@@ -50,10 +50,31 @@ python featureShowcase/buildReport.py             # renders the effort report to
 | `plumeOperatingEnvelope.png` | How far the march carries, over exit divergence and pressure ratio |
 | `mocPlumeInterior_*.png` | EXPERIMENTAL method-of-characteristics plume interior, shaded by Mach |
 | `mocShockCells_*.png` | EXPERIMENTAL shock cell structure of a mildly off-design jet |
-| `materialCurves.png` | Wall property curves behind the material selector |
+| `materialCurves.png` | Wall property curves behind the material selector, solid where a source measured it and dotted where a value is held flat |
+| `materialCryogenicRatio.png` | Conductivity at liquid hydrogen temperature against its room-temperature value, for the five alloys with cryogenic data |
 | `*Interactive.html` | The same views as pan-and-zoom plotly figures |
 
 ## Reading the figures
+
+**Wall materials.** `materialCurves.png` draws each property solid over the temperatures its
+source actually measured and dotted where the nearest measured value is held flat, which
+`materials.propertyProvenance` reports per property. The distinction is not cosmetic: a held
+value is broadcast across the grid and comes back the same shape as data, so an interpolator
+built on one returns a constant and looks exactly like an interpolator built on a real curve.
+Temperature is logarithmic so the cryogenic decade is legible beside the hot one, and the
+coolant inlet temperatures are marked because that is where every curve used to be clamped.
+
+`materialCryogenicRatio.png` is the size of what that clamping cost. The error has no consistent
+sign: pure copper conducts three and a half times better at 20 K because electron scattering
+falls away in a nearly perfect lattice, while every alloy conducts three to nine times worse.
+Five alloys still have no cryogenic source and are named on the figure. The copper alloys are
+the ones worth measuring rather than inferring, since the low-temperature peak is a purity
+effect that alloying suppresses.
+
+One thing the figure shows that the numbers hid: GRCop-42's expansion curve drops to 1.5e-6/K
+near room temperature, which is an Invar and not a copper alloy. Above 300 degC the curve is
+sound. It is left as the source gives it, and its provenance says so.
+
 
 **Combustion chamber.** The barrel is sized from L\*, `Lbarrel = (L* At - integral of pi r^2 dx) /
 (pi Rc^2)`, so the delivered characteristic length matches the requested one. This case gives a

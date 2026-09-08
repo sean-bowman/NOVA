@@ -514,3 +514,75 @@ def testTheTwoStoresDisagreeOn316L():
     curve = sampleWallMaterial('316L', 293.15)['thermalConductivity']
 
     assert scalar != pytest.approx(curve, rel = 0.05)
+
+# ------------------------------------------------------------------------------------------- #
+# -- Physical plausibility -- #
+# ------------------------------------------------------------------------------------------- #
+
+# Loose bounds on what a structural metal can do, as a guard against a transcription slip or a
+# unit error. These are not design values; they are the range outside which a number is wrong.
+plausibleExpansion = {
+    'copper':    (14.0e-6, 22.0e-6),
+    'aluminium': (17.0e-6, 28.0e-6),
+    'nickel':    (10.0e-6, 18.0e-6),
+    'steel':     (13.0e-6, 21.0e-6),
+    'titanium':  (6.0e-6, 12.0e-6),
+}
+
+materialFamily = {
+    'GRCop-42': 'copper', 'CuCrZr': 'copper', 'OFHC Copper': 'copper', 'NARloy-Z': 'copper',
+    'AlSi10Mg': 'aluminium', 'Al 6061-T6': 'aluminium',
+    'Inconel 718': 'nickel', 'Inconel 625': 'nickel',
+    '316L': 'steel', 'Ti-6Al-4V': 'titanium',
+}
+
+# GRCop-42 below 300 degC is a known exception, recorded in its provenance: the source's two
+# lowest expansion entries are not physical for a copper alloy and read as a fit artefact where
+# a mean referenced to 293 K is ill conditioned. They are left as the source gives them.
+expansionExceptions = {('GRCop-42', 25.0), ('GRCop-42', 100.0), ('GRCop-42', 200.0)}
+
+@pytest.mark.parametrize('material', sorted(materialFamily))
+def testExpansionIsPhysicallyPlausible(material):
+
+    '''
+
+    Every expansion value at and above room temperature sits inside the range its alloy family
+    can occupy. A copper alloy reading 1.5e-6/K is an Invar, not a copper, and that is the kind
+    of slip this catches.
+
+    '''
+
+    curves = wallMaterialCurves(material)
+    celsius = curves['temperatureK'] - 273.15
+    low, high = plausibleExpansion[materialFamily[material]]
+
+    for temperature, value in zip(celsius, curves['cte']):
+        if temperature < 20.0 or (material, round(float(temperature))) in expansionExceptions:
+            continue
+        assert low <= value <= high, (material, temperature, value)
+
+def testTheGrcopExpansionAnomalyIsStillRecorded():
+
+    '''
+
+    The exception above is real data, not a bug to be quietly fixed, so the entry that documents
+    it has to stay. If the source is ever superseded this test is the reminder to revisit it.
+
+    '''
+
+    curves = wallMaterialCurves('GRCop-42')
+
+    assert float(curves['cte'][0]) < 5.0e-6
+
+    source, _ = propertyProvenance('GRCop-42', 'cte')
+    assert 'not physical' in source
+
+@pytest.mark.parametrize('material', sorted(materialFamily))
+def testConductivityIsPositiveAndFinite(material):
+
+    '''No conductivity may be zero, negative or non-finite anywhere on its grid.'''
+
+    values = wallMaterialCurves(material)['thermalConductivity']
+
+    assert np.all(np.isfinite(values))
+    assert np.all(values > 0.0)

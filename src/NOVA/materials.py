@@ -222,7 +222,18 @@ _WALLCURVEDATA = {
         'provenance': {
             'thermalConductivity': ('NASA GRCop-42/-84 typical average summary.', (25, 900)),
             'yieldStrength':       ('NASA GRCop-42 tensile report.', (25, 900)),
-            'cte':                 ('NASA GRCop-42 thermal expansion report.', (25, 900)),
+            # The first two entries, 1.5e-6/K at 25 degC and 9.3e-6/K at 100 degC, are not
+            # physical for a copper alloy: they imply 45 per cent less expansion by 100 degC
+            # than a constant 17e-6/K would, and no copper alloy expands like an Invar. From
+            # 300 degC upward the curve is sensible and agrees with a constant 17e-6/K to
+            # within 12 per cent. The low end reads like a fit artefact near the reference
+            # temperature, where a mean from 293 K is ill conditioned. Left as the source
+            # gives it rather than corrected to a guess.
+            'cte':                 ('NASA GRCop-42 thermal expansion report. The 25 and '
+                                    '100 degC entries are not physical for a copper alloy '
+                                    'and look like a fit artefact where a mean from 293 K '
+                                    'is ill conditioned; above 300 degC the curve is sound.',
+                                    (25, 900)),
             'elongation':          ('NASA GRCop-42 tensile report.', (25, 900)),
         },
     },
