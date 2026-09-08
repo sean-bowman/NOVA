@@ -54,8 +54,8 @@ from .gasDynamics import (areaMachRelation, conicalLength, divergenceLossFactor,
 # -- Materials -- #
 
 from .materials import (availableWallMaterials, materialProperties, propertyIsMeasured,
-                        resolveWallMaterialName, roughnessTable, sampleWallMaterial,
-                        wallMaterialCurves)
+                        propertyProvenance, resolveWallMaterialName, roughnessTable,
+                        sampleWallMaterial, wallMaterialCurves)
 
 # -- Thermochemistry -- #
 
@@ -108,7 +108,8 @@ __all__ = [
     'stagnationRatio', 'staticPressureRatio', 'staticTemperatureRatio',
     # Materials
     'availableWallMaterials', 'materialProperties', 'propertyIsMeasured',
-    'resolveWallMaterialName', 'roughnessTable', 'sampleWallMaterial', 'wallMaterialCurves',
+    'propertyProvenance', 'resolveWallMaterialName', 'roughnessTable', 'sampleWallMaterial',
+    'wallMaterialCurves',
     # Thermochemistry
     'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
     # Fluid properties, atmosphere and the unit registry

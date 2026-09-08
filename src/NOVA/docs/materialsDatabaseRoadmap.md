@@ -18,22 +18,26 @@ Ten wall alloys, each on its own temperature grid, in degrees Celsius: GRCop-42,
 
 This is the store production uses. `regenThermal` builds a conductivity interpolator from it at three places in the heat transfer loop, `channelSizing` builds four interpolators, and the GUI's material panel samples it.
 
-Thirteen of its forty properties are measured curves. The other twenty-seven are a single room-temperature value broadcast flat across the grid:
+Twenty-one of its forty properties are measured curves. The other nineteen are a single room-temperature value broadcast flat across the grid:
 
 | Material | Conductivity | Yield | CTE | Elongation | Grid, degC |
 |---|---|---|---|---|---|
 | GRCop-42 | curve | curve | curve | curve | 25 to 900 |
-| CuCrZr | curve | flat | flat | flat | 20 to 600 |
-| OFHC Copper | curve | flat | flat | flat | 25 to 900 |
+| CuCrZr | curve | flat | curve | flat | 20 to 600 |
+| OFHC Copper | curve | flat | curve | flat | **-253** to 900 |
 | NARloy-Z | curve | flat | flat | flat | 25 to 800 |
 | AlSi10Mg | curve | flat | flat | flat | 25 to 900 |
-| Al 6061-T6 | curve | flat | flat | flat | 25 to 400 |
-| Inconel 718 | curve | flat | flat | flat | 25 to 900 |
+| Al 6061-T6 | curve | flat | curve | flat | **-253** to 400 |
+| Inconel 718 | curve | curve | curve | curve | **-253** to 900 |
 | Inconel 625 | curve | flat | flat | flat | 21 to 982 |
-| 316L | curve | flat | flat | flat | 25 to 900 |
-| Ti-6Al-4V | curve | flat | flat | flat | 20 to 800 |
+| 316L | curve | flat | curve | flat | **-253** to 900 |
+| Ti-6Al-4V | curve | flat | curve | flat | **-253** to 800 |
 
-Since a flat property is broadcast to the grid's length, it is the same shape as a real curve and an interpolator built on it behaves the same way. `wallMaterialCurves` therefore returns a `measured` map saying which is which, and `propertyIsMeasured` reads it. Anything drawing a conclusion from how a property changes with temperature has to consult that map first.
+A curve can be measured over part of its grid and held flat over the rest: the four expansion curves that came from NIST are data below room temperature and a held constant above it. `propertyProvenance(material, property)` returns the citation and the temperature range over which the stored values are data, which is the question `propertyIsMeasured` is too coarse to answer.
+
+Sources are recorded in `references_materialProperties_2026-09-08.md`.
+
+Since a flat property is broadcast to the grid's length, it is the same shape as a real curve and an interpolator built on it behaves the same way. `wallMaterialCurves` therefore returns a `measured` map saying which is which. Anything drawing a conclusion from how a property changes with temperature has to consult it first.
 
 ### `materialProperties` and `roughnessTable`
 
@@ -48,7 +52,19 @@ Two problems worth naming:
 
 ## Gaps that affect results now
 
-**Nothing covers cryogenic temperature.** Every grid starts at 20 to 25 degC, and regen coolant inlets are at liquid hydrogen temperature; the shipped example configures a fuel inlet of 20.27 K. `sampleWallMaterial('316L', 90.0)` clamps to the 25 degC value and returns it silently. For austenitic stainless the real conductivity at 90 K is roughly half its room-temperature value, so the cold end of a jacket is being sized on a conductivity that is materially wrong. Extending the grids downward is the single highest-value addition to the data.
+**Half the table still has no cryogenic data.** GRCop-42, CuCrZr, NARloy-Z, AlSi10Mg and Inconel 625 still start at room temperature and clamp below it, and regen coolant inlets are at liquid hydrogen temperature. The five NIST covers now reach 20 K, and the size of what was being missed is worth recording:
+
+| Material | k(20 K) / k(293 K) |
+|---|---|
+| OFHC Copper | **3.49** |
+| Inconel 718 | 0.303 |
+| Al 6061-T6 | 0.183 |
+| 316L | 0.142 |
+| Ti-6Al-4V | 0.114 |
+
+Clamping put every one of those at 1.0. The alloys conduct three to nine times *worse* at 20 K, and pure copper three and a half times *better*, so the error does not even have a consistent sign. My earlier estimate in this document, that 316L would be off by roughly a factor of two, was wrong by a further factor of three.
+
+For the copper alloys the missing data matters less than the bare gap suggests. The low-temperature conductivity peak is a purity effect: it comes from electron scattering falling away in a nearly perfect lattice, and alloying suppresses it. Carrying OFHC's peak across to GRCop-42 or NARloy-Z would be wrong in the direction that flatters the design. Their cryogenic behaviour needs measuring, not inferring.
 
 **Conductivity is evaluated at the hot wall only.** `regenThermal` reads `k(T_hot)` and uses it across the full wall thickness, which the code comments already acknowledge. With a real curve and a hot-to-cold span of several hundred kelvin the mean value through the wall is the physically correct one. A `k` accessor taking two temperatures and returning the thickness-averaged value would slot into three call sites with no other change.
 
@@ -62,7 +78,7 @@ The current shape, a dictionary of property names to values, does not survive co
 
 **Properties stop being scalars or single-variable curves.** An ablative needs a pyrolysis model, a char layer conductivity distinct from the virgin conductivity, and a recession rate against heat flux. A composite is orthotropic, so conductivity and expansion are tensors and depend on lay-up rather than on the material alone. A property has to be able to be a callable with its own signature.
 
-**Provenance has to be structured rather than a sentence.** The `source` string today is one line per material covering every property at once. A design allowable needs the source, the date, the specification it was taken from, the basis (typical, A-basis, B-basis, S-basis), the product form and thickness it applies to, and the range it was fitted over. Two of the current entries already carry warnings inside the prose, that NARloy-Z's trend is not independently validated and that AlSi10Mg is not traceable to a primary source, which is the right instinct and the wrong place for it.
+**Provenance has to carry more than a citation and a range.** The per-property `provenance` entry now gives both, which is enough to say what a number is and where it stops being data. A design allowable needs more: the date, the specification, the basis (typical, A-basis, B-basis, S-basis), and the product form and thickness it applies to. Inconel 718's yield curve already shows why the last of those matters, since it is spliced from two product forms that disagree by 1.8 per cent where they meet, and that figure currently lives in prose rather than in a field anything can check.
 
 **Typical values and design allowables have to be distinguishable.** The module docstring says the data is typical handbook values and not design allowables. Once anything computes a margin, that distinction has to be carried in the data and checked at the point of use, not stated once at the top of a file.
 
@@ -102,8 +118,11 @@ with the registry from `units.py` checking the unit on every entry, which is the
 
 Each step is worth doing on its own, and each is a prerequisite for the one after it.
 
-1. **Extend the metal grids to cryogenic temperature.** This changes results today. Sources: NIST cryogenic material properties database for the austenitics and aluminium alloys, NASA-HDBK-6003 and the CINDAS/Touloukian series for the copper alloys. Every added curve validated against its source with the error quantified, in the manner `tests/testMaterials.py` already uses for conductivity.
-2. **Add measured yield, expansion and elongation for the nine alloys that lack them.** Twenty-seven properties, each needing a cited source. Until then `propertyIsMeasured` reports False for all of them, and it should stay that way rather than being filled with plausible numbers.
+1. ~~**Extend the metal grids to cryogenic temperature.**~~ Done for the five alloys NIST covers, down to 20 K, with the fit errors NIST states and a test on each conductivity ratio. Still open for GRCop-42, CuCrZr, NARloy-Z, AlSi10Mg and Inconel 625, none of which NIST carries. The copper alloys need measurement rather than inference, for the reason given above.
+
+   One caveat that came out of doing it. Where NIST and the existing high-temperature source disagree at the 293 K join, the cryogenic segment is scaled onto the existing value so the validated hot curve is preserved. That is a normalisation, not a validation. The factors run from x0.996 for OFHC copper to x1.147 for Inconel 718, and each is recorded in the entry it applies to. Inconel 718's 12.8 per cent join disagreement is the one worth revisiting if a single source covering both ranges turns up.
+
+2. **Add measured yield and elongation for the eight alloys that lack them.** Inconel 718 now has both, from -253 to 816 degC, out of the Special Metals bulletin. The others are blocked on sources rather than on effort: ASME Section II Part D and MMPDS carry exactly the tables wanted for 316L, Inconel 625, 6061-T6 and Ti-6Al-4V, and both are paywalled; the Inconel 625 bulletin plots the curve without tabulating it. Filling these from assorted journal papers on different product forms would produce something that looks authoritative and is not traceable to one condition. Until a source is available `propertyIsMeasured` reports False, and that is the right answer.
 3. **Reconcile the two stores into one.** One entry per material carrying every property, with `materialProperties` and `wallMaterialCurves` as two views of it. This removes the 316L disagreement by construction.
 4. **Add the structured provenance record**, and with it the typical-against-allowable distinction.
 5. **Write the margin checks** that `channelSizing`'s four unused interpolators were built for. Once those exist, the strength and expansion curves are load-bearing rather than decorative, which is the point at which step 2 pays for itself.

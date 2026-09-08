@@ -219,30 +219,70 @@ _WALLCURVEDATA = {
         'elasticModulus':      124.0e9,  # [Pa]
         'source':              'NASA "GRCop-42 and -84 Typical Average Summary" (k); NASA GRCop-42 '
                                'tensile report (yield, elongation); NASA GRCop-42 CTE report.',
+        'provenance': {
+            'thermalConductivity': ('NASA GRCop-42/-84 typical average summary.', (25, 900)),
+            'yieldStrength':       ('NASA GRCop-42 tensile report.', (25, 900)),
+            'cte':                 ('NASA GRCop-42 thermal expansion report.', (25, 900)),
+            'elongation':          ('NASA GRCop-42 tensile report.', (25, 900)),
+        },
     },
 
     'CuCrZr': {
         'temperatureC':        [20, 100, 200, 300, 400, 500, 600],
         'thermalConductivity': [320, 324, 333, 335, 332, 327, 320],   # [W/m-K]
+        # Mean from 20 degC, from the quadratic expansion fit of de Groh et al. Table 5 for
+        # Cu-1Cr-0.1Zr (C18150). The first entry is the instantaneous value at 20 degC, where the
+        # mean from 20 degC is undefined.
+        'cte':                 [1.5788e-05, 1.6184e-05, 1.6678e-05, 1.7173e-05,
+                                1.7668e-05, 1.8162e-05, 1.8657e-05],   # [1/K]
         'yieldStrength':       350.0e6,   # [Pa], solution treated and aged, held constant
-        'cte':                 17.0e-6,
         'elongation':          20.0,
         'density':             8900.0,
         'elasticModulus':      128.0e9,
         'source':              'ITER Material Properties Handbook, CuCrZr (C18150), solution annealed '
-                               'and aged. Strength/CTE/elongation are the room-temperature values held flat.',
+                               'and aged (k, strength). Expansion from de Groh, Ellis and Loewenthal, '
+                               'NASA/TM-2007-214663 Table 5.',
+        'provenance': {
+            'thermalConductivity': ('ITER Material Properties Handbook, CuCrZr (C18150), '
+                                    'solution annealed and aged.', (20, 600)),
+            'yieldStrength':       ('ITER handbook room-temperature value, held flat. No '
+                                    'temperature-resolved source located.', (20, 20)),
+            'cte':                 ('de Groh, Ellis and Loewenthal, NASA/TM-2007-214663, Table 5, '
+                                    'Cu-1Cr-0.1Zr quadratic expansion fit, stated +/-1 %.', (20, 600)),
+            'elongation':          ('ITER handbook room-temperature value, held flat.', (20, 20)),
+        },
     },
 
     'OFHC Copper': {
-        'temperatureC':        [25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
-        'thermalConductivity': [391, 385, 381, 377, 372, 366, 360, 354, 347, 340],   # [W/m-K]
+        # Cryogenic segment from the NIST fit for RRR = 50, normalised by x0.9962 onto the
+        # room-temperature value below; the two sources differ by 0.4 % at 298 K.
+        'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
+                                25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
+        'thermalConductivity': [1362.68, 1158.96, 513.13, 463.37, 420.2, 404.49, 398.59, 394.24,
+                                391, 385, 381, 377, 372, 366, 360, 354, 347, 340],   # [W/m-K]
+        'cte':                 [1.1921e-05, 1.2778e-05, 1.4085e-05, 1.4427e-05, 1.5043e-05,
+                                1.5632e-05, 1.6062e-05, 1.6425e-05, 1.7000e-05, 1.7000e-05,
+                                1.7000e-05, 1.7000e-05, 1.7000e-05, 1.7000e-05, 1.7000e-05,
+                                1.7000e-05, 1.7000e-05, 1.7000e-05],   # [1/K], mean from 293 K
         'yieldStrength':       70.0e6,    # [Pa], annealed, held constant
-        'cte':                 17.0e-6,
         'elongation':          45.0,
         'density':             8940.0,
         'elasticModulus':      117.0e9,
-        'source':              'Touloukian TPRC / CRC Handbook, pure (C10100/C10200) copper. '
-                               'Strength/CTE/elongation are the room-temperature annealed values held flat.',
+        'source':              'NIST Cryogenic Material Properties Database, OFHC copper '
+                               'C10100/C10200 (k below 300 K, expansion); Touloukian TPRC / CRC '
+                               'Handbook above room temperature. Strength and elongation are the '
+                               'room-temperature annealed values held flat.',
+        'provenance': {
+            'thermalConductivity': ('NIST cryogenic database, RRR = 50 fit, 4-300 K, stated 2 %; '
+                                    'Touloukian TPRC above 298 K. STRONGLY purity dependent: at '
+                                    '20 K the NIST fit spans 1368 to 3245 W/m-K over RRR 50 to '
+                                    '150, and room temperature cannot distinguish them.',
+                                    (-253.1, 900)),
+            'yieldStrength':       ('Annealed room-temperature value, held flat.', (25, 25)),
+            'cte':                 ('NIST cryogenic database expansion fit, 4-300 K, stated 5 % '
+                                    'above 50 K; held flat above 25 degC.', (-253.1, 25)),
+            'elongation':          ('Annealed room-temperature value, held flat.', (25, 25)),
+        },
     },
 
     'NARloy-Z': {
@@ -256,6 +296,16 @@ _WALLCURVEDATA = {
         'source':              'NARloy-Z (Cu-3Ag-0.5Zr), SSME main combustion chamber alloy. '
                                'Room-temperature k ~290 W/m-K is well established; the temperature '
                                'trend here is approximate and is NOT independently validated.',
+        'provenance': {
+            'thermalConductivity': ('Room-temperature value well established; the trend is '
+                                    'approximate and NOT independently validated.', (25, 800)),
+            'yieldStrength':       ('Room-temperature value held flat. Literature reports yield '
+                                    'roughly flat to 500 degC then halving by 600-700 degC, but no '
+                                    'tabulated curve on a single product form was located.',
+                                    (25, 25)),
+            'cte':                 ('Room-temperature value held flat.', (25, 25)),
+            'elongation':          ('Room-temperature value held flat.', (25, 25)),
+        },
     },
 
     'AlSi10Mg': {
@@ -268,30 +318,96 @@ _WALLCURVEDATA = {
         'elasticModulus':      70.0e9,
         'source':              'AlSi10Mg LPBF, vendor simulation data carried from the original NOVA '
                                'heat transfer model. Not traceable to a primary source; retained for continuity.',
+        'provenance': {
+            'thermalConductivity': ('Vendor simulation data, not traceable to a primary source. '
+                                    'The alloy melts near 590 degC, so the entries above that are '
+                                    'not physical.', (25, 900)),
+            'yieldStrength':       ('LPBF T6 room-temperature value, held flat.', (25, 25)),
+            'cte':                 ('Room-temperature value held flat.', (25, 25)),
+            'elongation':          ('LPBF T6 room-temperature value, held flat.', (25, 25)),
+        },
     },
 
     'Al 6061-T6': {
-        'temperatureC':        [25, 100, 200, 300, 400],
-        'thermalConductivity': [167, 172, 177, 180, 182],   # [W/m-K]
+        # Cryogenic segment from the NIST fit, normalised by x1.0770 onto the room-temperature
+        # value below; the two sources differ by 7.1 % at 298 K.
+        'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
+                                25, 100, 200, 300, 400],
+        'thermalConductivity': [30.62, 56.25, 89.96, 98.99, 116.17, 133.48, 146.49, 158.57,
+                                167, 172, 177, 180, 182],   # [W/m-K]
+        'cte':                 [1.5216e-05, 1.6265e-05, 1.7995e-05, 1.8538e-05, 1.9663e-05,
+                                2.0883e-05, 2.1783e-05, 2.2460e-05, 2.3600e-05, 2.3600e-05,
+                                2.3600e-05, 2.3600e-05, 2.3600e-05],   # [1/K], mean from 293 K
         'yieldStrength':       276.0e6,
-        'cte':                 23.6e-6,
         'elongation':          12.0,
         'density':             2700.0,
         'elasticModulus':      68.9e9,
-        'source':              'ASM Handbook Vol 2, 6061-T6. Grid capped at 400 C where the T6 temper '
-                               'is lost. Strength/CTE from the shared handbook table, held flat.',
+        'source':              'NIST Cryogenic Material Properties Database, 6061-T6 (k and '
+                               'expansion below 300 K); ASM Handbook Vol 2 above room temperature. '
+                               'Grid capped at 400 C where the T6 temper is lost. Strength and '
+                               'elongation held flat.',
+        'provenance': {
+            'thermalConductivity': ('NIST cryogenic database fit, 1-300 K, stated 0.5 %; ASM '
+                                    'Handbook Vol 2 above 298 K.', (-253.1, 400)),
+            'yieldStrength':       ('ASM Handbook room-temperature T6 value, held flat. The T6 '
+                                    'temper over-ages above about 200 degC, so the flat value is '
+                                    'unconservative there.', (25, 25)),
+            'cte':                 ('NIST cryogenic database expansion fit, 4-300 K, stated 4 %; '
+                                    'held flat above 25 degC.', (-253.1, 25)),
+            'elongation':          ('ASM Handbook room-temperature T6 value, held flat.', (25, 25)),
+        },
     },
 
     'Inconel 718': {
-        'temperatureC':        [25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
-        'thermalConductivity': [11.2, 12.5, 14.1, 15.7, 17.3, 18.9, 20.4, 22.0, 23.7, 25.4],   # [W/m-K]
-        'yieldStrength':       1034.0e6,  # [Pa], aged, held constant
-        'cte':                 13.0e-6,
-        'elongation':          12.0,
+        # Cryogenic conductivity from the NIST fit, normalised by x1.1468 onto the
+        # room-temperature value below; the two sources differ by 12.8 % at 298 K, the largest
+        # join disagreement in this table. Yield and elongation are measured across the whole
+        # grid, spliced from two Special Metals tables that differ by 1.8 % where they overlap.
+        'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -78.9, -73.1,
+                                -23.1, 21.1, 25, 100, 200, 300, 315.6, 400, 500, 537.8, 600,
+                                648.9, 700, 704.4, 760, 800, 815.6, 900],
+        'thermalConductivity': [3.39, 5.44, 7.38, 7.85, 8.7, 9.48, 9.92, 10.0, 10.55, 11.15,
+                                11.2, 12.5, 14.1, 15.7, 15.95, 17.3, 18.9, 19.47, 20.4, 21.18,
+                                22.0, 22.07, 23.02, 23.7, 23.97, 25.4],   # [W/m-K]
+        'yieldStrength':       [1.3438e+09, 1.3246e+09, 1.2884e+09, 1.2788e+09, 1.2568e+09,
+                                1.2275e+09, 1.2024e+09, 1.1979e+09, 1.1586e+09, 1.1238e+09,
+                                1.1232e+09, 1.1109e+09, 1.0945e+09, 1.0781e+09, 1.0756e+09,
+                                1.0546e+09, 1.0298e+09, 1.0204e+09, 9.8954e+08, 9.6527e+08,
+                                9.3353e+08, 9.3079e+08, 7.9979e+08, 7.2043e+08, 6.8948e+08,
+                                6.8948e+08],   # [Pa], 0.2 % offset
+        'cte':                 [8.7467e-06, 9.3602e-06, 1.0350e-05, 1.0653e-05, 1.1264e-05,
+                                1.1885e-05, 1.2228e-05, 1.2286e-05, 1.2478e-05, 1.2958e-05,
+                                1.3000e-05, 1.3000e-05, 1.3000e-05, 1.3000e-05, 1.3000e-05,
+                                1.3000e-05, 1.3000e-05, 1.3000e-05, 1.3000e-05, 1.3000e-05,
+                                1.3000e-05, 1.3000e-05, 1.3000e-05, 1.3000e-05, 1.3000e-05,
+                                1.3000e-05],   # [1/K], mean from 293 K
+        'elongation':          [13.5, 13.7, 14.0, 14.3, 15.2, 16.3, 17.2, 17.4, 19.3, 21.0,
+                                20.9, 19.7, 18.0, 16.3, 16.0, 16.0, 16.0, 16.0, 15.4, 15.0,
+                                8.6, 8.0, 5.0, 12.2, 15.0, 15.0],   # [%]
         'density':             8190.0,
         'elasticModulus':      200.0e9,
-        'source':              'Special Metals Inconel 718 datasheet (k). Strength/CTE from the shared '
-                               'handbook table, held flat.',
+        'source':              'NIST Cryogenic Material Properties Database, Inconel 718 (k and '
+                               'expansion below 300 K); Special Metals INCONEL alloy 718 bulletin '
+                               '(k above room temperature, and yield and elongation across the '
+                               'whole range, Tables 21 and 19).',
+        'provenance': {
+            'thermalConductivity': ('NIST cryogenic database fit, 4-300 K, stated 2 %; Special '
+                                    'Metals bulletin above 298 K. The two disagree by 12.8 % at '
+                                    'the join, the largest in this table, and the cryogenic '
+                                    'segment is normalised onto the Special Metals value.',
+                                    (-253.1, 900)),
+            'yieldStrength':       ('Special Metals INCONEL alloy 718 bulletin. Table 21, forging '
+                                    'aged 1800 F/45 min + 1325 F/8 hr, for -423 to -110 F; Table '
+                                    '19, hot-rolled 4-in round aged 1950 F/1 hr + 1400 F/10 hr, '
+                                    'for 70 to 1500 F. The two product forms differ by 1.8 % at '
+                                    'room temperature, which is the splice error.', (-252.8, 815.6)),
+            'cte':                 ('NIST cryogenic database expansion fit, 4-300 K, stated 1.1 %; '
+                                    'held flat above 25 degC.', (-253.1, 25)),
+            'elongation':          ('Special Metals bulletin, same two tables as the yield '
+                                    'strength. Elongation is not monotone: it falls to 5 % near '
+                                    '760 degC and recovers above it, which is the alloy, not a '
+                                    'transcription error.', (-252.8, 815.6)),
+        },
     },
 
     'Inconel 625': {
@@ -302,32 +418,77 @@ _WALLCURVEDATA = {
         'elongation':          30.0,
         'density':             8440.0,
         'elasticModulus':      207.0e9,
-        'source':              'Special Metals Inconel 625 datasheet (k). Strength/CTE from the shared '
-                               'handbook table, held flat.',
+        'source':              'Special Metals INCONEL alloy 625 datasheet (k). Strength, expansion '
+                               'and elongation are room-temperature values held flat.',
+        'provenance': {
+            'thermalConductivity': ('Special Metals INCONEL alloy 625 bulletin.', (21, 982)),
+            'yieldStrength':       ('Annealed room-temperature value, held flat. The Special '
+                                    'Metals bulletin gives the temperature dependence only as a '
+                                    'figure, and digitising a plot is not a source.', (21, 21)),
+            'cte':                 ('Room-temperature value held flat.', (21, 21)),
+            'elongation':          ('Annealed room-temperature value, held flat.', (21, 21)),
+        },
     },
 
     '316L': {
-        'temperatureC':        [25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
-        'thermalConductivity': [14.6, 15.6, 17.0, 18.3, 19.6, 20.9, 22.1, 23.4, 24.6, 25.8],   # [W/m-K]
+        # Cryogenic segment from the NIST fit for type 316, normalised by x0.9568 onto the
+        # room-temperature value below; the two sources differ by 4.5 % at 298 K.
+        'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
+                                25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
+        'thermalConductivity': [2.07, 4.47, 7.58, 8.33, 9.66, 10.98, 12.09, 13.38,
+                                14.6, 15.6, 17.0, 18.3, 19.6, 20.9, 22.1, 23.4, 24.6, 25.8],   # [W/m-K]
+        'cte':                 [1.0993e-05, 1.1777e-05, 1.2961e-05, 1.3301e-05, 1.3953e-05,
+                                1.4572e-05, 1.4967e-05, 1.5244e-05, 1.6000e-05, 1.6000e-05,
+                                1.6000e-05, 1.6000e-05, 1.6000e-05, 1.6000e-05, 1.6000e-05,
+                                1.6000e-05, 1.6000e-05, 1.6000e-05],   # [1/K], mean from 293 K
         'yieldStrength':       170.0e6,
-        'cte':                 16.0e-6,
         'elongation':          40.0,
         'density':             8000.0,
         'elasticModulus':      193.0e9,
-        'source':              'ASM Handbook Vol 1 / Touloukian, austenitic 316 stainless (k). '
-                               'Strength/CTE from the shared handbook table, held flat.',
+        'source':              'NIST Cryogenic Material Properties Database, type 316 (k and '
+                               'expansion below 300 K); ASM Handbook Vol 1 / Touloukian above room '
+                               'temperature. Strength and elongation held flat.',
+        'provenance': {
+            'thermalConductivity': ('NIST cryogenic database fit for type 316, 1-300 K, stated '
+                                    '2 %; ASM/Touloukian above 298 K. The NIST fit is for 316 '
+                                    'rather than 316L; the two differ mainly in carbon, which has '
+                                    'little effect on conductivity.', (-253.1, 900)),
+            'yieldStrength':       ('ASTM A240 room-temperature minimum for 316L, held flat.',
+                                    (25, 25)),
+            'cte':                 ('NIST cryogenic database expansion fit, 4-300 K, stated 5 %; '
+                                    'held flat above 25 degC.', (-253.1, 25)),
+            'elongation':          ('Annealed room-temperature value, held flat.', (25, 25)),
+        },
     },
 
     'Ti-6Al-4V': {
-        'temperatureC':        [20, 100, 200, 300, 400, 500, 600, 700, 800],
-        'thermalConductivity': [6.7, 7.4, 8.7, 9.8, 10.3, 11.8, 13.4, 15.5, 17.9],   # [W/m-K]
+        # Cryogenic segment from the NIST fit, normalised by x0.9095 onto the room-temperature
+        # value below; the two sources differ by 9.9 % at 293 K.
+        'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
+                                20, 100, 200, 300, 400, 500, 600, 700, 800],
+        'thermalConductivity': [0.77, 1.73, 3.16, 3.35, 3.69, 4.41, 5.23, 6.0,
+                                6.7, 7.4, 8.7, 9.8, 10.3, 11.8, 13.4, 15.5, 17.9],   # [W/m-K]
+        'cte':                 [6.3596e-06, 6.8154e-06, 7.5153e-06, 7.7149e-06, 8.0840e-06,
+                                8.3769e-06, 8.4423e-06, 8.2041e-06, 8.6000e-06, 8.6000e-06,
+                                8.6000e-06, 8.6000e-06, 8.6000e-06, 8.6000e-06, 8.6000e-06,
+                                8.6000e-06, 8.6000e-06],   # [1/K], mean from 293 K
         'yieldStrength':       880.0e6,
-        'cte':                 8.6e-6,
         'elongation':          14.0,
         'density':             4430.0,
         'elasticModulus':      113.8e9,
-        'source':              'ASM Handbook Vol 2 / MMPDS, Ti-6Al-4V annealed (k). Strength/CTE from '
-                               'the shared handbook table, held flat.',
+        'source':              'NIST Cryogenic Material Properties Database, Ti-6Al-4V (k and '
+                               'expansion below 300 K); ASM Handbook Vol 2 / MMPDS annealed above '
+                               'room temperature. Strength and elongation held flat.',
+        'provenance': {
+            'thermalConductivity': ('NIST cryogenic database fit, 20-300 K, stated 2 %; '
+                                    'ASM/MMPDS above 293 K.', (-253.1, 800)),
+            'yieldStrength':       ('Annealed room-temperature value, held flat. MMPDS carries the '
+                                    'temperature dependence but is not openly available.',
+                                    (20, 20)),
+            'cte':                 ('NIST cryogenic database expansion fit, 4-300 K, stated 1.5 %; '
+                                    'held flat above 20 degC.', (-253.1, 20)),
+            'elongation':          ('Annealed room-temperature value, held flat.', (20, 20)),
+        },
     },
 }
 
@@ -378,6 +539,35 @@ def availableWallMaterials() -> list:
 
     return ['GRCop-42', 'CuCrZr', 'OFHC Copper', 'NARloy-Z',
             'AlSi10Mg', 'Al 6061-T6', 'Inconel 718', 'Inconel 625', '316L', 'Ti-6Al-4V']
+
+def propertyProvenance(material, propertyName: str) -> tuple:
+
+    '''
+
+    Where a wall-alloy property came from, and over what temperature range it is data.
+
+    A property can be a measured curve over part of its grid and a held constant over the rest.
+    `propertyIsMeasured` only says whether it varies at all; this says where.
+
+    Parameters:
+    -----------
+    material : str
+        Canonical name, legacy key or alias.
+    propertyName : str
+        One of 'thermalConductivity', 'yieldStrength', 'cte', 'elongation'.
+
+    Returns:
+    --------
+    tuple
+        (source, (lowC, highC)) where source cites where the numbers came from and the pair is
+        the temperature range in degrees Celsius over which the stored values are measured data.
+        Outside that range the property is the nearest measured value held flat.
+
+    '''
+
+    canonical = resolveWallMaterialName(material) or 'GRCop-42'
+
+    return _WALLCURVEDATA[canonical]['provenance'][propertyName]
 
 def propertyIsMeasured(material, propertyName: str) -> bool:
 
@@ -480,6 +670,7 @@ def wallMaterialCurves(material) -> dict:
         'fallback':            fallback,
         'measured':            {name: isMeasured(name) for name in
                                 ('thermalConductivity', 'yieldStrength', 'cte', 'elongation')},
+        'provenance':          entry['provenance'],
     }
 
 def sampleWallMaterial(material, temperatureK: float = 293.15) -> dict:
@@ -514,4 +705,5 @@ def sampleWallMaterial(material, temperatureK: float = 293.15) -> dict:
         'source':              curves['source'],
         'fallback':            curves['fallback'],
         'measured':            curves['measured'],
+        'provenance':          curves['provenance'],
     }

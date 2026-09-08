@@ -21,7 +21,7 @@ import warnings
 import numpy as np
 import pytest
 
-from NOVA.materials import (propertyIsMeasured, wallMaterialCurves, sampleWallMaterial, availableWallMaterials,
+from NOVA.materials import (propertyIsMeasured, propertyProvenance, wallMaterialCurves, sampleWallMaterial, availableWallMaterials,
                        resolveWallMaterialName, materialProperties, roughnessTable)
 
 def _conductivityAt(material: str, temperatureKelvin: float) -> float:
@@ -217,29 +217,39 @@ def testConductivityIsMeasuredForEveryMaterial():
     for name in availableWallMaterials():
         assert propertyIsMeasured(name, 'thermalConductivity'), name
 
-def testOnlyGrcopCarriesMeasuredStrengthAndExpansion():
+def testWhichMaterialsCarryMeasuredStrength():
 
     '''
 
-    The state of the data, recorded so it is visible rather than assumed. Yield strength,
-    expansion and elongation are room-temperature values held flat for every alloy but GRCop-42.
-    Adding a real curve for one of them should fail this test and be accompanied by a source and
-    a reference check, in the manner of _CONDUCTIVITY_REFERENCES above.
+    The state of the data, recorded so it is visible rather than assumed. GRCop-42 and Inconel 718
+    carry measured yield strength and elongation across their whole grids; the other eight are
+    room-temperature values held flat, because no openly available source tabulates them on a
+    single product form. Adding one should fail this test and be accompanied by a citation and a
+    reference check.
 
     See src/NOVA/docs/materialsDatabaseRoadmap.md.
 
     '''
 
-    withCurves = {name for name in availableWallMaterials()
-                  if propertyIsMeasured(name, 'yieldStrength')}
+    withYieldCurves = {name for name in availableWallMaterials()
+                       if propertyIsMeasured(name, 'yieldStrength')}
 
-    assert withCurves == {'GRCop-42'}
+    assert withYieldCurves == {'GRCop-42', 'Inconel 718'}
 
-    for name in availableWallMaterials():
-        if name == 'GRCop-42':
-            continue
-        for propertyName in ('yieldStrength', 'cte', 'elongation'):
-            assert not propertyIsMeasured(name, propertyName), (name, propertyName)
+def testWhichMaterialsCarryMeasuredExpansion():
+
+    '''
+
+    Expansion is measured for seven of the ten, but for four of those only below room temperature,
+    where the NIST cryogenic fits reach. propertyProvenance says which part of each curve is data.
+
+    '''
+
+    withExpansionCurves = {name for name in availableWallMaterials()
+                           if propertyIsMeasured(name, 'cte')}
+
+    assert withExpansionCurves == {'GRCop-42', 'CuCrZr', 'OFHC Copper', 'Al 6061-T6',
+                                   'Inconel 718', '316L', 'Ti-6Al-4V'}
 
 def testHeldFlatPropertiesAreActuallyFlat():
 
@@ -270,21 +280,224 @@ def testMeasuredPropertiesActuallyVary():
             values = curves[propertyName]
             assert not np.all(values == values[0]), (name, propertyName)
 
-def testNoMaterialCarriesCryogenicData():
+# --------------------------------------------------------------------------------------------- #
+# -- Provenance: what each property is, and over what range -- #
+# --------------------------------------------------------------------------------------------- #
+
+def testEveryPropertyCarriesProvenance():
+
+    '''Every property of every material names a source and the range over which it is data.'''
+
+    for name in availableWallMaterials():
+        for propertyName in ('thermalConductivity', 'yieldStrength', 'cte', 'elongation'):
+            source, (low, high) = propertyProvenance(name, propertyName)
+
+            assert isinstance(source, str) and len(source) > 20, (name, propertyName)
+            assert low <= high, (name, propertyName)
+
+def testProvenanceRangeAgreesWithTheData():
 
     '''
 
-    Every grid starts at or above 20 degC while regen coolant inlets are at liquid hydrogen
-    temperature, so the cold end of a jacket is sized on a clamped room-temperature conductivity.
-    This records that gap; extending a grid downward should fail here.
-
-    See step 1 of src/NOVA/docs/materialsDatabaseRoadmap.md.
+    A property whose provenance says it is measured at a single point must be flat, and one
+    measured over a span must vary. This keeps the two descriptions from drifting apart.
 
     '''
 
     for name in availableWallMaterials():
-        grid = wallMaterialCurves(name)['temperatureK']
-        assert grid[0] > 273.0, (name, grid[0])
+        curves = wallMaterialCurves(name)
+        for propertyName, measured in curves['measured'].items():
+            _, (low, high) = propertyProvenance(name, propertyName)
+            assert measured == (high > low), (name, propertyName, measured, low, high)
+
+def testAProvenanceRangeLiesInsideItsGrid():
+
+    '''A source cannot be cited over temperatures the grid does not reach.'''
+
+    for name in availableWallMaterials():
+        grid = wallMaterialCurves(name)['temperatureK'] - 273.15
+        for propertyName in ('thermalConductivity', 'yieldStrength', 'cte', 'elongation'):
+            _, (low, high) = propertyProvenance(name, propertyName)
+
+            assert low >= grid.min() - 1.0, (name, propertyName)
+            assert high <= grid.max() + 1.0, (name, propertyName)
+
+# --------------------------------------------------------------------------------------------- #
+# -- Cryogenic conductivity, against the NIST fits it was built from -- #
+# --------------------------------------------------------------------------------------------- #
+
+# Conductivity at 20 K as a fraction of its room-temperature value, from the NIST curve fits.
+# These are the numbers that matter for a jacket running liquid hydrogen, and NOVA used to clamp
+# every one of them to 1.0.
+cryogenicRatios = (
+    ('OFHC Copper', 3.485),
+    ('316L',        0.142),
+    ('Al 6061-T6',  0.183),
+    ('Ti-6Al-4V',   0.114),
+    ('Inconel 718', 0.303),
+)
+
+@pytest.mark.parametrize('material, expectedRatio', cryogenicRatios)
+def testCryogenicConductivityRatio(material, expectedRatio):
+
+    '''
+
+    Conductivity at 20 K against its room-temperature value. Copper rises steeply as it cools;
+    the alloys fall. Getting the direction wrong is the kind of error this pins.
+
+    '''
+
+    cold = sampleWallMaterial(material, 20.0)['thermalConductivity']
+    room = sampleWallMaterial(material, 298.15)['thermalConductivity']
+
+    assert cold / room == pytest.approx(expectedRatio, rel = 0.05)
+
+def testTheAlloysLoseConductivityWhenCold():
+
+    '''
+
+    Every alloy in the table except pure copper conducts worse at liquid hydrogen temperature
+    than at room temperature, by a factor of three or more. Clamping to the room-temperature
+    value, which is what happened before the grids were extended, overstates the cold end.
+
+    '''
+
+    for material in ('316L', 'Al 6061-T6', 'Ti-6Al-4V', 'Inconel 718'):
+        cold = sampleWallMaterial(material, 20.0)['thermalConductivity']
+        room = sampleWallMaterial(material, 298.15)['thermalConductivity']
+
+        assert cold < room / 3.0, material
+
+def testPureCopperGainsConductivityWhenCold():
+
+    '''
+
+    The opposite case, and the reason the sign cannot be assumed. Electron scattering falls away
+    in a pure metal, so OFHC copper conducts several times better at 20 K. The size of that peak
+    is set by residual resistivity ratio, which is why the stored curve names the RRR it assumes.
+
+    '''
+
+    cold = sampleWallMaterial('OFHC Copper', 20.0)['thermalConductivity']
+    room = sampleWallMaterial('OFHC Copper', 298.15)['thermalConductivity']
+
+    assert cold > 3.0 * room
+
+    source, _ = propertyProvenance('OFHC Copper', 'thermalConductivity')
+    assert 'RRR' in source
+
+@pytest.mark.parametrize('material', ['OFHC Copper', '316L', 'Al 6061-T6', 'Ti-6Al-4V',
+                                      'Inconel 718'])
+def testTheCryogenicGridReachesLiquidHydrogen(material):
+
+    '''
+
+    The grids used to start at room temperature while regen coolant inlets sit near 20 K, so the
+    cold end of a jacket was sized on a clamped room-temperature conductivity.
+
+    '''
+
+    grid = wallMaterialCurves(material)['temperatureK']
+
+    assert grid.min() <= 25.0, material
+
+def testMaterialsWithoutCryogenicDataStillClamp():
+
+    '''
+
+    The five with no cryogenic source keep the old behaviour and say so through their provenance.
+    Nothing here pretends to know what it does not.
+
+    '''
+
+    for material in ('GRCop-42', 'CuCrZr', 'NARloy-Z', 'AlSi10Mg', 'Inconel 625'):
+        grid = wallMaterialCurves(material)['temperatureK']
+        assert grid.min() > 273.0, material
+
+# --------------------------------------------------------------------------------------------- #
+# -- Inconel 718 strength, against the Special Metals bulletin -- #
+# --------------------------------------------------------------------------------------------- #
+
+# Temperature [K] and 0.2 % offset yield [MPa] from Special Metals INCONEL alloy 718, Tables 21
+# and 19, converted from ksi at 6.894757 MPa/ksi.
+inconelYieldReferences = (
+    (20.35,  1343.8),    # -423 F, liquid hydrogen
+    (77.6,   1287.9),    # -320 F, liquid nitrogen
+    (294.3,  1123.8),    #   70 F
+    (588.7,  1075.6),    #  600 F
+    (922.0,   965.3),    # 1200 F
+    (1033.2,  799.8),    # 1400 F
+)
+
+@pytest.mark.parametrize('kelvin, expectedMPa', inconelYieldReferences)
+def testInconelYieldAgainstTheBulletin(kelvin, expectedMPa):
+
+    '''Sampled yield strength against the tabulated Special Metals values, within 2 per cent.'''
+
+    sampled = sampleWallMaterial('Inconel 718', kelvin)['yieldStrength'] / 1e6
+
+    assert sampled == pytest.approx(expectedMPa, rel = 0.02)
+
+def testInconelGainsStrengthWhenCold():
+
+    '''
+
+    Inconel 718 is about 20 per cent stronger at liquid hydrogen temperature than at room
+    temperature. A held-flat room-temperature value understates the cold end, which is
+    conservative for a pressure margin and wrong for a thermal stress calculation.
+
+    '''
+
+    cold = sampleWallMaterial('Inconel 718', 20.35)['yieldStrength']
+    room = sampleWallMaterial('Inconel 718', 294.3)['yieldStrength']
+
+    assert cold / room == pytest.approx(1.196, rel = 0.02)
+
+def testInconelElongationIsNotMonotone():
+
+    '''
+
+    Elongation falls to 5 per cent near 760 degC and recovers above it. That is the alloy, not a
+    transcription error, and it is pinned here so nobody smooths it out.
+
+    '''
+
+    elongation = wallMaterialCurves('Inconel 718')['elongation']
+
+    assert float(np.min(elongation)) == pytest.approx(5.0, abs = 0.1)
+    assert float(elongation[-1]) > float(np.min(elongation))
+
+# --------------------------------------------------------------------------------------------- #
+# -- CuCrZr expansion, against the NASA quadratic it was built from -- #
+# --------------------------------------------------------------------------------------------- #
+
+def testCuCrZrExpansionAgainstTheQuadratic():
+
+    '''
+
+    Mean expansion from 20 degC, rebuilt from de Groh, Ellis and Loewenthal NASA/TM-2007-214663
+    Table 5: alpha(T) = A T^2 + B T + C for Cu-1Cr-0.1Zr, stated accurate to 1 per cent.
+
+    '''
+
+    A, B, C = 4.947e-09, 1.559e-05, -8.019e-05
+    strain = lambda T: A * T**2 + B * T + C
+
+    for celsius in (100.0, 300.0, 600.0):
+        expected = (strain(celsius) - strain(20.0)) / (celsius - 20.0)
+        sampled = sampleWallMaterial('CuCrZr', celsius + 273.15)['cte']
+
+        assert sampled == pytest.approx(expected, rel = 0.01), celsius
+
+def testCuCrZrExpansionRisesWithTemperature():
+
+    '''Copper expands faster as it heats; a flat value misses about 18 per cent by 600 degC.'''
+
+    cold = sampleWallMaterial('CuCrZr', 293.15)['cte']
+    hot = sampleWallMaterial('CuCrZr', 873.15)['cte']
+
+    assert hot > cold
+    assert hot / cold == pytest.approx(1.18, rel = 0.03)
 
 def testTheTwoStoresDisagreeOn316L():
 
