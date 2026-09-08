@@ -1,0 +1,10 @@
+# The working tree is LF throughout. Pin it so a checkout on Windows does not
+# rewrite every file and bury real diffs in line-ending churn.
+* text=auto eol=lf
+
+# Binary assets git should never try to normalise.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.pkl binary
+*.npz binary
