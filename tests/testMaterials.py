@@ -21,7 +21,7 @@ import warnings
 import numpy as np
 import pytest
 
-from NOVA.materials import (wallMaterialCurves, sampleWallMaterial, availableWallMaterials,
+from NOVA.materials import (propertyIsMeasured, wallMaterialCurves, sampleWallMaterial, availableWallMaterials,
                        resolveWallMaterialName, materialProperties, roughnessTable)
 
 def _conductivityAt(material: str, temperatureKelvin: float) -> float:
@@ -186,3 +186,118 @@ def testColdConductivityGainForStainless():
         warnings.simplefilter('error')
         value = sampleWallMaterial('316L', 90.0)['thermalConductivity']
     assert 5.0 < value < 20.0
+
+# ------------------------------------------------------------------------------------------- #
+# -- Provenance: which properties are measured, and which are held flat -- #
+# ------------------------------------------------------------------------------------------- #
+
+# A scalar in the table is broadcast across the temperature grid, so it comes back the same shape
+# as a measured curve and an interpolator built on it behaves identically. These tests fix what
+# the current data actually supports, so filling a gap has to be a deliberate edit here as well.
+
+def testEveryMaterialReportsWhichPropertiesAreMeasured():
+
+    '''The measured map covers all four properties, for every material in the table.'''
+
+    for name in availableWallMaterials():
+        measured = wallMaterialCurves(name)['measured']
+
+        assert set(measured) == {'thermalConductivity', 'yieldStrength', 'cte', 'elongation'}
+        assert all(isinstance(flag, bool) for flag in measured.values())
+
+def testConductivityIsMeasuredForEveryMaterial():
+
+    '''
+
+    Conductivity is what the heat transfer model reads, and it is the one property the table
+    carries as a real curve throughout.
+
+    '''
+
+    for name in availableWallMaterials():
+        assert propertyIsMeasured(name, 'thermalConductivity'), name
+
+def testOnlyGrcopCarriesMeasuredStrengthAndExpansion():
+
+    '''
+
+    The state of the data, recorded so it is visible rather than assumed. Yield strength,
+    expansion and elongation are room-temperature values held flat for every alloy but GRCop-42.
+    Adding a real curve for one of them should fail this test and be accompanied by a source and
+    a reference check, in the manner of _CONDUCTIVITY_REFERENCES above.
+
+    See src/NOVA/docs/materialsDatabaseRoadmap.md.
+
+    '''
+
+    withCurves = {name for name in availableWallMaterials()
+                  if propertyIsMeasured(name, 'yieldStrength')}
+
+    assert withCurves == {'GRCop-42'}
+
+    for name in availableWallMaterials():
+        if name == 'GRCop-42':
+            continue
+        for propertyName in ('yieldStrength', 'cte', 'elongation'):
+            assert not propertyIsMeasured(name, propertyName), (name, propertyName)
+
+def testHeldFlatPropertiesAreActuallyFlat():
+
+    '''
+
+    A property reported as not measured must be constant across its grid. If one ever varies
+    while reporting False, the map is lying about the data.
+
+    '''
+
+    for name in availableWallMaterials():
+        curves = wallMaterialCurves(name)
+        for propertyName, measured in curves['measured'].items():
+            if measured:
+                continue
+            values = curves[propertyName]
+            assert np.all(values == values[0]), (name, propertyName)
+
+def testMeasuredPropertiesActuallyVary():
+
+    '''The converse: a property reported as measured has to change somewhere across its grid.'''
+
+    for name in availableWallMaterials():
+        curves = wallMaterialCurves(name)
+        for propertyName, measured in curves['measured'].items():
+            if not measured:
+                continue
+            values = curves[propertyName]
+            assert not np.all(values == values[0]), (name, propertyName)
+
+def testNoMaterialCarriesCryogenicData():
+
+    '''
+
+    Every grid starts at or above 20 degC while regen coolant inlets are at liquid hydrogen
+    temperature, so the cold end of a jacket is sized on a clamped room-temperature conductivity.
+    This records that gap; extending a grid downward should fail here.
+
+    See step 1 of src/NOVA/docs/materialsDatabaseRoadmap.md.
+
+    '''
+
+    for name in availableWallMaterials():
+        grid = wallMaterialCurves(name)['temperatureK']
+        assert grid[0] > 273.0, (name, grid[0])
+
+def testTheTwoStoresDisagreeOn316L():
+
+    '''
+
+    materialProperties and wallMaterialCurves both carry 316L and give different conductivities,
+    16.3 against 14.6 W/m-K. Only the second is validated against a cited source. The
+    disagreement is recorded rather than silently tolerated; reconciling the two stores is step 3
+    of the roadmap and should replace this test.
+
+    '''
+
+    scalar = materialProperties('316L')['thermalConductivity']
+    curve = sampleWallMaterial('316L', 293.15)['thermalConductivity']
+
+    assert scalar != pytest.approx(curve, rel = 0.05)

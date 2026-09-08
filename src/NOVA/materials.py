@@ -198,6 +198,12 @@ def roughnessTable(surface: str = 'drawn tube') -> float:
 # them and the rest are held at their room-temperature value with that stated in `source`.
 #
 # Conductivity curves are validated against their cited sources in tests/testMaterials.py.
+#
+# A property written as a list is a measured curve. A property written as a scalar is one
+# value held flat across the grid, and `wallMaterialCurves` reports which is which in its
+# 'measured' map, because the two are the same shape once broadcast. Twenty-seven of the
+# forty properties here are held flat, and none of the grids reaches cryogenic temperature.
+# docs/materialsDatabaseRoadmap.md carries what closing those gaps would take.
 
 _WALLCURVEDATA = {
 
@@ -373,6 +379,33 @@ def availableWallMaterials() -> list:
     return ['GRCop-42', 'CuCrZr', 'OFHC Copper', 'NARloy-Z',
             'AlSi10Mg', 'Al 6061-T6', 'Inconel 718', 'Inconel 625', '316L', 'Ti-6Al-4V']
 
+def propertyIsMeasured(material, propertyName: str) -> bool:
+
+    '''
+
+    True when a wall-alloy property is a measured temperature curve rather than one value held
+    flat across the grid.
+
+    Parameters:
+    -----------
+    material : str
+        Canonical name, legacy key or alias.
+    propertyName : str
+        One of 'thermalConductivity', 'yieldStrength', 'cte', 'elongation'.
+
+    Returns:
+    --------
+    bool
+
+    Raises:
+    -------
+    KeyError
+        If the property is not one of the four the table carries.
+
+    '''
+
+    return wallMaterialCurves(material)['measured'][propertyName]
+
 def wallMaterialCurves(material) -> dict:
 
     '''
@@ -398,6 +431,18 @@ def wallMaterialCurves(material) -> dict:
         'source'               [str]
         'fallback'             [bool]       True when the requested material was not recognized
                                             and GRCop-42 was substituted
+        'measured'             [dict]       property name -> True when the array is a measured
+                                            curve, False when it is one value held flat across
+                                            the grid
+
+    The 'measured' map exists because the four property arrays are the same shape either way. A
+    scalar in the table is broadcast across the grid, so an interpolator built on a held-flat
+    property returns a constant and looks exactly like one built on real data. Anything drawing a
+    conclusion from how a property changes with temperature has to check this first.
+
+    Every material carries a measured conductivity curve. Only GRCop-42 carries measured yield
+    strength, expansion and elongation; for the other nine those are room-temperature values held
+    flat. See docs/materialsDatabaseRoadmap.md for what closing that would take.
 
     '''
 
@@ -418,6 +463,10 @@ def wallMaterialCurves(material) -> dict:
         array = np.atleast_1d(np.asarray(value, dtype = float))
         return array if array.size == gridLength else np.full(gridLength, array.flat[0])
 
+    # A list in the table is a measured curve; a scalar is one value held across the grid.
+    def isMeasured(name):
+        return isinstance(entry[name], (list, tuple))
+
     return {
         'material':            canonical,
         'temperatureK':        temperatureK,
@@ -429,6 +478,8 @@ def wallMaterialCurves(material) -> dict:
         'elasticModulus':      float(entry['elasticModulus']),
         'source':              entry['source'],
         'fallback':            fallback,
+        'measured':            {name: isMeasured(name) for name in
+                                ('thermalConductivity', 'yieldStrength', 'cte', 'elongation')},
     }
 
 def sampleWallMaterial(material, temperatureK: float = 293.15) -> dict:
@@ -440,7 +491,10 @@ def sampleWallMaterial(material, temperatureK: float = 293.15) -> dict:
 
     Returns a dict: 'material', 'temperatureK', 'thermalConductivity' [W/m-K],
     'yieldStrength' [Pa], 'cte' [1/K], 'elongation' [%], 'density' [kg/m^3],
-    'elasticModulus' [Pa], 'source', 'fallback'.
+    'elasticModulus' [Pa], 'source', 'fallback', 'measured'.
+
+    A sampled value whose 'measured' entry is False is the room-temperature value, whatever
+    temperature was asked for. It is not a reading off a curve.
 
     '''
 
@@ -459,4 +513,5 @@ def sampleWallMaterial(material, temperatureK: float = 293.15) -> dict:
         'elasticModulus':      curves['elasticModulus'],
         'source':              curves['source'],
         'fallback':            curves['fallback'],
+        'measured':            curves['measured'],
     }
