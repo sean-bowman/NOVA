@@ -23,10 +23,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from Nozzle import (PlumeGas, solveFreeJetNet, freeJetLeadingCharacteristic,
+from NOVA.Nozzle import (PlumeGas, solveFreeJetNet, freeJetLeadingCharacteristic,
                     fullyExpandedDiameter, machFromPressureRatio, prandtlCellCoefficient,
                     shockCellLength, prandtlMeyerAngle,
                     plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
@@ -206,7 +203,7 @@ def _refusalContour(exitMach, pressureRatio, wallAngle, mesh = False):
     decides whether the contour carries a characteristic mesh, which is what a conical contour
     lacks.
     '''
-    from Nozzle import PlumeContour, PlumeStructure
+    from NOVA.Nozzle import PlumeContour, PlumeStructure
 
     chamberPressure = 1.0e7
     stagnationOverStatic = (1.0 + 0.5 * (GAMMA - 1.0) * exitMach ** 2) ** (GAMMA / (GAMMA - 1.0))
@@ -225,7 +222,7 @@ def _refusalContour(exitMach, pressureRatio, wallAngle, mesh = False):
 
 def _solveRefusal(exitMach, pressureRatio, wallAngle, mesh = False):
     '''Run the field solve against that contour, at the ambient the structure was built for.'''
-    from Nozzle import solvePlumeField
+    from NOVA.Nozzle import solvePlumeField
 
     contour = _refusalContour(exitMach, pressureRatio, wallAngle, mesh = mesh)
 
@@ -288,7 +285,7 @@ def testInitialLineReproducesTheExitPlane():
     The line has to come back with the mesh's own states, ordered lip to axis, normalised on the
     lip radius, with y negative below the centre line and theta negative turning away from it.
     '''
-    from Nozzle import freeJetInitialLine
+    from NOVA.Nozzle import freeJetInitialLine
     line = freeJetInitialLine(PlumeGas(GAMMA), _syntheticSeed(), numPoints = 60)
 
     assert line is not None and len(line) > 10
@@ -307,7 +304,7 @@ def testInitialLineDisagreesWithTheSourceFlowConstruction():
     contoured nozzle straightens the flow instead, and the two answers are nowhere near each
     other, which puts every line of the march on the wrong initial data.
     '''
-    from Nozzle import freeJetInitialLine
+    from NOVA.Nozzle import freeJetInitialLine
     gas = PlumeGas(GAMMA)
     line = freeJetInitialLine(gas, _syntheticSeed(), numPoints = 60)
     sourceFlow = freeJetLeadingCharacteristic(gas, line[0].mach, -line[0].theta, 1.0,
@@ -318,6 +315,6 @@ def testInitialLineDisagreesWithTheSourceFlowConstruction():
 
 def testInitialLineRefusesAnIncompleteSeed():
     '''A conical contour has no mesh, and a partial seed must not raise.'''
-    from Nozzle import freeJetInitialLine
+    from NOVA.Nozzle import freeJetInitialLine
     assert freeJetInitialLine(PlumeGas(GAMMA), {'xMesh': [1]}) is None
     assert freeJetInitialLine(PlumeGas(GAMMA), {}) is None

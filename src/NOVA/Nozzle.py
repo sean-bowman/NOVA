@@ -68,110 +68,58 @@ from typing import Any
 from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
-# Global imports for GUI
+# The CEA interface needs rocketcea, which is the one dependency here that is
+# commonly missing, so the failure names it.
 try:
-    from utils import *
-    # Explicit re-imports so static analysis (Pylance) can resolve names the
-    # wildcard hides; runtime behavior is unchanged.
-    from utils import (RegenGeometryError, InvalidInputError,
-                       NumericalInstabilityError, PressureDropError,
-                       ConvergenceFailureError, ThermalConstraintError,
-                       GeometricConstraintError, VoluteGenerationError,
-                       chunkInterpolate, arcSpline, plotLine, parallelOffset,
-                       isentropicValues, fluidProps, createErrorContext,
-                       writeFile, readExcel, lineIntersection, revolveContour,
-                       intersection, pickleObject, DCM, py2cad)
-    from ceaInterface import *
-    from ceaInterface import CEA
-    from Volute import *
-    from Volute import Volute
-    from materials import wallMaterialCurves, sampleWallMaterial, availableWallMaterials, resolveWallMaterialName
-    from figures import exportInteractiveFigures
-    from keepOut import KeepOutEnvelope, keepOutEnvelope, revolveKeepOut, packingClearance
-    from channelSizing import (ChannelSizingState, channelSizingOutputs, solveChannelRadii)
-    from regenChannels import (RegenChannelState, regenChannelOutputs, solveRegenChannels,
-                               validateRegenChannelInputs)
-    from volutes import RegenVoluteState, regenVoluteOutputs, solveRegenVolutes
-    from chamber import (ConvergingSectionState, convergingSectionOutputs,
-                         solveConvergingSection)
-    from regenStations import RegenStationState, regenStationOutputs, solveRegenStations
-    from config import setInputs as readConfiguration
-    from exports import (exportData as writeExportData,
-                         exportExhaustPropertiesFEA as writeExhaustPropertiesFEA,
-                         pickleNozzle as writePickledNozzle)
-    from channelGeometry import (ChannelGeometryInputs,
-                                 generateCrossSections as buildCrossSections,
-                                 getMaxChannelRadius as maxChannelRadius)
-    from regenThermal import (RegenThermalContext, flutedHeatTransferStudyPath,
-                              validateRegenHeatTransferInputs,
-                              regenHeatTransferModel as solveRegenHeatTransfer,
-                              regenHeatTransferModelPlots as drawRegenHeatTransfer)
-    from gasDynamics import (prandtlMeyerAngle, machFromPrandtlMeyerAngle, machAngle,
-                             machFromPressureRatio, stagnationRatio, staticPressureRatio,
-                             staticTemperatureRatio, areaMachRelation, radiusMachRelation,
-                             machFromAreaRatio, conicalLength, divergenceLossFactor)
-    from characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
-                                 wallCharacteristicProjection)
-    from contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
-                               limitingCharacteristicIntersection, throatIntersection)
-    from contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
-                         conicalContour, raoParabolicContour, raoWallAngles,
-                         wallAnglesFromContour,
-                         truncatedIdealContour as solveTruncatedIdealContour,
-                         solveDesignPoint)
-# Relative imports for API-based Class calls
-except ImportError as e:
-    try:
-        from .utils import *
-        from .utils import (RegenGeometryError, InvalidInputError,
-                            NumericalInstabilityError, PressureDropError,
-                            ConvergenceFailureError, ThermalConstraintError,
-                            GeometricConstraintError, VoluteGenerationError,
-                            chunkInterpolate, arcSpline, plotLine, parallelOffset,
-                            isentropicValues, fluidProps, createErrorContext,
-                            writeFile, readExcel, lineIntersection, revolveContour,
-                            intersection, pickleObject, DCM, py2cad)
-        from .ceaInterface import *
-        from .ceaInterface import CEA
-        from .Volute import *
-        from .Volute import Volute
-        from .materials import wallMaterialCurves, sampleWallMaterial, availableWallMaterials, resolveWallMaterialName
-        from .figures import exportInteractiveFigures
-        from .keepOut import KeepOutEnvelope, keepOutEnvelope, revolveKeepOut, packingClearance
-        from .channelSizing import (ChannelSizingState, channelSizingOutputs, solveChannelRadii)
-        from .regenChannels import (RegenChannelState, regenChannelOutputs, solveRegenChannels,
-                                    validateRegenChannelInputs)
-        from .volutes import RegenVoluteState, regenVoluteOutputs, solveRegenVolutes
-        from .chamber import (ConvergingSectionState, convergingSectionOutputs,
-                              solveConvergingSection)
-        from .regenStations import RegenStationState, regenStationOutputs, solveRegenStations
-        from .config import setInputs as readConfiguration
-        from .exports import (exportData as writeExportData,
-                              exportExhaustPropertiesFEA as writeExhaustPropertiesFEA,
-                              pickleNozzle as writePickledNozzle)
-        from .channelGeometry import (ChannelGeometryInputs,
-                                      generateCrossSections as buildCrossSections,
-                                      getMaxChannelRadius as maxChannelRadius)
-        from .regenThermal import (RegenThermalContext, flutedHeatTransferStudyPath,
-                                   validateRegenHeatTransferInputs,
-                                   regenHeatTransferModel as solveRegenHeatTransfer,
-                                   regenHeatTransferModelPlots as drawRegenHeatTransfer)
-        from .gasDynamics import (prandtlMeyerAngle, machFromPrandtlMeyerAngle, machAngle,
-                                  machFromPressureRatio, stagnationRatio, staticPressureRatio,
-                                  staticTemperatureRatio, areaMachRelation, radiusMachRelation,
-                                  machFromAreaRatio, conicalLength, divergenceLossFactor)
-        from .characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
-                                      wallCharacteristicProjection)
-        from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
-                                    limitingCharacteristicIntersection, throatIntersection)
-        from .contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
-                              conicalContour, raoParabolicContour, raoWallAngles,
-                              wallAnglesFromContour,
-                              truncatedIdealContour as solveTruncatedIdealContour,
-                         solveDesignPoint)
-    except ImportError:
-        # If both fail, raise the original error with more context
-        raise ImportError(f'Could not import required modules. Original error: {e}. If the CEA interface is the problem, install its backend with "pip install rocketcea".')
+    from .utils import *
+    from .utils import (RegenGeometryError, InvalidInputError,
+                        NumericalInstabilityError, PressureDropError,
+                        ConvergenceFailureError, ThermalConstraintError,
+                        GeometricConstraintError, VoluteGenerationError,
+                        chunkInterpolate, arcSpline, plotLine, parallelOffset,
+                        isentropicValues, fluidProps, createErrorContext,
+                        writeFile, readExcel, lineIntersection, revolveContour,
+                        intersection, pickleObject, DCM, py2cad)
+    from .ceaInterface import *
+    from .ceaInterface import CEA
+    from .Volute import *
+    from .Volute import Volute
+    from .materials import wallMaterialCurves, sampleWallMaterial, availableWallMaterials, resolveWallMaterialName
+    from .figures import exportInteractiveFigures
+    from .keepOut import KeepOutEnvelope, keepOutEnvelope, revolveKeepOut, packingClearance
+    from .channelSizing import (ChannelSizingState, channelSizingOutputs, solveChannelRadii)
+    from .regenChannels import (RegenChannelState, regenChannelOutputs, solveRegenChannels,
+                                validateRegenChannelInputs)
+    from .nozzleVolutes import RegenVoluteState, regenVoluteOutputs, solveRegenVolutes
+    from .chamber import (ConvergingSectionState, convergingSectionOutputs,
+                          solveConvergingSection)
+    from .regenStations import RegenStationState, regenStationOutputs, solveRegenStations
+    from .config import setInputs as readConfiguration
+    from .exports import (exportData as writeExportData,
+                          exportExhaustPropertiesFEA as writeExhaustPropertiesFEA,
+                          pickleNozzle as writePickledNozzle)
+    from .channelGeometry import (ChannelGeometryInputs,
+                                  generateCrossSections as buildCrossSections,
+                                  getMaxChannelRadius as maxChannelRadius)
+    from .regenThermal import (RegenThermalContext, flutedHeatTransferStudyPath,
+                               validateRegenHeatTransferInputs,
+                               regenHeatTransferModel as solveRegenHeatTransfer,
+                               regenHeatTransferModelPlots as drawRegenHeatTransfer)
+    from .gasDynamics import (prandtlMeyerAngle, machFromPrandtlMeyerAngle, machAngle,
+                              machFromPressureRatio, stagnationRatio, staticPressureRatio,
+                              staticTemperatureRatio, areaMachRelation, radiusMachRelation,
+                              machFromAreaRatio, conicalLength, divergenceLossFactor)
+    from .characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
+                                  wallCharacteristicProjection)
+    from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
+                                limitingCharacteristicIntersection, throatIntersection)
+    from .contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
+                          conicalContour, raoParabolicContour, raoWallAngles,
+                          wallAnglesFromContour,
+                          truncatedIdealContour as solveTruncatedIdealContour,
+                          solveDesignPoint)
+except ImportError as error:
+    raise ImportError('Could not import NOVA\'s modules: {}. If the CEA interface is the problem, install its backend with "pip install rocketcea".'.format(error)) from error
 
 # Progress tracking
 from tqdm import tqdm
@@ -237,44 +185,24 @@ from datetime import datetime
 # studies in experimental/, the showcase scripts and the test suite all reach for them through
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
-try:
-    from plume import *
-    from plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
-                       PlumeFlow, PlumePoint, solvePlumeStructure, solvePlumeField,
-                       plumeCharacteristicSeed,
-                       fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
-                       obliqueShockDeflection, obliqueShockState, _exitWallAngle,
-                       freeJetRefineLine, freeJetGeneralPoint, freeJetSameFamilyPoint,
-                       freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCentreLineTarget,
-                       freeJetCentreLinePoint, freeJetCrossing, freeJetLeadingCharacteristic,
-                       freeJetCornerRays, solveFreeJetNet, freeJetInitialLine,
-                       plumeInteriorPoint, plumeAxisPoint, plumeNearAxisPoint,
-                       plumeFreeBoundaryPoint, plumeSameFamilyPoint, plumeShockCrossing,
-                       plumeMassFlux, plumeMachDisk, plumeExitLine, plumeCornerFan,
-                       solvePlumeMarch, advancePlumeFront, solvePlumeFront,
-                       prandtlCellCoefficient, packCellCoefficient, machDiskLocationCoefficient,
-                       machDiskOnsetPressureRatio, separationPressureRatio,
-                       plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
-                       plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
-except ImportError:
-    from .plume import *
-    from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
-                       PlumeFlow, PlumePoint, solvePlumeStructure, solvePlumeField,
-                       plumeCharacteristicSeed,
-                        fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
-                        obliqueShockDeflection, obliqueShockState, _exitWallAngle,
-                        freeJetRefineLine, freeJetGeneralPoint, freeJetSameFamilyPoint,
-                        freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCentreLineTarget,
-                        freeJetCentreLinePoint, freeJetCrossing, freeJetLeadingCharacteristic,
-                        freeJetCornerRays, solveFreeJetNet, freeJetInitialLine,
-                        plumeInteriorPoint, plumeAxisPoint, plumeNearAxisPoint,
-                        plumeFreeBoundaryPoint, plumeSameFamilyPoint, plumeShockCrossing,
-                        plumeMassFlux, plumeMachDisk, plumeExitLine, plumeCornerFan,
-                        solvePlumeMarch, advancePlumeFront, solvePlumeFront,
-                        prandtlCellCoefficient, packCellCoefficient, machDiskLocationCoefficient,
-                        machDiskOnsetPressureRatio, separationPressureRatio,
-                        plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
-                        plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
+from .plume import *
+from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
+                   PlumeFlow, PlumePoint, solvePlumeStructure, solvePlumeField,
+                   plumeCharacteristicSeed,
+                    fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
+                    obliqueShockDeflection, obliqueShockState, _exitWallAngle,
+                    freeJetRefineLine, freeJetGeneralPoint, freeJetSameFamilyPoint,
+                    freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCentreLineTarget,
+                    freeJetCentreLinePoint, freeJetCrossing, freeJetLeadingCharacteristic,
+                    freeJetCornerRays, solveFreeJetNet, freeJetInitialLine,
+                    plumeInteriorPoint, plumeAxisPoint, plumeNearAxisPoint,
+                    plumeFreeBoundaryPoint, plumeSameFamilyPoint, plumeShockCrossing,
+                    plumeMassFlux, plumeMachDisk, plumeExitLine, plumeCornerFan,
+                    solvePlumeMarch, advancePlumeFront, solvePlumeFront,
+                    prandtlCellCoefficient, packCellCoefficient, machDiskLocationCoefficient,
+                    machDiskOnsetPressureRatio, separationPressureRatio,
+                    plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
+                    plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
 
 
 class Nozzle:

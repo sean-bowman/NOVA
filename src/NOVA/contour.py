@@ -42,22 +42,13 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import fsolve, minimize_scalar
 
-try:
-    from characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
-                                 wallCharacteristicProjection)
-    from contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
-                               limitingCharacteristicIntersection, throatIntersection)
-    from gasDynamics import (prandtlMeyerAngle, radiusMachRelation, conicalLength,
-                             machFromAreaRatio, staticPressureRatio, staticTemperatureRatio)
-    from utils import arcSpline, plotLine, isentropicValues, lineIntersection
-except ImportError:
-    from .characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
-                                  wallCharacteristicProjection)
-    from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
-                                limitingCharacteristicIntersection, throatIntersection)
-    from .gasDynamics import (prandtlMeyerAngle, radiusMachRelation, conicalLength,
-                              machFromAreaRatio, staticPressureRatio, staticTemperatureRatio)
-    from .utils import arcSpline, plotLine, isentropicValues, lineIntersection
+from .characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
+                              wallCharacteristicProjection)
+from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
+                            limitingCharacteristicIntersection, throatIntersection)
+from .gasDynamics import (prandtlMeyerAngle, radiusMachRelation, conicalLength,
+                          machFromAreaRatio, staticPressureRatio, staticTemperatureRatio)
+from .utils import arcSpline, plotLine, isentropicValues, lineIntersection
 
 def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGamma: float,
                         gasConstant: float, stagnationTemperature: float) -> float:

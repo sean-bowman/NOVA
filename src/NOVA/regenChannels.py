@@ -67,22 +67,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-try:
-    from utils import (DCM, arcSpline, chunkInterpolate, intersection, parallelOffset, plotLine,
-                       revolveContour, GeometricConstraintError, InvalidInputError)
-    from channelGeometry import (ChannelGeometryInputs,
-                                 generateCrossSections as buildCrossSections,
-                                 getMaxChannelRadius as maxChannelRadius)
-    from channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
-    from validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
-except ImportError:
-    from .utils import (DCM, arcSpline, chunkInterpolate, intersection, parallelOffset, plotLine,
-                        revolveContour, GeometricConstraintError, InvalidInputError)
-    from .channelGeometry import (ChannelGeometryInputs,
-                                  generateCrossSections as buildCrossSections,
-                                  getMaxChannelRadius as maxChannelRadius)
-    from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
-    from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
+from .utils import (DCM, arcSpline, chunkInterpolate, intersection, parallelOffset, plotLine,
+                    revolveContour, GeometricConstraintError, InvalidInputError)
+from .channelGeometry import (ChannelGeometryInputs,
+                              generateCrossSections as buildCrossSections,
+                              getMaxChannelRadius as maxChannelRadius)
+from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
+from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
 
 # Plotly backs the interactive channel views only. A plotly-free install loses the .html figures
 # and nothing else.

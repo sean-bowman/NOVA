@@ -20,12 +20,10 @@ from matplotlib.patches import Polygon
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
-from Nozzle import (PlumeFlow, PlumePoint, plumeExitLine, solvePlumeMarch,          # noqa: E402
+from NOVA.Nozzle import (PlumeFlow, PlumePoint, plumeExitLine, solvePlumeMarch,          # noqa: E402
                     freeJetLeadingCharacteristic, PlumeGas, shockCellLength,
                     fullyExpandedDiameter, machFromPressureRatio, prandtlCellCoefficient)
-import figures as figureModule                                                       # noqa: E402
+from NOVA import figures as figureModule                                                       # noqa: E402
 
 background = '#1a1e2a'
 panel      = '#222735'
@@ -341,7 +339,7 @@ def drawOperatingRange():
     taken here as an isentropic compression, and the size of that approximation is drawn beside
     the plumes rather than described.
     '''
-    from Nozzle import obliqueShockState, plumeMachDisk, prandtlMeyerAngle
+    from NOVA.Nozzle import obliqueShockState, plumeMachDisk, prandtlMeyerAngle
     flow = PlumeFlow(GAMMA, 287.0, 300.0, 1.0e6)
     exitMach = 3.0
     exitPressure = flow.staticPressure(exitMach)

@@ -42,10 +42,7 @@ import os
 
 import numpy as np
 
-try:
-    from utils import py2cad, pickleObject, writeFile
-except ImportError:
-    from .utils import py2cad, pickleObject, writeFile
+from .utils import py2cad, pickleObject, writeFile
 
 def exportData(nozzle, filename: str = 'default'):
 

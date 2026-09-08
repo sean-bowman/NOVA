@@ -71,20 +71,12 @@ from typing import Any
 import numpy as np
 from scipy.optimize import brentq, fsolve
 
-try:
-    from utils import (arcSpline, isentropicValues, parallelOffset,
-                       GeometricConstraintError, InvalidInputError)
-    from gasDynamics import machFromAreaRatio
-    from keepOut import keepOutEnvelope
-    from validation import (Overlay, applyRules, arrayRule, choiceRule, integerRule,
-                            numericRule, presentRule, read)
-except ImportError:
-    from .utils import (arcSpline, isentropicValues, parallelOffset,
-                        GeometricConstraintError, InvalidInputError)
-    from .gasDynamics import machFromAreaRatio
-    from .keepOut import keepOutEnvelope
-    from .validation import (Overlay, applyRules, arrayRule, choiceRule, integerRule,
-                             numericRule, presentRule, read)
+from .utils import (arcSpline, isentropicValues, parallelOffset,
+                    GeometricConstraintError, InvalidInputError)
+from .gasDynamics import machFromAreaRatio
+from .keepOut import keepOutEnvelope
+from .validation import (Overlay, applyRules, arrayRule, choiceRule, integerRule,
+                         numericRule, presentRule, read)
 
 # The converging section reads the diverging contour and the chamber state it was solved in, and
 # a sunken contour additionally reads the jacket definition it has to wrap around. Written as a

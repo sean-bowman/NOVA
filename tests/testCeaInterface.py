@@ -23,10 +23,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from ceaInterface import (CEA, PA_PER_PSIA, DEGR_TO_K, FTPS_TO_MPS,
+from NOVA.ceaInterface import (CEA, PA_PER_PSIA, DEGR_TO_K, FTPS_TO_MPS,
                           LBMPFT3_TO_KGPM3, BTUPLBM_TO_JPKG, CALPGK_TO_JPKGK,
                           MILLIPOISE_TO_PAS, MCALCMKS_TO_WMK, R_UNIVERSAL)
 

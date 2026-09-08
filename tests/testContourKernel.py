@@ -14,11 +14,8 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from characteristics import CharacteristicGas
-from contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
+from NOVA.characteristics import CharacteristicGas
+from NOVA.contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
                            limitingCharacteristicIntersection, throatIntersection)
 
 GAMMA, GAS_CONSTANT, STAGNATION_TEMPERATURE = 1.1475421191138746, 692.0, 3512.0

@@ -13,10 +13,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from gasDynamics import (stagnationRatio, staticTemperatureRatio, staticPressureRatio,
+from NOVA.gasDynamics import (stagnationRatio, staticTemperatureRatio, staticPressureRatio,
                          machFromPressureRatio, machAngle, prandtlMeyerAngle,
                          machFromPrandtlMeyerAngle, areaMachRelation, radiusMachRelation,
                          machFromAreaRatio, conicalLength, divergenceLossFactor)

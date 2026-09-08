@@ -5,7 +5,7 @@ This directory is the research record for the free-jet characteristic net of NAS
 of Characteristics*, Andrews, Craidon, Dennard and Vick, Langley Research Center, June 1964
 (Appendix C), which carries the nozzle-interior MOC solver in `Nozzle.py` past the exit plane.
 
-The implementation lives in `NOVANozzleDesigner/Nozzle.py` and `tnd2327.py` is a shim onto it, so
+The implementation lives in `src/NOVA/Nozzle.py` and `tnd2327.py` is a shim onto it, so
 there is one solver rather than two that drift apart. `Nozzle.plumeField` exposes it to the product
 behind a validity envelope. The studies here drive the net directly instead, at operating points
 well outside that envelope, which is what mapping where a formulation breaks down requires.

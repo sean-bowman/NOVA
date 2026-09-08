@@ -58,12 +58,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-try:
-    from utils import arcSpline, chunkInterpolate, plotLine, ThermalConstraintError, createErrorContext
-    from ceaInterface import CEA
-except ImportError:
-    from .utils import arcSpline, chunkInterpolate, plotLine, ThermalConstraintError, createErrorContext
-    from .ceaInterface import CEA
+from .utils import arcSpline, chunkInterpolate, plotLine, ThermalConstraintError, createErrorContext
+from .ceaInterface import CEA
 
 @dataclass
 class RegenStationState:

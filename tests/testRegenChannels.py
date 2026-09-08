@@ -28,12 +28,10 @@ import numpy as np
 import pytest
 
 repositoryRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-packageDirectory = os.path.join(repositoryRoot, 'NOVANozzleDesigner')
-sys.path.insert(0, packageDirectory)
-
-from regenChannels import (RegenChannelState, regenChannelOutputs, regenChannelRules,
+packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
+from NOVA.regenChannels import (RegenChannelState, regenChannelOutputs, regenChannelRules,
                            validateRegenChannelInputs)
-from validation import fieldsCovered
+from NOVA.validation import fieldsCovered
 
 def workingInputs():
 
@@ -103,7 +101,7 @@ class TestStateContract:
         # The build copies the sizing solve's outputs onto its own state by name, which a static
         # read of the module cannot see. Anything the sizing solve produces and the build does
         # not hand on is silently lost, and the loss shows up far downstream as an empty array.
-        from channelSizing import channelSizingOutputs
+        from NOVA.channelSizing import channelSizingOutputs
 
         dropped = [name for name in channelSizingOutputs if name not in regenChannelOutputs]
 
@@ -115,7 +113,7 @@ class TestStateContract:
         # complete is that a fresh Nozzle can seed all of it.
         import matplotlib
         matplotlib.use('Agg', force = True)
-        from Nozzle import Nozzle
+        from NOVA.Nozzle import Nozzle
 
         state = Nozzle().regenChannelState()
         missing = [name for name in RegenChannelState.__dataclass_fields__

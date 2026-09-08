@@ -33,10 +33,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from channelGeometry import ChannelGeometryInputs, generateCrossSections, getMaxChannelRadius
+from NOVA.channelGeometry import ChannelGeometryInputs, generateCrossSections, getMaxChannelRadius
 
 def nozzleWallCloud(numStations, wallRadius = 0.058, length = 0.3, numSlices = 24):
 

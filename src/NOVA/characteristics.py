@@ -34,10 +34,7 @@ import numpy as np
 import sympy as sym
 from scipy.optimize import fsolve, least_squares
 
-try:
-    from gasDynamics import prandtlMeyerAngle
-except ImportError:
-    from .gasDynamics import prandtlMeyerAngle
+from .gasDynamics import prandtlMeyerAngle
 
 class CharacteristicGas:
 

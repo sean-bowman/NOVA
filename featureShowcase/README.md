@@ -85,7 +85,7 @@ the pressure-matching finding.
 
 **Contour verification.** The worked case delivers the area ratio and the length fraction it was
 asked for, exactly. See
-[NozzleContourValidation.md](../NOVANozzleDesigner/docs/NozzleContourValidation.md) for what that
+[NozzleContourValidation.md](../src/NOVA/docs/NozzleContourValidation.md) for what that
 check does and does not establish, for the comparison against the Rao wall-angle chart, and for
 the defects the comparison found.
 

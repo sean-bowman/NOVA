@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(root), 'documentProcessor'))
 
 from documentProcessor import DocumentProcessor
 
-reports = os.path.join(root, 'NOVANozzleDesigner', 'docs', 'reports')
+reports = os.path.join(root, 'src', 'NOVA', 'docs', 'reports')
 documents = [
     ('nozzleContourEffort_2026-09-06.md', 'NOVA', 'Contour verification and assessment'),
 ]

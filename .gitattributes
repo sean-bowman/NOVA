@@ -8,3 +8,6 @@
 *.pdf binary
 *.pkl binary
 *.npz binary
+
+# Windows batch files keep CRLF.
+*.bat text eol=crlf

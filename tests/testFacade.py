@@ -22,6 +22,7 @@ Author: Sean Bowman
 '''
 
 import ast
+import importlib
 import io
 import os
 import re
@@ -30,14 +31,13 @@ import sys
 import pytest
 
 repositoryRoot   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-packageDirectory = os.path.join(repositoryRoot, 'NOVANozzleDesigner')
-sys.path.insert(0, packageDirectory)
-
+packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
 # Every module the decomposition produced, plus the ones it built on.
 decomposedModules = (
     'chamber', 'channelGeometry', 'channelSizing', 'characteristics', 'ceaInterface', 'config',
     'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
-    'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation', 'volutes',
+    'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation',
+    'nozzleVolutes',
 )
 
 def moduleSource(name: str) -> str:
@@ -45,6 +45,12 @@ def moduleSource(name: str) -> str:
     '''The text of one module.'''
 
     return io.open(os.path.join(packageDirectory, name + '.py'), encoding = 'utf-8').read()
+
+def packageModule(name: str):
+
+    '''One module of the package, imported by its dotted name.'''
+
+    return importlib.import_module('NOVA.' + name)
 
 def nozzleClass() -> ast.ClassDef:
 
@@ -97,7 +103,7 @@ class TestModulesStandAlone:
     @pytest.mark.parametrize('name', decomposedModules)
     def testEveryModuleImportsOnItsOwn(self, name):
 
-        __import__(name)
+        packageModule(name)
 
 class TestNozzleIsAFacade:
 
@@ -163,7 +169,7 @@ class TestStateObjectsAreComplete:
     stateModules = {
         'regenChannels': 'RegenChannelState',
         'channelSizing': 'ChannelSizingState',
-        'volutes':       'RegenVoluteState',
+        'nozzleVolutes': 'RegenVoluteState',
         'chamber':       'ConvergingSectionState',
         'regenStations': 'RegenStationState',
         'plume':         'PlumeContour',
@@ -189,7 +195,7 @@ class TestStateObjectsAreComplete:
     @pytest.mark.parametrize('name, stateName', sorted(stateModules.items()))
     def testEveryFieldReachedIsDeclared(self, name, stateName):
 
-        module = __import__(name)
+        module = packageModule(name)
         declared = set(getattr(module, stateName).__dataclass_fields__)
 
         variableName = 'contour' if stateName == 'PlumeContour' else 'state'
@@ -202,9 +208,9 @@ class TestStateObjectsAreComplete:
 
         import matplotlib
         matplotlib.use('Agg', force = True)
-        from Nozzle import Nozzle
+        from NOVA.Nozzle import Nozzle
 
-        module = __import__(name)
+        module = packageModule(name)
         builder = {'RegenChannelState':      'regenChannelState',
                    'ChannelSizingState':     'channelSizingState',
                    'RegenVoluteState':       'regenVoluteState',
@@ -222,12 +228,12 @@ class TestStateObjectsAreComplete:
 
         pairs = (('regenChannels', 'RegenChannelState', 'regenChannelOutputs'),
                  ('channelSizing', 'ChannelSizingState', 'channelSizingOutputs'),
-                 ('volutes',       'RegenVoluteState',   'regenVoluteOutputs'),
+                 ('nozzleVolutes', 'RegenVoluteState',   'regenVoluteOutputs'),
                  ('chamber',       'ConvergingSectionState', 'convergingSectionOutputs'),
                  ('regenStations', 'RegenStationState',  'regenStationOutputs'))
 
         for name, stateName, outputName in pairs:
-            module = __import__(name)
+            module = packageModule(name)
             declared = set(getattr(module, stateName).__dataclass_fields__)
             outputs = set(getattr(module, outputName))
             assert outputs <= declared, (name, sorted(outputs - declared))
@@ -240,7 +246,7 @@ class TestOutputStaysOutOfTheRepository:
 
         import matplotlib
         matplotlib.use('Agg', force = True)
-        from Nozzle import Nozzle
+        from NOVA.Nozzle import Nozzle
 
         assert os.path.basename(Nozzle()._getOutputRoot()) == 'runs'
 

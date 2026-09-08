@@ -36,10 +36,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
+from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
                           flutedHeatTransferStudyPath, validateRegenHeatTransferInputs)
 
 class TestBartzViscosityConstant:
@@ -304,7 +301,7 @@ class TestStudyPath:
         packageDirectory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
         assert path.endswith(os.path.join('assets', 'FlutedChannelHeatTransferStudy.csv'))
-        assert path.startswith(os.path.join(packageDirectory, 'NOVANozzleDesigner'))
+        assert path.startswith(os.path.join(packageDirectory, 'src', 'NOVA'))
         assert 'propulsionDesign' not in path
 
 class TestInputValidation:

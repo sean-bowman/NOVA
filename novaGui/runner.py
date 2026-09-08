@@ -8,8 +8,6 @@ forwarded to a queue the GUI drains on its main thread.
 
 Before the first run the loader:
 
-  - puts NOVANozzleDesigner on sys.path (the package imports its siblings by
-    bare name, matching the README quickstart),
   - forces the Matplotlib Agg backend and applies the GUI palette so NOVA's
     saved figures match the rest of the window,
   - stops plotly.offline.plot from opening a browser tab,
@@ -26,6 +24,7 @@ import sys
 import json
 import time
 import functools
+import importlib
 import threading
 import traceback
 
@@ -33,8 +32,7 @@ from . import theme
 from . import configSchema
 from .progress import StageTracker
 
-# NOVANozzleDesigner lives one level up from this package.
-novaPackageDir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'NOVANozzleDesigner')
+# NOVA is installed as a package, so no path handling is needed here.
 
 # Files NOVA writes into <name>Outputs/. Names are fixed except the contour and
 # geometry text/STL files, which are prefixed with the run's `filename`.
@@ -255,16 +253,16 @@ class PipelineRunner:
 
         '''
 
-        if novaPackageDir not in sys.path:
-            sys.path.insert(0, novaPackageDir)
-
         import matplotlib
         matplotlib.use('Agg', force = True)
         import matplotlib.pyplot as plt
         plt.rcParams.update(theme.matplotlibRcParams())
 
-        import Nozzle as nozzleModule
-        from Nozzle import Nozzle as nozzleClass
+        # NOVA.Nozzle names both the module and the class it exports, and the
+        # package binds the class. The patches below need the module, so it is
+        # fetched by name rather than read off the package.
+        nozzleModule = importlib.import_module('NOVA.Nozzle')
+        from NOVA import Nozzle as nozzleClass
 
         # plotly.offline.plot defaults to opening a browser tab per figure.
         if not getattr(nozzleModule, '_novaGuiPlotPatched', False):
@@ -273,7 +271,7 @@ class PipelineRunner:
             nozzleModule._novaGuiPlotPatched = True
 
         # Silence progress bars in every NOVA module that binds tqdm by name.
-        for moduleName in ('Nozzle', 'utils', 'Volute'):
+        for moduleName in ('NOVA.Nozzle', 'NOVA.utils', 'NOVA.Volute'):
             module = sys.modules.get(moduleName)
             if module is None or not hasattr(module, 'tqdm'):
                 continue

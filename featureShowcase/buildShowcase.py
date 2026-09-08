@@ -2,7 +2,7 @@
 Representative plotted outputs for the NOVA nozzle designer.
 
 Renders geometry, flowfield, plume and material views from the renderer-independent figure
-dataclasses in NOVANozzleDesigner/figures.py, so the same data that drives the GUI panes and the
+dataclasses in src/NOVA/figures.py, so the same data that drives the GUI panes and the
 interactive exports also drives these figures.
 '''
 import os
@@ -17,10 +17,8 @@ from matplotlib.gridspec import GridSpec
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
-import figures as figureModule
-import materials as materialModule
+from NOVA import figures as figureModule
+from NOVA import materials as materialModule
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Palette -- #

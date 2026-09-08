@@ -1,7 +1,7 @@
 '''
 Free-jet characteristic net of NASA TN D-2327, under the names this directory's studies use.
 
-The implementation lives in `NOVANozzleDesigner/Nozzle.py`, beside the plume correlations it
+The implementation lives in `src/NOVA/Nozzle.py`, beside the plume correlations it
 extends and the nozzle-interior solver it continues. This module is the research face of it: the
 convergence sweeps and the showcase figures drive the net directly, at operating points well
 outside the envelope `Nozzle.plumeField` accepts, which is what a study of where the formulation
@@ -12,10 +12,7 @@ One implementation, two sets of names. Nothing here reimplements anything.
 import os
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from Nozzle import (                                  # noqa: E402
+from NOVA.Nozzle import (                                  # noqa: E402
     PlumeGas as Gas,
     PlumeNode as Point,
     freeJetGeneralPoint as generalPoint,

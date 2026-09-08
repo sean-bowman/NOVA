@@ -6,7 +6,7 @@ The immediate reason work stopped here: verification of the contour generator tu
 
 ## Where the code is
 
-The solver lives in `NOVANozzleDesigner/plume.py`, in three layers, and is re-exported from `Nozzle.py` so existing imports resolve unchanged.
+The solver lives in `src/NOVA/plume.py`, in three layers, and is re-exported from `Nozzle.py` so existing imports resolve unchanged.
 
 The correlations place the jet boundary, the shock cell spacing and the Mach disk from published fits, and solve nothing.
 

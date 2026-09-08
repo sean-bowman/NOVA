@@ -36,13 +36,11 @@ import numpy as np
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
-from contour import raoWallAngles, raoParabolicContour, raoChartExtrapolatedAbove
-from contourKernel import ThroatGeometry
-from gasDynamics import (conicalLength, machFromAreaRatio, staticPressureRatio,
+from NOVA.contour import raoWallAngles, raoParabolicContour, raoChartExtrapolatedAbove
+from NOVA.contourKernel import ThroatGeometry
+from NOVA.gasDynamics import (conicalLength, machFromAreaRatio, staticPressureRatio,
                          divergenceLossFactor)
-from Nozzle import Nozzle
+from NOVA.Nozzle import Nozzle
 
 background = '#1a1e2a'
 panel      = '#222735'
@@ -74,7 +72,7 @@ def runCase(areaRatio, lengthFraction, mesh = 50, fuel = 'LH2', oxidizer = 'LOX'
     One contour, returned as a flat dictionary of what it delivered. Returns None if the solve
     fails, so a sweep can report a hole rather than stopping at one.
     '''
-    config = json.load(open(os.path.join(root, 'NOVANozzleDesigner', 'assets',
+    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets',
                                          'loxLh2Example.json')))
     config.update({'Fuel': fuel, 'Oxidizer': oxidizer, 'OFRatio': mixtureRatio,
                    'chamberPressure': chamberPressure, 'thrust': thrust,

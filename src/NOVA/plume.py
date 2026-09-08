@@ -36,10 +36,7 @@ from typing import Any
 
 import numpy as np
 
-try:
-    from gasDynamics import prandtlMeyerAngle, machFromPressureRatio
-except ImportError:
-    from .gasDynamics import prandtlMeyerAngle, machFromPressureRatio
+from .gasDynamics import prandtlMeyerAngle, machFromPressureRatio
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Correlation constants -- #

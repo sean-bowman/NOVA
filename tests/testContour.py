@@ -18,15 +18,12 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from characteristics import CharacteristicGas
-from contourKernel import ThroatGeometry
-from contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
+from NOVA.characteristics import CharacteristicGas
+from NOVA.contourKernel import ThroatGeometry
+from NOVA.contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
                      conicalContour, raoWallAngles, raoParabolicContour, wallAnglesFromContour,
                      raoChartExtrapolatedAbove)
-from gasDynamics import conicalLength, radiusMachRelation
+from NOVA.gasDynamics import conicalLength, radiusMachRelation
 
 GAMMA, GAS_CONSTANT, STAGNATION_TEMPERATURE = 1.1475421191138746, 692.0, 3512.0
 

@@ -337,7 +337,7 @@ class NovaApp(tk.Tk):
         messagebox.showinfo(
             'About NOVA Nozzle Designer',
             'NOVA -- Nozzle Optimization for Variable Applications\n\n'
-            'Tkinter front end for the NOVANozzleDesigner suite: builds a config, runs the '
+            'Tkinter front end for the NOVA suite: builds a config, runs the '
             'contour, cooling and heat transfer pipeline on a background thread, and shows the '
             'resulting geometry and analysis.\n\n'
             f'GUI version {__import__("novaGui").__version__}',

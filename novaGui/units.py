@@ -10,7 +10,7 @@ A unit is an affine map: SI = display * scale + offset. Pure scale factors (offs
 pressure, length, force and mass flow; temperature carries an offset. `dimensionForUnit` maps a
 schema field's declared unit string to one of the dimension tables below.
 
-Factors match NOVANozzleDesigner/units.py and ceaInterface.py so a value typed in psi lands on
+Factors match src/NOVA/units.py and ceaInterface.py so a value typed in psi lands on
 the same Pa the CEA interface would compute.
 
 Author: Sean Bowman

@@ -34,7 +34,7 @@ The main window opens without loading the scientific stack; NumPy, SciPy, Matplo
 
 The run bar hands the form contents to a `PipelineRunner`, which:
 
-- puts `NOVANozzleDesigner` on `sys.path` and imports `Nozzle`,
+- imports `Nozzle` from the installed `NOVA` package,
 - forces the Matplotlib `Agg` backend and applies the GUI palette so NOVA's saved figures match the window,
 - stops `plotly.offline.plot` from opening browser tabs and silences the tqdm progress bars,
 - redirects the output folder to the location set in the Export tab,
@@ -46,7 +46,7 @@ Progress printed by NOVA drives the run bar and is mirrored into the collapsible
 
 ## Plotting
 
-Two renderers, one description. `NOVANozzleDesigner/figures.py` extracts each figure into a
+Two renderers, one description. `src/NOVA/figures.py` extracts each figure into a
 plain dataclass that mentions neither plotting library, then offers a plotly renderer for it.
 `novaGui/plotting.py` renders the same dataclasses with Matplotlib.
 
@@ -81,7 +81,7 @@ motionless bar reads as a hang.
 
 `novaGui/units.py` holds the per-field unit tables (pressure, length, force, temperature, angle, mass flow). Each numeric field stores and submits its value in NOVA's SI unit; the dropdown only changes the display, and switching it converts the shown number so the physical quantity is preserved.
 
-The wall material picker and its property panel read `NOVANozzleDesigner/materials.py` directly (numpy only, no CEA), sampling `sampleWallMaterial(name, temperature)` for the info line.
+The wall material picker and its property panel read `src/NOVA/materials.py` directly (numpy only, no CEA), sampling `sampleWallMaterial(name, temperature)` for the info line.
 
 ## Dependencies
 

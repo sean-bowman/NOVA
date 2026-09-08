@@ -2,7 +2,7 @@
 
 '''
 
-Validation and behaviour tests for NOVANozzleDesigner/materials.py.
+Validation and behaviour tests for src/NOVA/materials.py.
 
 The thermal conductivity curves are checked at reference temperatures against the values in
 their cited sources, and the error is quantified. Room-temperature pure-copper and austenitic
@@ -21,9 +21,7 @@ import warnings
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'NOVANozzleDesigner'))
-
-from materials import (wallMaterialCurves, sampleWallMaterial, availableWallMaterials,
+from NOVA.materials import (wallMaterialCurves, sampleWallMaterial, availableWallMaterials,
                        resolveWallMaterialName, materialProperties, roughnessTable)
 
 def _conductivityAt(material: str, temperatureKelvin: float) -> float:

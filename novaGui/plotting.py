@@ -7,7 +7,7 @@ draw routines the geometry and analysis tabs share. Matplotlib is imported here
 rather than in widgets.py so the main window can open before the scientific
 stack is touched.
 
-The renderers take figure descriptions from NOVANozzleDesigner.figures, which also
+The renderers take figure descriptions from NOVA.figures, which also
 carries a plotly renderer for the same descriptions. Matplotlib draws the inline
 pane because it is always installed and draws into a Tk canvas; plotly draws the
 interactive companion opened in a browser, which it does far better and which Tk

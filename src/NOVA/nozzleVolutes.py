@@ -60,16 +60,10 @@ from typing import Any
 import numpy as np
 from scipy.interpolate import CubicSpline
 
-try:
-    from utils import DCM, revolveContour, InvalidInputError, VoluteGenerationError, createErrorContext
-    from Volute import Volute
-    from keepOut import keepOutEnvelope, revolveKeepOut
-    from validation import applyRules, arrayRule, presentRule
-except ImportError:
-    from .utils import DCM, revolveContour, InvalidInputError, VoluteGenerationError, createErrorContext
-    from .Volute import Volute
-    from .keepOut import keepOutEnvelope, revolveKeepOut
-    from .validation import applyRules, arrayRule, presentRule
+from .utils import DCM, revolveContour, InvalidInputError, VoluteGenerationError, createErrorContext
+from .Volute import Volute
+from .keepOut import keepOutEnvelope, revolveKeepOut
+from .validation import applyRules, arrayRule, presentRule
 
 # Plotly backs the interactive volute view only. A plotly-free install loses the .html figure and
 # nothing else.

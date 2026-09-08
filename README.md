@@ -37,8 +37,12 @@ NOVA is a computational toolset for generating and analyzing rocket nozzle geome
 NOVA targets **Python 3.10** on Windows.
 
 ```bash
-pip install -r dependencies.txt
+pip install -e .
 ```
+
+That installs the dependencies and puts `NOVA` on the import path, so
+`from NOVA import Nozzle` resolves from any working directory. The package
+itself lives in `src/NOVA/`.
 
 Combustion thermochemistry comes from NASA CEA through
 [`rocketcea`](https://rocketcea.readthedocs.io/), which ships a prebuilt
@@ -61,7 +65,7 @@ everything else runs unchanged.
 ## Quickstart
 
 ```python
-from Nozzle import Nozzle
+from NOVA import Nozzle
 
 myNozzle = Nozzle()
 myNozzle.generateNozzle()                       # uses assets/nozzleConfig.json
@@ -72,8 +76,15 @@ myNozzle.generateNozzle(configPath = 'myCase.json')   # or point at your own
 example below:
 
 ```bash
-python -c "import sys; sys.path.insert(0,'NOVANozzleDesigner'); \
-from Nozzle import Nozzle; Nozzle().generateNozzle(configPath='NOVANozzleDesigner/assets/loxLh2Example.json')"
+python -c "from NOVA import Nozzle; Nozzle().generateNozzle(configPath='src/NOVA/assets/loxLh2Example.json')"
+```
+
+The solvers are importable on their own, without a `Nozzle`, and so are the
+physics modules:
+
+```python
+from NOVA import machFromAreaRatio, wallMaterialCurves
+from NOVA import gasDynamics, materials
 ```
 
 `generateNozzle()` runs the full pipeline: diverging contour, converging
@@ -86,7 +97,7 @@ case. Start from `assets/loxLh2Example.json` instead.
 
 ## Worked example: LOX/LH2 upper-stage nozzle
 
-`NOVANozzleDesigner/assets/loxLh2Example.json` defines a 100 kN hydrolox upper
+`src/NOVA/assets/loxLh2Example.json` defines a 100 kN hydrolox upper
 stage. It is the same operating point used as the CEA validation case in
 `tests/testCeaInterface.py`, so the thermochemistry can be checked directly
 against the NASA CEARun web tool.
@@ -180,7 +191,7 @@ truncation criterion NASA SP-8120 attributes to Ahlberg. Setting it to `length`
 cuts at the requested length instead and matches the wall static pressure to a
 target exit pressure, which is what earlier designs were built with and which
 delivers neither the requested area ratio nor an exit plane at that pressure.
-[NozzleContourValidation.md](NOVANozzleDesigner/docs/NozzleContourValidation.md)
+[NozzleContourValidation.md](src/NOVA/docs/NozzleContourValidation.md)
 measures all of this.
 
 ## Outputs
@@ -205,7 +216,7 @@ A run writes to `{filename}Outputs/` beside the repository root.
 Every figure is written twice when plotly is installed: a Matplotlib PNG and an interactive
 plotly HTML companion. Matplotlib is the required backend because it is the only one that
 renders into the GUI's Tk canvas; plotly is optional and adds the browser-side interactive
-views. Both are drawn from one description in `NOVANozzleDesigner/figures.py`, so the two
+views. Both are drawn from one description in `src/NOVA/figures.py`, so the two
 renderings cannot drift. Without plotly the `.html` files are simply not written and a one-line
 notice says so.
 
@@ -243,7 +254,7 @@ L* and contraction ratio are reported on the analysis tab.
 
 | Field | Unit | Meaning |
 |---|---|---|
-| `Fuel`, `Oxidizer` | -- | Propellant names; see the [CEA interface docs](NOVANozzleDesigner/docs/ceaInterface.md#propellant-names) |
+| `Fuel`, `Oxidizer` | -- | Propellant names; see the [CEA interface docs](src/NOVA/docs/ceaInterface.md#propellant-names) |
 | `OFRatio` | -- | Mixture ratio, or `"maxisp"` to optimize |
 | `chamberPressure` | Pa | |
 | `fuelInitialTemperature`, `oxidizerInitialTemperature` | K | |
@@ -256,7 +267,7 @@ L* and contraction ratio are reported on the analysis tab.
 ### Cooling, volutes and output
 
 Cooling channel, volute and print-support fields are documented in
-[NozzleCooling.md](NOVANozzleDesigner/docs/NozzleCooling.md).
+[NozzleCooling.md](src/NOVA/docs/NozzleCooling.md).
 
 `assets/regenExample.json` is the worked example with the cooling jacket switched
 on: sixty circular channels in GRCop-42, hydrogen coolant at 3.4 kg/s entering at
@@ -270,7 +281,7 @@ by a keep-out envelope rather than a chamber contour: `keepOutRadius`,
 left unset to take a default from the chamber radius. It is a packaging boundary,
 not a model of a closure.
 
-The `material` field is a wall alloy name resolved by `NOVANozzleDesigner/materials.py`: `GRCop-42`, `CuCrZr`, `OFHC Copper`, `NARloy-Z`, `AlSi10Mg`, `Al 6061-T6`, `Inconel 718`, `Inconel 625`, `316L`, `Ti-6Al-4V`, plus the legacy keys `cu` / `al` / `in`. The heat transfer model samples that module's temperature-dependent thermal conductivity curve for whichever alloy is named; an unrecognized name falls back to GRCop-42 with a warning. Conductivity curves are validated against their cited sources in `tests/testMaterials.py`.
+The `material` field is a wall alloy name resolved by `src/NOVA/materials.py`: `GRCop-42`, `CuCrZr`, `OFHC Copper`, `NARloy-Z`, `AlSi10Mg`, `Al 6061-T6`, `Inconel 718`, `Inconel 625`, `316L`, `Ti-6Al-4V`, plus the legacy keys `cu` / `al` / `in`. The heat transfer model samples that module's temperature-dependent thermal conductivity curve for whichever alloy is named; an unrecognized name falls back to GRCop-42 with a warning. Conductivity curves are validated against their cited sources in `tests/testMaterials.py`.
 
 `materials.py` and `units.py` are local forks of `orbitalRockets/common`, carried here so NOVA has no external dependency; `units.py` holds the conversion constants and the US Standard Atmosphere model.
 
@@ -349,16 +360,16 @@ other way round.
 
 ## Theory
 
-- [Nozzle Design Overview](NOVANozzleDesigner/docs/NozzleDesignOverview.md) -- consolidated contour and cooling reference, end to end ([PDF](NOVANozzleDesigner/docs/NozzleDesignOverview.pdf)).
-- [Nozzle Contour](NOVANozzleDesigner/docs/NozzleContour.md) -- MOC contour generation: nomenclature, Sauer transonic analysis, characteristics, process flow.
-- [Nozzle Contour Methods](NOVANozzleDesigner/docs/NozzleContourMethods.md) -- the contour families, what each optimises, how other axisymmetric MOC implementations differ, and where this one sits.
-- [Nozzle Contour Validation](NOVANozzleDesigner/docs/NozzleContourValidation.md) -- what the contour generator is checked against, the defects that check found, and an explicit statement of what is and is not validated.
-- [Contour Verification and Assessment](NOVANozzleDesigner/docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](NOVANozzleDesigner/docs/reports/nozzleContourEffort_2026-09-06.html).
-- [Nozzle Cooling](NOVANozzleDesigner/docs/NozzleCooling.md) -- regenerative cooling architecture and a worked example.
-- [CEA Interface](NOVANozzleDesigner/docs/ceaInterface.md) -- combustion thermochemistry, result keys and units, propellant naming, thread safety.
+- [Nozzle Design Overview](src/NOVA/docs/NozzleDesignOverview.md) -- consolidated contour and cooling reference, end to end ([PDF](src/NOVA/docs/NozzleDesignOverview.pdf)).
+- [Nozzle Contour](src/NOVA/docs/NozzleContour.md) -- MOC contour generation: nomenclature, Sauer transonic analysis, characteristics, process flow.
+- [Nozzle Contour Methods](src/NOVA/docs/NozzleContourMethods.md) -- the contour families, what each optimises, how other axisymmetric MOC implementations differ, and where this one sits.
+- [Nozzle Contour Validation](src/NOVA/docs/NozzleContourValidation.md) -- what the contour generator is checked against, the defects that check found, and an explicit statement of what is and is not validated.
+- [Contour Verification and Assessment](src/NOVA/docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](src/NOVA/docs/reports/nozzleContourEffort_2026-09-06.html).
+- [Nozzle Cooling](src/NOVA/docs/NozzleCooling.md) -- regenerative cooling architecture and a worked example.
+- [CEA Interface](src/NOVA/docs/ceaInterface.md) -- combustion thermochemistry, result keys and units, propellant naming, thread safety.
 - [Plume Development State](experimental/plumeDevelopmentState.md) -- where the plume solver stands: what is validated, what is open, and the findings behind both.
-- [Plume Structure References](NOVANozzleDesigner/docs/references_plumeStructure_2026-09-04.md) -- annotated sources behind the plume correlations in `Nozzle.py`, and an explicit statement of what the correlations do and do not support.
-- [Nozzle Contour References](NOVANozzleDesigner/docs/references_nozzleContour_2026-09-06.md) -- annotated sources behind the contour generator, and what they do and do not establish about it.
+- [Plume Structure References](src/NOVA/docs/references_plumeStructure_2026-09-04.md) -- annotated sources behind the plume correlations in `Nozzle.py`, and an explicit statement of what the correlations do and do not support.
+- [Nozzle Contour References](src/NOVA/docs/references_nozzleContour_2026-09-06.md) -- annotated sources behind the contour generator, and what they do and do not establish about it.
 
 ---
 

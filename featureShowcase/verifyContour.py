@@ -30,12 +30,10 @@ import numpy as np
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
-from gasDynamics import (areaMachRelation, machFromAreaRatio, staticPressureRatio,
+from NOVA.gasDynamics import (areaMachRelation, machFromAreaRatio, staticPressureRatio,
                          conicalLength, divergenceLossFactor)
-from contour import raoWallAngles, raoParabolicContour, wallAnglesFromContour
-from contourKernel import ThroatGeometry
+from NOVA.contour import raoWallAngles, raoParabolicContour, wallAnglesFromContour
+from NOVA.contourKernel import ThroatGeometry
 
 background = '#1a1e2a'
 panel      = '#222735'

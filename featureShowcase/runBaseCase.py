@@ -5,12 +5,9 @@ matplotlib.use('Agg', force=True)
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
+from NOVA import Nozzle
 
-import Nozzle as nozzleModule
-from Nozzle import Nozzle
-
-config = json.load(open(os.path.join(root, 'NOVANozzleDesigner', 'assets', 'loxLh2Example.json')))
+config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'loxLh2Example.json')))
 config.update({
     'Lstar': 1.0,                    # exercises combustion chamber generation
     'material': 'GRCop-42',          # exercises the material-indifferent wall curves

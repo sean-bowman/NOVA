@@ -55,20 +55,12 @@ import numpy as np
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-try:
-    from utils import DCM, parallelOffset, ConvergenceFailureError, createErrorContext
-    from materials import wallMaterialCurves
-    from channelGeometry import generateCrossSections as buildCrossSections
-    from regenThermal import (flutedHeatTransferStudyPath,
-                              regenHeatTransferModel as solveRegenHeatTransfer,
-                              regenHeatTransferModelPlots as drawRegenHeatTransfer)
-except ImportError:
-    from .utils import DCM, parallelOffset, ConvergenceFailureError, createErrorContext
-    from .materials import wallMaterialCurves
-    from .channelGeometry import generateCrossSections as buildCrossSections
-    from .regenThermal import (flutedHeatTransferStudyPath,
-                               regenHeatTransferModel as solveRegenHeatTransfer,
-                               regenHeatTransferModelPlots as drawRegenHeatTransfer)
+from .utils import DCM, parallelOffset, ConvergenceFailureError, createErrorContext
+from .materials import wallMaterialCurves
+from .channelGeometry import generateCrossSections as buildCrossSections
+from .regenThermal import (flutedHeatTransferStudyPath,
+                           regenHeatTransferModel as solveRegenHeatTransfer,
+                           regenHeatTransferModelPlots as drawRegenHeatTransfer)
 
 @dataclass
 class ChannelSizingState:

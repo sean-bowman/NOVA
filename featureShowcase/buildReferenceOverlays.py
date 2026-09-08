@@ -37,12 +37,10 @@ import numpy as np
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
-from contour import raoParabolicContour, raoWallAngles
-from contourKernel import ThroatGeometry
-from gasDynamics import conicalLength
-from Nozzle import Nozzle
+from NOVA.contour import raoParabolicContour, raoWallAngles
+from NOVA.contourKernel import ThroatGeometry
+from NOVA.gasDynamics import conicalLength
+from NOVA.Nozzle import Nozzle
 
 background = '#1a1e2a'
 panel      = '#222735'
@@ -116,7 +114,7 @@ engines = {
 def runEngine(name):
     '''Generate a NOVA contour at one engine's published operating point.'''
     spec = engines[name]
-    config = json.load(open(os.path.join(root, 'NOVANozzleDesigner', 'assets',
+    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets',
                                          'loxLh2Example.json')))
     config.update({'Fuel': spec['fuel'], 'Oxidizer': spec['oxidizer'],
                    'OFRatio': spec['mixtureRatio'],

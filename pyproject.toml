@@ -1,0 +1,53 @@
+[build-system]
+requires = ['setuptools>=68', 'wheel']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'nova-nozzle'
+version = '0.1.0'
+description = 'Rocket nozzle contour, regenerative cooling and plume design'
+readme = 'README.md'
+requires-python = '>=3.10'
+authors = [{ name = 'Sean Bowman', email = 'seanbowman9@gmail.com' }]
+keywords = ['rocket', 'nozzle', 'propulsion', 'method of characteristics', 'regenerative cooling']
+
+# Mirrors dependencies.txt. ctREFPROP is deliberately absent: it needs a licensed
+# REFPROP installation, and CoolProp covers the same accessor when it is missing.
+dependencies = [
+    'numpy>=2.2',
+    'scipy>=1.15',
+    'pandas>=2.3',
+    'sympy>=1.14',
+    'rocketcea>=1.2.3',
+    'CoolProp>=8.0',
+    'matplotlib>=3.10',
+    'joblib>=1.5',
+    'tqdm>=4.65',
+]
+
+[project.optional-dependencies]
+# Interactive figure companions. Without plotly a run still writes every PNG.
+interactive = ['plotly>=5.0', 'kaleido>=0.2']
+# The Tkinter front end. Tkinter itself ships with CPython.
+gui = ['tkinterweb>=4.0']
+# REFPROP-backed fluid properties, which need a licensed REFPROP installation.
+refprop = ['ctREFPROP>=0.10.5']
+# Report export helpers.
+reports = ['pypdf>=4.0', 'pywin32>=306']
+
+[tool.setuptools]
+package-dir = { '' = 'src' }
+
+[tool.setuptools.packages.find]
+where = ['src']
+
+[tool.setuptools.package-data]
+NOVA = ['assets/*.json', 'assets/*.csv']
+
+[tool.pytest.ini_options]
+testpaths = ['tests']
+# NOVA uses camelCase file and function names, so the default test_*.py
+# discovery pattern would match nothing.
+python_files = ['test*.py']
+python_classes = ['Test*']
+python_functions = ['test*']

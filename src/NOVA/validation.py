@@ -63,10 +63,7 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 
-try:
-    from utils import InvalidInputError
-except ImportError:
-    from .utils import InvalidInputError
+from .utils import InvalidInputError
 
 # The sentinel a few configuration entries use to mean 'work it out for me' rather than
 # 'not specified'. A rule that admits it skips its value checks when it sees it.

@@ -27,10 +27,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from validation import (Rule, applyRules, arrayRule, choiceRule, fieldsCovered, integerRule,
+from NOVA.validation import (Rule, applyRules, arrayRule, choiceRule, fieldsCovered, integerRule,
                         numericRule, presentRule, read, specified, textRule)
 
 class Configuration:

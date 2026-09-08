@@ -297,10 +297,7 @@ def _resolveOxidizerCard(canonicalName: str, oxidizerTemperature, chamberPressur
     # fluidProps is NOVA's own unified REFPROP/CoolProp accessor; import lazily
     # so this module stays importable when neither backend is installed.
     try:
-        try:
-            from utils import fluidProps
-        except ImportError:
-            from .utils import fluidProps
+        from .utils import fluidProps
         enthalpy, molarMass = fluidProps(
             canonicalName, 'TP', 'H M', oxidizerTemperature, chamberPressure)
     except Exception as error:

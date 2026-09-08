@@ -57,12 +57,8 @@ import warnings
 import numpy as np
 import pandas as pd
 
-try:
-    from utils import readExcel, InvalidInputError
-    from ceaInterface import CEA
-except ImportError:
-    from .utils import readExcel, InvalidInputError
-    from .ceaInterface import CEA
+from .utils import readExcel, InvalidInputError
+from .ceaInterface import CEA
 
 def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 

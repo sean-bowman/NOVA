@@ -4,7 +4,7 @@ Sources gathered to replace NOVA's plume extension with correlations that can be
 
 The question driving the search: what is the minimum set of published correlations needed to place the jet boundary, the shock cell spacing and the Mach disk of a rocket exhaust plume, given a nozzle exit state that NOVA already computes?
 
-These back the plume correlations in `NOVANozzleDesigner/Nozzle.py` (`Nozzle.plumeStructure`), which sit beside the method-of-characteristics solver they will eventually be driven by.
+These back the plume correlations in `src/NOVA/Nozzle.py` (`Nozzle.plumeStructure`), which sit beside the method-of-characteristics solver they will eventually be driven by.
 
 ---
 

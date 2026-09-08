@@ -3,7 +3,7 @@
 '''
 
 Field metadata for the config tab, ordered and grouped to mirror
-NOVANozzleDesigner/assets/nozzleConfig.json. Every key in that template appears
+src/NOVA/assets/nozzleConfig.json. Every key in that template appears
 here exactly once so the dictionary the GUI hands to Nozzle.setInputs() is
 always complete.
 

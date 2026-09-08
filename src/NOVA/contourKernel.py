@@ -32,12 +32,8 @@ Date:   09/06/2026
 import numpy as np
 from scipy.optimize import fsolve
 
-try:
-    from characteristics import CharacteristicGas
-    from gasDynamics import prandtlMeyerAngle
-except ImportError:
-    from .characteristics import CharacteristicGas
-    from .gasDynamics import prandtlMeyerAngle
+from .characteristics import CharacteristicGas
+from .gasDynamics import prandtlMeyerAngle
 
 class ThroatGeometry:
 

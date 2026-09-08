@@ -25,13 +25,10 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
+from NOVA.characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
                              wallCharacteristicProjection)
-from gasDynamics import prandtlMeyerAngle
-from plume import PlumeFlow, PlumePoint, plumeInteriorPoint
+from NOVA.gasDynamics import prandtlMeyerAngle
+from NOVA.plume import PlumeFlow, PlumePoint, plumeInteriorPoint
 
 GAMMA, GAS_CONSTANT, STAGNATION_TEMPERATURE = 1.22, 480.0, 3500.0
 CHAMBER = (1.1475421191138746, 692.0, 3512.0)

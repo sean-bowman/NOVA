@@ -28,10 +28,8 @@ import numpy as np
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
-from characteristics import CharacteristicGas
-from contour import quasiOneDimensionalField
+from NOVA.characteristics import CharacteristicGas
+from NOVA.contour import quasiOneDimensionalField
 
 background = '#1a1e2a'
 panel      = '#222735'

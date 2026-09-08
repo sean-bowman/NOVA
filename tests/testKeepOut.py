@@ -24,10 +24,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from keepOut import KeepOutEnvelope, keepOutEnvelope, packingClearance, revolveKeepOut
+from NOVA.keepOut import KeepOutEnvelope, keepOutEnvelope, packingClearance, revolveKeepOut
 
 chamberRadius = 0.09
 

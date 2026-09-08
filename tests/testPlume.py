@@ -2,7 +2,7 @@
 
 '''
 
-Validation and behaviour tests for the plume correlations in NOVANozzleDesigner/Nozzle.py.
+Validation and behaviour tests for the plume correlations in src/NOVA/Nozzle.py.
 
 Each correlation is checked against the source it was taken from, and against limiting cases
 where the answer is known independently: the Tam and Tanna diameter must collapse to the exit
@@ -10,7 +10,7 @@ diameter at matched Mach number, the Prandtl-Meyer function must reproduce its p
 at Mach 2, and the oblique shock deflection must agree with the theta-beta-M relation solved
 the other way round.
 
-Sources are listed in NOVANozzleDesigner/docs/references_plumeStructure_2026-09-04.md.
+Sources are listed in src/NOVA/docs/references_plumeStructure_2026-09-04.md.
 
 Author: Sean Bowman
 Date:   09/04/2026
@@ -23,9 +23,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'NOVANozzleDesigner'))
-
-from Nozzle import (Nozzle, prandtlMeyerAngle, machFromPressureRatio, fullyExpandedDiameter,
+from NOVA.Nozzle import (Nozzle, prandtlMeyerAngle, machFromPressureRatio, fullyExpandedDiameter,
                     shockCellLength, machDiskLocation, machDiskDiameter,
                     obliqueShockDeflection,
                     prandtlCellCoefficient, packCellCoefficient,

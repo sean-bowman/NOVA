@@ -1,0 +1,131 @@
+# -- NOVA: Nozzle Optimization and Vectoring Analysis -- #
+
+'''
+
+Rocket nozzle contour, regenerative cooling and plume design.
+
+The package is a facade over a set of single-purpose modules. `Nozzle` carries a configuration
+and delegates each stage of a run to the module that owns it: `contour` for the wall, `chamber`
+for the converging section, `regenChannels`, `channelSizing` and `regenThermal` for the cooling
+jacket, `nozzleVolutes` for the manifolds, and `plume` for the exhaust downstream of the lip.
+
+A minimal run reads a configuration and generates everything from it:
+
+    from NOVA import Nozzle
+
+    nozzle = Nozzle()
+    nozzle.generateNozzle('myEngine.json')
+
+The individual solvers are usable on their own, without a `Nozzle`, and the physics modules are
+importable directly for the functions they hold:
+
+    from NOVA import machFromAreaRatio, prandtlMeyerAngle, wallMaterialCurves
+    from NOVA import gasDynamics, materials
+
+Names re-exported here are the supported surface. Everything else is reachable through its own
+module, which is where the implementation detail is documented.
+
+----------------------------------------------------------------------
+                        Units
+----------------------------------------------------------------------
+
+Every quantity crossing a public boundary is SI: metres, kilograms, seconds, kelvin, pascals,
+and degrees for angles. Conversions belong at the edge, in `units`, not in the solvers.
+
+'''
+
+__version__ = '0.1.0'
+
+# Import order runs from the modules with no siblings of their own outward to the facade, so a
+# circular import would surface here rather than somewhere further in.
+
+from . import (ceaInterface, chamber, channelGeometry, channelSizing, characteristics, config,
+               contour, contourKernel, exports, figures, gasDynamics, keepOut, materials,
+               nozzleVolutes, plume, regenChannels, regenStations, regenThermal, units, utils,
+               validation)
+
+# -- Gas dynamics -- #
+
+from .gasDynamics import (areaMachRelation, conicalLength, divergenceLossFactor, machAngle,
+                          machFromAreaRatio, machFromPrandtlMeyerAngle, machFromPressureRatio,
+                          prandtlMeyerAngle, radiusMachRelation, stagnationRatio,
+                          staticPressureRatio, staticTemperatureRatio)
+
+# -- Materials -- #
+
+from .materials import (availableWallMaterials, materialProperties, resolveWallMaterialName,
+                        roughnessTable, sampleWallMaterial, wallMaterialCurves)
+
+# -- Thermochemistry -- #
+
+from .ceaInterface import CEA, getAvailableFuels, getAvailableOxidizers
+
+# -- Fluid properties and the standard atmosphere -- #
+#
+# The atmosphere model is `utils`'. `units` carries a second implementation of the same two
+# functions; only one of them can own the name, and this is it.
+
+from .utils import (convertAltitudeToPressure, convertPressureToAltitude, fluidProps, fluidView,
+                    isentropicValues)
+
+# -- Geometry -- #
+
+from .Volute import Volute
+from .keepOut import KeepOutEnvelope, keepOutEnvelope, packingClearance, revolveKeepOut
+
+# -- Plume -- #
+
+from .plume import (PlumeField, PlumeStructure, machDiskDiameter, machDiskLocation,
+                    obliqueShockDeflection, shockCellLength)
+
+# -- Figures -- #
+
+from .figures import exportInteractiveFigures
+
+# -- Errors -- #
+#
+# Every failure NOVA raises deliberately is one of these, so a caller can catch the family
+# without catching genuine bugs alongside it.
+
+from .utils import (ConvergenceFailureError, GeometricConstraintError, InvalidInputError,
+                    NumericalInstabilityError, PressureDropError, RegenGeometryError,
+                    ThermalConstraintError, VoluteGenerationError)
+
+# -- The facade -- #
+
+from .Nozzle import Nozzle
+
+__all__ = [
+    # Facade
+    'Nozzle',
+    # Submodules
+    'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing', 'characteristics', 'config',
+    'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
+    'nozzleVolutes', 'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'utils',
+    'validation',
+    # Gas dynamics
+    'areaMachRelation', 'conicalLength', 'divergenceLossFactor', 'machAngle', 'machFromAreaRatio',
+    'machFromPrandtlMeyerAngle', 'machFromPressureRatio', 'prandtlMeyerAngle', 'radiusMachRelation',
+    'stagnationRatio', 'staticPressureRatio', 'staticTemperatureRatio',
+    # Materials
+    'availableWallMaterials', 'materialProperties', 'resolveWallMaterialName', 'roughnessTable',
+    'sampleWallMaterial', 'wallMaterialCurves',
+    # Thermochemistry
+    'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
+    # Fluid properties and atmosphere
+    'convertAltitudeToPressure', 'convertPressureToAltitude', 'fluidProps', 'fluidView',
+    'isentropicValues',
+    # Geometry
+    'Volute', 'KeepOutEnvelope', 'keepOutEnvelope', 'packingClearance', 'revolveKeepOut',
+    # Plume
+    'PlumeField', 'PlumeStructure', 'machDiskDiameter', 'machDiskLocation',
+    'obliqueShockDeflection', 'shockCellLength',
+    # Figures
+    'exportInteractiveFigures',
+    # Errors
+    'ConvergenceFailureError', 'GeometricConstraintError', 'InvalidInputError',
+    'NumericalInstabilityError', 'PressureDropError', 'RegenGeometryError',
+    'ThermalConstraintError', 'VoluteGenerationError',
+    # Metadata
+    '__version__',
+]

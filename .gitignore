@@ -41,3 +41,7 @@ plotly.min.js
 featureShowcase/*.html
 featureShowcase/*.pkl
 featureShowcase/*.npz
+src/*.egg-info/
+*.egg-info/
+build/
+dist/

@@ -86,14 +86,9 @@ except ImportError:
     go = plot = make_subplots = None
     plotlyAvailable = False
 
-try:
-    from utils import (fluidProps, ConvergenceFailureError, InvalidInputError)
-    from materials import wallMaterialCurves
-    from validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
-except ImportError:
-    from .utils import (fluidProps, ConvergenceFailureError, InvalidInputError)
-    from .materials import wallMaterialCurves
-    from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
+from .utils import (fluidProps, ConvergenceFailureError, InvalidInputError)
+from .materials import wallMaterialCurves
+from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
 
 _plotlyNotices = set()
 
@@ -740,7 +735,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                            'or select a channel type that does not read the data map.'),
                 parameterName = 'channelType',
                 value = 'dataMap',
-                validRange = 'A flute heat transfer study CSV in NOVANozzleDesigner/assets/')
+                validRange = 'A flute heat transfer study CSV in src/NOVA/assets/')
 
         flutedHeatTransferStudy = read_csv(dataMapPath)
         '''

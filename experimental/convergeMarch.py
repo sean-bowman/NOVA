@@ -20,10 +20,7 @@ import time
 
 import numpy as np
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from Nozzle import (PlumeFlow, PlumePoint, solvePlumeMarch, shockCellLength,   # noqa: E402
+from NOVA.Nozzle import (PlumeFlow, PlumePoint, solvePlumeMarch, shockCellLength,   # noqa: E402
                     fullyExpandedDiameter, machFromPressureRatio, prandtlCellCoefficient)
 
 GAMMA, GAS_CONSTANT, STAGNATION_TEMPERATURE, STAGNATION_PRESSURE = 1.4, 287.0, 300.0, 1.0e6

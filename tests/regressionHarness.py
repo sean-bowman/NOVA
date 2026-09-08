@@ -37,10 +37,8 @@ import numpy as np
 
 harnessDirectory = os.path.dirname(os.path.abspath(__file__))
 repositoryRoot   = os.path.dirname(harnessDirectory)
-packageDirectory = os.path.join(repositoryRoot, 'NOVANozzleDesigner')
+packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
 baselineFolder   = os.path.join(harnessDirectory, 'baselines')
-
-sys.path.insert(0, packageDirectory)
 
 # The cases the harness records. Each names a configuration in assets/ and the overrides that
 # make it a harness run rather than a user run: no figures, no export, no plume.
@@ -92,7 +90,7 @@ def runCase(caseName: str, scratchFolder: str) -> object:
     import matplotlib
     matplotlib.use('Agg', force = True)
 
-    from Nozzle import Nozzle
+    from NOVA.Nozzle import Nozzle
 
     case = harnessCases[caseName]
     configPath = os.path.join(packageDirectory, 'assets', case['config'])

@@ -55,10 +55,7 @@ from joblib import Parallel, delayed, cpu_count
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
-try:
-    from utils import DCM
-except ImportError:
-    from .utils import DCM
+from .utils import DCM
 
 @dataclass
 class ChannelGeometryInputs:

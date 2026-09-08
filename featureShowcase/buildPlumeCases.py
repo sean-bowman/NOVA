@@ -2,7 +2,7 @@
 Individual plume figures, one operating regime per file, drawn at equal aspect ratio.
 
 The boundary, shock cell spacing and Mach disk are correlations from
-NOVANozzleDesigner/docs/references_plumeStructure_2026-09-04.md. The plume interior is not a
+src/NOVA/docs/references_plumeStructure_2026-09-04.md. The plume interior is not a
 solved flowfield and is not shaded as one.
 '''
 import os
@@ -16,8 +16,6 @@ import numpy as np
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-sys.path.insert(0, os.path.join(root, 'NOVANozzleDesigner'))
-
 background = '#1a1e2a'
 panel      = '#222735'
 copper     = '#E0975A'

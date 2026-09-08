@@ -21,10 +21,7 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                                'NOVANozzleDesigner'))
-
-from Nozzle import (PlumeFlow, PlumePoint, plumeInteriorPoint, plumeAxisPoint,
+from NOVA.Nozzle import (PlumeFlow, PlumePoint, plumeInteriorPoint, plumeAxisPoint,
                     plumeNearAxisPoint, plumeFreeBoundaryPoint, plumeCornerFan,
                     plumeExitLine, solvePlumeMarch, prandtlMeyerAngle)
 
@@ -272,7 +269,7 @@ def testSameFamilyPointClosesForRealCrossingsAndRefusesDistantOnes(flow):
     meet thousands of jet radii downstream, which is not a coalescence and must not be reported as
     one. The corrector diverges on those and the point is refused, which is the behaviour wanted.
     """
-    from Nozzle import plumeSameFamilyPoint
+    from NOVA.Nozzle import plumeSameFamilyPoint
     inner = PlumePoint(0.900, 0.300, 4.000, np.radians(8.0), flow)
 
     for delta in (1e-1, 1e-2):
@@ -333,7 +330,7 @@ def testShockCellPeriodMatchesPrandtl(flow):
     parallel exit close to design. That is the regime Prandtl's linearised result is derived for,
     and it is the only place the two are comparable.
     '''
-    from Nozzle import (shockCellLength, fullyExpandedDiameter, machFromPressureRatio,
+    from NOVA.Nozzle import (shockCellLength, fullyExpandedDiameter, machFromPressureRatio,
                         prandtlCellCoefficient)
 
     exitMach, ratio = 3.0, 1.05
@@ -404,7 +401,7 @@ def testMassFluxIsExactOnAUniformStream(flow):
     A line across a uniform axial stream carries rho V pi R^2, which is the one case the integral
     can be checked against arithmetic rather than against itself.
     '''
-    from Nozzle import plumeMassFlux
+    from NOVA.Nozzle import plumeMassFlux
     mach, radius = 3.0, 0.4
     line = [PlumePoint(0.0, r, mach, 0.0, flow, 'exit')
             for r in np.linspace(radius, 0.0, 400)]
@@ -418,7 +415,7 @@ def testMassFluxIsIndifferentToTheLineItIsMeasuredOn(flow):
     falls exactly as the area of revolution grows. This is what makes it usable on a characteristic
     line, which is never a plane.
     '''
-    from Nozzle import plumeMassFlux
+    from NOVA.Nozzle import plumeMassFlux
     mach, radius = 3.0, 0.4
     straight = [PlumePoint(0.0, r, mach, 0.0, flow, 'exit')
                 for r in np.linspace(radius, 0.0, 400)]
@@ -469,7 +466,7 @@ def testFrontAdvanceRefusesACharacteristicFront(flow):
     neighbour's, and the intersection returns a point already on the front. This records why the
     obvious way of building a front does not work.
     '''
-    from Nozzle import advancePlumeFront
+    from NOVA.Nozzle import advancePlumeFront
     radii = np.linspace(1.0, 0.0, 140)
     line = [PlumePoint(0.0, radius, 3.0, 0.0, flow, 'exit') for radius in radii]
     net = solvePlumeMarch(flow, line, flow.staticPressure(3.0) / 1.05, maxLines = 300,
@@ -516,7 +513,7 @@ def testIsentropicCompressionTracksTheObliqueShock(flow, pressureRatio, turnBoun
     turning angles have to agree, and the stagnation pressure the shock would cost has to stay
     small. Both bounds tighten as the jet approaches design.
     '''
-    from Nozzle import obliqueShockState, machFromPressureRatio
+    from NOVA.Nozzle import obliqueShockState, machFromPressureRatio
     exitMach = 3.0
     deflection, _, stagnationRatio = obliqueShockState(exitMach, GAMMA, pressureRatio)
     assert deflection > 0.0, 'an attached shock is needed for the comparison to mean anything'
@@ -530,7 +527,7 @@ def testIsentropicCompressionTracksTheObliqueShock(flow, pressureRatio, turnBoun
 
 def testObliqueShockStateDetaches(flow):
     '''Beyond what an attached shock can deliver, the state is refused rather than extrapolated.'''
-    from Nozzle import obliqueShockState
+    from NOVA.Nozzle import obliqueShockState
     deflection, mach, ratio = obliqueShockState(1.5, GAMMA, 50.0)
     assert deflection == 0.0 and ratio == 1.0
 
@@ -564,7 +561,7 @@ def testMachDiskIsAbsentFromAShockFreeNet(flow):
     A disk is a shock, and this net carries none, so a mildly off-design jet must report no disk
     rather than invent one. How close the core came is reported either way.
     '''
-    from Nozzle import plumeMachDisk
+    from NOVA.Nozzle import plumeMachDisk
     radii = np.linspace(1.0, 0.0, 140)
     line = [PlumePoint(0.0, radius, 3.0, 0.0, flow, 'exit') for radius in radii]
     net = solvePlumeMarch(flow, line, flow.staticPressure(3.0) / 1.05, maxLines = 300,
@@ -581,7 +578,7 @@ def testMachDiskIsFoundWhenTheCoreDecelerates(flow):
     station that falls to near sonic, and its diameter spans to the triple point, the radius at
     which the flow is supersonic again.
     '''
-    from Nozzle import plumeMachDisk
+    from NOVA.Nozzle import plumeMachDisk
     nodes = [PlumePoint(x, 0.0, max(1.02, 3.0 - x), 0.0, flow)
              for x in np.linspace(0.0, 2.5, 80)]
     nodes += [PlumePoint(2.05, radius, 1.02 if radius < 0.3 else 2.0, 0.0, flow)
