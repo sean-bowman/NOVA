@@ -66,6 +66,8 @@ Where the sunken section is concerned the hub radius is not free. The wall that 
 
 This is a defect in `arcSpline` rather than in the sunken contour, and `arcSpline` is used by every contour NOVA builds. Fixing it moves geometry throughout the tool, including the contour results that the preceding effort validated. It is therefore not fixed here: it is fixed in a stage that has a recorded baseline to measure the change against. The traditional contour, which every shipped configuration and the whole feature showcase uses, is unaffected and is what the baselines are recorded from.
 
+**Fixed subsequently.** `arcSpline` now fits a shape-preserving interpolant, which cannot leave the range of the points it is given, and the diverging wall declares its input smooth to keep the curvature-continuous fit where that is the more accurate choice. See `arcSplineOvershoot_2026-09-08.md`.
+
 **The data-map fluted channel model needs a study NOVA does not have.** Reported by name and path rather than by a file-not-found error against a directory that does not exist.
 
 **The alloy strength curves extrapolate without saying so.** `getGRCopStrength` interpolates manufacturer data on a cubic spline and returns a value for any temperature it is handed, including temperatures outside the data. That is how a 30.73 K lookup returned a yield strength from a curve whose lowest datum is 77.6 K. The temperature error that triggered it is fixed; the curve still extrapolates silently, and clamping it to its endpoints the way `materials.py` clamps thermal conductivity would close it.

@@ -1547,141 +1547,132 @@ def nonLinspace(start: float, end: float, numPoints: int = 100, method: str = 'e
 
     return nonLinearVector
 
-def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None = None, newNumPoints: int = 100) -> tuple:
+def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None = None,
+              newNumPoints: int = 100, method: str = 'shapePreserving') -> tuple:
 
     '''
-    
-    This function takes in a collection of 3D points, broken into X, Y, and Z arrays, that are unevenly distributed
-    with respect to their arclength. The final input, newNumPoints, specifies the total number of points in the
-    final spline that will be evenly distributed with respect to the spline arclength.
 
-    This function has been stolen to be used as an arclength-based spline interpolation tool, the death of the artist is real.
-    So now it works with 2D points as well.
-    
+    Resample a polyline onto points spaced evenly along its own arc length.
+
+    The input is a curve given as unevenly spaced points, in 2D or 3D. The output is
+    `newNumPoints` points on a smooth curve through them, spaced at equal arc length rather than
+    at equal parameter. NOVA uses it wherever a contour built from several pieces has to become
+    one evenly sampled wall.
+
+    Parameters:
+    -----------
+    xPoints, yPoints : ArrayLike
+        The curve. Consecutive duplicates are dropped before fitting.
+    zPoints : ArrayLike | None
+        Third coordinate. None makes the call 2D and returns two arrays.
+    newNumPoints : int
+        Points in the result.
+    method : str
+        'shapePreserving' fits a PCHIP interpolant, which cannot leave the range of the points it
+        passes through. 'curvatureContinuous' fits a natural cubic, which is C2 but overshoots at
+        a corner. See below for why the first is the default.
+
+    Returns:
+    --------
+    tuple
+        (x, r) for a 2D call, (x, y, z) for a 3D one.
+
+    Raises:
+    -------
+    ValueError
+        If fewer than two distinct points remain after duplicates are dropped, or if `method` is
+        not one of the two above.
+
+    ----------------------------------------------------------------------
+                    Why the fit is shape preserving
+    ----------------------------------------------------------------------
+
+    A C2 cubic through a curve with a corner in it must overshoot: continuity of curvature across
+    a point where the curvature is genuinely discontinuous can only be bought by bending the
+    curve out past the data on both sides. NOVA hands this function stitched curves routinely,
+    where a converging section meets a throat arc, or a channel interface meets a turnaround, and
+    those joins are corners.
+
+    Measured on the shipped regenerative example, a natural cubic through the interfaced regen
+    contour left the data by 6.36 mm at a station whose radius is 83.42 mm, which is 7.6 per cent
+    of the local radius, in a direction no input point goes. A PCHIP fit through the same points
+    overshoots by zero, which is a property of the interpolant rather than a result for that case.
+
+    The cost is curvature: PCHIP is C1, so the second derivative jumps at each input point. That
+    is not read anywhere. Wall angles are taken with `np.gradient`, a first derivative, which
+    stays continuous; the throat radius of curvature the Bartz correlation wants is a
+    configuration input rather than something measured off the wall.
+
+    'curvatureContinuous' restores the old behaviour for a caller that knows its input is smooth
+    and wants C2.
+
+    ----------------------------------------------------------------------
+                    Arc length
+    ----------------------------------------------------------------------
+
+    Spacing points evenly along the curve means inverting s(t), the arc length as a function of
+    the spline parameter. That is done by sampling the fitted curve densely, integrating the
+    speed |dP/dt| with the trapezoid rule, and interpolating the inverse. The sampling is fine
+    enough that the residual is far below the geometry's own tolerance, and the whole thing is
+    array work.
+
     '''
 
-    from copy import copy
-    import scipy.interpolate as spi
-    import scipy.integrate as sps
+    from scipy.interpolate import CubicSpline, PchipInterpolator
 
-    if zPoints is None:
+    fitters = {'shapePreserving': PchipInterpolator, 'curvatureContinuous': CubicSpline}
+    if method not in fitters:
+        raise ValueError(f'arcSpline: method must be one of {sorted(fitters)}, got {method!r}.')
+
+    is3D = zPoints is not None
+    if not is3D:
         zPoints = np.zeros(len(xPoints))
-        is2D = True
-        is3D = False
-    else:
-        is2D = False
-        is3D = True
 
-    # Helper functions to handle spline segment integration and event handling for line integration
-    def segmentIntegrator(t, y, polyCoefs):
-        output = np.zeros(np.size(t))
-        for k in range(3):
-            output += np.polyval(polyCoefs[k,:], t)**2
-        return np.sqrt(output)
+    points = np.column_stack([np.asarray(array, dtype = float).ravel()
+                              for array in (xPoints, yPoints, zPoints)])
 
-    def integrationEvents(t, y):
-        value = y[0]
-        return value
-    # scipy solve_ivp requires event functions to be monkey patched with terminal and direction handles
-    integrationEvents.terminal  = True
-    integrationEvents.direction = 1
+    # A repeated point gives a zero-length segment, which is a zero-width parameter interval and
+    # an unbounded derivative. One such pair appears in the shipped diverging contour, 6.7e-8 m
+    # apart on a curve 1.6 m long.
+    segment = np.linalg.norm(np.diff(points, axis = 0), axis = 1)
+    scale = segment.sum()
+    if scale <= 0:
+        raise ValueError('arcSpline: every point is coincident, so there is no curve to resample.')
 
-    # Initialize arrays to hold the newly generated points, as well as reorienting the passed-in points
-    newNumPointsArray = np.linspace(0, 1, newNumPoints)
-    newPoints = np.zeros((newNumPoints,3))
-    oldPoints = np.array([xPoints, yPoints, zPoints]).T
+    keep = np.insert(segment > scale * 1e-12, 0, True)
+    points = points[keep]
 
-    # Compute linear (chordal) arclength of each curve segment, as well as cumulative arclength
-    linearArcLength = np.sqrt(np.sum(np.diff(oldPoints, axis = 0)**2, axis = 1))
-    linearArcLengthNormalized = linearArcLength / np.sum(linearArcLength)
-    cumulativeLinearArclength = np.cumsum(linearArcLengthNormalized)
-    cumulativeLinearArclength = np.insert(cumulativeLinearArclength, 0, 0)
+    if len(points) < 2:
+        raise ValueError('arcSpline: fewer than two distinct points, so there is no curve.')
 
-    # Initialize empty arrays to store piecewise cubic splines for each dimension of the old points, as
-    # well as the derivative for each spline
-    spline, splineDerivative = [[[], [], []] for _ in range(2)]
-    # Make a (4, 3) array to be used to take the derivative of each spline (works because each
-    # spline segment is by definition a cubic polynomial)
-    derivativeArray = np.array([[3, 0, 0], [0, 2, 0], [0, 0, 1], [0, 0, 0]])
-    for i in range(3):
-        spline[i] = spi.CubicSpline(cumulativeLinearArclength, oldPoints[:,i])
-        # Make a copy of the spline object to take the derivative so we don't overwrite the original spline
-        # object properties
-        splineDerivativeIntermediate = copy(spline[i])
-        # Calculate the coefficients of the derivative by differentiating the spline coefficients
-        splineDerivativeIntermediate.c = (splineDerivativeIntermediate.c.T @ derivativeArray).T
-        splineDerivative[i] = splineDerivativeIntermediate
+    # Chordal parameterisation, normalised so the fit is scale independent.
+    segment = np.linalg.norm(np.diff(points, axis = 0), axis = 1)
+    parameter = np.insert(np.cumsum(segment / segment.sum()), 0, 0.0)
 
-    # Create dummy array to store the coefficients of each spline derivative segment (to be used while integrating)
-    polynomialCoefsDerivatives = np.zeros((3, 3))
-    # Initialize array to hold integrated spline segment length
-    segmentLength = np.zeros(len(xPoints)-1)
-    # Set integration option relative tolerance to 1e-9
-    integrationOptions = {'rtol': 1e-9}
+    fitter = fitters[method]
+    curves = [fitter(parameter, points[:, i]) for i in range(3)]
 
-    # First integration step: Determine the segment lengths of each cubic spline for the original points
-    for i in range(len(splineDerivative[i].c[0,:])):
+    # Arc length along the fitted curve. The sample count scales with the input so a long,
+    # detailed contour is not integrated more coarsely than a short one.
+    sampleCount = max(4001, 40 * len(points))
+    dense = np.linspace(0.0, 1.0, sampleCount)
 
-        # Store the coefficients of the polynomials describing the spline derivative for this segment
-        for j in range(3):
-            polynomialCoefsDerivatives[j,:] = splineDerivative[j].c[:,i]
+    speed = np.linalg.norm(np.column_stack([curve.derivative()(dense) for curve in curves]),
+                           axis = 1)
+    arclength = np.concatenate([[0.0],
+                                np.cumsum(0.5 * (speed[1:] + speed[:-1]) * np.diff(dense))])
 
-        # Perform integration along the polynomial over the interval of [0, length of linear normalized spline segments up to this point]
-        solution = sps.solve_ivp(lambda t, y: segmentIntegrator(t, y, polynomialCoefsDerivatives), \
-                                 [0, linearArcLengthNormalized[i]], [0], **integrationOptions)
-        # Store the output solution for cubic spline segment length
-        segmentLength[i] = solution.y[0][-1]
+    # Invert s(t) at evenly spaced arc lengths. np.interp needs an increasing first argument,
+    # which arclength is by construction: speed is a norm, so it cannot be negative.
+    targets = np.linspace(0.0, arclength[-1], newNumPoints)
+    atParameter = np.interp(targets, arclength, dense)
 
-    # Calculate total spline length and cumulative spline length for the old spline
-    totalSplineLength = np.sum(segmentLength)
-    cumulativeSplineLength = np.cumsum(segmentLength)
-    cumulativeSplineLength = np.insert(cumulativeSplineLength, 0, 0)
-
-    # Break spline length up over a uniformly spaced array of length newNumPoints
-    # and compare the regions where each old point falls relative to the new spacing
-    arclengthAlongSpline = newNumPointsArray * totalSplineLength
-    bins = np.digitize(arclengthAlongSpline, cumulativeSplineLength) - 1
-    bins[-1] = bins[-2]
-    newInterpolationPoints = newNumPointsArray
-
-    # Second integration step: Integrate over the newly spaced points and catch "zero-crossing" events,
-    # or function events where the sign changes from positive to negative. These are important to track as
-    # we re-space the points so that we can specify where the new spline points should land along the integration
-    # path. We will be integrating in 't' until the integral crosses the specified value of 'splineSegment', and
-    # because we normalized the total length each segment length is also normalized. Importantly, we start
-    # the integration at -splineSegment so the event handler for zero-crossings can catch when the function output
-    # 'y' reaches 0.
-    for i in range(newNumPoints):
-
-        # Define the length of the current spline segment
-        splineSegment = arclengthAlongSpline[i] - cumulativeSplineLength[bins[i]]
-
-        # Store the coefficients of the polynomials describing the spline derivative for this segment
-        for j in range(3):
-            polynomialCoefsDerivatives[j,:] = splineDerivative[j].c[:,bins[i]]
-
-        # Perform aforementioned integration
-        try:
-            solution = sps.solve_ivp(lambda t, y: segmentIntegrator(t, y, polynomialCoefsDerivatives), \
-                                    [0, linearArcLengthNormalized[bins[i]]], [-splineSegment], events = integrationEvents, **integrationOptions)
-        except:
-            class Solution():
-                def __init__(self):
-                    self.t_events = [[0]]
-            solution = Solution()
-
-        # Scale the new spline sample points by the result of the integration terminated at the zero crossing event
-        if any(solution.t_events[0]):
-            newInterpolationPoints[i] = solution.t_events[0] + cumulativeLinearArclength[bins[i]]
-
-    # Perform final sampling of the spline at the new interpolation points
-    for i in range(3):
-        newPoints[:,i] = spline[i](newInterpolationPoints)
+    resampled = np.column_stack([curve(atParameter) for curve in curves])
 
     if is3D:
-        return newPoints[:,0], newPoints[:,1], newPoints[:,2]
-    elif is2D:
-        return newPoints[:,0], newPoints[:,1]
+        return resampled[:, 0], resampled[:, 1], resampled[:, 2]
+
+    return resampled[:, 0], resampled[:, 1]
 
 def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2Points: np.ndarray, y2Points: np.ndarray, n: int) -> tuple:
 

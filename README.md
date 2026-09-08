@@ -364,6 +364,7 @@ other way round.
 - [Nozzle Contour](src/NOVA/docs/NozzleContour.md) -- MOC contour generation: nomenclature, Sauer transonic analysis, characteristics, process flow.
 - [Nozzle Contour Methods](src/NOVA/docs/NozzleContourMethods.md) -- the contour families, what each optimises, how other axisymmetric MOC implementations differ, and where this one sits.
 - [Nozzle Contour Validation](src/NOVA/docs/NozzleContourValidation.md) -- what the contour generator is checked against, the defects that check found, and an explicit statement of what is and is not validated.
+- [arcSpline Overshoot at a Corner](src/NOVA/docs/reports/arcSplineOvershoot_2026-09-08.md) -- why the arc-length resampler used to invent geometry outside its own input, what replaced it, and how far the contour moved.
 - [Contour Verification and Assessment](src/NOVA/docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](src/NOVA/docs/reports/nozzleContourEffort_2026-09-06.html).
 - [Nozzle Cooling](src/NOVA/docs/NozzleCooling.md) -- regenerative cooling architecture and a worked example.
 - [CEA Interface](src/NOVA/docs/ceaInterface.md) -- combustion thermochemistry, result keys and units, propellant naming, thread safety.

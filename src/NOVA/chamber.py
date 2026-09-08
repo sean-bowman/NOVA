@@ -13,8 +13,9 @@ interface angle, down a straight run, and into the throat inlet arc. It is the c
 converging section and it is what every shipped configuration uses.
 
 A sunken converging section, which recesses the throat inside the chamber and wraps the wall
-back around the closure behind it, lives in `experimental/sunkenNozzle.py`. It does not
-currently produce a usable contour; that module states why.
+back around the closure behind it, lives in `experimental/sunkenNozzle.py`. It builds, and it is
+outside the package because nothing has validated it as a design rather than because it cannot be
+drawn.
 
 The near-wall state along the converging wall is quasi one-dimensional: an area ratio at each
 station gives a subsonic Mach number, and the isentropic relations give the rest. That is the

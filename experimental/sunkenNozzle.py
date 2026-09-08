@@ -15,24 +15,28 @@ closure lands on the throat rather than below it.
                         Status
 ----------------------------------------------------------------------
 
-This does not currently produce a usable contour, which is why it is here rather than in the
-package.
+This builds. It is here because the package does not offer a sunken contour, not because the
+contour cannot be drawn.
 
-The stitched wall reaches the flow solve and stops. `arcSpline` fits an unconstrained cubic
-spline through the raw stitch, and the sunken stitch presents it with a corner: a dense ellipse,
-a dense arc, a single isolated conic control point, then a dense wall. The spline rings across
-that isolated point and overshoots by roughly 30 per cent of the local radius, which leaves
-sixteen of sixty points below the throat radius, the worst of them 15.6 mm inside it. An area
-ratio below one has no subsonic solution, so the failure surfaces two hundred lines downstream as
-a Mach solver that will not converge rather than as the geometry that caused it.
+It did not build until `arcSpline` was made shape preserving. The stitch this contour presents is
+a dense ellipse, a dense arc, a single isolated conic control point, then a dense wall, and the
+unconstrained cubic that `arcSpline` used to fit rang across the isolated point. That put sixteen
+of sixty contour points below the throat radius, the worst 15.6 mm inside it, and an area ratio
+below one has no subsonic solution, so the run failed two hundred lines downstream in the Mach
+solver rather than at the geometry that caused it. `arcSpline` now fits a shape-preserving
+interpolant by default, which cannot leave the range of the points it is given.
 
-The defect is in `arcSpline`, not in this contour, and `arcSpline` draws every contour NOVA
-builds. Fixing it moves geometry throughout the tool, including results that have been validated
-against references, so it is deliberately not fixed here. See
-`src/NOVA/docs/reports/nozzleDecomposition_2026-09-07.md` for the measurement.
+Driven directly against the shipped regenerative example, with the diverging contour and chamber
+thermochemistry of a real run and a throat eccentricity of 0.88, this solver returns a 100-point
+contour whose minimum radius is 0.050464 m against a throat of 0.050320 m, no points below the
+throat, and a near-wall Mach number running 0.117 at the chamber to 3.787 at the exit. Asking it
+for the old curvature-continuous fit reproduces the original failure exactly, a subsonic area-Mach
+solve refused at an area ratio of 0.684.
 
-What would close the gap: a shape-preserving fit through the stitch, or a stitch that does not
-present an isolated control point between two dense runs.
+What that does not establish: that the resulting nozzle is a good one. The contour closes and the
+quasi-1D flow solve runs on it. Nothing here has been checked against a reference sunken design,
+and the correction terms the cooling correlations would need for a recessed throat, noted in
+`src/NOVA/docs/NozzleCooling.md`, do not exist.
 
 ----------------------------------------------------------------------
                         Wiring it back in

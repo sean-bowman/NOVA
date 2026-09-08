@@ -1231,9 +1231,17 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                         edgecolor = 'w', facecolor = 'r', width = 0.005, length_includes_head = True)
         plt.gca().set_aspect('equal')
 
-    # Spline over non-dimensional nozzle arrays and make the points evenly spaced
+    # Spline over non-dimensional nozzle arrays and make the points evenly spaced.
+    #
+    # This is the one contour NOVA builds that is smooth by construction: it comes off the
+    # characteristic mesh as a single wall streamline with no join in it, so the curvature-
+    # continuous fit is both safe and the more accurate of the two. Every other caller of
+    # arcSpline hands it a stitched curve with a corner, where a C2 cubic has to overshoot, and
+    # takes the shape-preserving default instead.
     xNozzleWallOld, rNozzleWallOld = xNozzleWall, rNozzleWall
-    xNozzleWall, rNozzleWall = arcSpline(xNozzleWallOld, rNozzleWallOld, newNumPoints = state.numContourPoints)
+    xNozzleWall, rNozzleWall = arcSpline(xNozzleWallOld, rNozzleWallOld,
+                                         newNumPoints = state.numContourPoints,
+                                         method = 'curvatureContinuous')
 
     # Scale the nozzle coordinates into real space
     xNozzleWallScaled, rNozzleWallScaled = xNozzleWall * state.nozzleScalingFactor, rNozzleWall * state.nozzleScalingFactor

@@ -14,12 +14,15 @@ and features taken out of the package that are worth keeping the source of.
 wraps the wall back around the closure behind it. It was a second `contourType` in `chamber.py`
 until it moved here; the package now builds the traditional section only.
 
-It does not currently produce a usable contour. The stitched wall reaches the flow solve and stops
-there, because `arcSpline` overshoots the isolated conic control point in the stitch by about 30
-per cent of the local radius and drives sixteen of sixty points below the throat. That defect is
-in `arcSpline`, which draws every contour NOVA builds, so fixing it moves validated geometry
-throughout the tool and was deliberately left alone. The module docstring carries the detail and
-what wiring it back in would take.
+It builds. It did not until `arcSpline` was made shape preserving: the stitch presents an
+isolated conic control point between two dense runs, and the unconstrained cubic that `arcSpline`
+used to fit rang across it and drove sixteen of sixty points below the throat, which has no
+subsonic solution. Driven against the shipped regenerative example it now returns a closed
+contour with no point below the throat and a near-wall Mach number running 0.117 to 3.787.
+
+That does not make it a validated design. Nothing here has been checked against a reference
+sunken nozzle, and the cooling correlations carry no correction for a recessed throat. The module
+docstring says what wiring it back into the package would take.
 
 ## MOC free-jet plume interior
 
