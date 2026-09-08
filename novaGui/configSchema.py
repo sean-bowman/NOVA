@@ -137,9 +137,6 @@ forcedCoolingFlags = ('plotsAdv', 'plotJacket')
 
 # -- Dependency predicates -- #
 
-def _contourIsSunk(config: dict) -> bool:
-    return config.get('contourType') == 'sunk'
-
 def _divergingIsConical(config: dict) -> bool:
     return config.get('divergingSectionType') == 'Conical'
 
@@ -199,8 +196,8 @@ groups = [
         Field('numContourPoints', 'Contour points', 'int', default = 100,
               help = 'Number of points in the resampled wall contour.'),
         Field('contourType', 'Converging section type', 'choice',
-              choices = [('Traditional', 'trad'), ('Sunken throat', 'sunk')], default = 'trad',
-              help = 'Traditional: conical converging section into a throat arc. Sunken throat: recessed throat geometry.'),
+              choices = [('Traditional', 'trad')], default = 'trad',
+              help = 'Conical converging section into a throat arc.'),
         Field('divergingSectionType', 'Diverging section type', 'choice',
               choices = [('Method of characteristics', 'rao'), ('Conical', 'Conical')], default = 'rao',
               help = 'Method of characteristics: truncated ideal contour. Conical: straight cone at a fixed half angle.'),
@@ -253,21 +250,6 @@ groups = [
               synthetic = True, showWhen = _truncateByAreaRatio,
               help = "Local area ratio at which the regen section ends. Folded into the backend as 'er <ratio>'."),
     ]),
-
-    Group('Sunken Throat Geometry', [
-        Field('throatEntryLength', 'Throat entry length', 'float', default = None, unit = 'm',
-              help = 'Straight length ahead of the sunken throat.'),
-        Field('throatEccentricity', 'Throat eccentricity', 'float', default = None,
-              help = 'Eccentricity of the sunken throat cross section.'),
-        Field('throatBackWallPitch', 'Throat back wall pitch', 'float', default = None, unit = 'deg',
-              help = 'Pitch angle of the sunken throat back wall.'),
-        Field('throatGapThickness', 'Throat gap thickness', 'float', default = None, unit = 'm',
-              help = 'Gap thickness at the sunken throat.'),
-        Field('conicDepthModifier', 'Conic depth modifier', 'float', default = None,
-              help = 'Depth scaling for the sunken conic section.'),
-        Field('conicPinchModifier', 'Conic pinch modifier', 'float', default = None,
-              help = 'Pinch scaling for the sunken conic section.'),
-    ], showWhen = _contourIsSunk),
 
     Group('Combustion', [
         Field('Fuel', 'Fuel', 'choice', choices = fuelChoices, default = 'LH2', editable = True,

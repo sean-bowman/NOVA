@@ -92,8 +92,7 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         - Chamber conditions (chamberPressure)
         - Performance constraints (thrust, engineMassFlow, targetExitPressure, expansionRatio)
         - Geometry parameters (lengthFraction, conicalHalfAngle, numContourPoints)
-        - Contour type selection (contourType: 'trad' or 'sunk')
-        - Sunken nozzle parameters (throatEntryLength, throatEccentricity, etc.)
+        - Contour type selection (contourType: 'trad')
         - Chamber sizing (Lstar, contractionAreaRatio)
 
     Regenerative Cooling Jacket:
@@ -122,7 +121,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
     - CSV debug mode automatically converts string values to appropriate types (bool, int, float)
     - Excel mode uses named sheets: 'Contour Definition', 'Regenerative Cooling', etc.
     - Some parameters (maxWallTemperature, infillThickness) are broadcast to arrays if scalar
-    - Sunken nozzle parameters are only loaded when contourType == 'sunk'
 
     Raises:
     -------
@@ -185,15 +183,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
             nozzle.chamberInterfaceAngle        = inputDict['chamberInterfaceAngle']
             nozzle.Lstar                      = inputDict['Lstar']
             nozzle.chamberLength              = inputDict['chamberLength']
-            # Sunken Nozzle Parameters
-            if nozzle.contourType == 'sunk':
-                nozzle.throatEntryLength          = inputDict['throatEntryLength']
-                nozzle.throatEccentricity         = inputDict['throatEccentricity']
-                nozzle.throatBackWallPitch        = inputDict['throatBackWallPitch']
-                nozzle.throatGapThickness         = inputDict['throatGapThickness']
-                nozzle.conicDepthModifier         = inputDict['conicDepthModifier']
-                nozzle.conicPinchModifier         = inputDict['conicPinchModifier']
-
             # Diverging Section
             nozzle.divergingSectionType       = inputDict['divergingSectionType']
             nozzle.Fuel                       = inputDict['Fuel']
@@ -348,15 +337,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.chamberInterfaceAngle        = inputsPath['chamberInterfaceAngle']
         nozzle.Lstar                      = inputsPath['Lstar']
         nozzle.chamberLength              = inputsPath['chamberLength']
-        # Sunken Nozzle Parameters
-        if nozzle.contourType == 'sunk':
-            nozzle.throatEntryLength          = inputsPath['throatEntryLength']
-            nozzle.throatEccentricity         = inputsPath['throatEccentricity']
-            nozzle.throatBackWallPitch        = inputsPath['throatBackWallPitch']
-            nozzle.throatGapThickness         = inputsPath['throatGapThickness']
-            nozzle.conicDepthModifier         = inputsPath['conicDepthModifier']
-            nozzle.conicPinchModifier         = inputsPath['conicPinchModifier']
-
         # Diverging Section
         nozzle.divergingSectionType       = inputsPath['divergingSectionType']
         nozzle.Fuel                       = inputsPath['Fuel']
@@ -518,19 +498,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
                 case 'Contraction Area Ratio':
                     nozzle.contractionAreaRatio       = float(contourDefinitionInputs.values[i][1])
 
-                # Sunken Converging Section Paramters
-                case 'Throat Entry Length':
-                    nozzle.throatEntryLength          = float(contourDefinitionInputs.values[i][1])
-                case 'Throat Eccentricity':
-                    nozzle.throatEccentricity          = float(contourDefinitionInputs.values[i][1])
-                case 'Throat Back Wall Pitch':
-                    nozzle.throatBackWallPitch        = float(contourDefinitionInputs.values[i][1])
-                case 'Gap Thickness':
-                    nozzle.throatGapThickness         = float(contourDefinitionInputs.values[i][1])
-                case 'Conic Depth Modifier':
-                    nozzle.conicDepthModifier         = float(contourDefinitionInputs.values[i][1])
-                case 'Conic Pinch Modifier':
-                    nozzle.conicPinchModifier         = float(contourDefinitionInputs.values[i][1])
 
         regenJacketInputs, _ = readExcel(inputsPath, sheetName = "Regen Jacket")
         for i, _ in enumerate(regenJacketInputs.values):

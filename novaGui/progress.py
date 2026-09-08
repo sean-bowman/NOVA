@@ -44,7 +44,7 @@ def _contourStages() -> list:
     return [
         Stage(r'run config written',                      0.02, 0.06, 'writing run config'),
         Stage(r'pressure-matched truncated ideal|Generating a conical', 0.08, 0.62, 'solving nozzle contour'),
-        Stage(r'Generating (Traditional|Sunken) Converging Section', 0.64, 0.68, 'converging section'),
+        Stage(r'Generating Traditional Converging Section', 0.64, 0.68, 'converging section'),
         Stage(r'Generating Combustion Chamber',           0.70, 0.72, 'combustion chamber'),
         Stage(r'Truncating Nozzle Regen Section',         0.74, 0.78, 'regen truncation'),
     ]

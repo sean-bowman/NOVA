@@ -162,8 +162,8 @@ def solveRegenStations(state):
     This method locates the supersonic splitline and separates the regen section from the extension.
     The exhaust flow properties arrays are also split and interpolated accordingly.
 
-    The turnaround of a sunken contour must not be trimmed from the array, though it is
-    important to capture when indexing. Exhaust flow is not calculated at those points.
+    Stations outside the chamber carry no exhaust flow solution, so they are captured when
+    indexing but must not be trimmed from the array.
 
     '''
 

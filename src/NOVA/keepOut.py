@@ -5,10 +5,9 @@
 The axisymmetric volume behind the chamber that the cooling jacket has to pack around.
 
 A regeneratively cooled chamber does not end at the injector face. Whatever closes the chamber
-sits behind it, and the return volute, its supports and the turnaround of a sunken contour all
-have to route outside that volume. NOVA does not model what fills it, so it is described as a
-keep-out: an envelope that geometry must clear, named by three numbers rather than read from a
-part-specific contour.
+sits behind it, and the return volute and its supports have to route outside that volume. NOVA
+does not model what fills it, so it is described as a keep-out: an envelope that geometry must
+clear, named by three numbers rather than read from a part-specific contour.
 
 The envelope is a quarter ellipse of revolution, swept from an outer shoulder at the chamber
 radius inward to a hub where a boss or an igniter would sit:

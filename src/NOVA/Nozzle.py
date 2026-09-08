@@ -222,7 +222,7 @@ class Nozzle:
        - Truncated Ideal Contour (TIC) via Method of Characteristics
        - Pressure-matched contour optimization
        - Conical nozzle alternative
-       - Multiple converging section types: traditional, sunken
+       - Traditional converging section
 
     2. Regenerative Cooling System Design
        - Helical/fluted cooling channel generation
@@ -263,7 +263,7 @@ class Nozzle:
     lengthFraction : float
         Nozzle length as fraction of equivalent 15-deg conical nozzle [-]
     contourType : str
-        Converging section type: 'trad' or 'sunk'
+        Converging section type: 'trad'
 
     Regenerative Cooling Attributes:
     --------------------------------
@@ -305,7 +305,7 @@ class Nozzle:
         Generate optimized diverging section via MOC
     pressureMatchTruncatedIdealContour(lengthFraction, ...)
         Generate pressure-matched nozzle contour
-    convergingSection(raoThroatAngle, sunkenAngle, ...)
+    convergingSection(raoThroatAngle, ...)
         Generate converging section geometry
     conicalNozzle(conicalHalfAngle)
         Generate simple conical nozzle
@@ -427,14 +427,6 @@ class Nozzle:
         self.chamberLstarActual: float      = 0.0 # [m]
         self.chamberContractionRatio: float = 0.0 # [-]
 
-        # New sunken nozzle properties
-        self.throatEntryLength: float = 0.0 # [m]
-        self.throatEccentricity: float = 0.0 # [-] 
-        self.throatBackWallPitch: float = 0.0 # [deg]
-        self.throatGapThickness: float = 0.0 # [m]
-        self.conicDepthModifier: float = 0.0 # [-]
-        self.conicPinchModifier: float = 0.0 # [-]
-
         # # Non-dimensional parameters (From Rao Nozzle)
         self.throatRadiusNonDimensional          = 1     # [-] Non-dimensional
         self.throatInletCurvatureNonDimensional  = 1.5   # [-] Non-dimensional
@@ -465,8 +457,6 @@ class Nozzle:
         self.rNozzleWallDivergingNonDimensional = [] # [-]
         self.xNozzleWall: np.ndarray = np.array([]) # [m]
         self.rNozzleWall: np.ndarray = np.array([]) # [m]
-        self.xSunkTurnaround2D                  = [] # [m]
-        self.rSunkTurnaround2D                  = [] # [m]
         self.nozzleNearWallTemperature          = np.array([]) # [K]
         self.nozzleNearWallPressure             = [] # [Pa]
         self.nozzleNearWallVelocity             = [] # [m/s]
@@ -599,7 +589,7 @@ class Nozzle:
         self.keepOutRadius           = None # [m], None takes the chamber radius
         self.keepOutDepth            = None # [m], None takes half the keep-out radius
         self.keepOutHubRadius        = None # [m], None takes a quarter of the keep-out radius
-        self.nozzleKeepOut: Any = None      # KeepOutEnvelope; built when a volute or sunk contour needs it
+        self.nozzleKeepOut: Any = None      # KeepOutEnvelope; built when a volute needs it
         self.xKeepOut3D              = [] # [m]
         self.yKeepOut3D              = [] # [m]
         self.zKeepOut3D              = [] # [m]

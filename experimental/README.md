@@ -1,4 +1,27 @@
-# Experimental: MOC free-jet plume interior
+# Experimental
+
+Work that is not part of the shipped tool: research records for methods still being established,
+and features taken out of the package that are worth keeping the source of.
+
+| Module | What it is |
+|--------|-----------|
+| `tnd2327.py`, `convergeMarch.py`, `convergeRun.py`, `jetNetPrototype.py` | The MOC free-jet plume interior study, described below |
+| `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
+
+## Sunken throat converging section
+
+`sunkenNozzle.py` holds the converging section that recesses the throat inside the chamber and
+wraps the wall back around the closure behind it. It was a second `contourType` in `chamber.py`
+until it moved here; the package now builds the traditional section only.
+
+It does not currently produce a usable contour. The stitched wall reaches the flow solve and stops
+there, because `arcSpline` overshoots the isolated conic control point in the stitch by about 30
+per cent of the local radius and drives sixteen of sixty points below the throat. That defect is
+in `arcSpline`, which draws every contour NOVA builds, so fixing it moves validated geometry
+throughout the tool and was deliberately left alone. The module docstring carries the detail and
+what wiring it back in would take.
+
+## MOC free-jet plume interior
 
 This directory is the research record for the free-jet characteristic net of NASA TN D-2327,
 *Comparisons of Experimental Free-jet Boundaries with Theoretical Results Obtained with the Method

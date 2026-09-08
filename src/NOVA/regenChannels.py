@@ -152,7 +152,6 @@ class RegenChannelState:
     printDirection:                            Any = None
     printabilityCheck:                         Any = None
     rRegenNozzle:                              Any = None
-    rSunkTurnaround2D:                         Any = None
     regenSectionNearWallMachNumber:            Any = None
     regenSectionNearWallPressure:              Any = None
     regenSectionNearWallTemperature:           Any = None
@@ -163,7 +162,6 @@ class RegenChannelState:
     shellThickness:                            Any = None
     xNozzleMesh:                               Any = None
     xRegenNozzle:                              Any = None
-    xSunkTurnaround2D:                         Any = None
     yNozzleMesh:                               Any = None
     zNozzleMesh:                               Any = None
 
@@ -617,32 +615,6 @@ def solveRegenChannels(state, thermal):
                 state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed[returnTurnaroundIndex:]
 
                 return np.flip(xReturnTurnaround), np.flip(rReturnTurnaround)
-
-            elif state.contourType == 'sunk':
-
-                if state.channelType == 'circle':
-                    maxChannelRadiusAtReturn,_ = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
-                else:
-                    _,maxChannelRadiusAtReturn = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)   
-                filletRadius = maxChannelRadiusAtReturn                 
-
-                theta1 = np.arctan(abs(state.xSunkTurnaround2D[-1]-state.xSunkTurnaround2D[-2])/ \
-                                   abs(state.rSunkTurnaround2D[-1]-state.rSunkTurnaround2D[-2]))
-                thetaArc = np.linspace(np.pi+theta1,3*np.pi/2)
-
-                xFilletCenter = state.xSunkTurnaround2D[-1] + filletRadius*np.cos(theta1)
-                rFilletCenter = state.rSunkTurnaround2D[-1] + filletRadius*np.sin(theta1)
-
-                xFillet = filletRadius*np.cos(thetaArc) + xFilletCenter
-                rFillet = filletRadius*np.sin(thetaArc) + rFilletCenter
-
-                xEnd, rEnd = xFillet[-1] + state.returnVoluteFlareLen, rFillet[-1]
-                xLin, rLin = np.linspace(xFillet[-1],xEnd,50)[1:], rEnd*np.ones(49)
-
-                xAll, rAll = np.concatenate([state.xSunkTurnaround2D[1:],xFillet[1:],xLin])[:-1], np.concatenate([state.rSunkTurnaround2D[1:],rFillet[1:],rLin])[:-1]
-
-                return np.flip(xAll), np.flip(rAll)
-
         # ------------------------------------------------------------------------------------------------------------------------------------ #
         # -- Generate interfaces -- #      
         # ------------------------------------------------------------------------------------------------------------------------------------ #

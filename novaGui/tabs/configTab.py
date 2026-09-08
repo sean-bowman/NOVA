@@ -291,11 +291,6 @@ class ConfigTab(ttk.Frame):
         if truncationMode == 'er' and self._rows['truncationAreaRatio'].get() is None:
             problems.append("Area-ratio truncation needs a 'Truncation area ratio'.")
 
-        if config.get('contourType') == 'sunk':
-            missing = [k for k in ('throatEntryLength', 'throatGapThickness') if not isSet(k)]
-            if missing:
-                problems.append('Sunken throat needs: ' + ', '.join(missing) + '.')
-
         if config.get('makeCoolingChannels') in (True, 'on'):
             needed = ['hotWallThickness', 'shellThickness', 'coolantInitialTemperature', 'coolantInitialPressure']
             missing = [k for k in needed if not isSet(k)]

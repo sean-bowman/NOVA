@@ -28,7 +28,7 @@ against the fields it guards, and tested as data rather than as branches.
 
     numericRule('chamberPressure', 'Chamber pressure', units = 'Pa', minimum = 0)
     integerRule('nChannel', 'Number of channels', minimum = 10)
-    choiceRule('contourType', 'Converging section type', choices = ('trad', 'sunk'))
+    choiceRule('channelType', 'Channel cross section', choices = ('circle', 'fluted'))
     arrayRule('rNozzleWall', 'Nozzle wall radius', units = 'm', positive = True)
 
 Each returns a Rule. `applyRules(source, rules)` walks them in order and raises on the first
@@ -37,8 +37,8 @@ the earliest thing that is wrong.
 
 A rule that only applies sometimes carries a `when` predicate:
 
-    numericRule('throatEccentricity', 'Throat eccentricity', minimum = 0, maximum = 1,
-                when = lambda source: read(source, 'contourType') == 'sunk')
+    numericRule('fluteAmplitudeCoef', 'Flute amplitude coefficient', minimum = 0, maximum = 1,
+                when = lambda source: read(source, 'channelType') == 'fluted')
 
 `source` may be an object or a dictionary; `read` handles both, which is what lets the same table
 guard a `Nozzle`, a state dataclass and the heat transfer input dictionary.
