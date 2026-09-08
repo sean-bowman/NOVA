@@ -267,8 +267,6 @@ _buildOutputs = (
 
 regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs)))
 
-
-
 # What a channel definition has to say before the jacket can be laid out. Written as a table
 # rather than as branches: see validation.py.
 #
@@ -405,7 +403,6 @@ def _sizingState(state) -> 'ChannelSizingState':
         dcrData                            = state.dcrData,
         debugMode                          = state.debugMode)
 
-
 def solveRegenChannels(state, thermal):
 
     '''
@@ -466,7 +463,7 @@ def solveRegenChannels(state, thermal):
         '''
 
         # ------------------------------------------------------------------------------------------------------------------------------------ #
-        # -- Helper Methods -- #      
+        # -- Helper Methods -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         def interfaceToInlet():
@@ -509,7 +506,7 @@ def solveRegenChannels(state, thermal):
             xLimitTilt = filletRadius*np.cos(flareAngle) + xFilletCenter
             rLimitTilt = filletRadius*np.sin(flareAngle) + rFilletCenter
             # Find flare end
-            xFlareEnd = xLimitTilt - (flareLength)*np.sin(flareAngle) 
+            xFlareEnd = xLimitTilt - (flareLength)*np.sin(flareAngle)
             rFlareEnd = rLimitTilt + (flareLength)*np.cos(flareAngle)
 
             # Trim pathline
@@ -519,7 +516,7 @@ def solveRegenChannels(state, thermal):
 
             # Append the linear flare to the filleted centerline
             # place several points along flare to maintain linearity through later arcSplines
-            xFlare = np.concatenate([xFillet,np.linspace(xFillet[-1],xFlareEnd,numFlarePoints+2)[1:]]) 
+            xFlare = np.concatenate([xFillet,np.linspace(xFillet[-1],xFlareEnd,numFlarePoints+2)[1:]])
             rFlare = np.concatenate([rFillet,np.linspace(rFillet[-1],rFlareEnd,numFlarePoints+2)[1:]])
 
             state.gammaRegenSectionTrimmed               = state.gammaRegenSection[trimIndeces]
@@ -616,7 +613,7 @@ def solveRegenChannels(state, thermal):
 
                 return np.flip(xReturnTurnaround), np.flip(rReturnTurnaround)
         # ------------------------------------------------------------------------------------------------------------------------------------ #
-        # -- Generate interfaces -- #      
+        # -- Generate interfaces -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         # Instantiate trimmed arrays
@@ -650,17 +647,17 @@ def solveRegenChannels(state, thermal):
                 arcSpline(state.xRegenNozzleTrimmed,state.rRegenNozzleTrimmed,newNumPoints=state.numCrossSections)
 
             state.gammaRegenSectionTrimmed = \
-                chunkInterpolate(xOld, state.gammaRegenSectionTrimmed,               state.xRegenNozzleTrimmed)               
+                chunkInterpolate(xOld, state.gammaRegenSectionTrimmed,               state.xRegenNozzleTrimmed)
             state.molecularWeightRegenSectionTrimmed = \
-                chunkInterpolate(xOld, state.molecularWeightRegenSectionTrimmed,     state.xRegenNozzleTrimmed)     
+                chunkInterpolate(xOld, state.molecularWeightRegenSectionTrimmed,     state.xRegenNozzleTrimmed)
             state.gasConstantRegenSectionTrimmed = \
-                chunkInterpolate(xOld, state.gasConstantRegenSectionTrimmed,         state.xRegenNozzleTrimmed)         
+                chunkInterpolate(xOld, state.gasConstantRegenSectionTrimmed,         state.xRegenNozzleTrimmed)
             state.regenSectionNearWallTemperatureTrimmed = \
-                chunkInterpolate(xOld, state.regenSectionNearWallTemperatureTrimmed, state.xRegenNozzleTrimmed) 
+                chunkInterpolate(xOld, state.regenSectionNearWallTemperatureTrimmed, state.xRegenNozzleTrimmed)
             state.regenSectionNearWallMachNumberTrimmed = \
-                chunkInterpolate(xOld, state.regenSectionNearWallMachNumberTrimmed,  state.xRegenNozzleTrimmed)  
+                chunkInterpolate(xOld, state.regenSectionNearWallMachNumberTrimmed,  state.xRegenNozzleTrimmed)
             state.regenSectionNearWallPressureTrimmed = \
-                chunkInterpolate(xOld, state.regenSectionNearWallPressureTrimmed,    state.xRegenNozzleTrimmed)  
+                chunkInterpolate(xOld, state.regenSectionNearWallPressureTrimmed,    state.xRegenNozzleTrimmed)
 
         state.numInletInterfaceCS  = len(state.xInletInterface)
         state.numReturnInterfaceCS = len(state.xReturnInterface)
@@ -673,7 +670,7 @@ def solveRegenChannels(state, thermal):
     # -- Generate channel radius distribution -- #
     # ------------------------------------------------------------------------------------------------------------------------------------ #
 
-    # Create channel radius distribution and 2D centerline using dynamic channel radii (DCR) algorithm            
+    # Create channel radius distribution and 2D centerline using dynamic channel radii (DCR) algorithm
     def generateChannelRadii():
 
         # The sizing loop lives in channelSizing.py, which takes the engine, the coolant and
@@ -699,7 +696,7 @@ def solveRegenChannels(state, thermal):
     def generateChannelCenterline():
 
         # ------------------------------------------------------------------------------------------------------------------------------------ #
-        # -- Helper Methods -- #      
+        # -- Helper Methods -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         def kineosAlgorithm(xCenterline2D, rCenterline2D, channelRadius):
@@ -752,7 +749,7 @@ def solveRegenChannels(state, thermal):
             indeces = np.where(channelArcLength > nozzleArcSlice)[0]
             channelArcLength[indeces] = nozzleArcSlice[indeces]
 
-            # Calculate the projection angle required to make the channel cross-section 
+            # Calculate the projection angle required to make the channel cross-section
             # equivalent to the region of the nozzle allocated to it.
             projectionAngle = np.real(np.arccos(channelArcLength/nozzleArcSlice))
 
@@ -760,22 +757,22 @@ def solveRegenChannels(state, thermal):
             xArc = 2 * rCenterline2D * np.arccos((2*rCenterline2D**2 - ((xCenterline2DStep*np.tan(projectionAngle))/2)**2)/ (2 * rCenterline2D**2))
 
             # Calculate the arc length of channel movement in the r direction projected on the pathline.
-            rArc = 2 * rCenterline2D * np.arccos((2*rCenterline2D**2 - ((rCenterline2DStep/np.tan(np.pi/2-projectionAngle))/2)**2)/ (2 * rCenterline2D**2)) 
+            rArc = 2 * rCenterline2D * np.arccos((2*rCenterline2D**2 - ((rCenterline2DStep/np.tan(np.pi/2-projectionAngle))/2)**2)/ (2 * rCenterline2D**2))
 
             # Initialize an array to store the helix path angles.
             helixPath = np.zeros(len(xCenterline2D)) # state.numCrossSections
 
             # Calculate the position of each pathline point projected on the nozzle wall in degrees.
-            # Project the point from the previous axial slice to the next slice and then add 
+            # Project the point from the previous axial slice to the next slice and then add
             # the arc length required to position the channel.
             for n in range(len(xCenterline2D)-1):
 
-                helixPath[n+1] = ((helixPath[n] * rCenterline2D[n+1]) - np.sqrt(xArc[n+1]**2 + rArc[n+1]**2)) / rCenterline2D[n+1] 
+                helixPath[n+1] = ((helixPath[n] * rCenterline2D[n+1]) - np.sqrt(xArc[n+1]**2 + rArc[n+1]**2)) / rCenterline2D[n+1]
 
-            return helixPath         
+            return helixPath
 
         # ------------------------------------------------------------------------------------------------------------------------------------ #
-        # -- Define Nozzle Contours -- #      
+        # -- Define Nozzle Contours -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         # Copies and offsets
@@ -813,7 +810,7 @@ def solveRegenChannels(state, thermal):
         state.zNozzleShellMesh    = zNozzleShellMesh
 
         # ------------------------------------------------------------------------------------------------------------------------------------ #
-        # -- 3D Wrapping -- #      
+        # -- 3D Wrapping -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         # -- Get Centerline -- #
@@ -911,11 +908,11 @@ def solveRegenChannels(state, thermal):
 
         print(f'Running printability audit')
 
-        printabilityAudit()      
+        printabilityAudit()
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
-    # -- Generate channel cross sections and 3D geometry -- #      
-    # ------------------------------------------------------------------------------------------------------------------------------------ #       
+    # -- Generate channel cross sections and 3D geometry -- #
+    # ------------------------------------------------------------------------------------------------------------------------------------ #
 
     def generate3DChannels():
 
@@ -924,7 +921,7 @@ def solveRegenChannels(state, thermal):
         zNozzleColdWallMesh, yNozzleColdWallMesh, xNozzleColdWallMesh   \
             = [np.zeros((state.numCrossSections, state.numCrossSections)) for _ in range(3)]
         contourAngles = np.linspace(0, 2*np.pi, state.numCrossSections)
-        for i in range(state.numCrossSections):            
+        for i in range(state.numCrossSections):
             zNozzleColdWallMesh[i,:] = rNozzleColdWall[i] * np.cos(contourAngles)
             yNozzleColdWallMesh[i,:] = rNozzleColdWall[i] * np.sin(contourAngles)
             xNozzleColdWallMesh[:,i] = xNozzleColdWall
@@ -940,7 +937,7 @@ def solveRegenChannels(state, thermal):
         state.xNozzleColdWallMesh = xNozzleColdWallMesh
         state.yNozzleColdWallMesh = yNozzleColdWallMesh
         state.zNozzleColdWallMesh = zNozzleColdWallMesh
-        state.allNozzlePoints = allNozzlePoints        
+        state.allNozzlePoints = allNozzlePoints
 
         # Get update interface lengths
         xInletTrim  = state.xRegenNozzleTrimmed[-1]
@@ -978,7 +975,7 @@ def solveRegenChannels(state, thermal):
     generate3DChannels()
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
-    # -- Generate cooling jacket -- #      
+    # -- Generate cooling jacket -- #
     # ------------------------------------------------------------------------------------------------------------------------------------ #
 
     # Rotate copies of channel around nozzle to generate full jacket
@@ -1012,7 +1009,7 @@ def solveRegenChannels(state, thermal):
         state.xAllChannels, state.yAllChannels, state.zAllChannels = generateCoolingJacket(state.xChannel, state.yChannel, state.zChannel)
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
-    # -- Plots -- #      
+    # -- Plots -- #
     # ------------------------------------------------------------------------------------------------------------------------------------ #
 
     if state.plotsAdv == 'on' and _plotlyGate('advanced 3D channel views'):
@@ -1040,15 +1037,15 @@ def solveRegenChannels(state, thermal):
                                 opacity = 0.8,
                                 showscale = False))
             # Interfaced channels
-            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,2], y = state.xAllChannels[:,:,2], z = state.yAllChannels[:,:,2], 
+            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,2], y = state.xAllChannels[:,:,2], z = state.yAllChannels[:,:,2],
                                     colorscale = [[0, 'yellow'], [1,'yellow']],
                                     opacity = .999,
                                     showscale = False))
-            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,1], y = state.xAllChannels[:,:,1], z = state.yAllChannels[:,:,1], 
+            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,1], y = state.xAllChannels[:,:,1], z = state.yAllChannels[:,:,1],
                                     colorscale = [[0, 'cyan'], [1,'cyan']],
                                     opacity = 1,
                                     showscale = False))
-            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,3], y = state.xAllChannels[:,:,3], z = state.yAllChannels[:,:,3], 
+            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,3], y = state.xAllChannels[:,:,3], z = state.yAllChannels[:,:,3],
                                     colorscale = [[0, 'magenta'], [1,'magenta']],
                                     opacity = 1,
                                     showscale = False))
@@ -1089,12 +1086,12 @@ def solveRegenChannels(state, thermal):
                                         list(np.linspace(0,1,state.nChannel)))
 
                 fig = go.Figure()
-                fig.add_trace(go.Surface(x = state.zNozzleColdWallMesh, y = state.xNozzleColdWallMesh, z = state.yNozzleColdWallMesh, 
+                fig.add_trace(go.Surface(x = state.zNozzleColdWallMesh, y = state.xNozzleColdWallMesh, z = state.yNozzleColdWallMesh,
                                         colorscale = [[0, 'cyan'], [1,'cyan']],
                                         opacity = 0.5,
                                         showscale = False))
                 for i in range(state.nChannel):
-                    fig.add_trace(go.Surface(x = state.zAllChannels[:,:,i], y = state.xAllChannels[:,:,i], z = state.yAllChannels[:,:,i], 
+                    fig.add_trace(go.Surface(x = state.zAllChannels[:,:,i], y = state.xAllChannels[:,:,i], z = state.yAllChannels[:,:,i],
                                         colorscale = [[0, colori[i]], [1,colori[i]]],
                                         opacity = 1,
                                         showscale = False))
@@ -1129,7 +1126,7 @@ def solveRegenChannels(state, thermal):
                                 opacity = 0.8,
                                 showscale = False))
             # Interfaced channels
-            fig.add_trace(go.Surface(x = state.zChannel, y = state.xChannel, z = state.yChannel, 
+            fig.add_trace(go.Surface(x = state.zChannel, y = state.xChannel, z = state.yChannel,
                                     colorscale = [[0, 'yellow'], [1,'yellow']],
                                     opacity = .975,
                                     showscale = False))

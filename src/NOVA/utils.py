@@ -216,7 +216,7 @@ def refWrap(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: flo
 
     if (REFPROPinUsers is False) and (REFPROPinProgramFilesx86 is False):
         raise Exception(f'Uh oh, REFPROP isn\'t found at Users\\%YOURUSERNAME%\\REFPROP or C:\\Program Files (x86)\\REFPROP')
-    
+
     # Will default to User directory even if both are True because if statements check top-down
     if REFPROPinUsers is True:
         RP = REFPROPFunctionLibrary(rootUsers)
@@ -456,7 +456,7 @@ def fluidProps(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: 
     return coolWrap(species, inputTypes, outputTypes, inputTypeFirst, inputTypeSecond, mixtureRatio = mixtureRatio, units = units)
 
 class fluidView():
-    
+
     '''
     
     This class serves as a simple fluid property viewer that can be used to generate tables for reference in the propulsionDesign Streamlit web app.
@@ -495,7 +495,7 @@ class fluidView():
 
         if (REFPROPinUsers is False) and (REFPROPinProgramFilesx86 is False):
             raise Exception(f'Uh oh, REFPROP isn\'t found at Users\\%YOURUSERNAME%\\REFPROP or C:\\Program Files (x86)\\REFPROP')
-        
+
         # Will default to User directory even if both are True because if statements check top-down
         if REFPROPinUsers is True:
             fluidsDirectory = rootUsers + '\\FLUIDS\\'
@@ -520,7 +520,7 @@ class fluidView():
         allFluids.sort()
 
         return allFluids
-    
+
     def getAvailableProperties(self) -> list[str]:
 
         '''
@@ -539,7 +539,7 @@ class fluidView():
         availableProperties = dict(zip(readableProperties, formattedProperties))
 
         return availableProperties
-    
+
     def setInputs(self, userInputs: dict) -> None:
 
         '''
@@ -779,7 +779,7 @@ class fluidView():
                                   else 3 if output == 'Supercritical' \
                                   else 4 if output == 'Two-phase'
                                   else 0 for output in holdOutputs[0][i]]
-            
+
         self.phaseOutputs = phaseOutputs
         self.holdOutputs = holdOutputs
 
@@ -858,7 +858,7 @@ class fluidView():
         numOutputs = len(outputTypesSplit)
 
         outputs = fluidProps(self.fluid, self.inputTypes, self.outputTypes, self.firstValue, self.secondValue, mixtureRatio = self.mixtureRatio)
-        
+
         # Create and store the units for each output (useful for Z-axis label of plots)
         outputUnits = [0 for _ in range(numOutputs)]
         for i in range(numOutputs):
@@ -918,11 +918,10 @@ class fluidView():
         # Check is Custom Directory is specified
         if customDirectory is not None:
             cwd = customDirectory
-        
+
         # This will be used for Cp and density when only dealing with temperature and is taken at the midpoint of pressure range
         pressureMidpoint = (lowerPressure + upperPressure)/2
 
-       
         # Make a directory where we save new properties
         propertyFolder = Species + '_properties'
         pathPropertyFolder = os.path.join(cwd, propertyFolder)
@@ -930,7 +929,7 @@ class fluidView():
         # This wall pulled from internet and checks to see if a directory exists, and if it does it deletes it. (https://stackoverflow.com/questions/43765117/how-to-check-existence-of-a-folder-with-python-and-then-remove-it)
         if os.path.exists(pathPropertyFolder) and os.path.isdir(pathPropertyFolder):
             shutil.rmtree(pathPropertyFolder)
-            
+
             ## NOTE: This does not work until I get on a modern branch that supports exception handling properly
             # try:
             #     shutil.rmtree(pathPropertyFolder)
@@ -969,8 +968,6 @@ class fluidView():
                 df = pd.DataFrame(propertyValues, index=temperatureArray, columns=[f'{property}'])
                 # Now we make the headers in data frame Temperature [K] and Property
                 df.index.name = 'Temperature [K]'
-                
-                
 
                 # Save the DataFrame to a CSV file
                 csvFilename = f"{Species}_{property}_isobaric.csv"
@@ -978,7 +975,7 @@ class fluidView():
                 df.to_csv(csvFilePath)
 
         # Now we loop over each output property and generate a CSV for each and output in form of T, P, propertyValue irregardless of isobaric toggle
-        for property in tqdm(outputproperties):   
+        for property in tqdm(outputproperties):
             # Prepare an empty array to hold output property values
             propertyValues = np.zeros((numTemperatures, numPressures))
 
@@ -1087,8 +1084,6 @@ def convertToSCFM(fluid: str, massFlowrate: float, temperature: float, pressure:
 
     return SCFM
 
-
-
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Geometry Generation Tools -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -1147,7 +1142,7 @@ def py2cad(filename: str, xData: np.ndarray | list, yData: np.ndarray | list, zD
     # Append file extension if the given name does not contain it
     if '.' not in filename:
         filename += '.stl'
-    
+
     # Locally re-scope mesh data
     # If passed in arrays are lists, make them numpy arrays
     if type(xData) is list:
@@ -1210,7 +1205,7 @@ def py2cad(filename: str, xData: np.ndarray | list, yData: np.ndarray | list, zD
     fileID.write(np.int32(nFacets))
     # Don't forget to close the file
     fileID.close()
-    
+
 def parallelOffset(xCurve: ArrayLike, yCurve: ArrayLike, offsetDistance: ArrayLike, centralDifference: bool = True) -> tuple:
 
     '''
@@ -1233,7 +1228,7 @@ def parallelOffset(xCurve: ArrayLike, yCurve: ArrayLike, offsetDistance: ArrayLi
     deltaY = np.zeros(len(yCurve))
     xCurveParalleloffset = np.zeros(len(xCurve))
     yCurveParalleloffset = np.zeros(len(xCurve))
-    
+
     # Do numerical derivative for passed in curve
     if centralDifference:
         deltaX = np.gradient(xCurve)
@@ -1314,7 +1309,7 @@ def intersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCu
         yCurve1 = np.array(yCurve1)
     if type(yCurve2) is list:
         yCurve2 = np.array(yCurve2)
-    
+
     # If passed in arrays have no second dimension, give them one for convenience
     if len(xCurve1.shape) < 2:
         xCurve1 = xCurve1.reshape(len(xCurve1),1)
@@ -1331,10 +1326,10 @@ def intersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCu
 
     # Draw bounding box for intersection
     foundIndex = np.argwhere((movingMin(xCurve1) <= movingMax(xCurve2).T) &
-                             (movingMax(xCurve1) >= movingMin(xCurve2).T) & 
+                             (movingMax(xCurve1) >= movingMin(xCurve2).T) &
                              (movingMin(yCurve1) <= movingMax(yCurve2).T) &
                              (movingMax(yCurve1) >= movingMin(yCurve2).T))
-    
+
     # Special case for when each array is 2 elements long
     if foundIndex.shape == (1, 1):
         foundIndex_int = np.zeros((1,2), dtype = int)
@@ -1364,9 +1359,9 @@ def intersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCu
         outputArray[:,i] = np.linalg.solve(A[i,:,:], B[:,i])
 
     # Find where first two elements of outputArray are between 0 and 1
-    inRange = np.argwhere((outputArray[0,:] >= 0) & 
+    inRange = np.argwhere((outputArray[0,:] >= 0) &
                           (outputArray[0,:] <= 1) &
-                          (outputArray[1,:] >= 0) & 
+                          (outputArray[1,:] >= 0) &
                           (outputArray[1,:] <= 1))
 
     # Return x and y coordinates of intersection point by sampling out of the 3rd and 4th elements of outputArray
@@ -1376,7 +1371,7 @@ def intersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCu
     return xIntersect, yIntersect
 
 def discreteIntersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCurve2: ArrayLike, resolution: int = 1000) -> tuple:
-    
+
     '''
     
     Replacement function for testing for curve intersections by checking each curve in discrete steps.
@@ -1386,20 +1381,20 @@ def discreteIntersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayL
     '''
 
     from scipy.interpolate import interp1d
-    
+
     # Create interpolation functions for both curves
     curve1Interpolator = interp1d(xCurve1, yCurve1, kind = 'linear', fill_value = 'extrapolate')
     curve2Interpolator = interp1d(xCurve2, yCurve2, kind = 'linear', fill_value = 'extrapolate')
-    
+
     # Find the overlapping x-range
     xRangeMin = max(min(xCurve1), min(xCurve2))
     xRangeMax = min(max(xCurve1), max(xCurve2))
-    
+
     xRange = np.linspace(xRangeMin, xRangeMax, resolution)
 
     y1Range = curve1Interpolator(xRange)
     y2Range = curve2Interpolator(xRange)
-    
+
     # Find where the curves cross (sign changes in their difference)
     differences = y1Range - y2Range
     signChanges = np.where(np.diff(np.signbit(differences)))[0]
@@ -1407,7 +1402,7 @@ def discreteIntersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayL
     if not any(signChanges):
         print('No intersections detected')
         return [], []
-    
+
     # Initialize lists to store caught intersections
     xIntersection, yIntersection = [], []
 
@@ -1417,7 +1412,7 @@ def discreteIntersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayL
         xLeft, xRight   = xRange[signChange],  xRange[signChange + 1]
         y1Left, y1Right = y1Range[signChange], y1Range[signChange + 1]
         y2Left, y2Right = y2Range[signChange], y2Range[signChange + 1]
-        
+
         # Find intersection via linear interpolation
         xIntersectionValue = xLeft + (xRight - xLeft) * \
                              (y2Left - y1Left) / ((y1Right - y1Left) - (y2Right - y2Left))
@@ -1425,7 +1420,7 @@ def discreteIntersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayL
 
         xIntersection.append(xIntersectionValue)
         yIntersection.append(yIntersectionValue)
-            
+
     return xIntersection, yIntersection
 
 def fillet(xCurve1: np.ndarray | list, yCurve1: np.ndarray | list, xCurve2: np.ndarray | list, yCurve2: np.ndarray | list, radiusOfCurvature: float, numPoints: int = 50) -> list[float]:
@@ -1524,7 +1519,7 @@ def fillet(xCurve1: np.ndarray | list, yCurve1: np.ndarray | list, xCurve2: np.n
     # plt.plot(xFillet,yFillet,'c')
     # ax.set_aspect(aspect = 'equal')
     # plt.show(block = False)
-    
+
     return xFillet, yFillet
 
 def nonLinspace(start: float, end: float, numPoints: int = 100, method: str = 'exp') -> list[float]:
@@ -1583,14 +1578,14 @@ def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None 
         for k in range(3):
             output += np.polyval(polyCoefs[k,:], t)**2
         return np.sqrt(output)
-    
+
     def integrationEvents(t, y):
         value = y[0]
         return value
     # scipy solve_ivp requires event functions to be monkey patched with terminal and direction handles
     integrationEvents.terminal  = True
     integrationEvents.direction = 1
-    
+
     # Initialize arrays to hold the newly generated points, as well as reorienting the passed-in points
     newNumPointsArray = np.linspace(0, 1, newNumPoints)
     newPoints = np.zeros((newNumPoints,3))
@@ -1616,7 +1611,7 @@ def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None 
         # Calculate the coefficients of the derivative by differentiating the spline coefficients
         splineDerivativeIntermediate.c = (splineDerivativeIntermediate.c.T @ derivativeArray).T
         splineDerivative[i] = splineDerivativeIntermediate
-    
+
     # Create dummy array to store the coefficients of each spline derivative segment (to be used while integrating)
     polynomialCoefsDerivatives = np.zeros((3, 3))
     # Initialize array to hold integrated spline segment length
@@ -1689,11 +1684,11 @@ def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None 
         return newPoints[:,0], newPoints[:,1]
 
 def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2Points: np.ndarray, y2Points: np.ndarray, n: int) -> tuple:
-    
+
     # Local imports
     from scipy.interpolate import CubicSpline
     from scipy.optimize import root
-    
+
     # Find intersect location using splines
     splineCurve1 = CubicSpline(x1Points, y1Points)
     splineCurve2 = CubicSpline(x2Points, y2Points)
@@ -1708,13 +1703,13 @@ def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2P
     if x1Points[1] < xIntersection and x2Points[-1] > xIntersection:
         x1Points, x2Points, y1Points,  y2Points = x1Points - xIntersection, x2Points - xIntersection, \
                                                   y1Points - yIntersection, y2Points - yIntersection
-        
+
     elif x2Points[1] < xIntersection and x1Points[-1] > xIntersection:
         xPointA, x1Points =                       x1Points - xIntersection, x2Points - xIntersection
         x2Points =                                xPointA
         yPointA, y1Points =                       y1Points - yIntersection, y2Points - yIntersection
         y2Points =                                yPointA
-    
+
     # Find orientation of bisector and orient problem with the vertical bisector in order to simplify problem to one half of circle formula
 
     # Slope between endpoints
@@ -1723,32 +1718,32 @@ def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2P
     # Slope at intersect
     slopeIntersect1, slopeIntersect2 = (y1Points[-1] - y1Points[-2]) / (x1Points[-1] - x1Points[-2]), \
                                        (y2Points[1] - y2Points[0]) / (x2Points[1] - x2Points[0])
-    
+
     # Characteristic slopes (average of slopes)
     characteristicSlope1, characteristicSlope2 = (slopeIntersect1 + slopeEndpoint1) / 2,  \
                                                  (slopeIntersect2 + slopeEndpoint2) / 2
-    
-    # Find bisector angle from the characteristic angles of both curves 
+
+    # Find bisector angle from the characteristic angles of both curves
     characteristicAngle1, characteristicAngle2 = np.arctan2(characteristicSlope1 * x1Points[-1], x1Points[-1]), np.arctan2(characteristicSlope2 * x2Points[-1], x2Points[-1])
     characteristicTotalAngle                   = (characteristicAngle1 + characteristicAngle2) / 2
-    
+
     # Cosine transformation matrix
     transformationMatrix = [[np.cos(np.pi/2 - characteristicTotalAngle), -np.sin(np.pi/2 - characteristicTotalAngle)], \
                             [np.sin(np.pi / 2 - characteristicTotalAngle), np.cos(np.pi / 2 - characteristicTotalAngle)]]
-    
-    #Orient by cosine transformation matrix 
+
+    #Orient by cosine transformation matrix
     for i in range(len(x1Points)):
         x1NewPoints = np.array(transformationMatrix) @ np.array([x1Points[i], y1Points[i]]).T
         x1Points[i] = x1NewPoints[0]
         y1Points[i] = x1NewPoints[1]
-    
+
     for i in range (len(x2Points)):
         x2NewPoints = np.array(transformationMatrix) @ np.array([x2Points[i], y2Points[i]]).T
         x2Points[i] = x2NewPoints[0]
         y2Points[i] = x2NewPoints[1]
 
     # Trim curves to only segments near fillet
-    fitFactor = 2 # number of radii considered in curve fit 
+    fitFactor = 2 # number of radii considered in curve fit
     x1Fit = x1Points[x1Points > -fitFactor * radius]
     y1Fit = y1Points[x1Points > -fitFactor * radius]
     x2Fit = x2Points[x2Points < fitFactor * radius]
@@ -1764,8 +1759,8 @@ def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2P
     # f3 - set curve 1 slope equal to slope of fillet circle at intersect
     # f4 - set curve 2 slope equal to slope of fillet circle at intersect
 
-    def equations(x): 
-        return [(polynomialFit1[0] * x[0]**3 + polynomialFit1[1]   * x[0]**2 + polynomialFit1[2] * x[0] + polynomialFit1[3] - (-np.sqrt(radius**2 - (x[0] - x[2])**2) + x[3])), 
+    def equations(x):
+        return [(polynomialFit1[0] * x[0]**3 + polynomialFit1[1]   * x[0]**2 + polynomialFit1[2] * x[0] + polynomialFit1[3] - (-np.sqrt(radius**2 - (x[0] - x[2])**2) + x[3])),
                  polynomialFit2[0] * x[1]**3 + polynomialFit2[1]   * x[1]**2 + polynomialFit2[2] * x[1] + polynomialFit2[3] - (-np.sqrt(radius**2 - (x[1] - x[2])**2) + x[3]),
                3*polynomialFit1[0] * x[0]**1 + 2*polynomialFit1[1] * x[0]    + polynomialFit1[2] - (x[0] - x[2]) / np.sqrt(radius**2 - (x[0] - x[2])**2),
                3*polynomialFit2[0] * x[1]**1 + 2*polynomialFit2[1] * x[1]    + polynomialFit2[2] - (x[1] - x[2]) / np.sqrt(radius**2 - (x[1] - x[2])**2)]
@@ -1776,10 +1771,10 @@ def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2P
     # Solve system of equations
     systemOfEqSolution = root(equations, initialGuess)
 
-    # Process outputs 
+    # Process outputs
     xOutput1, xOutput2, x0, y0 = np.real(systemOfEqSolution.x[0]), np.real(systemOfEqSolution.x[1]), np.real(systemOfEqSolution.x[2]), \
                                  np.real(systemOfEqSolution.x[3])
-    
+
     # Find angle from fillet origin
     angleFillet1 = np.arctan2((np.polyval(polynomialFit1, xOutput1) - y0), (xOutput1 - x0))
     angleFillet2 = np.arctan2((np.polyval(polynomialFit2, xOutput2) - y0), (xOutput2 - x0))
@@ -1789,7 +1784,7 @@ def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2P
     xFillet = radius * np.cos(angleFillet) + x0
     yFillet = radius * np.sin(angleFillet) + y0
 
-    # Concatenate Results 
+    # Concatenate Results
     xOutput = np.concatenate([x1Points[x1Points < xOutput1], xFillet, x2Points[x2Points > xOutput2]])
     yOutput = np.concatenate([y1Points[x1Points < xOutput1], yFillet, y2Points[x2Points > xOutput2]])
 
@@ -1797,12 +1792,12 @@ def filletCurves (radius: float, x1Points: np.ndarray, y1Points: np.ndarray, x2P
     # Cosine Transformation Matrix to reorient results
     cosineTransformationMatrix = [[np.cos(characteristicTotalAngle - np.pi/2), -np.sin(characteristicTotalAngle - np.pi/2)],\
                                   [np.sin(characteristicTotalAngle - np.pi/2), np.cos(characteristicTotalAngle - np.pi/2)]]
-    
+
     # Reorient results
     for i in range(len(xOutput)):
        systemOfEqSolution = np.array(cosineTransformationMatrix) @ np.array([xOutput[i], yOutput[i]]).T
        xOutput[i] = systemOfEqSolution[0] # no se si es 1 o 0 me vuelvo lOCA - c
-       yOutput[i] = systemOfEqSolution[1] 
+       yOutput[i] = systemOfEqSolution[1]
 
     # Translate results to intial coordinates
     xOutput = xOutput + xIntersection
@@ -1857,15 +1852,15 @@ def revolveContour(xContour: list | np.ndarray, rContour: list | np.ndarray, num
         Rx = np.array([[1, 0, 0],
                 [0, np.cos(rotationValue[0]), -np.sin(rotationValue[0])],
                 [0, np.sin(rotationValue[0]), np.cos(rotationValue[0])]])
-        
+
         Ry = np.array([[np.cos(rotationValue[1]), 0, np.sin(rotationValue[1])],
                 [0, 1, 0],
                 [-np.sin(rotationValue[1]), 0, np.cos(rotationValue[1])]])
-        
+
         Rz = np.array([[np.cos(rotationValue[2]), -np.sin(rotationValue[2]), 0],
                 [np.sin(rotationValue[2]), np.cos(rotationValue[2]), 0],
                 [0, 0, 1]])
-        
+
         # Matrix multiply the rotation matrices to get a single rotation matrix that describes this rotation
         rotationMatrix[i,:,:] = Rz @ Ry @ Rx
 
@@ -1920,7 +1915,7 @@ def jtan2(theta: np.ndarray | list, exact: bool = False) -> list[float]:
         thetaCorrected = theta.copy()
         signDiff = theta[0:m].copy()
         # initalize discontinuity counter:
-        count = 0              
+        count = 0
         # store sign of discontinuties:
         for i in range(m):
             signDiff[i] = np.sign(theta[disc[i]+1] - theta[disc[i]])
@@ -1929,7 +1924,7 @@ def jtan2(theta: np.ndarray | list, exact: bool = False) -> list[float]:
             if p < m-1:             # not final discountinuity
                 for q in range(disc[p]+1,disc[p+1]+1):
                     if not exact:
-                        thetaCorrected[q] = theta[q] - (2*np.pi*count)    
+                        thetaCorrected[q] = theta[q] - (2*np.pi*count)
                     else:
                         thetaCorrected[q] = theta[q] - (gap[p]*count)
             else:                   # final discontinuity
@@ -1964,7 +1959,7 @@ def DCM(eulerAngles: ArrayLike, valueMatrix: ArrayLike, transpose: bool = False,
                 [np.cos(eulerAngles[2]), -np.sin(eulerAngles[2]),   0           ],  \
                 [np.sin(eulerAngles[2]),  np.cos(eulerAngles[2]),   0           ],  \
                 [0,                       0,                        1           ]]) # Z-axis rotation
-    
+
     # Matrix multiply the rotation matrices to get a single rotation matrix that describes this rotation
     if not transpose:
         match rotationOrder:
@@ -2013,14 +2008,14 @@ def rescaleData(rawData: np.ndarray | list, newMax: float = None, newMin: float 
 
     # First, normalize to [0, 1]
     normalizedData = (rawData - np.min(rawData)) / (np.max(rawData) - np.min(rawData))
-    
+
     # Then scale to [new_min, new_max]
     rescaledData = normalizedData * (newMax - newMin) + newMin
-    
+
     return rescaledData
 
 def bezierCurve(p1: float, p4: float, theta_1: float, theta_2: float, magnitude, res):
-    
+
     '''
 
     Creates a bezier curve using start and end points, start and end angles, and magnitude to control the magnitude of the curve
@@ -2043,7 +2038,7 @@ def bezierCurve(p1: float, p4: float, theta_1: float, theta_2: float, magnitude,
     # Bezier parametric equation
     def eqn(p1, p2, p3, p4, t):
         return (1 - (t**3))*p1 + (3*t*(1-t)**2)*p2 + 3*(t**2)*(1-t)*p3 + (t**3)*p4
-    
+
     # parametric bezier
     t = np.linspace(0, 1, res)
     x = [eqn(0, p2[0]-p1[0], p3[0]-p1[0], p4[0]-p1[0], i)+p1[0] for i in t]
@@ -2056,7 +2051,7 @@ def bezierCurve(p1: float, p4: float, theta_1: float, theta_2: float, magnitude,
     # plt.plot(p1[0], p1[1], '*')
     # plt.plot(p4[0], p4[1], '*')
     # plt.show(block = False)
-    
+
     return [x, y]
 
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -2090,7 +2085,7 @@ def secantSolve(function: Callable[...,float], initialGuess: float, lowerBound: 
     xStorage = np.zeros(maxIterations)
     xPrevious, xNext = initialGuess, (initialGuess + initialGuess * tolerance)
     functionPrevious = function(xPrevious)
-    
+
     converged = False
     while not converged:
 
@@ -2107,7 +2102,7 @@ def secantSolve(function: Callable[...,float], initialGuess: float, lowerBound: 
             xUpdate = xNext - functionNext * (xNext - xPrevious) / (functionNext - functionPrevious)
             xNew = min(upperBound, max(lowerBound, xUpdate))
             xPrevious, xNext, functionPrevious = xNext, xNew, functionNext
-        
+
         # Update storage array for convergence failure and increment iterator
         xStorage[(iterator % maxIterations)] = xPrevious
         iterator += 1
@@ -2123,7 +2118,7 @@ def secantSolve(function: Callable[...,float], initialGuess: float, lowerBound: 
         if np.isnan(functionNext):
             solution = np.mean(xStorage)
             converged = True
-    
+
     return solution
 
 def chunkInterpolate(xPoints: ArrayLike, yPoints: ArrayLike, xNewPoints: ArrayLike) -> np.ndarray:
@@ -2136,10 +2131,10 @@ def chunkInterpolate(xPoints: ArrayLike, yPoints: ArrayLike, xNewPoints: ArrayLi
     and total number of inflection points
     
     '''
-    
+
     if len(xPoints) != len(yPoints):
         raise Exception('x and y point arrays must be the same size.')
-    
+
     pointsOfInflection = np.concatenate([[0],np.where(np.diff(np.sign(np.diff(xPoints))) != 0)[0] + 1])
     newPointsOfInflection = np.concatenate([[0],np.where(np.diff(np.sign(np.diff(xNewPoints))) != 0)[0] + 1])
     if 1 in newPointsOfInflection and 1 not in pointsOfInflection:
@@ -2147,12 +2142,12 @@ def chunkInterpolate(xPoints: ArrayLike, yPoints: ArrayLike, xNewPoints: ArrayLi
 
     if len(pointsOfInflection) != len(newPointsOfInflection):
         raise Exception('Old and new x arrays must have the same number of inflection points.')
-    
+
     yNewPoints = np.array([])
 
     ## 1...n-1 chunks
     for i in range(1,len(pointsOfInflection)):
-        
+
         # chunk
 
         j = pointsOfInflection[i-1]
@@ -2160,21 +2155,21 @@ def chunkInterpolate(xPoints: ArrayLike, yPoints: ArrayLike, xNewPoints: ArrayLi
 
         xChunk = xPoints[j:k]
         yChunk = yPoints[j:k]
-        
+
         if sum(np.sign(np.diff(xChunk))) < 0:
             flipFlag = True
-        else: 
+        else:
             flipFlag = False
 
-        if flipFlag:                        
+        if flipFlag:
             xChunk = np.flip(xChunk)
             yChunk = np.flip(yChunk)
-        
+
         # interpolate
 
         m = newPointsOfInflection[i-1]
         n = newPointsOfInflection[i]
-        
+
         if not flipFlag:
             yNewChunk = np.interp(xNewPoints[m:n],xChunk,yChunk)
             yNewPoints = np.append(yNewPoints,yNewChunk)
@@ -2190,20 +2185,20 @@ def chunkInterpolate(xPoints: ArrayLike, yPoints: ArrayLike, xNewPoints: ArrayLi
 
     xChunk = xPoints[j:]
     yChunk = yPoints[j:]
-    
+
     if sum(np.sign(np.diff(xChunk))) < 0:
         flipFlag = True
-    else: 
+    else:
         flipFlag = False
 
-    if flipFlag:                        
+    if flipFlag:
         xChunk = np.flip(xChunk)
         yChunk = np.flip(yChunk)
-    
+
     # interpolate
 
     m = newPointsOfInflection[-1]
-    
+
     if not flipFlag:
         yNewChunk = np.interp(xNewPoints[m:],xChunk,yChunk)
         yNewPoints = np.append(yNewPoints,yNewChunk)
@@ -2228,7 +2223,7 @@ def plotly3DGeometry(xData: np.ndarray | list, yData: np.ndarray | list, zData: 
     fig = go.Figure()
 
     # Update the figure container with the passed in data
-    fig.add_trace(go.Surface(x = xData, y = yData, z = zData, 
+    fig.add_trace(go.Surface(x = xData, y = yData, z = zData,
                              colorscale = [[0, color], [1,color]],
                              opacity = alpha,
                              showscale = False))
@@ -2263,7 +2258,7 @@ def plotlySurface(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.
     fig = go.Figure()
 
     # Update the figure container with the passed in data
-    fig.add_trace(go.Surface(x = xData, y = yData, z = zData, 
+    fig.add_trace(go.Surface(x = xData, y = yData, z = zData,
                              colorscale = colorMap,
                              opacity = alpha))
 
@@ -2373,7 +2368,7 @@ def plotLine(xData: np.ndarray | list, yData: np.ndarray | list,
     Wrapper for matplotlib plots bc I'm lazy.
     
     '''
-    
+
     plt.rcParams.update({'font.size': fontSize})
     plt.style.use('dark_background')
 
@@ -2383,7 +2378,7 @@ def plotLine(xData: np.ndarray | list, yData: np.ndarray | list,
              label = label, color = color,
              lw = lineWidth, ls = lineStyle,
              marker = markerStyle, ms = markerSize)
-    
+
     ax = plt.gca()
     ax.set_xlabel(xLabel)
     ax.set_ylabel(yLabel)
@@ -2401,7 +2396,7 @@ def plot3DLine(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.nda
     Wrapper for matplotlib 3D plots bc I'm lazy.
     
     '''
-    
+
     plt.rcParams.update({'font.size': fontSize})
     plt.style.use('dark_background')
 
@@ -2421,7 +2416,7 @@ def plot3DLine(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.nda
                 label = label, color = color,
                 lw = lineWidth, ls = lineStyle,
                 marker = markerStyle, ms = markerSize)
-    
+
     plt.gca().set_xlabel(xLabel)
     plt.gca().set_ylabel(yLabel)
     plt.gca().set_zlabel(zLabel)
@@ -2464,7 +2459,7 @@ def writeFile(filename: str, data: np.ndarray | list, headers: bool = False) -> 
 
     if '.' not in filename:
         raise Exception('You must specify that the written file is either a .txt or a .csv file')
-    
+
     # Convert the data to a numpy array if it isnt one already
     if isinstance(data, list):
         data = np.array(data)
@@ -2499,9 +2494,9 @@ def writeFile(filename: str, data: np.ndarray | list, headers: bool = False) -> 
                     # appearance of the original data.
                     # In total you get: 'data[this row, first col] \t data[this row, second col] \t ... \n'
                     txtFile.write('\t'.join([str(i) for i in (list(data[i,:]))]) + '\n')
- 
+
 def readExcel(fileName: str, sheetName: str):
-    
+
     '''
     
     Wrapper for reading data from an open Excel file using COM.
@@ -2513,7 +2508,7 @@ def readExcel(fileName: str, sheetName: str):
     import pandas as pd
     import win32com.client
     from time import sleep
- 
+
     try:
         # Open an instance of excel and open the specified file and sheet
         excelInstance = win32com.client.Dispatch("Excel.Application")
@@ -2529,7 +2524,7 @@ def readExcel(fileName: str, sheetName: str):
         excelInstance = win32com.client.Dispatch("Excel.Application")
         workbook      = excelInstance.Workbooks.Open(fileName)
         sheet         = workbook.Worksheets(sheetName)
-    
+
     # Get the used range
     usedRange = sheet.UsedRange
     values    = usedRange.Value
@@ -2539,10 +2534,10 @@ def readExcel(fileName: str, sheetName: str):
 
     # Create DataFrame using the first row as headers
     dataFrame = pd.DataFrame(data[1:], columns = data[0])
-    
+
     # Convert 'None' values to numpy 'NaN's
     dataFrame = dataFrame.replace({None: np.nan})
-    
+
     return dataFrame, excelInstance
 
 def stitchPDF(pdfFileList: list) -> io.BytesIO:
@@ -2558,26 +2553,25 @@ def stitchPDF(pdfFileList: list) -> io.BytesIO:
     from pypdf import PdfReader, PdfWriter  # type: ignore[import]  # optional PDF dependency
 
     writer = PdfWriter()
-    
+
     # Iterate through each uploaded PDF
     for pdfFile in pdfFileList:
         # Read the PDF from the uploaded file
         reader = PdfReader(pdfFile)
-        
+
         # Add all pages from this PDF to the writer
         for page in reader.pages:
             writer.add_page(page)
-    
+
     # Write to a BytesIO object instead of a file
     outputFile = io.BytesIO()
     writer.write(outputFile)
     outputFile.seek(0)  # Reset pointer to beginning
 
-
     return outputFile
 
 def pickleObject(obj, filePath: str) -> None:
-    
+
     '''
 
     This method is responsible for pickling a given object to a specified file path.

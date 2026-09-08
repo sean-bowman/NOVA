@@ -163,7 +163,6 @@ class RegenThermalContext:
     export:     str  = 'off'
     debugMode:  bool = False
 
-
 def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber: float,
                                  exhaustGamma: float, exhaustGasConstant: float,
                                  exhaustMolecularWeight: float, hotWallTemperature: float,
@@ -358,7 +357,7 @@ def validateRegenHeatTransferInputs(inputsDict: dict) -> None:
 
     applyRules(inputsDict, regenThermalRules)
 
-def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperature: float = None, 
+def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperature: float = None,
                            showDataMap: bool = False, returnDict: bool = False, plots: bool = True, titleFlare: str = '',
                            xReference = [], rReference = []):
 
@@ -678,9 +677,9 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             runCircle             = True
             circleCSA             = inputsDict["circleCSA"]
             circleSA              = inputsDict["circleSA"]
-        else: 
+        else:
             runCircle             = False
-    else: 
+    else:
         runCircle                 = False
     if not runFluted and not runCircle:
         raise Exception('regenHeatTransferModel: Please specify cross sectional area AND surface area'
@@ -725,7 +724,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     if constantColdWallTemperature is not None:
         runAdiabaticColdWall = True
         showDataMap = False
-    else: 
+    else:
         runAdiabaticColdWall = False
 
     # Read in fluted channel heat transfer study data
@@ -997,7 +996,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                                         (flutedFrictionFactor / circleFrictionFactor)**(1/3)
 
         # Check if there are any nans anywhere in here
-        if True: 
+        if True:
             for name, value in locals().items():
                 try:
                     # Check scalars
@@ -1059,7 +1058,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
                         # to calculate conductive resistance in the nozzle using a cylindrical model for conductive resistance, we frame our reference around
                         # the nozzle axis becuase the assumption must be that the heat transfer problem is cylindrically symmetrical and that is only true
-                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling 
+                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling
                         # "comes inwards" from all directions whereas from the channel axis, heating only comes in from one direction and cooling goes out in all directions
                         conductiveResistance = np.log(1 + hotWallThickness / rHotWall3D[i]) / \
                                             (2*np.pi * differentialPathLength[i] * dataMapWallConductivity[i])
@@ -1148,7 +1147,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
                         # to calculate conductive resistance in the nozzle using a cylindrical model for conductive resistance, we frame our reference around
                         # the nozzle axis becuase the assumption must be that the heat transfer problem is cylindrically symmetrical and that is only true
-                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling 
+                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling
                         # "comes inwards" from all directions whereas from the channel axis, heating only comes in from one direction and cooling goes out in all directions
                         conductiveResistance = np.log(1 + hotWallThickness / rHotWall3D[i]) / \
                                             (2*np.pi * differentialPathLength[i] * flutedWallConductivity[i])
@@ -1237,7 +1236,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
                         # to calculate conductive resistance in the nozzle using a cylindrical model for conductive resistance, we frame our reference around
                         # the nozzle axis becuase the assumption must be that the heat transfer problem is cylindrically symmetrical and that is only true
-                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling 
+                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling
                         # "comes inwards" from all directions whereas from the channel axis, heating only comes in from one direction and cooling goes out in all directions
                         conductiveResistance = np.log(1 + hotWallThickness / rHotWall3D[i]) / \
                                             (2*np.pi * differentialPathLength[i] * circleWallConductivity[i])
@@ -1415,9 +1414,9 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 'coolantConvectiveHeatTransferCoef' : circleCoolantConvectiveHeatTransferCoef,
                 'reynoldsNumber'                    : circleCoolantReynoldsNumber
             }
-        else: 
-            circleHeatTransferOutputs = {}         
-            circlePlotOutputs = {}           
+        else:
+            circleHeatTransferOutputs = {}
+            circlePlotOutputs = {}
         if showDataMap:
             dataMapHeatTransferOutputs = {
                 'coolantPressure':     dataMapCoolantPressure,
@@ -1442,8 +1441,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 'coolantConvectiveHeatTransferCoef' : dataMapCoolantConvectiveHeatTransferCoef,
                 'reynoldsNumber'                    : dataMapCoolantReynoldsNumber
             }
-        else: 
-            dataMapHeatTransferOutputs = {}         
+        else:
+            dataMapHeatTransferOutputs = {}
             dataMapPlotOutputs = {}
 
     else:
@@ -1480,11 +1479,11 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 'specificHeat'                        : circleCoolantSpecificHeat,
                 'adiabaticConvectiveHeatTransferCoef' : circleAdiabaticConvectiveHeatTransferCoef
             }
-        else: 
-            circleHeatTransferOutputs = {}         
-            circlePlotOutputs = {}  
-        dataMapHeatTransferOutputs = {}         
-        dataMapPlotOutputs = {}      
+        else:
+            circleHeatTransferOutputs = {}
+            circlePlotOutputs = {}
+        dataMapHeatTransferOutputs = {}
+        dataMapPlotOutputs = {}
 
     # Plots
     if plots and context.plotsAdv == 'on' and _plotlyGate('the interactive heat transfer view'):
@@ -1577,7 +1576,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 circleCoolantNusseltNumber              = circleResults["nusseltNumber"]
                 circleExhaustConvectiveHeatTransferCoef = circleResults["exhaustConvectiveHeatTransferCoef"]
                 circleCoolantConvectiveHeatTransferCoef = circleResults["coolantConvectiveHeatTransferCoef"]
-                circleCoolantReynoldsNumber             = circleResults["reynoldsNumber"]    
+                circleCoolantReynoldsNumber             = circleResults["reynoldsNumber"]
             else:
                 runCircle = False
         else:
@@ -1600,7 +1599,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 dataMapCoolantNusseltNumber              = dataMapResults["nusseltNumber"]
                 dataMapExhaustConvectiveHeatTransferCoef = dataMapResults["exhaustConvectiveHeatTransferCoef"]
                 dataMapCoolantConvectiveHeatTransferCoef = dataMapResults["coolantConvectiveHeatTransferCoef"]
-                dataMapCoolantReynoldsNumber             = dataMapResults["reynoldsNumber"]    
+                dataMapCoolantReynoldsNumber             = dataMapResults["reynoldsNumber"]
             else:
                 showDataMap = False
         else:
@@ -1678,18 +1677,18 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
 
         # Nozzle Contours
         for i in [1,2,3]:
-            for j in [1,2,3,4]:                        
+            for j in [1,2,3,4]:
                 if len(xReference)==0 or len(rReference)==0:
-                    add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)  
+                    add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
                 else:
-                    add_trace(j, i, xReference, rReference, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)  
+                    add_trace(j, i, xReference, rReference, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
 
         # -- Titles -- #
 
         # Coolant Pressure
         fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
         # Coolant Temperature
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')  
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
         # Wall Temperature
         if len(xReference)==0:
             add_trace(1, 3, xReference, maxTemperatureCopper * np.ones(len(xReference)), 'GRCop Melting Temp', colors['GRCop Melting Temp'], dash='solid')
@@ -1699,11 +1698,11 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
         # Velocity
         fig.update_yaxes(title_text=r'$\text {Velocity [m/s]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
         # Mach
-        fig.update_yaxes(title_text=r'$\text {Mach Number [-]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a') 
+        fig.update_yaxes(title_text=r'$\text {Mach Number [-]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
         # Heat Transfer
         fig.update_yaxes(title_text=r'$\text {Heat Transfer [W]}$', row=2, col=3, secondary_y=False, gridcolor='#4a4a4a')
         # Density
-        fig.update_yaxes(title_text=r'$\rho \text{ [kg/m}^{3} \text{]}$', row=3, col=1, secondary_y=False, gridcolor='#4a4a4a') 
+        fig.update_yaxes(title_text=r'$\rho \text{ [kg/m}^{3} \text{]}$', row=3, col=1, secondary_y=False, gridcolor='#4a4a4a')
         # Viscosity
         fig.update_yaxes(title_text=r'$\mu \text{ [Pa*s]}$', row=3, col=2, secondary_y=False, gridcolor='#4a4a4a')
         # Specific Heat
@@ -1741,7 +1740,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
             add_trace(4, 1, xHotWall3D, flutedCoolantNusseltNumber, 'Fluted', colors['Fluted'])
             # Heat Transfer Coef
             add_trace(4, 2, xHotWall3D, flutedCoolantConvectiveHeatTransferCoef, 'Coolant - Fluted', colors['Fluted'])
-            add_trace(4, 2, xHotWall3D, flutedExhaustConvectiveHeatTransferCoef, 'Exhaust - Fluted', colors['Fluted'], dash='dot') 
+            add_trace(4, 2, xHotWall3D, flutedExhaustConvectiveHeatTransferCoef, 'Exhaust - Fluted', colors['Fluted'], dash='dot')
             # Reynolds
             add_trace(4, 3, xHotWall3D, flutedCoolantReynoldsNumber, 'Fluted', colors['Fluted'])
 
@@ -1768,7 +1767,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
             add_trace(4, 1, xHotWall3D, circleCoolantNusseltNumber, 'Circular', colors['Circular'])
             # Heat Transfer Coef
             add_trace(4, 2, xHotWall3D, circleCoolantConvectiveHeatTransferCoef, 'Coolant - Circular', colors['Circular'])
-            add_trace(4, 2, xHotWall3D, circleExhaustConvectiveHeatTransferCoef, 'Exhaust - Circular', colors['Circular'], dash='dot') 
+            add_trace(4, 2, xHotWall3D, circleExhaustConvectiveHeatTransferCoef, 'Exhaust - Circular', colors['Circular'], dash='dot')
             # Reynolds
             add_trace(4, 3, xHotWall3D, circleCoolantReynoldsNumber, 'Circular', colors['Circular'])
 
@@ -1795,7 +1794,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
             add_trace(4, 1, xHotWall3D, dataMapCoolantNusseltNumber, 'Data Map', colors['Data Map'])
             # Heat Transfer Coef
             add_trace(4, 2, xHotWall3D, dataMapCoolantConvectiveHeatTransferCoef, 'Coolant - Data Map', colors['Data Map'])
-            add_trace(4, 2, xHotWall3D, dataMapExhaustConvectiveHeatTransferCoef, 'Exhaust - Data Map', colors['Data Map'], dash='dot') 
+            add_trace(4, 2, xHotWall3D, dataMapExhaustConvectiveHeatTransferCoef, 'Exhaust - Data Map', colors['Data Map'], dash='dot')
             # Reynolds
             add_trace(4, 3, xHotWall3D, dataMapCoolantReynoldsNumber, 'Data Map', colors['Data Map'])
 
@@ -1812,16 +1811,16 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
 
         # Update overall layout
         fig.update_layout(
-            #height=1200, 
-            #width=1800, 
+            #height=1200,
+            #width=1800,
             title_text=f'Regen Channel Properties: {int(nChannel)} Channels{titleFlare}',
             title_x=0.5,  # Center the main title
             autosize=True,
             title_font=dict(size=24),
-            plot_bgcolor='black', 
-            paper_bgcolor='black', 
+            plot_bgcolor='black',
+            paper_bgcolor='black',
             font=dict(color='white', family = "Computer Modern"),
-            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12)) 
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
         )
 
         if context.export == 'on':
@@ -1944,15 +1943,15 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
 
         # Nozzle Contours
         for i in [1,2]:
-            for j in [1,2]:                        
-                add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)  
+            for j in [1,2]:
+                add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
 
         # -- Titles -- #
 
         # Coolant Pressure
         fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
         # Coolant Temperature
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')  
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
         # Specific Heat
         fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
         # Heat Transfer Coef
@@ -1993,16 +1992,16 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
 
         # Update overall layout
         fig.update_layout(
-            #height=1200, 
-            #width=1800, 
+            #height=1200,
+            #width=1800,
             title_text=f'Regen Channel Properties: {int(nChannel)} Channels{titleFlare}',
             title_x=0.5,  # Center the main title
             autosize=True,
             title_font=dict(size=24),
-            plot_bgcolor='black', 
-            paper_bgcolor='black', 
+            plot_bgcolor='black',
+            paper_bgcolor='black',
             font=dict(color='white', family = "Computer Modern"),
-            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12)) 
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
         )
 
         if context.export == 'on':

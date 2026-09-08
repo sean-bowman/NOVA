@@ -544,14 +544,14 @@ def solveRegenStations(state):
         state.extensionNearWallMachNumber                 = machNumberNearWallExtension
         state.extensionNearWallRecoveryTemperature        = recoveryTemperatureNearWallExtension
 
-        state.thermalCondExtension                    = thermalCondExtension    
-        state.viscosityExtension                      = viscosityExtension      
-        state.prandtlExtension                        = prandtlExtension        
-        state.gammaExtension                          = gammaExtension          
-        state.gasConstantExtension                    = gasConstantExtension    
-        state.specificHeatExtension                   = specificHeatExtension   
-        state.densityExtension                        = densityExtension        
-        state.reynoldsExtension                       = reynoldsExtension       
+        state.thermalCondExtension                    = thermalCondExtension
+        state.viscosityExtension                      = viscosityExtension
+        state.prandtlExtension                        = prandtlExtension
+        state.gammaExtension                          = gammaExtension
+        state.gasConstantExtension                    = gasConstantExtension
+        state.specificHeatExtension                   = specificHeatExtension
+        state.densityExtension                        = densityExtension
+        state.reynoldsExtension                       = reynoldsExtension
         state.molecularWeightExtension                = molecularWeightExtension
 
     if state.visualizeContour == 'on':
@@ -587,14 +587,14 @@ def solveRegenStations(state):
             maskedR.append(np.ma.masked_where(np.isnan(state.allRPoints[i]), state.allRPoints[i]))
             maskedMach.append(np.ma.masked_where(np.isnan(state.allMachNumbers[i]), state.allMachNumbers[i]))
         levels = np.arange(0.5, 1 + state.idealMachNumber, 0.1)
-        for i in range(3):                
-            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor, 
-                         maskedR[i]*state.nozzleScalingFactor, 
-                         maskedMach[i], 
+        for i in range(3):
+            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor,
+                         maskedR[i]*state.nozzleScalingFactor,
+                         maskedMach[i],
                          levels = levels)
-            plt.contourf(maskedX[i]*state.nozzleScalingFactor, 
-                         -maskedR[i]*state.nozzleScalingFactor, 
-                         maskedMach[i], 
+            plt.contourf(maskedX[i]*state.nozzleScalingFactor,
+                         -maskedR[i]*state.nozzleScalingFactor,
+                         maskedMach[i],
                          levels = levels)
         plt.colorbar(contour, label = 'Mach Number', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
 
@@ -626,15 +626,15 @@ def solveRegenStations(state):
             maskedPressure.append(np.ma.masked_where(np.isnan(state.allPressures[i]), state.allPressures[i]))
         levels = np.arange(state.targetExitPressure, maskedPressure[0].max(), 1e4)
         cmap = plt.colormaps['coolwarm'].with_extremes(under = 'cyan', over = 'magenta')
-        for i in range(3):                
-            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor, 
-                         maskedR[i]*state.nozzleScalingFactor, 
-                         maskedPressure[i], 
+        for i in range(3):
+            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor,
+                         maskedR[i]*state.nozzleScalingFactor,
+                         maskedPressure[i],
                          levels = levels,
                          cmap = cmap,
                          extend = 'min')
-            plt.contourf(maskedX[i]*state.nozzleScalingFactor, 
-                         -maskedR[i]*state.nozzleScalingFactor, 
+            plt.contourf(maskedX[i]*state.nozzleScalingFactor,
+                         -maskedR[i]*state.nozzleScalingFactor,
                          maskedPressure[i],
                          levels = levels,
                          cmap = cmap,
@@ -669,14 +669,14 @@ def solveRegenStations(state):
             maskedTemperature.append(np.ma.masked_where(np.isnan(state.allTemperatures[i]), state.allTemperatures[i]))
         levels = np.arange(1000, maskedTemperature[0].max(), 100)
         cmap = plt.colormaps['plasma']
-        for i in range(3):                
-            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor, 
-                         maskedR[i]*state.nozzleScalingFactor, 
+        for i in range(3):
+            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor,
+                         maskedR[i]*state.nozzleScalingFactor,
                          maskedTemperature[i],
                          levels = levels,
                          cmap = cmap)
-            plt.contourf(maskedX[i]*state.nozzleScalingFactor, 
-                         -maskedR[i]*state.nozzleScalingFactor, 
+            plt.contourf(maskedX[i]*state.nozzleScalingFactor,
+                         -maskedR[i]*state.nozzleScalingFactor,
                          maskedTemperature[i],
                          levels = levels,
                          cmap = cmap)

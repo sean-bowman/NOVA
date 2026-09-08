@@ -120,7 +120,6 @@ class ChannelGeometryInputs:
     nonPrintableIndices:  Any   = field(default_factory = list)
     allNozzlePoints:      Any   = None
 
-
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                           channelRadius, crossSectionStyle, i: int = None):
 
@@ -572,7 +571,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
     # Initialize
     xCircle, yCircle, xGausFluted, yGausFluted                                                  \
-        = [np.zeros((geometry.numCSPointsChannel, arrLen)) for _ in range(4)]       
+        = [np.zeros((geometry.numCSPointsChannel, arrLen)) for _ in range(4)]
     circleCSA, circleSA, gausFlutedCSA, gausFlutedSA,                                           \
     isCircle, turnAngle, radiusOfCurvature                                                      \
         = [np.zeros((arrLen))                          for _ in range(7)]
@@ -661,7 +660,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         # -- find compression index -- #
 
         compressianIndex         = np.zeros((geometry.numCrossSections))
-        circleCrossSectionPoints = np.zeros((geometry.numCSPointsChannel,3)) 
+        circleCrossSectionPoints = np.zeros((geometry.numCSPointsChannel,3))
         for i in tqdm(range(geometry.numCrossSections), desc="Scanning Cross Sections", colour="#ABD038"):
 
             pointQuery = [geometry.allNozzlePoints[int(nozzleIndex[i]),0], geometry.allNozzlePoints[int(nozzleIndex[i]),1], geometry.allNozzlePoints[int(nozzleIndex[i]),2]]
@@ -698,7 +697,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         # identify correct arrays to return
         xChannel, yChannel, zChannel = xChannelCirc, yChannelCirc, zChannelCirc
 
-    # -- Finish -- #            
+    # -- Finish -- #
 
     heatTransferDict = {}
 

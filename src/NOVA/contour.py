@@ -301,16 +301,9 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
 
     gas, throat = state.gas, state.throat
 
-
     #-----------------------------------------------------------------------------------------------------------------------------------------#
     # -- TIC Helper functions -- #
     #-----------------------------------------------------------------------------------------------------------------------------------------#
-
-
-
-    
-
-    
 
     def calculateWallPoints(upstreamPoints: tuple, machNumber: np.ndarray, flowAngle: np.ndarray, xPoints: np.ndarray, rPoints: np.ndarray, iteratorContour: int, jteratorContour: int) -> tuple:
 
@@ -345,7 +338,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
         rightRunningX, rightRunningR, rightRunningFlowAngle, rightRunningMachNumber \
         = [v2 for v2 in [xPoints[iteratorContour+1,jteratorContour], rPoints[iteratorContour+1,jteratorContour], \
                             flowAngle[iteratorContour+1,jteratorContour], machNumber[iteratorContour+1,jteratorContour]]]
-    
+
         # Find potential wall points using left running characteristic mesh point
         etaLeftRunning1 = (upstreamX + downstreamX) + (2 * (leftRunningR - downstreamR) - (leftRunningX - downstreamX) * \
                            (np.tan(upstreamFlowAngle) + np.tan(downstreamFlowAngle))) / \
@@ -421,7 +414,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
         newUpstreamPoint = [newUpstreamR, newUpstreamFlowAngle, newUpstreamMachNumber]
 
         return xQuery, rQuery, downstreamPoint, newUpstreamPoint, iteratorContour, jteratorContour, reachedEndOfMachNet, terminated
-    
+
     #-----------------------------------------------------------------------------------------------------------------------------------------#
     # -- TIC Algorithm Setup -- #
     #-----------------------------------------------------------------------------------------------------------------------------------------#
@@ -496,7 +489,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     limitingCharacteristicX = np.zeros(state.numCharacteristics)
     for i in range(state.numCharacteristics):
         limitingCharacteristicX[i] = sauerLimitingCharacteristic(gas, throat, limitingCharacteristicR[i], returnAxialLocation = True)
-        
+
     if state.plotsDocs.lower() == 'on':
         # Plot initial conditions
         plotLine(throatWallX, throatWallR, \
@@ -509,7 +502,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                 'y', linewidth = 2, label = 'Limiting Characteristic')
         plt.axhline(y = 0, color = 'w', linestyle = '--', linewidth = 2)
         plt.axvline(x = 0, color = 'w', linestyle = '--', linewidth = 2)
-    
+
     if state.plotsDocs.lower() == 'on':
         # Plot to visualize throat wall and limiting characteristic intersection
         plotLine(throatWallX, throatWallR, \
@@ -599,7 +592,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                            throatKernelMach[i-1,k+1], throatKernelFlowAngle[i-1,k+1], throatKernelX[i-1,k+1], throatKernelR[i-1,k+1]]
             throatKernelMach[i,k+1], throatKernelFlowAngle[i,k+1], throatKernelX[i,k+1], throatKernelR[i,k+1] \
             = axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
-            
+
             if state.plotsDocs.lower() == 'on':
                 # Update throat kernel plot (Axisymmetrix Method of Characteristics for interior points CORRECTOR STEP)
                 plt.plot(throatKernelX[i-1,k+1], throatKernelR[i-1,k+1], '*', color = 'tab:orange', markersize = 12)
@@ -703,7 +696,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                             expansionKernelMach[i-1,j+1], expansionKernelFlowAngle[i-1,j+1], expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1]]
             expansionKernelMach[i, j+1], expansionKernelFlowAngle[i, j+1], expansionKernelX[i, j+1], expansionKernelR[i, j+1] = \
             axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
-            
+
             if state.plotsDocs.lower() == 'on':
                 # Update throat kernel plot (Axisymmetrix Method of Characteristics for Expansion Mesh down to axis)
                 plt.plot(expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1], '*c', markersize = 12)
@@ -724,7 +717,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                         expansionKernelMach[i-1,j],  expansionKernelFlowAngle[i-1,j], expansionKernelX[i-1,j],  expansionKernelR[i-1,j]]
         expansionKernelMach[i, j], expansionKernelFlowAngle[i, j], expansionKernelX[i, j], expansionKernelR[i, j] = \
         axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
-        
+
         if state.plotsDocs.lower() == 'on':
             # Update throat kernel plot (Axisymmetrix Method of Characteristics for Expansion Mesh across axis)
             plt.plot(expansionKernelX[i-1,j], expansionKernelR[i-1,j],  '*', color = 'tab:orange', markersize = 12)
@@ -743,7 +736,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                             expansionKernelMach[i-1,j+1], expansionKernelFlowAngle[i-1,j+1], expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1]]
             expansionKernelMach[i, j+1], expansionKernelFlowAngle[i, j+1], expansionKernelX[i, j+1], expansionKernelR[i, j+1] = \
             axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
-            
+
             if state.plotsDocs.lower() == 'on':
                 # Update throat kernel plot (Axisymmetrix Method of Characteristics for expansion mesh inside axis)
                 plt.plot(expansionKernelX[i,j], expansionKernelR[i,j],  '*', color = 'tab:orange', markersize = 12)
@@ -756,7 +749,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                             expansionKernelX[i,j+1]-expansionKernelX[i-1,j+1], expansionKernelR[i,j+1]-expansionKernelR[i-1,j+1], \
                             edgecolor = 'w', facecolor = 'tab:purple', width = arrowSize, length_includes_head = True)
                 stop = 1
-    
+
     #-----------------------------------------------------------------------------------------------------------------------------------------#
     # -- Calculate Wall Points using Flow Straightening Section Kernel -- #
     #-----------------------------------------------------------------------------------------------------------------------------------------#
@@ -792,7 +785,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     flowStraighteningMachNumber[:,0], flowStraighteningFlowAngle[:,0], flowStraighteningX[:,0], flowStraighteningR[:,0] \
     = [kernelStuff for kernelStuff in [expansionKernelMach[numRows - numContourElements + 1:,-1], expansionKernelFlowAngle[numRows - numContourElements + 1:,-1], \
                                         expansionKernelX[numRows - numContourElements + 1:,-1], expansionKernelR[numRows - numContourElements + 1:,-1]]]
-    
+
     flowStraighteningMachNumber[-1, 1:] = calculatedExitMach * np.ones(numContourElements - 2)
     flowStraighteningX[-1, 1:], flowStraighteningR[-1, 1:] \
     = [stuff for stuff in [exitAxisArray, exitRadiusArray]]
@@ -847,14 +840,14 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                             flowStraighteningX[i,jMesh+1]-flowStraighteningX[i+1,jMesh+1], flowStraighteningR[i,jMesh+1]-flowStraighteningR[i+1,jMesh+1], \
                             edgecolor = 'w', facecolor = 'm', width = arrowSize, length_includes_head = True)
                     stop = 1
-            
+
             jMesh += 1
 
         if state.plotsDocs.lower() == 'on':
             # Change view for plot to view wall point calculations
             plt.gca().set_xlim([0, 0.125])
             plt.gca().set_ylim([0.975, 1.02])
-            
+
         upstreamPoints = [upstreamX, upstreamR, upstreamFlowAngle]
         newWallPointX, newWallPointR, downstreamPoint, newUpstreamPoint, iContour, jContour, reachedEndOfMachNet, terminated \
         = calculateWallPoints(upstreamPoints,
@@ -878,7 +871,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
             temperatureNozzleWall[index], pressureNozzleWall[index], velocityNozzleWall[index] \
             = isentropicValues(machNumberNozzleWall[index], state.chamberStagnationTemperature, state.chamberPressure, \
                                 state.chamberGamma, state.chamberRGasConstant)
-            
+
             # Only truncate when a truncation criterion has been given. Otherwise the wall runs out
             # to the end of the mach net, which is the full-length ideal contour.
             if isPressureMatching:
@@ -1036,30 +1029,30 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
             kernelRows, kernelCols = expansionKernelX.shape
             iExit = kernelRows - offset - 1
             jExit = kernelCols - 2
-        
+
             while not terminated:
 
                 index += 1
-        
+
                 # Check for centerline intercept
                 if abs(expansionKernelR[iExit+1,jExit]) < 1e-3:
-                    terminated = True 
-        
+                    terminated = True
+
                 if expansionKernelX[iExit+1,jExit] >= xExitPlane:
                     characteristicSlope = (expansionKernelR[iExit+1,jExit]-expansionKernelR[iExit,jExit]) / (expansionKernelX[iExit+1,jExit] - expansionKernelX[iExit,jExit])
                     characteristicYIntercept = expansionKernelR[iExit,jExit] - characteristicSlope * expansionKernelX[iExit,jExit]
                     rExitPlane[index] = characteristicSlope * xExitPlane + characteristicYIntercept
                     machNumberExitPlane[index] = expansionKernelMach[iExit,jExit] + (expansionKernelMach[iExit+1,jExit] - expansionKernelMach[iExit,jExit]) / \
-                                                    (expansionKernelX[iExit+1,jExit] - expansionKernelX[iExit,jExit]) * (xExitPlane - expansionKernelX[iExit,jExit]) 
+                                                    (expansionKernelX[iExit+1,jExit] - expansionKernelX[iExit,jExit]) * (xExitPlane - expansionKernelX[iExit,jExit])
                     flowAngleExitPlane[index] = expansionKernelFlowAngle[iExit,jExit] + (expansionKernelFlowAngle[iExit+1,jExit] - expansionKernelFlowAngle[iExit,jExit]) / \
                                                 (expansionKernelX[iExit+1,jExit] - expansionKernelX[iExit,jExit]) * (xExitPlane - expansionKernelX[iExit,jExit])
                     jExit -= 1
                 else:
-                    characteristicSlope = (expansionKernelR[iExit+1,jExit+1] - expansionKernelR[iExit+1,jExit]) / (expansionKernelX[iExit+1,jExit+1] - expansionKernelX[iExit+1,jExit]) 
+                    characteristicSlope = (expansionKernelR[iExit+1,jExit+1] - expansionKernelR[iExit+1,jExit]) / (expansionKernelX[iExit+1,jExit+1] - expansionKernelX[iExit+1,jExit])
                     characteristicYIntercept = expansionKernelR[iExit+1,jExit] - characteristicSlope * expansionKernelX[iExit+1,jExit]
-                    rExitPlane[index] = characteristicSlope * xExitPlane + characteristicYIntercept 
+                    rExitPlane[index] = characteristicSlope * xExitPlane + characteristicYIntercept
                     machNumberExitPlane[index] = expansionKernelMach[iExit+1,jExit] + (expansionKernelMach[iExit+1,jExit+1] - expansionKernelMach[iExit+1,jExit]) / \
-                                                    (expansionKernelX[iExit+1,jExit+1] - expansionKernelX[iExit+1,jExit]) * (xExitPlane - expansionKernelX[iExit+1,jExit]) 
+                                                    (expansionKernelX[iExit+1,jExit+1] - expansionKernelX[iExit+1,jExit]) * (xExitPlane - expansionKernelX[iExit+1,jExit])
                     flowAngleExitPlane[index] = expansionKernelFlowAngle[iExit+1,jExit] + (expansionKernelFlowAngle[iExit+1,jExit+1] - expansionKernelFlowAngle[iExit+1,jExit]) / \
                                                 (expansionKernelX[iExit+1,jExit+1] - expansionKernelX[iExit+1,jExit]) * (xExitPlane - expansionKernelX[iExit+1,jExit])
                     iExit += 1
@@ -1193,7 +1186,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
         state.allFlowAngles  = [throatKernelFlowAngle, expansionKernelFlowAngle, flowStraighteningFlowAngle]
         state.allXPoints     = [throatKernelX, expansionKernelX, flowStraighteningX]
         state.allRPoints     = [throatKernelR, expansionKernelR, flowStraighteningR]
-        
+
         for i in range(3):
             removeElements                    = np.nonzero(state.allXPoints[i] <= 0.0)
             state.allXPoints[i][removeElements]     = float('nan')
@@ -1689,16 +1682,16 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
                 maskedMach.append(np.ma.masked_where(np.isnan(nozzle.allMachNumbers[i]), nozzle.allMachNumbers[i]))
             levels = np.arange(0.5, nozzle.idealMachNumber, 0.1)
             cmap = plt.colormaps['plasma'].with_extremes(under = 'magenta', over = 'cyan')
-            for i in range(3):                
-                contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                            maskedR[i]*nozzle.nozzleScalingFactor, 
-                            maskedMach[i], 
+            for i in range(3):
+                contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                            maskedR[i]*nozzle.nozzleScalingFactor,
+                            maskedMach[i],
                             levels = levels,
                             cmap = cmap,
                             extend = 'max')
-                plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                            -maskedR[i]*nozzle.nozzleScalingFactor, 
-                            maskedMach[i], 
+                plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                            -maskedR[i]*nozzle.nozzleScalingFactor,
+                            maskedMach[i],
                             levels = levels,
                             cmap = cmap,
                             extend = 'max')
@@ -1721,15 +1714,15 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
                 maskedPressure.append(np.ma.masked_where(np.isnan(nozzle.allPressures[i]), nozzle.allPressures[i]))
             levels = np.arange(nozzle.targetExitPressure, maskedPressure[0].max(), 1e4)
             cmap = plt.colormaps['coolwarm'].with_extremes(under = 'cyan', over = 'magenta')
-            for i in range(3):                
-                contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                            maskedR[i]*nozzle.nozzleScalingFactor, 
-                            maskedPressure[i], 
+            for i in range(3):
+                contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                            maskedR[i]*nozzle.nozzleScalingFactor,
+                            maskedPressure[i],
                             levels = levels,
                             cmap = cmap,
                             extend = 'min')
-                plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                            -maskedR[i]*nozzle.nozzleScalingFactor, 
+                plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                            -maskedR[i]*nozzle.nozzleScalingFactor,
                             maskedPressure[i],
                             levels = levels,
                             cmap = cmap,
@@ -1774,16 +1767,16 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
                     maskedMach.append(np.ma.masked_where(np.isnan(nozzle.allMachNumbers[i]), nozzle.allMachNumbers[i]))
                 levels = np.arange(0.5, nozzle.idealMachNumber, 0.1)
                 cmap = plt.colormaps['plasma'].with_extremes(under = 'magenta', over = 'cyan')
-                for i in range(3):                
-                    contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                                maskedR[i]*nozzle.nozzleScalingFactor, 
-                                maskedMach[i], 
+                for i in range(3):
+                    contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                                maskedR[i]*nozzle.nozzleScalingFactor,
+                                maskedMach[i],
                                 levels = levels,
                                 cmap = cmap,
                                 extend = 'max')
-                    plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                                -maskedR[i]*nozzle.nozzleScalingFactor, 
-                                maskedMach[i], 
+                    plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                                -maskedR[i]*nozzle.nozzleScalingFactor,
+                                maskedMach[i],
                                 levels = levels,
                                 cmap = cmap,
                                 extend = 'max')
@@ -1806,15 +1799,15 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
                     maskedPressure.append(np.ma.masked_where(np.isnan(nozzle.allPressures[i]), nozzle.allPressures[i]))
                 levels = np.arange(nozzle.targetExitPressure, maskedPressure[0].max(), 1e4)
                 cmap = plt.colormaps['coolwarm'].with_extremes(under = 'cyan', over = 'magenta')
-                for i in range(3):                
-                    contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                                maskedR[i]*nozzle.nozzleScalingFactor, 
-                                maskedPressure[i], 
+                for i in range(3):
+                    contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                                maskedR[i]*nozzle.nozzleScalingFactor,
+                                maskedPressure[i],
                                 levels = levels,
                                 cmap = cmap,
                                 extend = 'min')
-                    plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor, 
-                                -maskedR[i]*nozzle.nozzleScalingFactor, 
+                    plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
+                                -maskedR[i]*nozzle.nozzleScalingFactor,
                                 maskedPressure[i],
                                 levels = levels,
                                 cmap = cmap,

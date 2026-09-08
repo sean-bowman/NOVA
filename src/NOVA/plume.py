@@ -2079,7 +2079,6 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
             'massDriftWorst': max(drifts, key = abs) if drifts else float('nan'),
             'massDriftFinal': drifts[-1] if drifts else float('nan')}
 
-
 def _resamplePlumeLine(flow: PlumeFlow, line: list, count: int) -> list:
 
     """
@@ -2424,7 +2423,6 @@ def _lastOrZero(values) -> float:
         return 0.0
 
     return float(values[-1])
-
 
 def plumeCharacteristicSeed(contour) -> dict:
 

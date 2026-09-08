@@ -357,8 +357,8 @@ def solveRegenVolutes(state):
 
         print(f'Generating Inlet Volute:')
 
-        # wall thickness sizing           
-        hoopStressTarget = getGRCopStrength('yield', state.coolantInitialTemperature, 42) 
+        # wall thickness sizing
+        hoopStressTarget = getGRCopStrength('yield', state.coolantInitialTemperature, 42)
         FOS = state.voluteFOS
         hoopStressTarget *= 1/FOS
 
@@ -379,7 +379,7 @@ def solveRegenVolutes(state):
             xFlareEndCAD = state.xChannelCenterline2D[-1] - np.sin(np.deg2rad(state.inletVoluteTilt))*0.003
             rFlareEndCAD = state.rChannelCenterline2D[-1] - np.cos(np.deg2rad(state.inletVoluteTilt))*0.003
             xSquarcCorner = xFlareEndCAD + np.cos(np.deg2rad(state.inletVoluteTilt))*state.channelRadius[-1]*1.05
-            rSquarcCorner = rFlareEndCAD - np.sin(np.deg2rad(state.inletVoluteTilt))*state.channelRadius[-1]*1.05 
+            rSquarcCorner = rFlareEndCAD - np.sin(np.deg2rad(state.inletVoluteTilt))*state.channelRadius[-1]*1.05
 
             inletVolute.voluteScrollRadius         = rSquarcCorner
             inletVolute.axialOffset                = xSquarcCorner
@@ -418,7 +418,7 @@ def solveRegenVolutes(state):
                 failureMode=type(e).__name__
             ) from e
 
-        # relative roll               
+        # relative roll
         for i in range(state.numCSVolute):
             inletVolute.xVolute[i,:], inletVolute.yVolute[i,:], inletVolute.zVolute[i,:] = DCM(eulerAngles = [0,0,np.deg2rad(state.voluteRelativeRoll)],
                                                                                             valueMatrix = [inletVolute.xVolute[i,:],
@@ -475,8 +475,8 @@ def solveRegenVolutes(state):
 
         print(f'Generating Return Volute:')
 
-        # wall thickness sizing           
-        hoopStressTarget = getGRCopStrength('yield', state.coolantExitTemperature, 42) 
+        # wall thickness sizing
+        hoopStressTarget = getGRCopStrength('yield', state.coolantExitTemperature, 42)
         FOS = state.voluteFOS
         hoopStressTarget *= 1/FOS
 
@@ -633,12 +633,12 @@ def solveRegenVolutes(state):
                                 opacity = 0.7,
                                 showscale = False))
         # Representative channel
-        fig.add_trace(go.Surface(x = xChannelAlignmentCheckRolledReturn, y = yChannelAlignmentCheckRolledReturn, z = zChannelAlignmentCheckRolledReturn, 
+        fig.add_trace(go.Surface(x = xChannelAlignmentCheckRolledReturn, y = yChannelAlignmentCheckRolledReturn, z = zChannelAlignmentCheckRolledReturn,
                                 colorscale = [[0, 'red'], [1,'red']],
                                 opacity = 1,
                                 showscale = False))
         # Volutes
-        if state.makeInletVolute == 'on':    
+        if state.makeInletVolute == 'on':
             fig.add_trace(go.Surface(x = state.xInletVolute, y = state.yInletVolute, z = state.zInletVolute,
                                     colorscale = [[0,'cyan'],[1,'cyan']],
                                     opacity = 0.8,
@@ -658,7 +658,7 @@ def solveRegenVolutes(state):
                     fig.add_trace(go.Scatter3d(x = state.xInletVoluteShell[i,:], y = state.yInletVoluteShell[i,:], z = state.zInletVoluteShell[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5)))                                 
+                                                    width = 5)))
             if state.inletVolute.circlePrintability == 'thin':
                 fig.add_trace(go.Surface(x = state.xInletVoluteSupportWall, y = state.yInletVoluteSupportWall, z = state.zInletVoluteSupportWall,
                                         colorscale = [[0,'magenta'],[1,'magenta']],
@@ -677,8 +677,8 @@ def solveRegenVolutes(state):
                     fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportUpper[i,:], y = state.yInletVoluteSupportUpper[i,:], z = state.zInletVoluteSupportUpper[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5))) 
-            if state.inletVolute.circlePrintability == 'thick':    
+                                                    width = 5)))
+            if state.inletVolute.circlePrintability == 'thick':
                 fig.add_trace(go.Surface(x = state.xInletVoluteSupportWall, y = state.yInletVoluteSupportWall, z = state.zInletVoluteSupportWall,
                                         colorscale = [[0,'magenta'],[1,'magenta']],
                                         opacity = 0.35,
@@ -696,7 +696,7 @@ def solveRegenVolutes(state):
                     fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportUpper[i,:], y = state.yInletVoluteSupportUpper[i,:], z = state.zInletVoluteSupportUpper[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5))) 
+                                                    width = 5)))
                 fig.add_trace(go.Surface(x = state.xInletVoluteSupportLower, y = state.yInletVoluteSupportLower, z = state.zInletVoluteSupportLower,
                                         colorscale = [[0,'magenta'],[1,'magenta']],
                                         opacity = 0.35,
@@ -725,7 +725,7 @@ def solveRegenVolutes(state):
                     fig.add_trace(go.Scatter3d(x = state.xReturnVoluteShell[i,:], y = state.yReturnVoluteShell[i,:], z = state.zReturnVoluteShell[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5)))                                       
+                                                    width = 5)))
             if state.returnVolute.circlePrintability == 'thin':
                 fig.add_trace(go.Surface(x = state.xReturnVoluteSupportWall, y = state.yReturnVoluteSupportWall, z = state.zReturnVoluteSupportWall,
                                         colorscale = [[0,'magenta'],[1,'magenta']],
@@ -744,8 +744,8 @@ def solveRegenVolutes(state):
                     fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportUpper[i,:], y = state.yReturnVoluteSupportUpper[i,:], z = state.zReturnVoluteSupportUpper[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5))) 
-            if state.returnVolute.circlePrintability == 'thick':    
+                                                    width = 5)))
+            if state.returnVolute.circlePrintability == 'thick':
                 fig.add_trace(go.Surface(x = state.xReturnVoluteSupportWall, y = state.yReturnVoluteSupportWall, z = state.zReturnVoluteSupportWall,
                                         colorscale = [[0,'magenta'],[1,'magenta']],
                                         opacity = 0.35,
@@ -763,7 +763,7 @@ def solveRegenVolutes(state):
                     fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportUpper[i,:], y = state.yReturnVoluteSupportUpper[i,:], z = state.zReturnVoluteSupportUpper[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5)))         
+                                                    width = 5)))
                 fig.add_trace(go.Surface(x = state.xReturnVoluteSupportLower, y = state.yReturnVoluteSupportLower, z = state.zReturnVoluteSupportLower,
                                         colorscale = [[0,'magenta'],[1,'magenta']],
                                         opacity = 0.35,

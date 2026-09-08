@@ -131,7 +131,6 @@ def drawInterior(machJet, thetaNDeg, staticRatio, slug, targetRadius, targetAxia
           f'(rmax {radiusMax:.1f} vs {targetRadius}, x {axialAt:.0f} vs {targetAxial})')
     return path
 
-
 def drawCells(machJet, staticRatio, slug, numRays = 40, numLeading = 200):
     """
     Shock cell structure of a mildly off-design jet.

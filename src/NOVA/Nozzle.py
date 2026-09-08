@@ -163,7 +163,6 @@ def _plotlyGate(featureName: str) -> bool:
         print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
     return False
 
-
 # Scientific computing imports
 from scipy.interpolate import UnivariateSpline, interp1d, CubicSpline, griddata
 from scipy.optimize import fsolve, least_squares, minimize_scalar
@@ -174,7 +173,6 @@ import sympy as sym
 # Data handling
 from pandas import read_csv
 from datetime import datetime
-    
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Exhaust Plume -- #
@@ -203,7 +201,6 @@ from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNod
                     machDiskOnsetPressureRatio, separationPressureRatio,
                     plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
                     plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
-
 
 class Nozzle:
 
@@ -383,7 +380,7 @@ class Nozzle:
     '''
 
     # ------------------------------------------------------------------------------------------------------------------------------------- #
-    # -- Default values for nozzle object -- # 
+    # -- Default values for nozzle object -- #
     # ------------------------------------------------------------------------------------------------------------------------------------- #
 
     def __init__(self):
@@ -705,11 +702,11 @@ class Nozzle:
 
         # Hidden Options
         self.plotsDocs                                = 'off'
-    
+
     # ------------------------------------------------------------------------------------------------------------------------------------- #
     # -- Helper Methods -- #
     # ------------------------------------------------------------------------------------------------------------------------------------- #
-    
+
     def _getRepositoryRoot(self) -> str:
 
         '''
@@ -764,10 +761,6 @@ class Nozzle:
 
         return os.path.join(self._getRepositoryRoot(), 'runs')
 
-    
-
-
-
     # ------------------------------------------------------------------------------------------------------------------------------------- #
     # -- Public Methods (Methods accessible by users) -- #
     # ------------------------------------------------------------------------------------------------------------------------------------- #
@@ -798,7 +791,7 @@ class Nozzle:
         """
 
         readConfiguration(self, inputsPath, debugMode = debugMode)
-        
+
     # -- Method of Characteristics and Nozzle Contour Generation/Optimization Methods -- #
 
     def truncatedIdealContour(self, targetExitMach: float, lengthFraction: float,
@@ -880,7 +873,6 @@ class Nozzle:
         else:
             return solution.thrustCoef
 
-
     def pressureMatchTruncatedIdealContour(self, lengthFraction: float | str,
                                            lowerBound: float = 0.65, upperBound: float = 0.9):
 
@@ -905,7 +897,6 @@ class Nozzle:
 
         return solveDesignPoint(self, lengthFraction,
                                 lowerBound = lowerBound, upperBound = upperBound)
-
 
     def convergingSectionState(self):
 
@@ -1203,7 +1194,7 @@ class Nozzle:
                 setattr(self, name, value)
 
         self.regenChannelSolution = state
-            
+
     def regenVoluteState(self):
 
         """
@@ -1256,7 +1247,7 @@ class Nozzle:
                 setattr(self, name, value)
 
         self.regenVoluteSolution = state
-    
+
     def regenChannelState(self):
 
         """
@@ -1494,7 +1485,7 @@ class Nozzle:
 
         # -- Nozzle Contour -- #
 
-        # Generate the diverging section 
+        # Generate the diverging section
         if self.divergingSectionType == 'Conical':
             # Generate a conical diverging section
             self.conicalNozzle(conicalHalfAngle = self.conicalHalfAngle)
@@ -1511,14 +1502,14 @@ class Nozzle:
         # -- Regenerative Cooling Architecture -- #
 
         if self.makeCoolingChannels != 'off':
-            
+
             # Generate channel(s)
             self.generateRegenChannels()
 
             # Generate volute(s)
             if self.makeInletVolute == 'on' or self.makeReturnVolute == 'on':
                 self.generateRegenVolutes()
- 
+
         # -- Exhaust Plume -- #
 
         # Correlated structure only; see plumeStructure() for what is and is not modelled.
@@ -1545,4 +1536,3 @@ class Nozzle:
             # pickle beside it as '<filename>Outputs.pkl', which escapes the *Outputs/ ignore rule
             # and leaves a stray several hundred kilobytes in the parent.
             self.pickleNozzle(os.path.join(self.dataFolder, self.filename))
-   

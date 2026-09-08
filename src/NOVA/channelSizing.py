@@ -525,7 +525,7 @@ def solveChannelRadii(state, geometry, thermal):
         '''
 
         # first check if nChannel is too high and reduce if so
-        if True: 
+        if True:
             throatRadius = min(rNozzle)
             offsetHotWallThickness = state.hotWallThickness - state.infillThickness
             arcAngle = 2*np.pi / nChannel
@@ -886,7 +886,7 @@ def solveChannelRadii(state, geometry, thermal):
             plotKeys = ['temperature','pressure','wallTemperature','velocity','machNumber','heatTransfer','density','viscosity','specificHeat',
                         'nusseltNumber','exhaustConvectiveHeatTransferCoef','coolantConvectiveHeatTransferCoef','reynoldsNumber']
             for key in plotKeys:
-                heatTransferPlots[key] = np.zeros(state.numCrossSections)        
+                heatTransferPlots[key] = np.zeros(state.numCrossSections)
 
         # find max channel radius at each station
         for i in tqdm(range(state.numCrossSections), desc="Solving for channel radii", colour="#ABD038"):
@@ -908,7 +908,7 @@ def solveChannelRadii(state, geometry, thermal):
             if channelRadius[i] < state.minChannelRadius:
                 channelRadius[i] = state.minChannelRadius
 
-            # Wrap                   
+            # Wrap
             if i < state.numCrossSections - 1:
                 xChannelCenterline2D[i], rChannelCenterline2D[i] = (arr[0] if i == 0 else arr[1] for arr in findChannelCenterline_oneStation(xNozzle, rNozzle, channelRadius, xChannelCenterline2D, rChannelCenterline2D, i))
                 xChannelCenterline3D[i:i+2], yChannelCenterline3D[i:i+2], zChannelCenterline3D[i:i+2], channelRadius = \
@@ -946,16 +946,16 @@ def solveChannelRadii(state, geometry, thermal):
     # Heat transfer plots
     if state.channelType == 'fluted':
 
-        # Get comparison  
+        # Get comparison
         heatTransferDict["numCrossSections"]    = state.numCrossSections
         heatTransferDict["xHotWall3D"]          = state.xRegenNozzleTrimmed
         heatTransferDict["rHotWall3D"]          = state.rRegenNozzleTrimmed
-        heatTransferDict["gamma"]               = state.gammaRegenSectionTrimmed              
-        heatTransferDict["molecularWeight"]     = state.molecularWeightRegenSectionTrimmed    
-        heatTransferDict["gasConstant"]         = state.gasConstantRegenSectionTrimmed        
-        heatTransferDict["nearWallMachNumber"]  = state.regenSectionNearWallMachNumberTrimmed 
+        heatTransferDict["gamma"]               = state.gammaRegenSectionTrimmed
+        heatTransferDict["molecularWeight"]     = state.molecularWeightRegenSectionTrimmed
+        heatTransferDict["gasConstant"]         = state.gasConstantRegenSectionTrimmed
+        heatTransferDict["nearWallMachNumber"]  = state.regenSectionNearWallMachNumberTrimmed
         heatTransferDict["nearWallTemperature"] = state.regenSectionNearWallTemperatureTrimmed
-        heatTransferDict["nearWallPressure"]    = state.regenSectionNearWallPressureTrimmed   
+        heatTransferDict["nearWallPressure"]    = state.regenSectionNearWallPressureTrimmed
         keysHX = ["gausFlutedCSA","gausFlutedSA","circleCSA","circleSA","differentialPathLength","fluteAmplitudeGauss","flutePitch","turnAngle","radiusOfCurvature","isCircle"]
         for key in keysHX:
             heatTransferDict[key] = np.zeros(state.numCrossSections)
@@ -979,8 +979,8 @@ def solveChannelRadii(state, geometry, thermal):
                                          titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
 
     if state.channelType == 'circle':
-        drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel, 
-                                         circleResults=heatTransferPlots, 
+        drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel,
+                                         circleResults=heatTransferPlots,
                                          titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
 
     return state

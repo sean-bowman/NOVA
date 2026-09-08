@@ -62,7 +62,7 @@ except:
                         VoluteGenerationError)
 
 def bezier(p1: float, p4: float, theta_1: float, theta_2: float, magnitude, res, TwoD=1):
-   
+
     '''
    
      Creates a bezier curve utilizing p1 and p4 as the end points, theta_1 and theta_2 as end angles, and magnitude to control the magnitude of the curve
@@ -85,7 +85,7 @@ def bezier(p1: float, p4: float, theta_1: float, theta_2: float, magnitude, res,
     # Bezier parametric equation
     def eqn(p1, p2, p3, p4, t):
         return (1 - (t**3))*p1 + (3*t*(1-t)**2)*p2 + 3*(t**2)*(1-t)*p3 + (t**3)*p4
-    
+
     # parametric bezier
     t = np.linspace(0, 1, res)
     x = [eqn(0, p2[0]-p1[0], p3[0]-p1[0], p4[0]-p1[0], i)+p1[0] for i in t]
@@ -98,11 +98,11 @@ def bezier(p1: float, p4: float, theta_1: float, theta_2: float, magnitude, res,
     # plt.plot(p1[0], p1[1], '*')
     # plt.plot(p4[0], p4[1], '*')
     #plt.show()
-    
+
     return [x, y]
 
-def dynamicEggShell(yInnerCS, zInnerCS, 
-                    wallThickness:float=None, 
+def dynamicEggShell(yInnerCS, zInnerCS,
+                    wallThickness:float=None,
                     wallHoopStress:float=None, pressureDifferential:float=None, hydraulicDiameter:float=None):
 
     '''
@@ -134,10 +134,9 @@ def dynamicEggShell(yInnerCS, zInnerCS,
     mahalo no ka heluhelu 'ana :)
             
     '''
-    
+
     N = np.shape(yInnerCS)[0] # numCrossSections
     M = np.shape(yInnerCS)[1] # crossSectionResolution
-
 
     ## Determine wall thickness
     # catch invalid inputs
@@ -145,14 +144,14 @@ def dynamicEggShell(yInnerCS, zInnerCS,
         raise Exception('Please specify EITHER wall thickness OR wall hoop stress and pressure differential and hydraulic diameter.')
     # generate wall thicknesses if not specified
     if wallHoopStress is not None:
-        
+
         if pressureDifferential is None or hydraulicDiameter is None:
             raise Exception('If sizing shell by hoop stress, please specify pressure differential.')
-        
+
         wallThickness = np.zeros((N))
         for i in range(N):
             wallThickness[i] = hoopStressCalculator(hoopStress = wallHoopStress,
-                                                    pressureDifferential = pressureDifferential, 
+                                                    pressureDifferential = pressureDifferential,
                                                     diameter = hydraulicDiameter[i])
     # catch prespecified wall thickness
     if wallThickness.__class__ is int or wallThickness.__class__ is float:
@@ -170,28 +169,28 @@ def dynamicEggShell(yInnerCS, zInnerCS,
     y1Prime, z1Prime = [np.zeros((N)) for _ in range(2)]
     # loop
     for i in range(N):
-        
+
         yShellCS[i,:], zShellCS[i,:] = parallelOffset(yInnerCS[i,:],zInnerCS[i,:],wallThickness[i])
 
         if [yShellCS[i,0],zShellCS[i,0]] != [yShellCS[i,-1],zShellCS[i,-1]]: # mind the gap
-        
+
             D = .1 # generic length, trimmed later w/ interection()
-            
-            dydxBackward  = (zShellCS[i,1]  - zShellCS[i,0]) /(yShellCS[i,1]  - yShellCS[i,0] ) 
+
+            dydxBackward  = (zShellCS[i,1]  - zShellCS[i,0]) /(yShellCS[i,1]  - yShellCS[i,0] )
             thetaBackward = np.arctan(dydxBackward)
-            dydxForward   = (zShellCS[i,-2] - zShellCS[i,-1])/(yShellCS[i,-2] - yShellCS[i,-1]) 
+            dydxForward   = (zShellCS[i,-2] - zShellCS[i,-1])/(yShellCS[i,-2] - yShellCS[i,-1])
             thetaForward  = np.arctan(dydxForward)
-            
+
             dxBackward = (D*np.cos(thetaBackward))
             dyBackward = (D*np.sin(thetaBackward))
-            dxForward  = (D*np.cos(thetaForward)) 
-            dyForward  = (D*np.sin(thetaForward)) 
-        
+            dxForward  = (D*np.cos(thetaForward))
+            dyForward  = (D*np.sin(thetaForward))
+
             xBackward1 = yShellCS[i, 0] + dxBackward
             yBackward1 = zShellCS[i, 0] + dyBackward
             xBackward2 = yShellCS[i, 0] - dxBackward
             yBackward2 = zShellCS[i, 0] - dyBackward
-            
+
             xForward1  = yShellCS[i,-1] + dxForward
             yForward1  = zShellCS[i,-1] + dyForward
             xForward2  = yShellCS[i,-1] - dxForward
@@ -217,7 +216,7 @@ def dynamicEggShell(yInnerCS, zInnerCS,
             zShellCS[i, 0] = yNewClosure[0][0]
             yShellCS[i,-1] = xNewClosure[0][0]
             zShellCS[i,-1] = yNewClosure[0][0]
-            
+
         # # Dubug plot
         # plt.figure()
         # plt.plot   ( yInnerCS[i,:],   zInnerCS[i,:],                       'b')
@@ -287,7 +286,7 @@ class Volute:
         # Alignment
         self.axialOffset            = axialOffset            # [m]
         self.anchorBy               = anchorBy               # 'c' , 'n' , 's' , 'i' , 'o' , 'ni' , 'si' , 'no' , 'so'
-       
+
         # Area Distribution
         self.scaledBy                   = scaledBy                   # 'linear' , 'momentum' #^ Momentum is not currently working
         self.numOrifices                = numOrifices                # [int]
@@ -302,7 +301,7 @@ class Volute:
         self.eggPointiness      = eggPointiness      # Pointiness of the top of the egg (1 is regular egg, above that is sharper)
         self.printabilityAngle  = printabilityAngle  # [deg] Angle of geometry with printability concerns
         self.circlePrintability = circlePrintability # 'on' , 'off' flag for interior support wall for circle volute
-        
+
         # Wall options
         self.wallThickness        = wallThickness        # [m] scalar or vector or None
         self.wallHoopStress       = wallHoopStress       # [Pa]
@@ -310,7 +309,7 @@ class Volute:
         self.alignWallBy          = alignWallBy          # 'inner' , 'outer'
 
         # -- Program options -- #
-            
+
         self.plots       = plots       # 'on' , 'off'
         self.progressbar = progressbar # 'on' , 'off'
         self.export      = export      # 'on' , 'off'
@@ -343,7 +342,7 @@ class Volute:
     #-----------------------------------------------------------------#
     # -- Public Methods (Methods accessible by users) -- #
     #-----------------------------------------------------------------#
-    
+
     def generateVolute(self):
 
         '''
@@ -391,7 +390,7 @@ class Volute:
 
             fig = go.Figure()
 
-            fig.add_trace(go.Surface(x = self.xVolute, y = self.yVolute, z = self.zVolute, 
+            fig.add_trace(go.Surface(x = self.xVolute, y = self.yVolute, z = self.zVolute,
                                     colorscale = [[0, 'Cyan'], [1,'Cyan']],
                                     opacity = 0.8,
                                     showscale = False))
@@ -399,9 +398,9 @@ class Volute:
                 fig.add_trace(go.Scatter3d(x = self.xVolute[i,:], y = self.yVolute[i,:], z = self.zVolute[i,:],
                                     mode = 'lines',
                                     line = dict(color = colorii[i],
-                                                width = 5)))          
+                                                width = 5)))
             if self.wallThickness is not None:
-                fig.add_trace(go.Surface(x = self.xShell, y = self.yShell, z = self.zShell, 
+                fig.add_trace(go.Surface(x = self.xShell, y = self.yShell, z = self.zShell,
                                         colorscale = [[0, 'Yellow'], [1,'Yellow']],
                                         opacity = .35,
                                         showscale = False))
@@ -409,7 +408,7 @@ class Volute:
                     fig.add_trace(go.Scatter3d(x = self.xShell[i,:], y = self.yShell[i,:], z = self.zShell[i,:],
                                         mode = 'lines',
                                         line = dict(color = colorii[i],
-                                                    width = 5))) 
+                                                    width = 5)))
             if self.circlePrintability == 'thick':
                     fig.add_trace(go.Surface(x = self.xInternalSupportWall, y = self.yInternalSupportWall, z = self.zInternalSupportWall,
                                             colorscale = [[0,'magenta'],[1,'magenta']],
@@ -428,7 +427,7 @@ class Volute:
                         fig.add_trace(go.Scatter3d(x = self.xInternalSupportFilletUpper[i,:], y = self.yInternalSupportFilletUpper[i,:], z = self.zInternalSupportFilletUpper[i,:],
                                             mode = 'lines',
                                             line = dict(color = colorii[i],
-                                                        width = 5))) 
+                                                        width = 5)))
                     fig.add_trace(go.Surface(x = self.xInternalSupportFilletLower, y = self.yInternalSupportFilletLower, z = self.zInternalSupportFilletLower,
                                             colorscale = [[0,'magenta'],[1,'magenta']],
                                             opacity = 0.35,
@@ -437,7 +436,7 @@ class Volute:
                         fig.add_trace(go.Scatter3d(x = self.xInternalSupportFilletLower[i,:], y = self.yInternalSupportFilletLower[i,:], z = self.zInternalSupportFilletLower[i,:],
                                             mode = 'lines',
                                             line = dict(color = colorii[i],
-                                                        width = 5))) 
+                                                        width = 5)))
             if self.circlePrintability == 'thin':
                     fig.add_trace(go.Surface(x = self.xInternalSupportWall, y = self.yInternalSupportWall, z = self.zInternalSupportWall,
                                             colorscale = [[0,'magenta'],[1,'magenta']],
@@ -456,8 +455,8 @@ class Volute:
                         fig.add_trace(go.Scatter3d(x = self.xInternalSupportFilletUpper[i,:], y = self.yInternalSupportFilletUpper[i,:], z = self.zInternalSupportFilletUpper[i,:],
                                             mode = 'lines',
                                             line = dict(color = colorii[i],
-                                                        width = 5)))      
-                        
+                                                        width = 5)))
+
             fig.update_layout(scene = dict(xaxis_title = 'Radius [m]',
                                         yaxis_title = 'Radius [m]',
                                         zaxis_title = 'Axis [m]'),
@@ -473,7 +472,7 @@ class Volute:
 
         # Step 4: Export geometry (if user specified)
         if self.export == 'on':
-            
+
             py2cad(os.path.join(outputDirectory, self.filename + '.stl'), self.xVolute[1:], self.yVolute[1:], self.zVolute[1:])
             if self.wallThickness is not None:
                 py2cad(os.path.join(outputDirectory, self.filename + '_eggShell.stl'), self.xShell[1:], self.yShell[1:], self.zShell[1:])
@@ -504,7 +503,7 @@ class Volute:
         '''
 
         def drawCircleSupportThick(R):
-    
+
             # scope inputs
             thetaCirc   = np.linspace(0, 2*np.pi, self.crossSectionResolution)
             yCircleWall = R*np.cos(thetaCirc)
@@ -525,7 +524,7 @@ class Volute:
             yOverhangRadial             = np.array([0, D*np.sin(a)])
             zOverhangRadial             = np.array([0, D*np.cos(a)])
             overhangRadialIntersection  = intersection(yOverhangRadial,zOverhangRadial,yCircleWall,zCircleWall)
-            yOverhangRadialIntersection = overhangRadialIntersection[0][0][0] 
+            yOverhangRadialIntersection = overhangRadialIntersection[0][0][0]
             zOverhangRadialIntersection = overhangRadialIntersection[1][0][0]
             # draw extended linear overhang
             yOverhang = np.array([yOverhangRadialIntersection - D*np.cos(a),yOverhangRadialIntersection + D*np.cos(a)])
@@ -565,8 +564,8 @@ class Volute:
             filletCenter2  = intersection(yRectilinearOff,zRectilinearOff,yOverhangOff,zOverhangOff)
             yFilletCenter2 = filletCenter2 [0][0][0]
             zFilletCenter2 = filletCenter2 [1][0][0]
-            yFilletCircle2 = 1.005*r * np.cos(np.linspace(0,2*np.pi,self.crossSectionResolution*2)) + yFilletCenter2 
-            zFilletCircle2 = 1.005*r * np.sin(np.linspace(0,2*np.pi,self.crossSectionResolution*2)) + zFilletCenter2 
+            yFilletCircle2 = 1.005*r * np.cos(np.linspace(0,2*np.pi,self.crossSectionResolution*2)) + yFilletCenter2
+            zFilletCircle2 = 1.005*r * np.sin(np.linspace(0,2*np.pi,self.crossSectionResolution*2)) + zFilletCenter2
             # trim overhang
             overhangIntersections = intersection(yOverhang,zOverhang,yFilletCircle2,zFilletCircle2)
             yOverhangIntersection = overhangIntersections[0][0][0]
@@ -582,9 +581,9 @@ class Volute:
             # trim fillet
             thetaWallIntersection     = np.arctan((zRectilinearIntersection-zFilletCenter2)/(yFilletCenter2-yRectilinearIntersection))
             thetaOverhangIntersection = np.arctan((zOverhangIntersection-zFilletCenter2 )/(yFilletCenter2 -yOverhangIntersection))
-            yFillet2 = (1.005*r) * np.cos(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + yFilletCenter2 
-            zFillet2 = (1.005*r) * np.sin(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + zFilletCenter2 
-            
+            yFillet2 = (1.005*r) * np.cos(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + yFilletCenter2
+            zFillet2 = (1.005*r) * np.sin(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + zFilletCenter2
+
             # stitch
             yTransitionBodyQuad1 = np.concatenate([np.flip(yFillet2),np.flip(yFillet1),yArcUpper])
             zTransitionBodyQuad1 = np.concatenate([np.flip(zFillet2),np.flip(zFillet1),zArcUpper+t])
@@ -594,7 +593,7 @@ class Volute:
             zTransitionBodyUpper = np.concatenate([zTransitionBodyQuad1,zTransitionBodyQuad2,[zTransitionBodyQuad1[0]]])
 
             #### lower transition body
-            
+
             ## fillet
             # draw circle
             zRectilinearOff[-1] = 0
@@ -629,7 +628,7 @@ class Volute:
             ## lattice wall
             yLatticeWall = np.array([ yRectilinear[-1],     (-yRectilinear[-1] ),   (-yRectilinear[-1] ),   yRectilinear[-1],     yRectilinear[-1]     ])
             zLatticeWall = np.array([(zRectilinear[-1] + t),( zRectilinear[-1] + t),( zRectilinear[0] - t),(zRectilinear[0] - t),(zRectilinear[-1] + t)])
-            
+
             ## store
             xInternalSupportWallCS        = np.zeros((5))
             yInternalSupportWallCS        = yLatticeWall
@@ -676,8 +675,8 @@ class Volute:
             # plt.plot(yTransitionBodyLowerNoOverlap,zTransitionBodyLowerNoOverlap,'r',linewidth=2)
             # plt.plot(yLatticeWallNoOverlap,zLatticeWallNoOverlap,'r',linewidth=2)
             # plt.axis('equal')
-            # plt.show(block = True)            
-            
+            # plt.show(block = True)
+
             return xInternalSupportWallCS,       yInternalSupportWallCS,       zInternalSupportWallCS,\
                     xInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS,zInternalSupportFilletUpperCS,\
                     xInternalSupportFilletLowerCS,yInternalSupportFilletLowerCS,zInternalSupportFilletLowerCS,\
@@ -696,7 +695,7 @@ class Volute:
             ## upper fillet
             # arc
             thetaArc = np.linspace(0.5*np.pi - a, 0.5*np.pi + a, self.crossSectionResolution - 4)
-            yArc = R * np.cos(thetaArc) 
+            yArc = R * np.cos(thetaArc)
             zArc = R * np.sin(thetaArc) + t
             # tri
             triUpperRight = [R * np.cos(0.5*np.pi - a), R*np.sin(0.5*np.pi - a)]
@@ -724,7 +723,7 @@ class Volute:
             # plt.axis('equal')
             # plt.show(block = True)
             # debug = 1
-            
+
             supportArea = np.abs(np.trapz(zInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS)) + 0.002*abs(zInternalSupportWallCS[0]-zInternalSupportWallCS[1])
 
             return xInternalSupportWallCS,       yInternalSupportWallCS,       zInternalSupportWallCS,\
@@ -748,7 +747,7 @@ class Volute:
                 debug = 1 # Not implemented
         # Case 3: Specifying interfaceArea OR interfaceHydraulicDiameter and expandedArea OR expandedHydraulicDiameter
         if all((any((self.interfaceArea, self.interfaceHydraulicDiameter)), any((self.expandedArea, self.expandedHydraulicDiameter)))):
-            
+
             # Set whichever interface parameter was not specified
             if self.interfaceArea is None and self.interfaceHydraulicDiameter is not None:
                 self.interfaceArea              = np.pi * (self.interfaceHydraulicDiameter / 2)**2
@@ -789,7 +788,7 @@ class Volute:
         # loop
         print(f'Generating Volute Cross Sections:')
         for i in tqdm(range(self.numCrossSections)):
-            
+
             R = radiusDistribution[i]
             yCS[i,:] = R*np.cos(thetaCirc)
             zCS[i,:] = R*np.sin(thetaCirc)
@@ -818,7 +817,7 @@ class Volute:
 
                     nominalArea = np.pi*(R**2)
                     usableArea  = nominalArea - supportArea
-                
+
                 radiusDistribution[i] = R
 
             if self.circlePrintability.lower() == 'thin':
@@ -842,7 +841,7 @@ class Volute:
 
                     nominalArea = np.pi*(R**2)
                     usableArea  = nominalArea - supportArea
-                
+
                 radiusDistribution[i] = R
 
             # move to anchor point
@@ -874,7 +873,7 @@ class Volute:
             if self.circlePrintability.lower() == 'thick':
                 yInternalSupportWallCS[i,:]        += dy
                 yInternalSupportFilletUpperCS[i,:] += dy
-                yInternalSupportFilletLowerCS[i,:] += dy            
+                yInternalSupportFilletLowerCS[i,:] += dy
                 zInternalSupportWallCS[i,:]        += dz
                 zInternalSupportFilletUpperCS[i,:] += dz
                 zInternalSupportFilletLowerCS[i,:] += dz
@@ -901,7 +900,7 @@ class Volute:
                 yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
                                                         self.wallThickness)
             self.wallThickness = abs(wallThickness)
-            
+
         # move cross sections to correct radius
         if self.alignWallBy == 'inner':
             yCS += self.voluteScrollRadius
@@ -915,7 +914,7 @@ class Volute:
                 yInternalSupportWallCS += self.voluteScrollRadius
                 yInternalSupportFilletUpperCS += self.voluteScrollRadius
         elif self.alignWallBy == 'outer':
-            
+
             if self.wallThickness is None:
                 print('No outer wall to align by.')
                 yCS += self.voluteScrollRadius
@@ -929,7 +928,7 @@ class Volute:
                     yInternalSupportWallCS += self.voluteScrollRadius
                     yInternalSupportFilletUpperCS += self.voluteScrollRadius
 
-            elif self.wallThickness is not None:    
+            elif self.wallThickness is not None:
                 y1p = np.zeros((self.numCrossSections))
                 z1p = np.zeros((self.numCrossSections))
                 match self.anchorBy.lower():
@@ -973,11 +972,11 @@ class Volute:
         else:
             raise Exception('Invalid wall alignment argument. Please specify inner or outer.')
 
-        # roll cross sections about scroll axis to create mesh 
+        # roll cross sections about scroll axis to create mesh
         if self.scrollDirection.lower() == 'cw':
-            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections) 
+            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections)
         elif self.scrollDirection.lower() == 'ccw':
-            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections) 
+            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections)
         else:
             raise Exception('Invalid scroll direction argument. Please specify cw or ccw.')
         xVolute, yVolute, zVolute = [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
@@ -1002,13 +1001,13 @@ class Volute:
                 [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                 [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                 [0,             0,              1           ]]) # Z-axis rotation
-            
+
             R = Rx@Ry@Rz                                        # Rotation matrix
 
-            # Un-centered rotated matrix:              
-            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V  
-            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V  
-            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V  
+            # Un-centered rotated matrix:
+            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V
+            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V
+            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V
 
         # roll outer wall cross sections about scroll axis to create mesh
         if self.wallThickness is not None:
@@ -1034,13 +1033,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V  
-                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V  
-                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V  
+                # Un-centered rotated matrix:
+                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V
+                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V
+                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V
 
         # roll inner support cross sections about scroll axis to create mesh
         if self.circlePrintability.lower() == 'thick':
@@ -1071,13 +1070,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V  
+                # Un-centered rotated matrix:
+                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
             for i in range(self.numCrossSections):
 
                 V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
@@ -1099,13 +1098,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V 
+                # Un-centered rotated matrix:
+                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
             for i in range(self.numCrossSections):
 
                 V = [xInternalSupportFilletLowerCS[i,:], yInternalSupportFilletLowerCS[i,:], zInternalSupportFilletLowerCS[i,:]]
@@ -1127,13 +1126,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportFilletLower[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportFilletLower[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportFilletLower[i,:] = (R@V).T[:,2]            # Extract Z from V 
+                # Un-centered rotated matrix:
+                xInternalSupportFilletLower[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportFilletLower[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportFilletLower[i,:] = (R@V).T[:,2]            # Extract Z from V
         if self.circlePrintability.lower() == 'thin':
             xInternalSupportWall, yInternalSupportWall, zInternalSupportWall =                      \
                 [np.zeros((self.numCrossSections,2)) for _ in range(3)]
@@ -1160,13 +1159,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V  
+                # Un-centered rotated matrix:
+                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
             for i in range(self.numCrossSections):
 
                 V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
@@ -1188,14 +1187,14 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V 
-            
+                # Un-centered rotated matrix:
+                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
+
         # axial location
         zVolute += self.axialOffset
         if self.wallThickness is not None:
@@ -1208,7 +1207,7 @@ class Volute:
             zInternalSupportWall        += self.axialOffset
             zInternalSupportFilletUpper += self.axialOffset
 
-        # assign    
+        # assign
         self.xVolute = xVolute
         self.yVolute = yVolute
         self.zVolute = zVolute
@@ -1233,7 +1232,7 @@ class Volute:
             self.xInternalSupportFilletUpper = xInternalSupportFilletUpper
             self.yInternalSupportFilletUpper = yInternalSupportFilletUpper
             self.zInternalSupportFilletUpper = zInternalSupportFilletUpper
-       
+
     def generateSquarcVolute(self):
 
         '''
@@ -1251,7 +1250,7 @@ class Volute:
         '''
 
         def drawCircleSupportThick(R):
-           
+
             # scope inputs
             thetaCirc   = np.linspace(0, 2*np.pi, self.crossSectionResolution*4)
             yCircleWall = R*np.cos(thetaCirc)
@@ -1272,7 +1271,7 @@ class Volute:
             yOverhangRadial             = np.array([0, D*np.sin(a)])
             zOverhangRadial             = np.array([0, D*np.cos(a)])
             overhangRadialIntersection  = intersection(yOverhangRadial,zOverhangRadial,yCircleWall,zCircleWall)
-            yOverhangRadialIntersection = overhangRadialIntersection[0][0][0] 
+            yOverhangRadialIntersection = overhangRadialIntersection[0][0][0]
             zOverhangRadialIntersection = overhangRadialIntersection[1][0][0]
             # draw extended linear overhang
             yOverhang = np.array([yOverhangRadialIntersection - D*np.cos(a),yOverhangRadialIntersection + D*np.cos(a)])
@@ -1312,8 +1311,8 @@ class Volute:
             filletCenter2  = intersection(yRectilinearOff,zRectilinearOff,yOverhangOff,zOverhangOff)
             yFilletCenter2 = filletCenter2 [0][0][0]
             zFilletCenter2 = filletCenter2 [1][0][0]
-            yFilletCircle2 = 1.005*r * np.cos(np.linspace(0,2*np.pi,self.crossSectionResolution*4)) + yFilletCenter2 
-            zFilletCircle2 = 1.005*r * np.sin(np.linspace(0,2*np.pi,self.crossSectionResolution*4)) + zFilletCenter2 
+            yFilletCircle2 = 1.005*r * np.cos(np.linspace(0,2*np.pi,self.crossSectionResolution*4)) + yFilletCenter2
+            zFilletCircle2 = 1.005*r * np.sin(np.linspace(0,2*np.pi,self.crossSectionResolution*4)) + zFilletCenter2
             # trim overhang
             overhangIntersections = intersection(yOverhang,zOverhang,yFilletCircle2,zFilletCircle2)
             yOverhangIntersection = overhangIntersections[0][0][0]
@@ -1329,8 +1328,8 @@ class Volute:
             # trim fillet
             thetaWallIntersection     = np.arctan((zRectilinearIntersection-zFilletCenter2)/(yFilletCenter2-yRectilinearIntersection))
             thetaOverhangIntersection = np.arctan((zOverhangIntersection-zFilletCenter2 )/(yFilletCenter2 -yOverhangIntersection))
-            yFillet2 = (1.005*r) * np.cos(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + yFilletCenter2 
-            zFillet2 = (1.005*r) * np.sin(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + zFilletCenter2 
+            yFillet2 = (1.005*r) * np.cos(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + yFilletCenter2
+            zFillet2 = (1.005*r) * np.sin(np.linspace(np.pi-thetaOverhangIntersection,np.pi-thetaWallIntersection,int(self.crossSectionResolution/4))) + zFilletCenter2
             # stitch
             yTransitionBodyQuad1 = np.concatenate([np.flip(yFillet2),np.flip(yFillet1),yArcUpper])
             zTransitionBodyQuad1 = np.concatenate([np.flip(zFillet2),np.flip(zFillet1),zArcUpper+t])
@@ -1340,7 +1339,7 @@ class Volute:
             zTransitionBodyUpper = np.concatenate([zTransitionBodyQuad1,zTransitionBodyQuad2,[zTransitionBodyQuad1[0]]])
 
             #### lower transition body
-            
+
             ## fillet right
             # draw circle
             zRectilinearOff[-1] = 0
@@ -1382,7 +1381,7 @@ class Volute:
             ## lattice wall
             yLatticeWall = np.array([ yRectilinear[-1],     (-yRectilinear[-1] ),   (-yRectilinear[-1] ),   yRectilinear[-1],     yRectilinear[-1]     ])
             zLatticeWall = np.array([(zRectilinear[-1] + t),( zRectilinear[-1] + t),( zRectilinear[0] - t),(zRectilinear[0] - t),(zRectilinear[-1] + t)])
-            
+
             ## store
             xInternalSupportWallCS        = np.zeros((5))
             yInternalSupportWallCS        = yLatticeWall
@@ -1393,7 +1392,6 @@ class Volute:
             xInternalSupportFilletLowerCS = np.zeros((int(0.75*self.crossSectionResolution+2)))
             yInternalSupportFilletLowerCS = yTransitionBodyLower
             zInternalSupportFilletLowerCS = zTransitionBodyLower
-
 
             ## area caulculation
             # upper fillet
@@ -1417,7 +1415,7 @@ class Volute:
             supportArea = abs(np.trapz(zTransitionBodyLowerNoOverlap,yTransitionBodyLowerNoOverlap)) + \
                 abs(np.trapz(zTransitionBodyUpperNoOverlap,yTransitionBodyUpperNoOverlap)) + \
                     abs(np.trapz(zLatticeWallNoOverlap,yLatticeWallNoOverlap))
-            
+
             # ySquarc = np.concatenate([[-R],R * np.cos(np.linspace(-np.pi/2,np.pi,self.crossSectionResolution)),[-R]])
             # zSquarc = np.concatenate([[-R],R * np.sin(np.linspace(-np.pi/2,np.pi,self.crossSectionResolution)),[-R]])
             # # Debug plot
@@ -1437,7 +1435,7 @@ class Volute:
             # plt.scatter([yWallIntersection1],[zWallIntersection1],50,color='m',marker='*')
             # plt.axis('equal')
             # plt.show(block = True)
-            
+
             return xInternalSupportWallCS,       yInternalSupportWallCS,       zInternalSupportWallCS,\
                    xInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS,zInternalSupportFilletUpperCS,\
                    xInternalSupportFilletLowerCS,yInternalSupportFilletLowerCS,zInternalSupportFilletLowerCS,\
@@ -1456,7 +1454,7 @@ class Volute:
             ## upper fillet
             # arc
             thetaArc = np.linspace(0.5*np.pi - a, 0.5*np.pi + a, self.crossSectionResolution - 4)
-            yArc = R * np.cos(thetaArc) 
+            yArc = R * np.cos(thetaArc)
             zArc = R * np.sin(thetaArc) + t
             # tri
             triUpperRight = [R * np.cos(0.5*np.pi - a), R*np.sin(0.5*np.pi - a)]
@@ -1472,8 +1470,8 @@ class Volute:
             zInternalSupportFilletUpperCS = np.concatenate([zArc,zTri,[zArc[0]]])
 
             ## sheet
-            xInternalSupportWallCS = np.array([0,0])               
-            yInternalSupportWallCS = np.array([0,0] )                      
+            xInternalSupportWallCS = np.array([0,0])
+            yInternalSupportWallCS = np.array([0,0] )
             zInternalSupportWallCS = np.array([-R,triCenter[1]]).reshape(2)
 
             # # Debug plot
@@ -1484,7 +1482,7 @@ class Volute:
             # plt.axis('equal')
             # plt.show(block = True)
             # debug = 1
-        
+
             supportArea = abs(np.trapz(zInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS)) + 0.002*abs(zInternalSupportWallCS[0]-zInternalSupportWallCS[1])
 
             return xInternalSupportWallCS,       yInternalSupportWallCS,       zInternalSupportWallCS,\
@@ -1492,7 +1490,7 @@ class Volute:
                     supportArea
 
         ## Define area distribution
-        # determine interface area from specified parameter 
+        # determine interface area from specified parameter
         if self.interfaceArea is None and self.interfaceHydraulicDiameter is not None:
             charLInterface     = self.interfaceHydraulicDiameter*(2+1.5*np.pi)/(4+3*np.pi)
             self.interfaceArea = (charLInterface**2)*(1+0.75*np.pi)
@@ -1504,16 +1502,16 @@ class Volute:
                     charLExpanded      = self.expandedHydraulicDiameter*(2+1.5*np.pi)/(4+3*np.pi)
                     self.expandedArea  = (charLExpanded**2)*(1+0.75*np.pi)
                 elif self.expandedCharLen is not None:
-                    self.expandedArea  = (self.expandedCharLen**2)*(1+0.75*np.pi)    
+                    self.expandedArea  = (self.expandedCharLen**2)*(1+0.75*np.pi)
             self.interfaceArea = self.expandedArea/self.numOrifices
-        # determine expanded area from specified parameter 
+        # determine expanded area from specified parameter
         if self.expandedArea is None and self.expandedHydraulicDiameter is not None:
             charLExpanded      = self.expandedHydraulicDiameter*(2+1.5*np.pi)/(4+3*np.pi)
             self.expandedArea  = (charLExpanded**2)*(1+0.75*np.pi)
         elif self.expandedArea is None and self.expandedCharLen is not None:
             self.expandedArea  = (self.expandedCharLen**2)*(1+0.75*np.pi)
         elif self.expandedArea is None and self.numOrifices is not None:
-            self.expandedArea  = self.interfaceArea*self.numOrifices    
+            self.expandedArea  = self.interfaceArea*self.numOrifices
 
         # get characteristic length distribution from area distribution
         self.crossSectionalArea = np.linspace(self.interfaceArea,self.expandedArea,self.numCrossSections)
@@ -1542,14 +1540,14 @@ class Volute:
         # loop
         print(f'Generating Volute Cross Sections:')
         for i in tqdm(range(self.numCrossSections)):
-            
+
             L = charLenDistribution[i]
             yCirc = L*np.sin(thetaCirc) - L*(np.cos(tiltAngle) - np.sin(tiltAngle))
             zCirc = L*np.cos(thetaCirc) + L*(np.cos(tiltAngle) + np.sin(tiltAngle))
             yCSi  = np.concatenate([[0],yCirc,[0]])
             zCSi  = np.concatenate([[0],zCirc,[0]])
             yCS[i,:] = -yCSi
-            zCS[i,:] = -zCSi  
+            zCS[i,:] = -zCSi
 
             # draw circle support
             if self.circlePrintability.lower() == 'thick':
@@ -1569,7 +1567,7 @@ class Volute:
                     yCSi  = np.concatenate([[0],yCirc,[0]])
                     zCSi  = np.concatenate([[0],zCirc,[0]])
                     yCS[i,:] = -yCSi
-                    zCS[i,:] = -zCSi  
+                    zCS[i,:] = -zCSi
 
                     # draw circle support
                     xInternalSupportWallCS[i,:],       yInternalSupportWallCS[i,:],       zInternalSupportWallCS[i,:],       \
@@ -1579,14 +1577,14 @@ class Volute:
 
                     nominalArea = (L**2)*(1+0.75*np.pi)
                     usableArea  = nominalArea - supportArea
-                    
+
                     yInternalSupportWallCS[i,:]        += L
                     zInternalSupportWallCS[i,:]        += L
                     yInternalSupportFilletUpperCS[i,:] += L
                     zInternalSupportFilletUpperCS[i,:] += L
                     yInternalSupportFilletLowerCS[i,:] += L
                     zInternalSupportFilletLowerCS[i,:] += L
-                
+
                 charLenDistribution[i] = L
 
             if self.circlePrintability.lower() == 'thin':
@@ -1605,7 +1603,7 @@ class Volute:
                     yCSi  = np.concatenate([[0],yCirc,[0]])
                     zCSi  = np.concatenate([[0],zCirc,[0]])
                     yCS[i,:] = -yCSi
-                    zCS[i,:] = -zCSi  
+                    zCS[i,:] = -zCSi
 
                     # draw circle support
                     xInternalSupportWallCS[i,:],       yInternalSupportWallCS[i,:],       zInternalSupportWallCS[i,:],       \
@@ -1614,12 +1612,12 @@ class Volute:
 
                     nominalArea = (L**2)*(1+0.75*np.pi)
                     usableArea  = nominalArea - supportArea
-                    
+
                     yInternalSupportWallCS[i,:]        += L
                     zInternalSupportWallCS[i,:]        += L
                     yInternalSupportFilletUpperCS[i,:] += L
                     zInternalSupportFilletUpperCS[i,:] += L
-                
+
                 charLenDistribution[i] = L
 
         # update values to refelct circle cupport area corrections
@@ -1653,7 +1651,7 @@ class Volute:
                 yInternalSupportWallCS += self.voluteScrollRadius
                 yInternalSupportFilletUpperCS += self.voluteScrollRadius
         elif self.alignWallBy == 'outer':
-            
+
             if self.wallThickness is None:
                 print('No outer wall to align by.')
                 yCS += self.voluteScrollRadius
@@ -1666,7 +1664,7 @@ class Volute:
                 if self.circlePrintability.lower() ==  'thin':
                     yInternalSupportWallCS += self.voluteScrollRadius
                     yInternalSupportFilletUpperCS += self.voluteScrollRadius
-            elif self.wallThickness is not None:    
+            elif self.wallThickness is not None:
                 for i in range(self.numCrossSections):
                     yCS[i,:] -= self.voluteScrollRadius - y1p[i]
                     zCS[i,:] -= -z1p[i]
@@ -1687,11 +1685,11 @@ class Volute:
         else:
             raise Exception('Invalid wall alignment argument. Please specify inner or outer.')
 
-        # roll cross sections about scroll axis to create mesh 
+        # roll cross sections about scroll axis to create mesh
         if self.scrollDirection.lower() == 'cw':
-            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections) 
+            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections)
         elif self.scrollDirection.lower() == 'ccw':
-            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections) 
+            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections)
         else:
             raise Exception('Invalid scroll direction argument. Please specify cw or ccw.')
         xVolute, yVolute, zVolute = [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
@@ -1716,13 +1714,13 @@ class Volute:
                 [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                 [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                 [0,             0,              1           ]]) # Z-axis rotation
-            
+
             R = Rx@Ry@Rz                                        # Rotation matrix
 
-            # Un-centered rotated matrix:              
-            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V  
-            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V  
-            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V  
+            # Un-centered rotated matrix:
+            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V
+            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V
+            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V
 
         # roll outer wall cross sections about scroll axis to create mesh
         if self.wallThickness is not None:
@@ -1748,13 +1746,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V  
-                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V  
-                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V  
+                # Un-centered rotated matrix:
+                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V
+                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V
+                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V
 
         # roll inner support cross sections about scroll axis to create mesh
         if self.circlePrintability.lower() == 'thick':
@@ -1785,13 +1783,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V  
+                # Un-centered rotated matrix:
+                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
             for i in range(self.numCrossSections):
 
                 V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
@@ -1813,13 +1811,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V 
+                # Un-centered rotated matrix:
+                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
             for i in range(self.numCrossSections):
 
                 V = [xInternalSupportFilletLowerCS[i,:], yInternalSupportFilletLowerCS[i,:], zInternalSupportFilletLowerCS[i,:]]
@@ -1841,13 +1839,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportFilletLower[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportFilletLower[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportFilletLower[i,:] = (R@V).T[:,2]            # Extract Z from V 
+                # Un-centered rotated matrix:
+                xInternalSupportFilletLower[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportFilletLower[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportFilletLower[i,:] = (R@V).T[:,2]            # Extract Z from V
         if self.circlePrintability.lower() == 'thin':
             xInternalSupportWall, yInternalSupportWall, zInternalSupportWall =                      \
                 [np.zeros((self.numCrossSections,2)) for _ in range(3)]
@@ -1874,13 +1872,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V  
+                # Un-centered rotated matrix:
+                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
             for i in range(self.numCrossSections):
 
                 V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
@@ -1902,14 +1900,14 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V  
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V  
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V 
-            
+                # Un-centered rotated matrix:
+                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
+                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
+                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
+
         # axial location
         zVolute += self.axialOffset
         if self.wallThickness is not None:
@@ -1922,7 +1920,7 @@ class Volute:
             zInternalSupportWall        += self.axialOffset
             zInternalSupportFilletUpper += self.axialOffset
 
-        # assign    
+        # assign
         self.xVolute = xVolute
         self.yVolute = yVolute
         self.zVolute = zVolute
@@ -1965,11 +1963,11 @@ class Volute:
         Default egg pointiness is 1.
         
         '''
-        
+
         def drawEgg(h,pointiness=1):
 
             # im stealing this egg -B
-            
+
             top_circle_scaling_factor = pointiness  # Pointiness of the top of the egg
 
             # -- Declare properties of egg -- #
@@ -2021,7 +2019,7 @@ class Volute:
 
             egg_arc_3_x = r1*np.cos(theta_1_left) - circle_1_center_x    # This is circle 1 left
             egg_arc_3_y = r1*np.sin(theta_1_left) + circle_1_center_y
-            
+
             # Make egg tip (previously circle 3)
             # Bezier spline controls
                 # 0.7 and 0.1 used because at pointiness=1 the egg is egg shaped
@@ -2067,8 +2065,7 @@ class Volute:
             # plt.plot(circle_x_1_right,circle_y_1_right,'blue')
             # plt.plot(circle_x_2,circle_y_2,'red')
             # plt.plot(circle_x_3,circle_y_3,'green')
-            
-            
+
             # plt.plot   ( egg_arc_1_x[:-1], egg_arc_1_y[:-1],          'orange',label='arc 1')
             # plt.plot   ( egg_arc_2_x,      egg_arc_2_y,               'green',label='arc 2')
             # plt.plot   ( egg_arc_3_x,      egg_arc_3_y,               'blue',label='arc 3')
@@ -2091,18 +2088,18 @@ class Volute:
         eggTolerance = 1e-6
         # make resolution eggable
         self.crossSectionResolution = int(np.ceil(self.crossSectionResolution/8)*8)
-        
+
         ## Define area distribution
         if self.progressbar == 'on':
             print('Converging egg volute area distribution. This should only take a few seconds.')
-        
+
         if self.numOrifices is None:
             # if not specified, get interface area from interface hydraulic diameter
             if self.interfaceHydraulicDiameter is not None:
-                
+
                 if self.interfaceArea is not None:
                     raise Exception('Please specify only interface area OR hydraulic diameter')
-                
+
                 # guess and check egg until interface area is determined
                 interfaceEggH = self.interfaceHydraulicDiameter
                 yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
@@ -2131,10 +2128,10 @@ class Volute:
                 self.interfaceArea = interfaceEggCSA
             # if not specified, get expanded area from expanded hydraulic diameter
             if self.expandedHydraulicDiameter is not None:
-                
+
                 if self.expandedArea is not None:
                     raise Exception('Please specify only expanded area OR hydraulic diameter')
-                
+
                 # guess and check egg until expanded area is determined
                 expandedEggH = self.expandedHydraulicDiameter
                 yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
@@ -2184,10 +2181,10 @@ class Volute:
 
                 # if not specified, get expanded area from expanded hydraulic diameter
                 if self.expandedHydraulicDiameter is not None:
-                
+
                     if self.expandedArea is not None:
                         raise Exception('Please specify only expanded area OR hydraulic diameter')
-                    
+
                     # guess and check egg until expanded area is determined
                     expandedEggH = self.expandedHydraulicDiameter
                     yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
@@ -2236,13 +2233,12 @@ class Volute:
             # interface end specified
             elif self.expandedArea is None and self.expandedHydraulicDiameter is None:
 
-                
                 # if not specified, get interface area from interface hydraulic diameter
                 if self.interfaceHydraulicDiameter is not None:
-                    
+
                     if self.interfaceArea is not None:
                         raise Exception('Please specify only interface area OR hydraulic diameter')
-                    
+
                     # guess and check egg until interface area is determined
                     interfaceEggH = self.interfaceHydraulicDiameter
                     yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
@@ -2269,7 +2265,7 @@ class Volute:
                                 interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
                             checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
                     self.interfaceArea = interfaceEggCSA
-                
+
                 self.expandedArea = self.interfaceArea*self.numOrifices
 
                 if self.expandedHydraulicDiameter is None: # need to establish expanded hydraulic diameter to make first cross section
@@ -2297,7 +2293,7 @@ class Volute:
             self.crossSectionalArea = np.linspace(self.interfaceArea,self.expandedArea,self.numCrossSections)
         elif self.scaledBy.lower() == 'momentum':
             debug = 1 # not implemented
-        
+
         ## generate inner wall CSs with seat at (0,0):
         if self.progressbar == 'on':
             print('Generating cross sections.')
@@ -2363,13 +2359,13 @@ class Volute:
             zCS[i,:] += dz
 
         self.hydraulicDiameter = hydraulicDiameter
-            
+
         # generate shell
         if self.wallThickness is not None or self.wallHoopStress is not None:
-            
+
             if self.progressbar == 'on':
                 print('Generating shell.')
-            
+
             yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
                                                                     self.wallThickness,
                                                                     self.wallHoopStress, self.pressureDifferential, self.hydraulicDiameter)
@@ -2390,13 +2386,13 @@ class Volute:
             if self.wallThickness is not None:
                 yShellCS += self.voluteScrollRadius
         elif self.alignWallBy == 'outer':
-            
+
             if self.wallThickness is None:
                 print('No outer wall to align by.')
                 yCS += self.voluteScrollRadius
                 if self.wallThickness is not None:
                     yShellCS += self.voluteScrollRadius
-            elif self.wallThickness is not None:    
+            elif self.wallThickness is not None:
                 y1p = np.zeros((self.numCrossSections))
                 z1p = np.zeros((self.numCrossSections))
                 match self.anchorBy.lower():
@@ -2429,13 +2425,13 @@ class Volute:
         else:
             raise Exception('Invalid wall alignment argument. Please specify inner or outer.')
 
-        # roll cross sections about scroll axis to create mesh 
+        # roll cross sections about scroll axis to create mesh
         if self.progressbar == 'on':
             print('Generating 3D geometry.')
         if self.scrollDirection.lower() == 'cw':
-            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections) 
+            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections)
         elif self.scrollDirection.lower() == 'ccw':
-            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections) 
+            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections)
         else:
             raise Exception('Invalid scroll direction argument. Please specify cw or ccw.')
         xVolute, yVolute, zVolute = [np.zeros((self.numCrossSections,localCrossSectionResolution)) for _ in range(3)]
@@ -2460,13 +2456,13 @@ class Volute:
                 [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                 [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                 [0,             0,              1           ]]) # Z-axis rotation
-            
+
             R = Rx@Ry@Rz                                        # Rotation matrix
 
-            # Un-centered rotated matrix:              
-            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V  
-            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V  
-            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V  
+            # Un-centered rotated matrix:
+            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V
+            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V
+            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V
 
         # roll outer wall cross sections about scroll axis to create mesh
         if self.wallThickness is not None:
@@ -2492,13 +2488,13 @@ class Volute:
                     [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
                     [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
                     [0,             0,              1           ]]) # Z-axis rotation
-                
+
                 R = Rx@Ry@Rz                                        # Rotation matrix
 
-                # Un-centered rotated matrix:              
-                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V  
-                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V  
-                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V  
+                # Un-centered rotated matrix:
+                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V
+                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V
+                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V
 
         # axial location
         if self.progressbar == 'on':
@@ -2507,9 +2503,9 @@ class Volute:
         if self.wallThickness is not None:
             zShell += self.axialOffset
 
-        # assign 
+        # assign
         if self.progressbar == 'on':
-            print('Finishing volute.')   
+            print('Finishing volute.')
         self.xVolute = xVolute
         self.yVolute = yVolute
         self.zVolute = zVolute

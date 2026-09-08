@@ -121,9 +121,9 @@ def exportData(nozzle, filename: str = 'default'):
             if nozzle.returnVolute.circlePrintability == 'thick':
                 py2cad(filename[:-4] + 'ReturnVolutePrintSupportsLower.stl', nozzle.xReturnVoluteSupportLower, nozzle.yReturnVoluteSupportLower, nozzle.zReturnVoluteSupportLower)
 
-    # Shove all .stl outputs into one .stl file
-    #TODO
-
+    # Each geometry above is written as its own .stl. A single assembly file would be more
+    # convenient to open, but py2cad writes one solid per call and a multi-solid STL needs a
+    # writer that concatenates the facet lists under one header.
 
 def exportExhaustPropertiesFEA(nozzle) -> None:
 

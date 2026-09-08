@@ -21,14 +21,14 @@ Sean Bowman
 
 '''
 
+import functools
 import os
+import threading
 import warnings
 
-from . import units
-import functools
-import threading
-
 import numpy as np
+
+from . import units
 
 # rocketcea's find_mingw_lib.add_mingw_lib() walks PATH and calls
 # os.add_dll_directory() on every entry matching *mingw64*bin, with no
@@ -342,7 +342,6 @@ def _resolveOxidizerCard(canonicalName: str, oxidizerTemperature, chamberPressur
             add_new_oxidizer(derivedName, (' ' * 4).join(cardTokens))
             _REGISTEREDPROPELLANTS.add(derivedName)
     return derivedName
-
 
 # ------------------------------------------------------------------------------------------------------------------------------------ #
 # -- CEA_Obj cache -- #

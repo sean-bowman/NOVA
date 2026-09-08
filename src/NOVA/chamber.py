@@ -515,7 +515,7 @@ def solveConvergingSection(state, raoThroatAngle: float = 'default', chamberInte
             # flow properties are evaluated below, so the constant-area chamber station
             # falls out of the same isentropic area-ratio solve as the rest of the
             # converging section rather than needing a special case.
-            xConvergingSection, rConvergingSection = prependCombustionChamber(state, 
+            xConvergingSection, rConvergingSection = prependCombustionChamber(state,
                 xConvergingSection, rConvergingSection)
 
             # Concantentate and interpolate (equal arc spacing of nozzle contour)

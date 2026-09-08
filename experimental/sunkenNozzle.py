@@ -191,7 +191,7 @@ def solveSunkenConvergingSection(state, geometryOnly, calculateConvergingFlowPro
 
     # Outer Arc
     xOuterArcCenter = xOuterEnvelope[0]
-    rOuterArcCenter = rOuterEnvelope[0] - outerArcRadius       
+    rOuterArcCenter = rOuterEnvelope[0] - outerArcRadius
     theta = np.linspace(3*np.pi/2,np.pi/2)
     xOuterArc = outerArcRadius*np.cos(theta) + xOuterArcCenter
     rOuterArc = outerArcRadius*np.sin(theta) + rOuterArcCenter
@@ -263,8 +263,8 @@ def solveSunkenConvergingSection(state, geometryOnly, calculateConvergingFlowPro
     xConicCTRL = xEllipse[-1] - xEllipse[-1]*state.conicDepthModifier
     drConicCTRL = abs(xInnerArc[-1])*np.tan(0.5*np.deg2rad(state.throatBackWallPitch)) * state.conicPinchModifier
     rConicCTRL = state.rNozzleWall[0] + drConicCTRL
-    xConicGuide = [xInnerArc[-1],xConicCTRL,xInnerWall[0]] 
-    rConicGuide = [rInnerArc[-1],rConicCTRL,rInnerWall[0]] 
+    xConicGuide = [xInnerArc[-1],xConicCTRL,xInnerWall[0]]
+    rConicGuide = [rInnerArc[-1],rConicCTRL,rInnerWall[0]]
 
     # Stitch it all together
     xConvergingSectionRough = np.flip(np.concatenate([xEllipse,xInnerArc,[xConicCTRL],xInnerWall]))
