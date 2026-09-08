@@ -113,3 +113,70 @@ Accessed 2026-09-08 unless noted otherwise.
 Yield strength against temperature is still a held-flat room-temperature value for eight of the ten alloys. The tabulated sources that would close it, ASME Section II Part D and MMPDS, are both paywalled; the producer datasheets either plot it without tabulating it (Inconel 625) or do not cover it (CuCrZr, AlSi10Mg). Filling those from journal papers on assorted product forms would produce a curve that looks authoritative and is not traceable to one condition, which is worse than a flag saying the data is absent.
 
 Cryogenic data is absent for GRCop-42, CuCrZr, NARloy-Z, AlSi10Mg and Inconel 625. For the copper alloys this matters less than it might: the low-temperature conductivity peak that makes pure copper so conductive at 20 K is a purity effect, and alloying additions suppress it, so extrapolating OFHC behaviour onto GRCop-42 or NARloy-Z would be wrong in a way that flatters the design.
+
+---
+
+# References: non-metallic and refractory materials
+
+Sources consulted while building the non-metallic store, added 2026-09-08.
+
+## GrafTech, Grade ATJ graphite datasheet GT-5028 Rev 2
+
+- **URL:** <https://nstx.pppl.gov/DragNDrop/Working_Groups/PFCR/materials/20090908%20Grade-ATJ-Isomolded-Graphite.pdf>
+- **Accessed:** 2026-09-08
+- **Relevance:** The producer datasheet for the fine-grain isomolded graphite most commonly used for throat inserts and nozzle liners. The only tier-1 source found for any material in this store.
+- **Key findings:**
+  - Room-temperature with-grain values: density 1.76 g/cm3, thermal conductivity 116 W/m-K, CTE 3.0e-6/K to 100 degC, tensile 26 MPa, flexural 31 MPa, compressive 66 MPa, Young's modulus 9.7 GPa, resistivity 11.7 microhm-m, particle size 0.03 mm, ash 0.11 %.
+  - The datasheet lists with-grain only. Isomolded ATJ is near isotropic but not isotropic; across-grain strength runs roughly 10 to 20 per cent lower.
+  - No temperature dependence is given. Graphite conductivity falls roughly as 1/T above 500 K, and its strength *rises* with temperature to about 2500 degC, which is opposite to every metal in the wall store. Neither behaviour is captured by the stored room-temperature value.
+  - The datasheet's own disclaimer says the values are not to be used to establish specification limits or alone as a basis of design, which is the definition of selection-grade data.
+
+## Multimatrix Composite Materials for Rocket Nozzle Manufacturing: A Comparative Review
+
+- **URL:** <https://pmc.ncbi.nlm.nih.gov/articles/PMC12610372/>
+- **Accessed:** 2026-09-08
+- **Relevance:** The single most productive source for this store. A peer-reviewed comparative review that tabulates carbon-carbon, C/SiC, SiC/SiC and carbon phenolic side by side, with the processing route and test atmosphere stated for each value.
+- **Key findings:**
+  - Carbon-carbon: density 1.75 to 1.90 g/cm3, CTE 0.5 to 2.0e-6/K, tensile 150 to 160 MPa, flexural 170 MPa, compressive 150 to 250 MPa, modulus about 75 GPa, fracture toughness 5 to 10 MPa m^0.5. Maximum use about 1750 degC in air, above 2500 degC inert.
+  - C/SiC: density 2.0 to 2.1 g/cm3, tensile about 230 MPa, flexural 290 to 300 MPa, compressive about 390 MPa, modulus about 78 GPa. Maximum use 1300 to 1500 degC oxidising, retaining about 88 MPa at 1500 to 1700 degC.
+  - SiC/SiC: density 2.4 to 3.0 g/cm3, tensile about 287 MPa, modulus 250 to 260 GPa, fracture toughness about 15 MPa m^0.5, maximum use 1600 to 1700 degC. Compressive strength is quoted in steam, which is the environment a hydrogen exhaust actually presents.
+  - Carbon phenolic: tensile about 60 MPa, flexural about 90 MPa, compressive about 150 MPa, modulus about 20 GPa, ablation rate 0.05 to 0.20 mm/s under plasma torch. Char protects to 2000 to 3000 degC inert.
+  - **The 1750 degC figure for carbon-carbon in air is for coated material.** A separate result in the same literature puts the onset of oxidation for bare 2D C/C at about 370 to 500 degC. Both are stored, because quoting only the first is how a nozzle extension gets designed to a number it will never see.
+  - Through-thickness properties of a 2D layup are far below in-plane, and 3D reinforcement recovers 30 to 40 per cent. No through-thickness values were tabulated, so none are stored.
+
+## Mireles, Rodriguez, Gao and Philips, *Additive Manufacture of Refractory Alloy C103 for Propulsion Applications*
+
+- **URL:** <https://ntrs.nasa.gov/api/citations/20205003679/downloads/AM_C103_(AIAA)_26May2020.pdf>
+- **Accessed:** 2026-09-08
+- **Relevance:** NASA MSFC's characterisation of laser powder bed fusion C103, the alloy radiatively cooled nozzle extensions and RCS thrusters are made from.
+- **Key findings:**
+  - Table 3, room-temperature tensile in the Z direction: as-built 560.43 and 410.94 MPa, stress relieved 410.5 and 334.9, SR+HIP 452.46 and 326.03, with elongation 16.67, 20.79 and 18.88 per cent.
+  - **That table's two strength columns are transposed.** It is headed yield then ultimate, but every row lists the larger number first, and a yield strength above the ultimate is impossible. The store takes the smaller of each pair as yield and says so in the provenance.
+  - L-PBF exceeds wrought at room temperature in both strengths while giving up elongation, and beats wrought on ultimate strength at 1093 degC.
+  - Elevated-temperature results appear only as Figure 13, a plot, so no curve is stored.
+  - Oxygen pick-up is significant: 441 ppm in powder rising to 1070 ppm after stress relief and HIP.
+
+## Vendor and literature values for polymers, and for yttria-stabilised zirconia
+
+- **URLs:** <https://www.curbellplastics.com/materials/plastics/pctfe/>, <https://www.fluorotec.com/materials/pctfe-other-fluoropolymers/pctfe/>, <https://www.worldscientific.com/doi/10.1142/S0218625X06008670>
+- **Accessed:** 2026-09-08
+- **Relevance:** The remaining classes, at the lowest grade in the store.
+- **Key findings:**
+  - PCTFE thermal conductivity 0.24 to 0.26 W/m-K at 23 degC falling to 0.10 to 0.14 at -196 degC, useful range -240 to 193 degC. One of the few polymers here with a measured temperature dependence, and the least prone to cold flow of the unfilled fluoropolymers.
+  - PEEK about 0.25 W/m-K, maximum continuous service about 249 degC, the highest glass transition of the common sealing polymers.
+  - PTFE thermally stable to about 260 degC. Its expansion is strongly non-linear, with two solid-solid transitions near room temperature taking the instantaneous coefficient above 500e-6/K, so the single stored value is a poor description and is marked as such.
+  - 7YSZ conductivity is about 2.3 W/m-K dense and nearer 1.0 as a sprayed coating. **Porosity, not composition, is the variable**, so both ends are stored rather than a misleading midpoint. CTE about 11e-6/K.
+
+---
+
+## What this left undone, for the non-metals
+
+The grade of this store is below the wall alloys and the reason is structural rather than effort. For metals there are critically evaluated compilations that are freely available: NIST for cryogenic properties, producer bulletins with tabulated tensile data. The equivalents here are access controlled or paywalled:
+
+- The DTIC reports carrying virgin and char thermal conductivity of MX-4926 phenolic-carbon to 5000 degF, AD0702112 and AD0675179, return HTTP 403 to automated access.
+- MIL-HDBK-17 for composites and the CINDAS series for thermophysical properties are paywalled.
+- Producer datasheets for POCO graphite and for the ceramic composites were either 404 or gave room-temperature values only.
+
+The consequence is that almost nothing in this store has a temperature-dependent curve, and the one material that most needs a model NOVA does not have is carbon phenolic: an ablative needs virgin and char conductivity as separate curves, a pyrolysis gas mass flux and a recession rate against local heat flux. Its entry carries none of those and says so.
+
+The plasma torch ablation rate is stored with a warning attached. A torch number is not a motor number: recession depends on enthalpy, pressure and shear at the wall, and a torch reproduces none of them.

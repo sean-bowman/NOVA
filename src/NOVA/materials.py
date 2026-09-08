@@ -505,6 +505,403 @@ _WALLCURVEDATA = {
 
 # Free-text names, and the legacy 'cu' / 'al' / 'in' keys the earlier heat transfer model used,
 # folded to the canonical entries above.
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Non-metallic and refractory materials -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+# Everything a nozzle is made of that is not a regeneratively cooled wall: throat inserts, nozzle
+# extensions, ablative liners, thermal barrier coatings and the polymers in the feed system.
+#
+# This is a separate store from _WALLCURVEDATA on purpose. `wallMaterialCurves` is what
+# regenThermal and channelSizing read, and nothing in this table can be a cooled wall: carbon
+# phenolic is meant to be consumed, graphite cannot be brazed into a jacket, and PTFE is a seal.
+# Keeping them apart means a material cannot be selected for a job it cannot do.
+#
+# ----------------------------------------------------------------------
+#                     What grade of data this is
+# ----------------------------------------------------------------------
+#
+# Lower than the wall alloys, and deliberately so. For metals there are critically evaluated
+# compilations with stated fit errors: NIST for cryogenic properties, producer bulletins with
+# tabulated tensile data. The equivalents here are either access controlled (the DTIC ablative
+# thermal property reports), paywalled (MIL-HDBK-17 for composites, CINDAS) or do not exist in
+# one place. What is freely available is vendor datasheets giving room-temperature values and
+# journal papers characterising one formulation.
+#
+# So these entries are SELECTION grade, not analysis grade. They answer "will this survive here,
+# what does it weigh, and roughly how does it conduct", which is the question these materials are
+# usually asked. They do not answer "what is k at 847 K" and they are not design allowables. Each
+# property carries a `basis` saying which it is.
+#
+# The governing property for most of this table is not a curve at all but the maximum use
+# temperature, and for the carbon materials that number depends entirely on the atmosphere: 2D
+# carbon-carbon is good past 2500 degC in an inert environment and oxidises from about 400 degC
+# bare. Both are recorded, because quoting only the first is how a nozzle extension gets designed
+# to a number it will never see.
+
+# Property values are keyed by variant so that anisotropy, and the virgin-versus-char split an
+# ablative needs, use one mechanism. Isotropic materials use the single key 'isotropic'.
+
+_MATERIALCLASSES = {
+
+    'ATJ Graphite': {
+        'class':        'refractory',
+        'form':         'fine-grain isomolded graphite',
+        'application':  'Throat inserts, nozzle liners, hot-pressing tooling',
+        'density':      1760.0,        # [kg/m^3]
+        'properties': {
+            # The datasheet reports with-grain values only. Isomolded ATJ is near isotropic but
+            # not isotropic: across-grain strength runs roughly 10 to 20 per cent lower.
+            'thermalConductivity': {'withGrain': 116.0},        # [W/m-K] at room temperature
+            'cte':                 {'withGrain': 3.0e-6},       # [1/K], mean to 100 degC
+            'tensileStrength':     {'withGrain': 26.0e6},       # [Pa]
+            'flexuralStrength':    {'withGrain': 31.0e6},       # [Pa]
+            'compressiveStrength': {'withGrain': 66.0e6},       # [Pa]
+            'elasticModulus':      {'withGrain': 9.7e9},        # [Pa]
+        },
+        'maxUseTemperatureC': {'inert': 2800.0, 'oxidising': 400.0},
+        'basis': 'producerDatasheet',
+        'provenance': {
+            'thermalConductivity': ('GrafTech GT-5028 Rev 2 (2009), Grade ATJ, room temperature, '
+                                    'with grain. Graphite conductivity falls steeply with '
+                                    'temperature, roughly as 1/T above 500 K, so this value is '
+                                    'not usable hot.', 'producerDatasheet'),
+            'cte':                 ('GrafTech GT-5028 Rev 2, mean to 100 degC, with grain.',
+                                    'producerDatasheet'),
+            'tensileStrength':     ('GrafTech GT-5028 Rev 2, room temperature, with grain. '
+                                    'Graphite gains strength with temperature to about 2500 degC, '
+                                    'which is the opposite of every metal in this module.',
+                                    'producerDatasheet'),
+            'flexuralStrength':    ('GrafTech GT-5028 Rev 2, room temperature, with grain.',
+                                    'producerDatasheet'),
+            'compressiveStrength': ('GrafTech GT-5028 Rev 2, room temperature, with grain.',
+                                    'producerDatasheet'),
+            'elasticModulus':      ('GrafTech GT-5028 Rev 2, room temperature, with grain.',
+                                    'producerDatasheet'),
+            'maxUseTemperatureC':  ('Inert limit is the sublimation-limited working range for '
+                                    'bulk graphite. The oxidising limit is where measurable '
+                                    'oxidation begins in air, not where the part fails.',
+                                    'literatureRepresentative'),
+        },
+    },
+
+    'Carbon-Carbon (2D)': {
+        'class':        'composite',
+        'form':         '2D laminate, CVI or PIP densified',
+        'application':  'Nozzle extensions, throat inserts, hot structure',
+        'density':      1825.0,        # [kg/m^3], midpoint of 1750 to 1900
+        'properties': {
+            'cte':                 {'inPlane': 1.25e-6},        # [1/K], 0.5 to 2.0e-6 reported
+            'tensileStrength':     {'inPlane': 155.0e6},        # [Pa], 150 to 160 MPa
+            'flexuralStrength':    {'inPlane': 170.0e6},        # [Pa]
+            'compressiveStrength': {'inPlane': 200.0e6},        # [Pa], 150 to 250 MPa
+            'elasticModulus':      {'inPlane': 75.0e9},         # [Pa]
+            'fractureToughness':   {'inPlane': 7.5e6},          # [Pa m^0.5], 5 to 10
+        },
+        # Bare C/C oxidises from about 400 degC. The 1750 degC figure is for coated material and
+        # is the number that gets quoted; both are here so neither is mistaken for the other.
+        'maxUseTemperatureC': {'inert': 2500.0, 'oxidising': 400.0, 'oxidisingCoated': 1750.0},
+        'basis': 'literatureReview',
+        'provenance': {
+            'cte':                 ('Multimatrix Composite Materials for Rocket Nozzle '
+                                    'Manufacturing: A Comparative Review, PMC12610372. Reported '
+                                    'as 0.5 to 2.0e-6/K; the midpoint is stored.',
+                                    'literatureReview'),
+            'tensileStrength':     ('PMC12610372, PIP densified, inert atmosphere, 150 to 160 MPa.',
+                                    'literatureReview'),
+            'flexuralStrength':    ('PMC12610372, air, transient loading.', 'literatureReview'),
+            'compressiveStrength': ('PMC12610372, CVI densified, air, 150 to 250 MPa.',
+                                    'literatureReview'),
+            'elasticModulus':      ('PMC12610372, air, steady loading.', 'literatureReview'),
+            'fractureToughness':   ('PMC12610372, CVI+PIP, inert, 5 to 10 MPa m^0.5.',
+                                    'literatureReview'),
+            'maxUseTemperatureC':  ('PMC12610372 gives 1750 degC in air and above 2500 degC '
+                                    'inert. The 1750 figure requires an oxidation-protection '
+                                    'coating; bare 2D C/C oxidises measurably from about 400 '
+                                    'degC, which is the limit stored under oxidising.',
+                                    'literatureReview'),
+        },
+        'notes': ('Through-thickness tensile and shear strength of a 2D layup are far below the '
+                  'in-plane values, which is what governs a bonded or bolted joint. 3D '
+                  'reinforcement recovers 30 to 40 per cent of it. No through-thickness values '
+                  'are stored because none were found tabulated.'),
+    },
+
+    'C/SiC': {
+        'class':        'composite',
+        'form':         'carbon fibre, silicon carbide matrix, CVI or RS',
+        'application':  'Nozzle extensions where bare carbon-carbon would oxidise',
+        'density':      2050.0,        # [kg/m^3], 2.0 to 2.1
+        'properties': {
+            'tensileStrength':     {'inPlane': 230.0e6},        # [Pa]
+            'flexuralStrength':    {'inPlane': 295.0e6},        # [Pa], 290 to 300
+            'compressiveStrength': {'inPlane': 390.0e6},        # [Pa]
+            'elasticModulus':      {'inPlane': 78.2e9},         # [Pa]
+            'fractureToughness':   {'inPlane': 5.45e6},         # [Pa m^0.5]
+        },
+        'maxUseTemperatureC': {'inert': 1700.0, 'oxidising': 1400.0},
+        'basis': 'literatureReview',
+        'provenance': {
+            'tensileStrength':     ('PMC12610372, reaction sintered, air, steady.',
+                                    'literatureReview'),
+            'flexuralStrength':    ('PMC12610372, PIP, air, transient, 290 to 300 MPa.',
+                                    'literatureReview'),
+            'compressiveStrength': ('PMC12610372, CVI, air, steady.', 'literatureReview'),
+            'elasticModulus':      ('PMC12610372, reaction sintered, air, steady.',
+                                    'literatureReview'),
+            'fractureToughness':   ('PMC12610372, CVI+PIP, inert.', 'literatureReview'),
+            'maxUseTemperatureC':  ('PMC12610372 gives 1300 to 1500 degC in an oxidising '
+                                    'atmosphere. Retained strength at 1500 to 1700 degC is about '
+                                    '88 MPa, which is what sets the inert figure.',
+                                    'literatureReview'),
+        },
+        'notes': ('The reason to accept C/SiC over C/C is that it holds up in air without a '
+                  'separate oxidation coating, at the cost of density and toughness.'),
+    },
+
+    'SiC/SiC': {
+        'class':        'composite',
+        'form':         'silicon carbide fibre and matrix, 2D woven or 3D braided',
+        'application':  'Hot structure, turbine and nozzle components in oxidising service',
+        'density':      2700.0,        # [kg/m^3], 2.4 to 3.0
+        'properties': {
+            'tensileStrength':     {'inPlane': 287.0e6},        # [Pa]
+            'flexuralStrength':    {'inPlane': 300.0e6},        # [Pa]
+            'compressiveStrength': {'inPlane': 232.0e6},        # [Pa]
+            'elasticModulus':      {'inPlane': 255.0e9},        # [Pa], 250 to 260
+            'fractureToughness':   {'inPlane': 15.0e6},         # [Pa m^0.5]
+        },
+        'maxUseTemperatureC': {'inert': 1700.0, 'oxidising': 1600.0},
+        'basis': 'literatureReview',
+        'provenance': {
+            'tensileStrength':     ('PMC12610372, 2D plain weave with BN interphase, air.',
+                                    'literatureReview'),
+            'flexuralStrength':    ('PMC12610372, 3D braided with PyC interphase, inert.',
+                                    'literatureReview'),
+            'compressiveStrength': ('PMC12610372, LSI, steam or moist air.', 'literatureReview'),
+            'elasticModulus':      ('PMC12610372, 2D woven with BN interphase, air, 250 to 260 '
+                                    'GPa.', 'literatureReview'),
+            'fractureToughness':   ('PMC12610372, 3D braided with BN interphase, air.',
+                                    'literatureReview'),
+            'maxUseTemperatureC':  ('PMC12610372, 1600 to 1700 degC, sustained above 1400 to '
+                                    '1600 degC.', 'literatureReview'),
+        },
+        'notes': ('Stiffest of the ceramic composites here by a factor of three, and the only one '
+                  'whose strength is quoted in steam, which is the environment a hydrogen-fuelled '
+                  'exhaust actually presents.'),
+    },
+
+    'Carbon Phenolic': {
+        'class':        'ablative',
+        'form':         'woven carbon fabric in phenolic resin, tape wrapped or moulded',
+        'application':  'Solid motor throat and exit cone liners, uncooled chambers',
+        'density':      1450.0,        # [kg/m^3], typical virgin MX-4926 class
+        'properties': {
+            'tensileStrength':     {'virgin': 60.0e6},          # [Pa]
+            'flexuralStrength':    {'virgin': 90.0e6},          # [Pa]
+            'compressiveStrength': {'virgin': 150.0e6},         # [Pa]
+            'elasticModulus':      {'virgin': 20.0e9},          # [Pa]
+            'ablationRate':        {'plasmaTorch': 1.25e-4},    # [m/s], 0.05 to 0.20 mm/s
+        },
+        'maxUseTemperatureC': {'oxidising': 1000.0, 'charInert': 2500.0},
+        'basis': 'literatureReview',
+        'provenance': {
+            'tensileStrength':     ('PMC12610372, compression moulded, air.', 'literatureReview'),
+            'flexuralStrength':    ('PMC12610372, filament wound, air.', 'literatureReview'),
+            'compressiveStrength': ('PMC12610372, hand lay-up, air.', 'literatureReview'),
+            'elasticModulus':      ('PMC12610372, transient loading.', 'literatureReview'),
+            'ablationRate':        ('PMC12610372, plasma torch testing, 0.05 to 0.20 mm/s. A '
+                                    'torch number is not a motor number: recession depends on '
+                                    'enthalpy, pressure and shear at the wall, none of which the '
+                                    'torch reproduces.', 'literatureReview'),
+            'density':             ('Virgin density typical of the MX-4926 class. Char density '
+                                    'is roughly half, and the store carries no char value.',
+                                    'literatureRepresentative'),
+            'maxUseTemperatureC':  ('PMC12610372: above 1000 degC a carbon layer forms, and the '
+                                    'char protects to 2000 to 3000 degC in an inert environment. '
+                                    'The lower figure is stored for the char limit as the '
+                                    'conservative end of that range.', 'literatureReview'),
+        },
+        'notes': ('The material NOVA cannot currently model. An ablative needs virgin and char '
+                  'conductivity as separate curves, a pyrolysis gas mass flux, and a recession '
+                  'rate against local heat flux; this entry has none of those. It is here so the '
+                  'material can be compared on density and strength, not so it can be analysed. '
+                  'The DTIC reports that carry virgin and char conductivity to 5000 degF are '
+                  'access controlled.'),
+    },
+
+    'Silica Phenolic': {
+        'class':        'ablative',
+        'form':         'silica fabric in phenolic resin',
+        'application':  'Exit cones and lower-flux ablative liners',
+        'density':      1700.0,        # [kg/m^3]
+        'properties': {
+            'thermalConductivity': {'virgin': 0.6},             # [W/m-K], room temperature
+        },
+        'maxUseTemperatureC': {'oxidising': 1650.0},
+        'basis': 'literatureRepresentative',
+        'provenance': {
+            'thermalConductivity': ('Representative room-temperature value for silica-phenolic '
+                                    'ablators. Not traced to a primary source.',
+                                    'literatureRepresentative'),
+            'density':             ('Representative virgin density.', 'literatureRepresentative'),
+            'maxUseTemperatureC':  ('Set by silica melting and the onset of a molten surface '
+                                    'layer rather than by the resin.', 'literatureRepresentative'),
+        },
+        'notes': ('Lower conductivity and lower cost than carbon phenolic, and lower flux '
+                  'capability. Included for comparison only; every value is representative rather '
+                  'than sourced, which is why the basis says so.'),
+    },
+
+    '7YSZ': {
+        'class':        'ceramic',
+        'form':         '7 to 8 wt% yttria stabilised zirconia, APS or EB-PVD',
+        'application':  'Thermal barrier coating over a metallic wall',
+        'density':      6000.0,        # [kg/m^3], bulk; a sprayed coating is 10 to 20 % porous
+        'properties': {
+            # Conductivity depends on porosity more than on chemistry. A dense sintered body is
+            # near 2.3 W/m-K; a sprayed coating with its porosity and splat boundaries is nearer
+            # 1.0. Both ends are recorded rather than a single misleading midpoint.
+            'thermalConductivity': {'denseSintered': 2.3, 'sprayedCoating': 1.0},   # [W/m-K]
+            'cte':                 {'isotropic': 11.0e-6},      # [1/K]
+        },
+        'maxUseTemperatureC': {'oxidising': 1200.0},
+        'basis': 'literatureRepresentative',
+        'provenance': {
+            'thermalConductivity': ('Roughly 2.3 W/m-K for dense 7 wt% YSZ, falling to about 1.0 '
+                                    'for a sprayed coating whose porosity and splat boundaries '
+                                    'do most of the insulating. Porosity, not composition, is '
+                                    'the variable.', 'literatureRepresentative'),
+            'cte':                 ('About 11e-6/K for 8YSZ. The number that matters is not this '
+                                    'but its mismatch against the substrate: against GRCop-42 at '
+                                    '17e-6/K the difference drives the strain that spalls the '
+                                    'coating.', 'literatureRepresentative'),
+            'maxUseTemperatureC':  ('Phase stability and sintering of the porous structure limit '
+                                    'sustained use; the tetragonal prime phase destabilises above '
+                                    'roughly 1200 degC.', 'literatureRepresentative'),
+        },
+        'notes': ('A coating is not a material in the sense the rest of this table means. What '
+                  'governs its life is adhesion, the thermally grown oxide under it and the '
+                  'expansion mismatch against what it is sprayed onto, none of which is a bulk '
+                  'property.'),
+    },
+
+    'PTFE': {
+        'class':        'polymer',
+        'form':         'virgin unfilled polytetrafluoroethylene',
+        'application':  'Cryogenic seals, valve seats, bearing surfaces',
+        'density':      2175.0,        # [kg/m^3]
+        'properties': {
+            'thermalConductivity': {'isotropic': 0.25},         # [W/m-K] at room temperature
+            'cte':                 {'isotropic': 135.0e-6},     # [1/K], near room temperature
+        },
+        'maxUseTemperatureC': {'continuous': 260.0},
+        'minUseTemperatureC': -260.0,
+        'basis': 'literatureRepresentative',
+        'provenance': {
+            'thermalConductivity': ('Representative room-temperature value for unfilled PTFE.',
+                                    'literatureRepresentative'),
+            'cte':                 ('PTFE expansion is an order of magnitude above copper and is '
+                                    'strongly non-linear: two solid-solid transitions near room '
+                                    'temperature take the instantaneous coefficient above '
+                                    '500e-6/K. A single number is a poor description and is '
+                                    'stored only for rough comparison.',
+                                    'literatureRepresentative'),
+            'maxUseTemperatureC':  ('Thermally stable to about 260 degC.',
+                                    'literatureRepresentative'),
+        },
+        'notes': ('Cold flow under sustained load is what usually governs a PTFE seal, not '
+                  'strength, and no creep data is stored here.'),
+    },
+
+    'PCTFE': {
+        'class':        'polymer',
+        'form':         'polychlorotrifluoroethylene, Kel-F or Neoflon',
+        'application':  'Cryogenic valve seats and seals, liquid oxygen service',
+        'density':      2130.0,        # [kg/m^3]
+        'properties': {
+            # One of the few polymers here with a measured temperature dependence.
+            'thermalConductivity': {'isotropic': 0.25, 'atLiquidNitrogen': 0.12},   # [W/m-K]
+        },
+        'maxUseTemperatureC': {'continuous': 193.0},
+        'minUseTemperatureC': -240.0,
+        'basis': 'producerDatasheet',
+        'provenance': {
+            'thermalConductivity': ('0.24 to 0.26 W/m-K at 23 degC falling to 0.10 to 0.14 at '
+                                    '-196 degC, from fluoropolymer supplier datasheets. '
+                                    'Midpoints stored.', 'producerDatasheet'),
+            'maxUseTemperatureC':  ('Useful range quoted as -240 to 193 degC.',
+                                    'producerDatasheet'),
+        },
+        'notes': ('The lowest expansion and least cold flow of the unfilled fluoropolymers, which '
+                  'is why it is the usual choice for a cryogenic seat where PTFE would extrude.'),
+    },
+
+    'PEEK': {
+        'class':        'polymer',
+        'form':         'unfilled polyetheretherketone',
+        'application':  'Structural polymer parts, bearings, cryogenic sealing',
+        'density':      1320.0,        # [kg/m^3]
+        'properties': {
+            'thermalConductivity': {'isotropic': 0.25},         # [W/m-K]
+        },
+        'maxUseTemperatureC': {'continuous': 249.0},
+        'glassTransitionC': 143.0,
+        'basis': 'literatureRepresentative',
+        'provenance': {
+            'thermalConductivity': ('About 0.25 W/m-K at room temperature for unfilled PEEK. '
+                                    'Filled and carbon-reinforced grades run several times '
+                                    'higher and are a different material for this purpose.',
+                                    'literatureRepresentative'),
+            'maxUseTemperatureC':  ('Maximum continuous working temperature about 249 degC, with '
+                                    'properties retained to roughly 299 degC under pressure.',
+                                    'literatureRepresentative'),
+            'glassTransitionC':    ('The highest glass transition of the common sealing polymers, '
+                                    'which is what recommends it for cryogenic hydrogen service.',
+                                    'literatureRepresentative'),
+        },
+        'notes': ('Structural where PTFE and PCTFE are sealing materials.'),
+    },
+
+    'C103': {
+        'class':        'refractoryMetal',
+        'form':         'Nb-10Hf-1Ti, wrought or laser powder bed fusion',
+        'application':  'Radiatively cooled nozzle extensions, reaction control thrusters',
+        'density':      8850.0,        # [kg/m^3]
+        'properties': {
+            'yieldStrength':   {'wrought': 276.0e6, 'lpbfStressRelieved': 411.0e6},   # [Pa]
+            'tensileStrength': {'wrought': 386.0e6, 'lpbfStressRelieved': 560.0e6},   # [Pa]
+            'elongation':      {'wrought': 20.0, 'lpbfStressRelieved': 16.7},         # [%]
+        },
+        'maxUseTemperatureC': {'inert': 1400.0, 'oxidising': 400.0},
+        'basis': 'literatureReview',
+        'provenance': {
+            'yieldStrength':   ('Wrought room-temperature values are the commonly quoted '
+                                'specification figures. The LPBF numbers are Mireles, Rodriguez, '
+                                'Gao and Philips, Additive Manufacture of Refractory Alloy C103 '
+                                'for Propulsion Applications, NASA MSFC, AIAA 2020, Table 3, '
+                                'as-built Z direction. NOTE: that table lists yield above '
+                                'ultimate, which is impossible, so its two columns are '
+                                'transposed. The values here take the smaller as yield.',
+                                'literatureReview'),
+            'tensileStrength': ('Same source and same transposition caveat as the yield strength.',
+                                'literatureReview'),
+            'elongation':      ('NASA MSFC AIAA 2020 Table 3, as-built Z direction, 16.67 +/- 0.2 '
+                                'per cent; wrought specification minimum is 20 per cent.',
+                                'literatureReview'),
+            'maxUseTemperatureC': ('C103 is used to roughly 1400 degC in vacuum or inert '
+                                   'atmosphere. It oxidises catastrophically in air from about '
+                                   '400 degC and is always used with a silicide coating, '
+                                   'typically R512E, in any oxidising service.',
+                                   'literatureReview'),
+        },
+        'notes': ('The classic radiatively cooled extension material. Its temperature-dependent '
+                  'strength is published only as a figure in the sources found, so no curve is '
+                  'stored; strength at 1093 degC is roughly 172 MPa ultimate, and elongation '
+                  'still exceeds 50 per cent at 1371 degC.'),
+    },
+}
+
 _WALLMATERIALALIASES = {
     'cu': 'GRCop-42', 'copper': 'GRCop-42', 'grcop42': 'GRCop-42', 'grcop-42': 'GRCop-42',
     'grcop 42': 'GRCop-42', 'gr-cop42': 'GRCop-42', 'grcop': 'GRCop-42',
@@ -718,3 +1115,206 @@ def sampleWallMaterial(material, temperatureK: float = 293.15) -> dict:
         'measured':            curves['measured'],
         'provenance':          curves['provenance'],
     }
+
+def availableMaterialClasses() -> list:
+
+    '''
+
+    The material classes the non-metallic store carries.
+
+    Returns:
+    --------
+    list
+        Sorted class names: 'ablative', 'ceramic', 'composite', 'polymer', 'refractory',
+        'refractoryMetal'.
+
+    '''
+
+    return sorted({entry['class'] for entry in _MATERIALCLASSES.values()})
+
+def availableMaterials(materialClass: str = None) -> list:
+
+    '''
+
+    Non-metallic and refractory materials, optionally filtered to one class.
+
+    These are not wall alloys and cannot be used as one. `wallMaterialCurves` reads a separate
+    store, so nothing here can be selected as a regeneratively cooled wall.
+
+    Parameters:
+    -----------
+    materialClass : str | None
+        One of `availableMaterialClasses()`, or None for everything.
+
+    Returns:
+    --------
+    list
+        Sorted material names.
+
+    Raises:
+    -------
+    KeyError
+        If the class is not one this store carries.
+
+    '''
+
+    if materialClass is None:
+        return sorted(_MATERIALCLASSES)
+
+    if materialClass not in availableMaterialClasses():
+        raise KeyError('Unknown material class {!r}. Known classes: {}.'.format(
+            materialClass, availableMaterialClasses()))
+
+    return sorted(name for name, entry in _MATERIALCLASSES.items()
+                  if entry['class'] == materialClass)
+
+def materialProfile(material: str) -> dict:
+
+    '''
+
+    Everything the non-metallic store holds for one material.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableMaterials()`, matched case insensitively.
+
+    Returns:
+    --------
+    dict
+        The stored entry, with keys 'class', 'form', 'application', 'density', 'properties',
+        'maxUseTemperatureC', 'basis', 'provenance' and optionally 'notes'.
+
+    Raises:
+    -------
+    KeyError
+        If the material is not in the store. Unlike the wall alloys there is no fallback: there
+        is no sensible default throat insert, and quietly substituting one would be worse than
+        refusing.
+
+    '''
+
+    for name, entry in _MATERIALCLASSES.items():
+        if name.lower() == material.strip().lower():
+            return entry
+
+    raise KeyError('Unknown material {!r}. Known materials: {}.'.format(
+        material, availableMaterials()))
+
+def materialProperty(material: str, propertyName: str, variant: str = None):
+
+    '''
+
+    One property of a non-metallic material.
+
+    Properties are keyed by variant so that anisotropy and the virgin-versus-char split of an
+    ablative use one mechanism: 'withGrain' and 'acrossGrain' for graphite, 'inPlane' and
+    'throughThickness' for a laminate, 'virgin' and 'char' for an ablative, 'isotropic' where
+    there is only one value.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableMaterials()`.
+    propertyName : str
+        A key of the material's 'properties' entry.
+    variant : str | None
+        Which variant to read. None returns the whole variant mapping.
+
+    Returns:
+    --------
+    float | dict
+        The value, or the mapping of every variant when `variant` is None.
+
+    Raises:
+    -------
+    KeyError
+        If the material, property or variant is absent. A property missing from an entry means
+        no source was found for it, not that it is zero.
+
+    '''
+
+    entry = materialProfile(material)
+    properties = entry['properties']
+
+    if propertyName not in properties:
+        raise KeyError(
+            '{!r} carries no {!r}. It has: {}. A property absent from this store means no '
+            'source was found for it.'.format(material, propertyName, sorted(properties)))
+
+    if variant is None:
+        return properties[propertyName]
+
+    if variant not in properties[propertyName]:
+        raise KeyError('{!r} {!r} has no variant {!r}. It has: {}.'.format(
+            material, propertyName, variant, sorted(properties[propertyName])))
+
+    return properties[propertyName][variant]
+
+def maxUseTemperature(material: str, atmosphere: str = 'oxidising') -> float:
+
+    '''
+
+    The temperature limit of a non-metallic material in a given atmosphere, in degrees Celsius.
+
+    For the carbon materials this is the governing selection property and it depends entirely on
+    the atmosphere. Bare 2D carbon-carbon is good past 2500 degC inert and oxidises from about
+    400 degC in air, a factor of six. Quoting only the inert figure is how a nozzle extension
+    gets designed to a number it will never see.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableMaterials()`.
+    atmosphere : str
+        'inert', 'oxidising', 'oxidisingCoated', 'charInert' or 'continuous', depending on what
+        the material's entry defines.
+
+    Returns:
+    --------
+    float
+        Temperature limit [degC].
+
+    Raises:
+    -------
+    KeyError
+        If the material defines no limit for that atmosphere.
+
+    '''
+
+    limits = materialProfile(material)['maxUseTemperatureC']
+
+    if atmosphere not in limits:
+        raise KeyError('{!r} defines no limit in a {!r} atmosphere. It defines: {}.'.format(
+            material, atmosphere, sorted(limits)))
+
+    return limits[atmosphere]
+
+def materialPropertyProvenance(material: str, propertyName: str) -> tuple:
+
+    '''
+
+    Where a non-metallic property came from, and what grade of source it is.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableMaterials()`.
+    propertyName : str
+        A property or 'density' or 'maxUseTemperatureC'.
+
+    Returns:
+    --------
+    tuple
+        (source, basis), where basis is 'producerDatasheet', 'literatureReview' or
+        'literatureRepresentative' in descending order of how much weight it carries.
+
+    '''
+
+    provenance = materialProfile(material)['provenance']
+
+    if propertyName not in provenance:
+        raise KeyError('{!r} records no provenance for {!r}. It records: {}.'.format(
+            material, propertyName, sorted(provenance)))
+
+    return provenance[propertyName]

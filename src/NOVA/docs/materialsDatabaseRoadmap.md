@@ -10,7 +10,33 @@ This document is the parking place for that longer plan. It is not a commitment 
 
 ## What exists today
 
-Two stores, in `src/NOVA/materials.py`, that do not know about each other.
+Three stores, in `src/NOVA/materials.py`.
+
+### `_MATERIALCLASSES`, reached through `availableMaterials` and `materialProfile`
+
+Everything a nozzle is made of that is not a regeneratively cooled wall: throat inserts, nozzle extensions, ablative liners, thermal barrier coatings and the polymers in the feed system. Eleven materials across six classes.
+
+| Material | Class | Density [kg/m3] | Inert limit [degC] | Oxidising limit [degC] | Basis |
+|---|---|---|---|---|---|
+| ATJ Graphite | refractory | 1760 | 2800 | 400 | producer datasheet |
+| Carbon-Carbon (2D) | composite | 1825 | 2500 | 400 bare, 1750 coated | literature review |
+| C/SiC | composite | 2050 | 1700 | 1400 | literature review |
+| SiC/SiC | composite | 2700 | 1700 | 1600 | literature review |
+| Carbon Phenolic | ablative | 1450 | 2500 char | 1000 | literature review |
+| Silica Phenolic | ablative | 1700 | -- | 1650 | representative |
+| 7YSZ | ceramic | 6000 | -- | 1200 | representative |
+| C103 | refractory metal | 8850 | 1400 | 400 | literature review |
+| PTFE | polymer | 2175 | -- | 260 | representative |
+| PCTFE | polymer | 2130 | -- | 193 | producer datasheet |
+| PEEK | polymer | 1320 | -- | 249 | representative |
+
+It is kept apart from the wall alloys deliberately. `wallMaterialCurves` is what the heat transfer model reads, and nothing in this table can be a cooled wall: carbon phenolic is meant to be consumed, graphite cannot be brazed into a jacket, PTFE is a seal.
+
+**This store is selection grade, not analysis grade, and its `basis` field says which per property.** For metals there are critically evaluated compilations that are freely available. The equivalents here are access controlled or paywalled, so almost nothing carries a temperature-dependent curve. What it does carry is the property that usually governs the choice: the maximum use temperature, with the atmosphere it applies in. For the carbon materials those differ by a factor of six.
+
+### The wall alloy stores
+
+Two stores that do not know about each other.
 
 ### `_WALLCURVEDATA`, reached through `wallMaterialCurves` and `sampleWallMaterial`
 
@@ -126,6 +152,8 @@ Each step is worth doing on its own, and each is a prerequisite for the one afte
 3. **Reconcile the two stores into one.** One entry per material carrying every property, with `materialProperties` and `wallMaterialCurves` as two views of it. This removes the 316L disagreement by construction.
 4. **Add the structured provenance record**, and with it the typical-against-allowable distinction.
 5. **Write the margin checks** that `channelSizing`'s four unused interpolators were built for. Once those exist, the strength and expansion curves are load-bearing rather than decorative, which is the point at which step 2 pays for itself.
-6. **Generalise the property model** to callables and tensors, which is what admits ablatives and composites.
+6. **Generalise the property model** to callables and tensors, which is what admits ablatives and composites. The non-metallic store took a first step by keying every property on a variant, so anisotropy and the virgin-versus-char split of an ablative use one mechanism, but the values behind those keys are still scalars.
+
+7. **Give the ablatives a model rather than a datasheet entry.** Carbon phenolic is the material NOVA most conspicuously cannot analyse. It needs virgin and char conductivity as separate curves, a pyrolysis gas mass flux, and a recession rate against local heat flux rather than against a plasma torch. Its entry carries none of those and says so. The DTIC reports holding the conductivity data, AD0702112 and AD0675179, refuse automated access.
 
 Steps 1, 2 and 3 are data and refactoring inside the current design. Steps 4 through 6 change the design, and there is no reason to change it before something needs the generality.

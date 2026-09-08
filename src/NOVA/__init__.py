@@ -53,7 +53,9 @@ from .gasDynamics import (areaMachRelation, conicalLength, divergenceLossFactor,
 
 # -- Materials -- #
 
-from .materials import (availableWallMaterials, materialProperties, propertyIsMeasured,
+from .materials import (availableMaterialClasses, availableMaterials, availableWallMaterials,
+                        materialProfile, materialProperties, materialProperty,
+                        materialPropertyProvenance, maxUseTemperature, propertyIsMeasured,
                         propertyProvenance, resolveWallMaterialName, roughnessTable,
                         sampleWallMaterial, wallMaterialCurves)
 
@@ -110,6 +112,9 @@ __all__ = [
     'availableWallMaterials', 'materialProperties', 'propertyIsMeasured',
     'propertyProvenance', 'resolveWallMaterialName', 'roughnessTable', 'sampleWallMaterial',
     'wallMaterialCurves',
+    # Non-metallic and refractory materials
+    'availableMaterialClasses', 'availableMaterials', 'materialProfile', 'materialProperty',
+    'materialPropertyProvenance', 'maxUseTemperature',
     # Thermochemistry
     'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
     # Fluid properties, atmosphere and the unit registry
