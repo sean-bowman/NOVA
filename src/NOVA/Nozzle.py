@@ -388,323 +388,323 @@ class Nozzle:
 
     def __init__(self):
 
+        '''
+
+        Declare every attribute a run will touch.
+
+        Little of this is a default in the useful sense. Six of the attributes below are read
+        while still empty; every other one is overwritten by the configuration reader, or by
+        the solver that owns it, before anything looks at it. What the block provides is a
+        single declaration point: the state builders copy fields off the Nozzle by name, so
+        an attribute missing from here is dropped silently rather than raising, and the unit
+        of each one is recorded beside it.
+
+        None is the placeholder throughout. The exceptions are the channel point clouds,
+        which are concatenated into while still empty and so have to be arrays.
+
+        '''
+
         # -- Nozzle Contour Properties -- #
 
         # Primary Parameters
-        self.Fuel               = [] # [case sensitive string of CEA propellant name]
-        self.Oxidizer           = [] # [case sensitive string of CEA propellant name]
-        self.chamberPressure: float = 0.0 # [Pa]
+
+        self.Fuel                                     = None     # [case sensitive string of CEA propellant name]
+        self.Oxidizer                                 = None     # [case sensitive string of CEA propellant name]
+        self.chamberPressure: float | None            = None     # [Pa]
 
         # Specify one - Calculate other: Engine Design Constraints
         # Set 1:
-        self.thrust             = [] # [N]
-        self.engineMassFlow: float = 0.0 # [kg/s]
+        self.thrust                                   = None     # [N]
+        self.engineMassFlow: float | None             = None     # [kg/s]
         # Set 2:
-        self.targetExitPressure: float = 0.0 # [Pa]
-        self.plumeAmbientPressure       = [] # [Pa] ambient the plume is drawn against
-        self.expansionRatio     = [] # [-]
+        self.targetExitPressure: float | None         = None     # [Pa]
+        self.plumeAmbientPressure                     = None     # [Pa] ambient the plume is drawn against
+        self.expansionRatio                           = None     # [-]
 
         # Additional optional properties
-        self.visualizeContour           = [] # [bool]
-        self.lengthFraction             = [] # [float]
-        self.OFRatio: float | str = 0.0 # [-]
-        self.fuelInitialTemperature     = [] # [K]
-        self.oxidizerInitialTemperature = [] # [K]
-        self.numContourPoints: int = 0 # [int]
-        self.contourType                = [] # [str]
-        self.truncationMethod           = [] # [str]
-        self.raoThroatAngle             = [] # [deg]
-        self.chamberInterfaceAngle        = [] # [deg]
-        self.chamberDiameter: float = 0.0 # [m]
+        self.visualizeContour                         = None     # [bool]
+        self.lengthFraction                           = None     # [float]
+        self.OFRatio: float | str | None              = None     # [-]
+        self.fuelInitialTemperature                   = None     # [K]
+        self.oxidizerInitialTemperature               = None     # [K]
+        self.numContourPoints: int | None             = None     # [int]
+        self.contourType                              = None     # [str]
+        self.truncationMethod                         = None     # [str]
+        self.raoThroatAngle                           = None     # [deg]
+        self.chamberInterfaceAngle                    = None     # [deg]
+        self.chamberDiameter: float | None            = None     # [m]
 
         # Combustion chamber sizing. Specify one; leave the other unset.
-        self.Lstar                      = [] # [m] characteristic length, Vc / At
-        self.chamberLength              = [] # [m] cylindrical barrel length
+        self.Lstar                                    = None     # [m] characteristic length, Vc / At
+        self.chamberLength                            = None     # [m] cylindrical barrel length
 
         # Chamber outputs, filled by _prependCombustionChamber()
-        self.chamberBarrelLength: float     = 0.0 # [m]
-        self.chamberVolume: float           = 0.0 # [m^3]
-        self.chamberLstarActual: float      = 0.0 # [m]
-        self.chamberContractionRatio: float = 0.0 # [-]
+        self.chamberBarrelLength: float | None        = None     # [m]
+        self.chamberVolume: float | None              = None     # [m^3]
+        self.chamberLstarActual: float | None         = None     # [m]
+        self.chamberContractionRatio: float | None    = None     # [-]
 
         # # Non-dimensional parameters (From Rao Nozzle)
-        self.throatRadiusNonDimensional          = 1     # [-] Non-dimensional
-        self.throatInletCurvatureNonDimensional  = 1.5   # [-] Non-dimensional
-        self.throatOutletCurvatureNonDimensional = 0.382 # [-] Non-dimensional
-        self.nozzleScalingFactor: float = 0.0    # [-] Non-dimensional
+        self.throatRadiusNonDimensional               = 1        # [-] Non-dimensional
+        self.throatInletCurvatureNonDimensional       = 1.5      # [-] Non-dimensional
+        self.throatOutletCurvatureNonDimensional      = 0.382    # [-] Non-dimensional
+        self.nozzleScalingFactor: float | None        = None     # [-] Non-dimensional
 
         # Calculated Properties
 
         # CEA
-        self.ceaOutput: Any                     = None # CEA object; set once CEA runs, guarded by hasattr
-        self.chamberRGasConstant: float = 0.0 # [-]
-        self.chamberGamma: float = 0.0 # [-]
-        self.throatGamma: float = 0.0 # [-]
-        self.chamberStagnationTemperature: float = 0.0 # [K]
-        self.maxAdiabaticVelocity: float = 0.0 # [m/s]
-        self.exitMachNumber                     = [] # [-]
-        self.idealMachNumber: float = 0.0 # [-]
-        self.epsilonSauer: float = 0.0 # [-]
-        self.epsilonSauerScaled                 = [] # [m]
-        self.flowParameterSauer: float = 0.0 # [-]
+        self.ceaOutput: Any                           = None     # CEA object; set once CEA runs, guarded by hasattr
+        self.chamberRGasConstant: float | None        = None     # [-]
+        self.chamberGamma: float | None               = None     # [-]
+        self.throatGamma: float | None                = None     # [-]
+        self.chamberStagnationTemperature: float | None = None   # [K]
+        self.maxAdiabaticVelocity: float | None       = None     # [m/s]
+        self.exitMachNumber                           = None     # [-]
+        self.idealMachNumber: float | None            = None     # [-]
+        self.epsilonSauer: float | None               = None     # [-]
+        self.flowParameterSauer: float | None         = None     # [-]
 
         # Truncated Ideal Contour/Converging Section
-        self.numCharacteristics                 = [] # [int]
-        self.throatArea                         = [] # [m^2]
-        self.theoreticalCharacteristicVelocity  = [] # [m/s]
-        self.deliveredCharacteristicVelocity    = [] # [m/s]
-        self.xNozzleWallDivergingNonDimensional = [] # [-]
-        self.rNozzleWallDivergingNonDimensional = [] # [-]
-        self.xNozzleWall: np.ndarray = np.array([]) # [m]
-        self.rNozzleWall: np.ndarray = np.array([]) # [m]
-        self.nozzleNearWallTemperature          = np.array([]) # [K]
-        self.nozzleNearWallPressure             = [] # [Pa]
-        self.nozzleNearWallVelocity             = [] # [m/s]
-        self.nozzleNearWallMachNumber           = [] # [-]
-        self.thrustCoef                         = [] # [-]
-        
-        self.xRegenNozzle: np.ndarray = np.array([]) # [m]
-        self.rRegenNozzle: np.ndarray = np.array([]) # [m]
-        self.regenSectionNearWallTemperature: np.ndarray = np.array([]) # [K]
-        self.regenSectionNearWallPressure: np.ndarray    = np.array([]) # [Pa]
-        self.regenSectionNearWallVelocity       = [] # [m/s]
-        self.regenSectionNearWallMachNumber: np.ndarray  = np.array([]) # [-]
+        self.numCharacteristics                       = None     # [int]
+        self.throatArea                               = None     # [m^2]
+        self.theoreticalCharacteristicVelocity        = None     # [m/s]
+        self.deliveredCharacteristicVelocity          = None     # [m/s]
+        self.xNozzleWallDivergingNonDimensional       = None     # [-]
+        self.rNozzleWallDivergingNonDimensional       = None     # [-]
+        self.xNozzleWall: np.ndarray | None           = None     # [m]
+        self.rNozzleWall: np.ndarray | None           = None     # [m]
+        self.nozzleNearWallTemperature                = None     # [K]
+        self.nozzleNearWallPressure                   = None     # [Pa]
+        self.nozzleNearWallVelocity                   = None     # [m/s]
+        self.nozzleNearWallMachNumber                 = None     # [-]
+        self.thrustCoef                               = None     # [-]
 
-        self.xExtension                         = [] # [m]
-        self.rExtension                         = [] # [m]
-        self.extensionWallTemperature           = [] # [K]
-        self.extensionWallPressure              = [] # [Pa]
-        self.extensionWallVelocity              = [] # [m/s]
-        self.extensionWallMachNumber            = [] # [-]
+        self.xRegenNozzle: np.ndarray | None          = None     # [m]
+        self.rRegenNozzle: np.ndarray | None          = None     # [m]
+        self.regenSectionNearWallTemperature: np.ndarray | None = None # [K]
+        self.regenSectionNearWallPressure: np.ndarray | None = None # [Pa]
+        self.regenSectionNearWallVelocity             = None     # [m/s]
+        self.regenSectionNearWallMachNumber: np.ndarray | None = None # [-]
 
-        self.thermalConductivityRegenSection   = [] # [W/m-K]
-        self.viscosityRegenSection             = [] # [Pa-s]
-        self.prandtlNumberRegenSection         = [] # [-]
-        self.gammaRegenSection: np.ndarray     = np.array([]) # [-]
-        self.gasConstantRegenSection: np.ndarray = np.array([]) # [J/K]
-        self.specificHeatRegenSection          = [] # [J/kg-K]
-        self.densityRegenSection               = [] # [kg/m^3]
-        self.reynoldsNumberRegenSection        = [] # [-]
-        self.molecularWeightRegenSection: np.ndarray = np.array([]) # [kg/mol]
+        self.xExtension                               = None     # [m]
+        self.rExtension                               = None     # [m]
 
-        self.exitExpansionRatio                = [] # [-]
-        self.inletContractionRatio             = [] # [-]
-        self.areaRatioArray                    = [] # [-]
+        self.thermalConductivityRegenSection          = None     # [W/m-K]
+        self.viscosityRegenSection                    = None     # [Pa-s]
+        self.prandtlNumberRegenSection                = None     # [-]
+        self.gammaRegenSection: np.ndarray | None     = None     # [-]
+        self.gasConstantRegenSection: np.ndarray | None = None   # [J/K]
+        self.specificHeatRegenSection                 = None     # [J/kg-K]
+        self.densityRegenSection                      = None     # [kg/m^3]
+        self.reynoldsNumberRegenSection               = None     # [-]
+        self.molecularWeightRegenSection: np.ndarray | None = None # [kg/mol]
+
+        self.exitExpansionRatio                       = None     # [-]
+        self.inletContractionRatio                    = None     # [-]
+        self.areaRatioArray                           = None     # [-]
 
         # -- Regenerative Cooling Jacket Properties -- #
 
         # Geometric Inputs
-        self.hotWallThickness: float = 0.0 # [m]
-        self.shellThickness: float = 0.0 # [m]
-        self.numCSPointsChannel: int = 0 # [int]
-        self.numCrossSections: int = 0 # [int]f
-        self.infillThickness          = np.array([]) # [m]
-        self.numFlutes                = [] # [int]
-        self.fluteAmplitudeCoef: float = 0.0 # [frac of 1]
-        self.fluteHelixAngle: float = 0.0 # [deg]
-        self.interfaceLength          = [] # [m]
+        self.hotWallThickness: float | None           = None     # [m]
+        self.shellThickness: float | None             = None     # [m]
+        self.numCSPointsChannel: int | None           = None     # [int]
+        self.numCrossSections: int | None             = None     # [int]f
+        self.infillThickness                          = None     # [m]
+        self.numFlutes                                = None     # [int]
+        self.fluteAmplitudeCoef: float | None         = None     # [frac of 1]
+        self.fluteHelixAngle: float | None            = None     # [deg]
+        self.interfaceLength                          = None     # [m]
 
         # Printability options
-        self.printabilityCheck = [] # [bool]
-        self.printDirection    = [] # [str]
-        self.maxOverhangAngle  = [] # [deg]
+        self.printabilityCheck                        = None     # [bool]
+        self.printDirection                           = None     # [str]
+        self.maxOverhangAngle                         = None     # [deg]
 
         # dynamicChannelRadii
-        self.dcrData                        = {}
-        self.channelType                    = [] # [str]
-        self.minChannelRadius               = 0.75e-3 # [m]
-        self.maxChannelRadius               = [] # [m]
-        self.coolantExitPressure            = [] # Pa
-        self.coolantExitTemperature         = [] # K
+        self.dcrData                                  = {}
+        self.channelType                              = None     # [str]
+        self.minChannelRadius                         = 0.00075  # [m]
+        self.maxChannelRadius                         = None     # [m]
+        self.coolantExitPressure                      = None     # Pa
+        self.coolantExitTemperature                   = None     # K
 
         # Regen Outputs
-        self.nChannel: int = 0 # [int]
-        self.channelRadius: np.ndarray = np.array([]) # [m]
-        self.xChannelCenterline2D           = [] # [m]
-        self.rChannelCenterline2D           = [] # [m]
-        self.wrapAngles                     = [] # [m]
-        self.xChannelCenterline3D: np.ndarray = np.array([]) # [m]
-        self.yChannelCenterline3D           = [] # [m]
-        self.zChannelCenterline3D           = [] # [m]
-        self.rChannelCenterline3D           = [] # [m]
-        self.xNozzleShell: np.ndarray = np.array([]) # [m]
-        self.rNozzleShell: np.ndarray = np.array([]) # [m]
-        
-        self.xRegenNozzleTrimmed                    = [] # [m]
-        self.rRegenNozzleTrimmed: np.ndarray = np.array([]) # [m]
-        self.gammaRegenSectionTrimmed: np.ndarray = np.array([]) # [-]
-        self.molecularWeightRegenSectionTrimmed: np.ndarray = np.array([]) # [kg/mol]
-        self.gasConstantRegenSectionTrimmed: np.ndarray = np.array([]) # [J/K]
-        self.regenSectionNearWallTemperatureTrimmed: np.ndarray = np.array([]) # [K]
-        self.regenSectionNearWallMachNumberTrimmed: np.ndarray = np.array([]) # [-]
-        self.regenSectionNearWallPressureTrimmed: np.ndarray = np.array([]) # [Pa]
+        self.nChannel: int | None                     = None     # [int]
+        self.channelRadius: np.ndarray | None         = None     # [m]
+        self.xChannelCenterline2D                     = None     # [m]
+        self.rChannelCenterline2D                     = None     # [m]
+        self.wrapAngles                               = None     # [m]
+        self.xChannelCenterline3D: np.ndarray | None  = None     # [m]
+        self.yChannelCenterline3D                     = None     # [m]
+        self.zChannelCenterline3D                     = None     # [m]
+        self.rChannelCenterline3D                     = None     # [m]
+        self.xNozzleShell: np.ndarray | None          = None     # [m]
+        self.rNozzleShell: np.ndarray | None          = None     # [m]
 
-        self.xRegenNozzleInterfaced: np.ndarray = np.array([]) # [m]
-        self.rRegenNozzleInterfaced         = [] # [m]
-        self.numReturnInterfaceCS           = 0  # [int]
-        self.numInletInterfaceCS            = 0  # [int]
-        self.xReturnInterface               = [] # [m]
-        self.rReturnInterface               = [] # [m]
-        self.xInletInterface                = [] # [m]
-        self.rInletInterface                = [] # [m]
-        
-        self.xNozzleHotWallMesh             = [] # [m]
-        self.yNozzleHotWallMesh             = [] # [m]
-        self.zNozzleHotWallMesh             = [] # [m]
+        self.xRegenNozzleTrimmed                      = None     # [m]
+        self.rRegenNozzleTrimmed: np.ndarray | None   = None     # [m]
+        self.gammaRegenSectionTrimmed: np.ndarray | None = None  # [-]
+        self.molecularWeightRegenSectionTrimmed: np.ndarray | None = None # [kg/mol]
+        self.gasConstantRegenSectionTrimmed: np.ndarray | None = None # [J/K]
+        self.regenSectionNearWallTemperatureTrimmed: np.ndarray | None = None # [K]
+        self.regenSectionNearWallMachNumberTrimmed: np.ndarray | None = None # [-]
+        self.regenSectionNearWallPressureTrimmed: np.ndarray | None = None # [Pa]
 
-        self.xNozzleColdWallMesh            = [] # [m]
-        self.yNozzleColdWallMesh            = [] # [m]
-        self.zNozzleColdWallMesh            = [] # [m]
+        self.xRegenNozzleInterfaced: np.ndarray | None = None    # [m]
+        self.rRegenNozzleInterfaced                   = None     # [m]
+        self.numReturnInterfaceCS                     = None     # [int]
+        self.numInletInterfaceCS                      = None     # [int]
+        self.xReturnInterface                         = None     # [m]
+        self.rReturnInterface                         = None     # [m]
+        self.xInletInterface                          = None     # [m]
+        self.rInletInterface                          = None     # [m]
 
-        self.xNozzleShellMesh               = [] # [m]
-        self.yNozzleShellMesh               = [] # [m]
-        self.zNozzleShellMesh               = [] # [m]
+        self.xNozzleHotWallMesh                       = None     # [m]
+        self.yNozzleHotWallMesh                       = None     # [m]
+        self.zNozzleHotWallMesh                       = None     # [m]
 
-        self.allNozzlePoints                = [] # [m]
+        self.xNozzleColdWallMesh                      = None     # [m]
+        self.yNozzleColdWallMesh                      = None     # [m]
+        self.zNozzleColdWallMesh                      = None     # [m]
+
+        self.xNozzleShellMesh                         = None     # [m]
+        self.yNozzleShellMesh                         = None     # [m]
+        self.zNozzleShellMesh                         = None     # [m]
+
+        self.allNozzlePoints                          = None     # [m]
         # Stations the printability audit marked as unsupported. Empty until that audit runs,
         # and read by the cross-section builder whether or not it has.
-        self.nonPrintableIndices            = [] # [int]
+        self.nonPrintableIndices                      = None     # [int]
 
-        self.yChannel: np.ndarray = np.array([]) # [m]
-        self.xChannel: np.ndarray = np.array([]) # [m]
-        self.zChannel: np.ndarray = np.array([]) # [m]
+        self.yChannel: np.ndarray                     = np.array([]) # [m]
+        self.xChannel: np.ndarray                     = np.array([]) # [m]
+        self.zChannel: np.ndarray                     = np.array([]) # [m]
 
-        self.yAllChannels                   = [] # [m]
-        self.xAllChannels                   = [] # [m]
-        self.zAllChannels                   = [] # [m]
-       
-        self.xChannelDefeatured: np.ndarray = np.array([]) # [m]
-        self.yChannelDefeatured: np.ndarray = np.array([]) # [m]
-        self.zChannelDefeatured: np.ndarray = np.array([]) # [m]   
+        self.yAllChannels                             = None     # [m]
+        self.xAllChannels                             = None     # [m]
+        self.zAllChannels                             = None     # [m]
+
+        self.xChannelDefeatured: np.ndarray           = np.array([]) # [m]
+        self.yChannelDefeatured: np.ndarray           = np.array([]) # [m]
+        self.zChannelDefeatured: np.ndarray           = np.array([]) # [m]
 
         # Volute Inputs
-        self.makeInletVolute         = '' # 'on' , 'off'
-        self.makeReturnVolute        = '' # 'on' , 'off'
-        self.numCSPointsVolute       = [] # [int]
-        self.voluteRelativeRoll      = 0  # [deg]
-        self.voluteFOS               = 1  # []
-        
-        self.plotKeepOut             = '' # 'on' , 'off'
-        self.keepOutAxialOffset      = 0.0  # [m]
-        self.keepOutRadius           = None # [m], None takes the chamber radius
-        self.keepOutDepth            = None # [m], None takes half the keep-out radius
-        self.keepOutHubRadius        = None # [m], None takes a quarter of the keep-out radius
-        self.nozzleKeepOut: Any = None      # KeepOutEnvelope; built when a volute needs it
-        self.xKeepOut3D              = [] # [m]
-        self.yKeepOut3D              = [] # [m]
-        self.zKeepOut3D              = [] # [m]
+        self.makeInletVolute                          = None     # 'on' , 'off'
+        self.makeReturnVolute                         = None     # 'on' , 'off'
+        self.numCSPointsVolute                        = None     # [int]
+        self.voluteRelativeRoll                       = None     # [deg]
+        self.voluteFOS                                = 1        # []
 
-        self.inletVoluteCrossSection = '' # 'circle' , 'egg' , 'squarc'
-        self.inletVoluteAlignment    = '' # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
-        self.inletVolutePrintability = '' # 'off' , 'thick' , 'thin
-        self.inletVoluteTilt         = [] # [deg]
-        self.inletGraylocDiameter: float = 0.0 # [in]
-        self.inletVoluteAxialOffset  = [] # [m]
-        self.inletVoluteFlareRad     = [] # [m]
-        self.inletVoluteFlareLen     = [] # [m]
-        
-        self.returnVoluteCrossSection = '' # 'circle' , 'egg' , 'squarc'
-        self.returnVoluteAlignment    = '' # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
-        self.returnVolutePrintability = '' # 'off' , 'thick' , 'thin
-        self.returnVoluteTilt         = [] # [deg]
-        self.returnGraylocDiameter: float = 0.0 # [in]
-        self.returnVoluteAxialOffset  = [] # [m]
-        self.returnVoluteRadialOffset: float = 0.0 # [m]
-        self.returnVoluteFlareRad     = [] # [m]
-        self.returnVoluteFlareAngle   = [] # [deg]
-        self.returnVoluteFlareLen     = [] # [m]
+        self.plotKeepOut                              = None     # 'on' , 'off'
+        self.keepOutAxialOffset                       = None     # [m]
+        self.keepOutRadius                            = None     # [m], None takes the chamber radius
+        self.keepOutDepth                             = None     # [m], None takes half the keep-out radius
+        self.keepOutHubRadius                         = None     # [m], None takes a quarter of the keep-out radius
+        self.nozzleKeepOut: Any                       = None     # KeepOutEnvelope; built when a volute needs it
+        self.xKeepOut3D                               = None     # [m]
+        self.yKeepOut3D                               = None     # [m]
+        self.zKeepOut3D                               = None     # [m]
+
+        self.inletVoluteCrossSection                  = None     # 'circle' , 'egg' , 'squarc'
+        self.inletVoluteAlignment                     = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
+        self.inletVolutePrintability                  = None     # 'off' , 'thick' , 'thin
+        self.inletVoluteTilt                          = None     # [deg]
+        self.inletGraylocDiameter: float | None       = None     # [in]
+        self.inletVoluteAxialOffset                   = None     # [m]
+
+        self.returnVoluteCrossSection                 = None     # 'circle' , 'egg' , 'squarc'
+        self.returnVoluteAlignment                    = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
+        self.returnVolutePrintability                 = None     # 'off' , 'thick' , 'thin
+        self.returnVoluteTilt                         = None     # [deg]
+        self.returnGraylocDiameter: float | None      = None     # [in]
+        self.returnVoluteAxialOffset                  = None     # [m]
+        self.returnVoluteRadialOffset: float | None   = None     # [m]
+        self.returnVoluteFlareRad                     = None     # [m]
+        self.returnVoluteFlareLen                     = None     # [m]
 
         # Volute Outputs
-        self.inletVolute: Any          = None # Volute object; set when volute is built
-        self.xInletVolute              = [] # [m]
-        self.yInletVolute              = [] # [m]
-        self.zInletVolute              = [] # [m]
-        self.xInletVoluteShell         = [] # [m]
-        self.yInletVoluteShell         = [] # [m]
-        self.zInletVoluteShell         = [] # [m]
-        self.xInletVoluteSupportWall   = [] # [m]
-        self.yInletVoluteSupportWall   = [] # [m]
-        self.zInletVoluteSupportWall   = [] # [m]
-        self.xInletVoluteSupportUpper  = [] # [m]
-        self.yInletVoluteSupportUpper  = [] # [m]
-        self.zInletVoluteSupportUpper  = [] # [m]
-        self.xInletVoluteSupportLower  = [] # [m]
-        self.yInletVoluteSupportLower  = [] # [m]
-        self.zInletVoluteSupportLower  = [] # [m]
-        
-        self.returnVolute: Any         = None # Volute object; set when volute is built
-        self.xReturnVolute             = [] # [m]
-        self.yReturnVolute             = [] # [m]
-        self.zReturnVolute             = [] # [m]
-        self.xReturnVoluteShell        = [] # [m]
-        self.yReturnVoluteShell        = [] # [m]
-        self.zReturnVoluteShell        = [] # [m]
-        self.xReturnVoluteSupportWall  = [] # [m]
-        self.yReturnVoluteSupportWall  = [] # [m]
-        self.zReturnVoluteSupportWall  = [] # [m]
-        self.xReturnVoluteSupportUpper = [] # [m]
-        self.yReturnVoluteSupportUpper = [] # [m]
-        self.zReturnVoluteSupportUpper = [] # [m]
-        self.xReturnVoluteSupportLower = [] # [m]
-        self.yReturnVoluteSupportLower = [] # [m]
-        self.zReturnVoluteSupportLower = [] # [m]
-        
+        self.inletVolute: Any                         = None     # Volute object; set when volute is built
+        self.xInletVolute                             = None     # [m]
+        self.yInletVolute                             = None     # [m]
+        self.zInletVolute                             = None     # [m]
+        self.xInletVoluteShell                        = None     # [m]
+        self.yInletVoluteShell                        = None     # [m]
+        self.zInletVoluteShell                        = None     # [m]
+        self.xInletVoluteSupportWall                  = None     # [m]
+        self.yInletVoluteSupportWall                  = None     # [m]
+        self.zInletVoluteSupportWall                  = None     # [m]
+        self.xInletVoluteSupportUpper                 = None     # [m]
+        self.yInletVoluteSupportUpper                 = None     # [m]
+        self.zInletVoluteSupportUpper                 = None     # [m]
+        self.xInletVoluteSupportLower                 = None     # [m]
+        self.yInletVoluteSupportLower                 = None     # [m]
+        self.zInletVoluteSupportLower                 = None     # [m]
+
+        self.returnVolute: Any                        = None     # Volute object; set when volute is built
+        self.xReturnVolute                            = None     # [m]
+        self.yReturnVolute                            = None     # [m]
+        self.zReturnVolute                            = None     # [m]
+        self.xReturnVoluteShell                       = None     # [m]
+        self.yReturnVoluteShell                       = None     # [m]
+        self.zReturnVoluteShell                       = None     # [m]
+        self.xReturnVoluteSupportWall                 = None     # [m]
+        self.yReturnVoluteSupportWall                 = None     # [m]
+        self.zReturnVoluteSupportWall                 = None     # [m]
+        self.xReturnVoluteSupportUpper                = None     # [m]
+        self.yReturnVoluteSupportUpper                = None     # [m]
+        self.zReturnVoluteSupportUpper                = None     # [m]
+        self.xReturnVoluteSupportLower                = None     # [m]
+        self.yReturnVoluteSupportLower                = None     # [m]
+        self.zReturnVoluteSupportLower                = None     # [m]
+
         # -- Heat Transfer Model -- #
 
         # Inputs
-        self.coolant                   = [] # [case sensitive string of RefProp fluid name]
-        self.coolantInitialTemperature: float = 0.0 # [K]
-        self.coolantInitialPressure: float = 0.0 # [Pa]
-        self.coolantMassFlow: float = 0.0 # [kg/s]
-        self.swirlPercent              = [] # [-]
-        
+        self.coolant                                  = None     # [case sensitive string of RefProp fluid name]
+        self.coolantInitialTemperature: float | None  = None     # [K]
+        self.coolantInitialPressure: float | None     = None     # [Pa]
+        self.coolantMassFlow: float | None            = None     # [kg/s]
+        self.swirlPercent                             = None     # [-]
+
         # Outputs
-        self.coolantFinalTemperature    = [] # [K]
-        self.coolantFinalPressure       = [] # [Pa]
-        self.flutedHeatTransferOutputs  = [] # [dict]
-        self.circleHeatTransferOutputs  = [] # [dict]
-        self.dataMapHeatTransferOutputs = [] # [dict]
+        self.coolantFinalTemperature                  = None     # [K]
+        self.coolantFinalPressure                     = None     # [Pa]
+        self.flutedHeatTransferOutputs                = None     # [dict]
+        self.circleHeatTransferOutputs                = None     # [dict]
+        self.dataMapHeatTransferOutputs               = None     # [dict]
 
         # -- Plume -- #
 
-        self.nozzlePlumeStructure: Any = None # PlumeStructure, set by plumeStructure()
-        self.nozzlePlumeField: Any = None     # PlumeField, set by plumeField()
+        self.nozzlePlumeStructure: Any                = None     # PlumeStructure, set by plumeStructure()
+        self.nozzlePlumeField: Any                    = None     # PlumeField, set by plumeField()
 
         # -- TVC Properties -- #
 
         # Geometry
-        self.xExtensionMesh      = []
-        self.yExtensionMesh      = []
-        self.zExtensionMesh      = []
-        self.xSealMesh           = []
-        self.ySealMesh           = []
-        self.zSealMesh           = []
-        self.xNozzleMesh         = []
-        self.yNozzleMesh         = []
-        self.zNozzleMesh         = []
-        self.xExtensionActuation = []
-        self.rExtensionActuation = []
+        self.xNozzleMesh                              = None
+        self.yNozzleMesh                              = None
+        self.zNozzleMesh                              = None
 
         # -- Program Options -- #
 
-        self.debugMode = False
+        self.debugMode                                = False
 
         # Plot Options
-        self.plotsBasic  = '' # 'on' , 'off'
-        self.plotsAdv    = '' # 'on' , 'off'
-        self.plotJacket  = '' # 'on', 'off'
-        self.plotsDebug  = '' # 'on' , 'off'
+        self.plotsBasic                               = None     # 'on' , 'off'
+        self.plotsAdv                                 = None     # 'on' , 'off'
+        self.plotJacket                               = None     # 'on', 'off'
+        self.plotsDebug                               = None     # 'on' , 'off'
 
         # Export Options
-        self.export      = '' # 'on' , 'off'
-        self.filename    = '' # 'on' , 'off'
+        self.export                                   = None     # 'on' , 'off'
+        self.filename                                 = None     # 'on' , 'off'
 
-        self.dataFolder        = ''
-        self.topLevelDirectory = ''
+        self.dataFolder                               = None
+        self.topLevelDirectory                        = None
 
         # Hidden Options
-        self.plotsDocs              = 'off'
-        self.inputValidityCheck     = True # [bool]
+        self.plotsDocs                                = 'off'
     
     # ------------------------------------------------------------------------------------------------------------------------------------- #
     # -- Helper Methods -- #
