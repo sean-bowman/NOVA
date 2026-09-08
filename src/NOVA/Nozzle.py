@@ -78,7 +78,7 @@ try:
                         GeometricConstraintError, VoluteGenerationError,
                         chunkInterpolate, arcSpline, plotLine, parallelOffset,
                         isentropicValues, fluidProps, createErrorContext,
-                        writeFile, readExcel, lineIntersection, revolveContour,
+                        writeFile, lineIntersection, revolveContour,
                         intersection, pickleObject, DCM, py2cad)
     from .ceaInterface import *
     from .ceaInterface import CEA
@@ -346,14 +346,14 @@ class Nozzle:
 
     Or use the high-level wrapper:
         nozzle = Nozzle()
-        nozzle.generateNozzle(configPath='path/to/config.xlsx')
+        nozzle.generateNozzle(configPath='path/to/config.json')
 
     Examples:
     ---------
     Basic nozzle generation from config file:
 
     >>> nozzle = Nozzle()
-    >>> nozzle.generateNozzle(configPath='config.xlsx')
+    >>> nozzle.generateNozzle(configPath='config.json')
 
     Manual attribute-based setup:
 
@@ -786,7 +786,7 @@ class Nozzle:
         Parameters:
         -----------
         inputsPath : str | dict
-            Path to a .json or .xlsx configuration, or the fields already loaded.
+            Path to a .json configuration, or the fields already loaded.
         debugMode : bool
             True dumps the local state of a failed station during later solves.
 
@@ -1541,10 +1541,6 @@ class Nozzle:
             # Silently skipped when plotly is not installed.
             exportInteractiveFigures(self, self.dataFolder)
 
-            # Check if excel instance is attached to the object, which is not serializable and
-            # therefore must be removed before pickling
-            if hasattr(self, 'excelInstance'):
-                del self.excelInstance
             # Inside the outputs directory, named for the run. Passing the directory itself put the
             # pickle beside it as '<filename>Outputs.pkl', which escapes the *Outputs/ ignore rule
             # and leaves a stray several hundred kilobytes in the parent.

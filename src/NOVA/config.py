@@ -4,15 +4,14 @@
 
 Turning a configuration into the state a run works from.
 
-A configuration reaches NOVA three ways, and this module reads all of them onto a nozzle:
+A configuration reaches NOVA two ways, and they are the same path:
 
-    a JSON file      a path ending in .json
-    a dictionary     the same fields, already loaded, which is how the GUI supplies them
-    a workbook       a path ending in .xlsx, one sheet per group of fields
+    a JSON file      a path ending in .json, loaded and then read as a dictionary
+    a dictionary     the same fields already loaded, which is how the GUI supplies them
 
-They are not quite equivalent, and the differences are worth stating rather than discovering.
+The conventions the fields follow are worth stating rather than discovering.
 
-**Unset is NaN, not None.** A null in JSON, or an empty cell in the workbook, becomes NaN on the
+**Unset is NaN, not None.** A null in JSON becomes NaN on the
 object. That is the convention every downstream module reads, which is why `validation.specified`
 treats NaN and None and absent as the same thing.
 
@@ -55,9 +54,8 @@ import os
 import warnings
 
 import numpy as np
-import pandas as pd
 
-from .utils import readExcel, InvalidInputError
+from .utils import InvalidInputError
 from .ceaInterface import CEA
 
 def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
@@ -68,18 +66,16 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
     This method initializes all nozzle design parameters including contour definition,
     regenerative cooling jacket specifications, volute geometry, and program options.
-    Supports three input modes: GUI dictionary input, debug CSV input, and Excel config file.
 
     Parameters:
     -----------
     inputsPath : str | dict
         Configuration source - can be:
-        - dict: Dictionary of parameter key-value pairs (typical GUI usage)
-        - str (debugMode=True): Path to CSV file with 'Key' and 'Value' columns
-        - str (debugMode=False): Path to Excel config file with multiple sheets
+        - str: path to a .json configuration
+        - dict: the same keys already loaded, which is what the GUI hands over
     debugMode : bool, optional
-        If True, expects inputsPath to be a CSV file path. If False and inputsPath
-        is a string, expects an Excel config file. Default is False.
+        True makes a station that fails to converge dump its local state rather than
+        raising. It is a solver flag, not an input format. Default is False.
 
     Returns:
     --------
@@ -118,14 +114,12 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
     Notes:
     ------
     - None/NaN values in dict input are automatically converted to np.nan for compatibility
-    - CSV debug mode automatically converts string values to appropriate types (bool, int, float)
-    - Excel mode uses named sheets: 'Contour Definition', 'Regenerative Cooling', etc.
     - Some parameters (maxWallTemperature, infillThickness) are broadcast to arrays if scalar
 
     Raises:
     -------
-    ValueError
-        If debugMode is True but inputsPath is not a string
+    InvalidInputError
+        If the configuration cannot be read, or its design point cannot be closed.
 
     '''
 
@@ -133,160 +127,22 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
     # -- Determine input type -- #
 
-    if debugMode:
-        nozzle.debugMode = True
-        # Inputs from the GUI-generated csv
-        if isinstance(inputsPath, str):
-
-            GUIFlag = True
-
-            # -- Read csv and assign values -- #
-
-            df = pd.read_csv(inputsPath)
-
-            # convert key and value columns to dict
-            rawDict = dict(zip(df["Key"], df["Value"]))
-
-            inputDict = {}
-
-            # Convert string values to appropriate types
-            for k, v in rawDict.items():
-                if isinstance(v, str):
-                    # try converting to bool
-                    if v.lower() in ['true', 'false']:
-                        inputDict[k] = v.lower() == 'true'
-                        continue
-                    # try converting to int
-                    if v.isdigit() or (v.startswith('-') and v[1:].isdigit()):
-                        inputDict[k] = int(v)
-                        continue
-                    # try converting to float
-                    try:
-                        inputDict[k] = float(v)
-                        continue
-                    except ValueError:
-                        pass
-                # keep as original type (string or whatever pandas read)
-                inputDict[k] = v
-
-            # -- Read dict and assign values -- #
-
-            # -- Contour Definition Inputs -- #
-
-            nozzle.visualizeContour           = inputDict['visualizeContour']
-            nozzle.numContourPoints           = inputDict['numContourPoints']
-
-            # Converging Section
-            nozzle.contourType                = inputDict['contourType']
-            nozzle.chamberDiameter                 = inputDict['chamberDiameter']
-            nozzle.raoThroatAngle             = inputDict['raoThroatAngle']
-            nozzle.chamberInterfaceAngle        = inputDict['chamberInterfaceAngle']
-            nozzle.Lstar                      = inputDict['Lstar']
-            nozzle.chamberLength              = inputDict['chamberLength']
-            # Diverging Section
-            nozzle.divergingSectionType       = inputDict['divergingSectionType']
-            nozzle.Fuel                       = inputDict['Fuel']
-            nozzle.Oxidizer                   = inputDict['Oxidizer']
-            nozzle.OFRatio                    = inputDict['OFRatio']
-            nozzle.fuelInitialTemperature     = inputDict['fuelInitialTemperature']
-            nozzle.oxidizerInitialTemperature = inputDict['oxidizerInitialTemperature']
-            nozzle.chamberPressure            = inputDict['chamberPressure']
-            nozzle.engineMassFlow             = inputDict['engineMassFlow']
-            nozzle.thrust                     = inputDict['thrust']
-            nozzle.targetExitPressure         = inputDict['targetExitPressure']
-            nozzle.plumeAmbientPressure       = inputDict['plumeAmbientPressure']
-            nozzle.lengthFraction             = inputDict['lengthFraction']
-            nozzle.conicalHalfAngle           = inputDict['conicalHalfAngle']
-            nozzle.truncationMethod           = inputDict['truncationMethod']
-            nozzle.expansionRatio             = inputDict['expansionRatio']
-            nozzle.truncateOn                 = inputDict.get('truncateOn', 'areaRatio')
-            nozzle.numCharacteristicsRequested = inputDict.get('numCharacteristics', 50)
-
-            # -- Regenerative Cooling Jacket Inputs -- #
-            nozzle.makeCoolingChannels            = inputDict['makeCoolingChannels']
-            nozzle.numCrossSections               = inputDict['numCrossSections']
-            nozzle.numCSPointsChannel             = inputDict['numCSPointsChannel']
-            nozzle.hotWallThickness               = inputDict['hotWallThickness']
-            nozzle.shellThickness                 = inputDict['shellThickness']
-            nozzle.infillThickness                = inputDict['infillThickness']
-            nozzle.material                       = inputDict['material']
-            nozzle.nChannel                       = inputDict['nChannel']
-            nozzle.channelType                    = inputDict['channelType']
-            nozzle.minCoolantExitPressure         = inputDict['minCoolantExitPressure']
-            nozzle.minCoolantExitTemperature      = inputDict['minCoolantExitTemperature']
-            nozzle.maxWallTempUpperBound          = inputDict['maxWallTempUpperBound']
-            nozzle.maxWallTempLowerBound          = inputDict['maxWallTempLowerBound']
-            nozzle.nChannelUpperBound             = inputDict['nChannelUpperBound']
-            nozzle.nChannelLowerBound             = inputDict['nChannelLowerBound']
-            nozzle.maxWallTemperature             = inputDict['maxWallTemperature']
-            nozzle.numFlutes                      = inputDict['numFlutes']
-            nozzle.fluteAmplitudeCoef             = inputDict['fluteAmplitudeCoef']
-            nozzle.fluteHelixAngle                = inputDict['fluteHelixAngle']
-            nozzle.interfaceLength                = inputDict['interfaceLength']
-            nozzle.coolantClass                   = inputDict['coolantClass']
-            nozzle.coolant                        = inputDict['coolant']
-            nozzle.coolantInitialTemperature      = inputDict['coolantInitialTemperature']
-            nozzle.coolantInitialPressure         = inputDict['coolantInitialPressure']
-            nozzle.coolantMassFlow                = inputDict['coolantMassFlow']
-            nozzle.printabilityCheck              = inputDict['printabilityCheck']
-            nozzle.printDirection                 = inputDict['printDirection']
-            nozzle.maxOverhangAngle               = inputDict['maxOverhangAngle']
-
-            # -- Regen Volute Inputs -- #
-            nozzle.makeInletVolute                = inputDict['makeInletVolute']
-            nozzle.makeReturnVolute               = inputDict['makeReturnVolute']
-            nozzle.numCSVolute                    = inputDict['numCSVolute']
-            nozzle.numCSPointsVolute              = inputDict['numCSPointsVolute']
-            nozzle.voluteRelativeRoll             = inputDict['voluteRelativeRoll']
-            nozzle.plotKeepOut                    = inputDict['plotKeepOut']
-            nozzle.keepOutAxialOffset             = inputDict['keepOutAxialOffset']
-            nozzle.keepOutRadius                  = inputDict['keepOutRadius']
-            nozzle.keepOutDepth                   = inputDict['keepOutDepth']
-            nozzle.keepOutHubRadius               = inputDict['keepOutHubRadius']
-            nozzle.inletVoluteCrossSection        = inputDict['inletVoluteCrossSection']
-            nozzle.inletVoluteAlignment           = inputDict['inletVoluteAlignment']
-            nozzle.inletVolutePrintability        = inputDict['inletVolutePrintability']
-            nozzle.inletVoluteTilt                = inputDict['inletVoluteTilt']
-            nozzle.inletGraylocDiameter           = inputDict['inletGraylocDiameter']
-            nozzle.inletVoluteAxialOffset         = inputDict['inletVoluteAxialOffset']
-            nozzle.inletVoluteFlareRoverD         = inputDict['inletVoluteFlareRoverD']
-            nozzle.inletVoluteFlareLength         = inputDict['inletVoluteFlareLength']
-            nozzle.returnVoluteCrossSection       = inputDict['returnVoluteCrossSection']
-            nozzle.returnVoluteAlignment          = inputDict['returnVoluteAlignment']
-            nozzle.returnVolutePrintability       = inputDict['returnVolutePrintability']
-            nozzle.returnVoluteTilt               = inputDict['returnVoluteTilt']
-            nozzle.returnGraylocDiameter          = inputDict['returnGraylocDiameter']
-            nozzle.returnVoluteAxialOffset        = inputDict['returnVoluteAxialOffset']
-            nozzle.returnVoluteRadialOffset       = inputDict['returnVoluteRadialOffset']
-            nozzle.returnVoluteFlareRoverD        = inputDict['returnVoluteFlareRoverD']
-            nozzle.returnVoluteReturnAngle        = inputDict['returnVoluteReturnAngle']
-            nozzle.returnVoluteFlareLen           = inputDict['returnVoluteFlareLen']
-
-            # -- Program Options -- #
-            nozzle.plotsBasic                     = inputDict['plotsBasic']
-            nozzle.plotsAdv                       = inputDict['plotsAdv']
-            nozzle.plotJacket                     = inputDict['plotJacket']
-            nozzle.plotsDebug                     = inputDict['plotsDebug']
-            nozzle.export                         = inputDict['export']
-            nozzle.filename                       = inputDict['filename']
-
-        else:
-            raise ValueError("We're in debug mode so inputsPath should be a string containing the input file csv file path.")
+    # debugMode is a solver flag rather than an input format: it makes a station that fails
+    # to converge dump its local state instead of raising. channelSizing reads it.
+    nozzle.debugMode = debugMode
 
     # Inputs from a JSON config file. generateNozzle() defaults to
     # assets/nozzleConfig.json, so this must be handled before the
     # spreadsheet branch below, which would otherwise hand a .json path to
     # the Excel reader. The keys are identical to the GUI dict form, so the
     # file is simply loaded and allowed to fall through to that branch.
-    if isinstance(inputsPath, str) and inputsPath.lower().endswith('.json') and not debugMode:
+    if isinstance(inputsPath, str) and inputsPath.lower().endswith('.json'):
         import json
         with open(inputsPath, 'r') as configFile:
             inputsPath = json.load(configFile)
 
     # Inputs from the GUI
     if isinstance(inputsPath, dict):
-
-        GUIFlag = True
 
         # Converging-section keys were renamed away from solid-motor language. Catch a
         # pre-rename config here rather than letting it surface as a bare KeyError three
@@ -424,229 +280,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.export                         = inputsPath['export']
         nozzle.filename                       = inputsPath['filename']
 
-    # Inputs from the config file
-    elif isinstance(inputsPath, str) and not debugMode:
-
-        GUIFlag = False
-
-        # -- Read each sheet and assign values -- # 
-
-        contourDefinitionInputs, _ = readExcel(inputsPath, sheetName = "Contour Definition")
-        for i, _ in enumerate(contourDefinitionInputs.values):
-            match contourDefinitionInputs.values[i][0]:
-
-                # Primary Parameters
-                case 'Fuel':
-                    nozzle.Fuel                       = contourDefinitionInputs.values[i][1]
-                case 'Oxidizer':
-                    nozzle.Oxidizer                   = contourDefinitionInputs.values[i][1]
-                case 'Chamber Pressure':
-                    nozzle.chamberPressure            = float(contourDefinitionInputs.values[i][1])
-
-                # Specify one - Calculate other: Engine Design Constraints
-                # Set 1:
-                case 'Thrust':
-                    nozzle.thrust                     = float(contourDefinitionInputs.values[i][1])
-                case 'Total Engine Mass Flow (Fuel + Oxidizer)':
-                    nozzle.engineMassFlow             = float(contourDefinitionInputs.values[i][1])
-                # Set 2:
-                case 'Target Nozzle Exit Pressure':
-                    nozzle.targetExitPressure         = float(contourDefinitionInputs.values[i][1])
-                case 'Nozzle Expansion Ratio':
-                    nozzle.expansionRatio             = float(contourDefinitionInputs.values[i][1])
-
-                # Optional Prameters
-                case 'Make Contour Plots?':
-                    nozzle.visualizeContour           = contourDefinitionInputs.values[i][1]
-                case 'Nozzle Length Fraction':
-                    nozzle.lengthFraction             = float(contourDefinitionInputs.values[i][1]) if not isinstance(contourDefinitionInputs.values[i][1], str) else contourDefinitionInputs.values[i][1]
-                case 'OF Ratio':
-                    if isinstance(contourDefinitionInputs.values[i][1], str) or contourDefinitionInputs.values[i][1] is None:
-                        nozzle.OFRatio                = 'maxisp'
-                    else:
-                        nozzle.OFRatio                = float(contourDefinitionInputs.values[i][1])
-                case 'Fuel Initial Temperature':
-                    nozzle.fuelInitialTemperature     = float(contourDefinitionInputs.values[i][1])
-                case 'Oxidizer Initial Temperature':
-                    nozzle.oxidizerInitialTemperature = float(contourDefinitionInputs.values[i][1])
-                case 'Total Number of Contour Points':
-                    nozzle.numContourPoints           = int(contourDefinitionInputs.values[i][1])
-                case 'Contour Type':
-                    nozzle.contourType                = contourDefinitionInputs.values[i][1]
-                case 'Rao Throat Angle':
-                    nozzle.raoThroatAngle             = float(contourDefinitionInputs.values[i][1])
-
-                # Diverging Section Parameters
-                case 'Diverging Section Type':
-                    nozzle.divergingSectionType       = contourDefinitionInputs.values[i][1]
-                case 'Conical Half Angle':
-                    nozzle.conicalHalfAngle           = float(contourDefinitionInputs.values[i][1])
-                case 'Regen Nozzle Truncation Method':
-                    nozzle.truncationMethod           = contourDefinitionInputs.values[i][1]
-                case 'Binding Constraint':
-                    nozzle.truncateOn                 = contourDefinitionInputs.values[i][1]
-                case 'Number of Characteristics':
-                    nozzle.numCharacteristicsRequested = int(contourDefinitionInputs.values[i][1])
-
-                # Traditional Converging Section Parameters
-                case 'Chamber Interface Angle':
-                    nozzle.chamberInterfaceAngle        = float(contourDefinitionInputs.values[i][1])
-                case 'Chamber Diameter':
-                    nozzle.chamberDiameter                 = float(contourDefinitionInputs.values[i][1])
-                case 'L*':
-                    nozzle.Lstar                      = float(contourDefinitionInputs.values[i][1])
-                case 'Contraction Area Ratio':
-                    nozzle.contractionAreaRatio       = float(contourDefinitionInputs.values[i][1])
-
-
-        regenJacketInputs, _ = readExcel(inputsPath, sheetName = "Regen Jacket")
-        for i, _ in enumerate(regenJacketInputs.values):
-            match regenJacketInputs.values[i][0]:
-
-                # Options
-                case 'Generate Cooling Channels?':
-                    nozzle.makeCoolingChannels                = regenJacketInputs.values[i][1]
-
-                # Wall Properties
-                case 'Hot Wall Thickness':
-                    nozzle.hotWallThickness           = float(regenJacketInputs.values[i][1])
-                case 'Cold Wall Thickness':
-                    nozzle.shellThickness             = float(regenJacketInputs.values[i][1])
-                case 'Material':
-                    nozzle.material                   = regenJacketInputs.values[i][1]
-
-                # Channel Properties
-                case 'Channel Type':
-                    nozzle.channelType                = regenJacketInputs.values[i][1]
-                case 'Maximum Hot Wall Temperature':
-                    nozzle.maxWallTemperature         = float(regenJacketInputs.values[i][1])
-                case 'Number of Channels':
-                    nozzle.nChannel                   = int(regenJacketInputs.values[i][1])
-                case 'Number of Channel Cross Section Points':
-                    nozzle.numCSPointsChannel         = int(regenJacketInputs.values[i][1])
-                case 'Number of Channel Cross Sections':
-                    nozzle.numCrossSections           = int(regenJacketInputs.values[i][1])
-                case 'Infill Thickness':
-                    nozzle.infillThickness            = float(regenJacketInputs.values[i][1])
-                case 'Number of Flutes':
-                    nozzle.numFlutes                  = int(regenJacketInputs.values[i][1])
-                case 'Flute Amplitude Coefficient':
-                    nozzle.fluteAmplitudeCoef         = float(regenJacketInputs.values[i][1])
-                case 'Flute Helix Angle':
-                    nozzle.fluteHelixAngle            = float(regenJacketInputs.values[i][1])
-                case 'Circular Interface Length':
-                    nozzle.interfaceLength            = float(regenJacketInputs.values[i][1])
-
-                # Heat Transfer Model Properties
-                case 'Coolant Class':
-                    nozzle.coolantClass               = regenJacketInputs.values[i][1]
-                case 'Coolant Species':
-                    nozzle.coolant                    = regenJacketInputs.values[i][1]
-                case 'Initial Temperature':
-                    nozzle.coolantInitialTemperature  = float(regenJacketInputs.values[i][1])
-                case 'Initial Pressure':
-                    nozzle.coolantInitialPressure     = float(regenJacketInputs.values[i][1])
-                case 'Total Coolant Mass Flow':
-                    nozzle.coolantMassFlow            = float(regenJacketInputs.values[i][1])                
-                case 'Swirl Percent':
-                    nozzle.swirlPercent               = float(regenJacketInputs.values[i][1])                
-
-                # Printability Opeions
-                case 'Check for printability?':
-                    nozzle.printabilityCheck          = regenJacketInputs.values[i][1]
-                case 'Print direction':
-                    nozzle.printDirection             = regenJacketInputs.values[i][1]
-                case 'Max Overhang Angle':
-                    nozzle.maxOverhangAngle           = float(regenJacketInputs.values[i][1])
-
-        regenVoluteInputs, _ = readExcel(inputsPath, sheetName = "Regen Volutes")
-        for i, _ in enumerate(regenVoluteInputs.values):
-            match regenVoluteInputs.values[i][0]:
-
-                # Options
-                case 'Generate Inlet Volute?':
-                    nozzle.makeInletVolute            = regenVoluteInputs.values[i][1]
-                case 'Generate Return Volute?':
-                    nozzle.makeReturnVolute           = regenVoluteInputs.values[i][1]
-                case 'Volute Relative Roll':
-                    nozzle.voluteRelativeRoll         = float(regenVoluteInputs.values[i][1])
-                case 'Number of Volute Cross Section Points':
-                    nozzle.numCSPointsVolute          = int(regenVoluteInputs.values[i][1])
-                case 'Number of Volute Cross Sections':
-                    nozzle.numCSVolute                = int(regenVoluteInputs.values[i][1])
-                case 'Plot Keep Out?':
-                    nozzle.plotKeepOut                = regenVoluteInputs.values[i][1]
-                case 'Keep Out Axial Offset':
-                    nozzle.keepOutAxialOffset         = float(regenVoluteInputs.values[i][1])
-                case 'Keep Out Radius':
-                    nozzle.keepOutRadius              = float(regenVoluteInputs.values[i][1])
-                case 'Keep Out Depth':
-                    nozzle.keepOutDepth               = float(regenVoluteInputs.values[i][1])
-                case 'Keep Out Hub Radius':
-                    nozzle.keepOutHubRadius           = float(regenVoluteInputs.values[i][1])
-                case 'Volute Factor of Safety':
-                    nozzle.voluteFOS                  = float(regenVoluteInputs.values[i][1])
-
-                # Inlet Volute Geometry
-                case 'Inlet Cross Section Type':
-                    nozzle.inletVoluteCrossSection    = (regenVoluteInputs.values[i][1])
-                case 'Inlet Cross Section Alignment':
-                    nozzle.inletVoluteAlignment       = (regenVoluteInputs.values[i][1])
-                case 'Inlet Circle Printability':
-                    nozzle.inletVolutePrintability    = (regenVoluteInputs.values[i][1])
-                case 'Inlet Volute Cross Section Tilt Angle':
-                    nozzle.inletVoluteTilt            = float(regenVoluteInputs.values[i][1])
-                case 'Inlet Grayloc Seal Ring ID':
-                    nozzle.inletGraylocDiameter       = float(regenVoluteInputs.values[i][1])
-                case 'Inlet Volute Turnaround Axial Offset':
-                    nozzle.inletVoluteAxialOffset     = float(regenVoluteInputs.values[i][1])
-                case 'Inlet Channel Flare R/D':
-                    nozzle.inletVoluteFlareRoverD     = float(regenVoluteInputs.values[i][1])
-                case 'Inlet Channel Flare Extension Length':
-                    nozzle.inletVoluteFlareLength     = float(regenVoluteInputs.values[i][1])
-
-                # Return Volute Geometry
-                case 'Return Cross Section Type':
-                    nozzle.returnVoluteCrossSection   = (regenVoluteInputs.values[i][1])
-                case 'Return Cross Section Alignment':
-                    nozzle.returnVoluteAlignment      = (regenVoluteInputs.values[i][1])
-                case 'Return Circle Printability':
-                    nozzle.returnVolutePrintability   = (regenVoluteInputs.values[i][1])
-                case 'Return Volute Cross Section Tilt Angle':
-                    nozzle.returnVoluteTilt           = float(regenVoluteInputs.values[i][1])
-                case 'Return Grayloc Seal Ring ID':
-                    nozzle.returnGraylocDiameter      = float(regenVoluteInputs.values[i][1])
-                case 'Return Volute Turnaround Axial Offset':
-                    nozzle.returnVoluteAxialOffset    = float(regenVoluteInputs.values[i][1])
-                case 'Return Volute Turnaround Radial Offset':
-                    nozzle.returnVoluteRadialOffset   = float(regenVoluteInputs.values[i][1])
-                case 'Return Channel Flare R/D':
-                    nozzle.returnVoluteFlareRoverD    = float(regenVoluteInputs.values[i][1])
-                case 'Return Channel Return Angle':
-                    nozzle.returnVoluteReturnAngle    = float(regenVoluteInputs.values[i][1])
-                case 'Return Channel Flare Extension Length':
-                    nozzle.returnVoluteFlareLen       = float(regenVoluteInputs.values[i][1])
-
-        programOptionInputs, excelInstance = readExcel(inputsPath, sheetName = "Program Options")
-        for i, _ in enumerate(programOptionInputs.values):
-            match programOptionInputs.values[i][0]:
-
-                # Plot Options
-                case 'Basic Plot Outputs?':
-                    nozzle.plotsBasic                 = programOptionInputs.values[i][1]
-                case 'Advanced Plot Outputs?':
-                    nozzle.plotsAdv                   = programOptionInputs.values[i][1]
-                case 'Plot Full Regen Jacket?':
-                    nozzle.plotJacket                 = programOptionInputs.values[i][1]
-                case 'Debug Plot Outputs?':
-                    nozzle.plotsDebug                 = programOptionInputs.values[i][1]
-
-                # Export Options
-                case 'Export Data?':
-                    nozzle.export                     = programOptionInputs.values[i][1]
-                case 'Export File Name':
-                    nozzle.filename                   = programOptionInputs.values[i][1]
-
     # If exporting is on, make the export directory
     if nozzle.export == 'on':
         # Every run of this name writes into one directory under the output root.
@@ -677,10 +310,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
     # Copy all CEA Outputs to the object in case user wants them for some reason
     nozzle.ceaOutput = ceaOutput
-    nozzle.excelInstance = False if GUIFlag else excelInstance
-    # Where the workbook was read from, so the export can keep a copy of it beside the run.
-    nozzle.configWorkbookPath = inputsPath if (isinstance(inputsPath, str)
-                                            and inputsPath.lower().endswith('.xlsx')) else ''
 
     # -- Assign important calculated values to object -- #
 
@@ -731,26 +360,3 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
     nozzle.epsilonSauer                 = (nozzle.throatRadiusNonDimensional / 8) * np.sqrt(2 * (nozzle.chamberGamma + 1) * \
                                             nozzle.throatRadiusNonDimensional / nozzle.throatInletCurvatureNonDimensional)
     nozzle.flowParameterSauer           = np.sqrt(2 / ((nozzle.chamberGamma + 1) * nozzle.throatRadiusNonDimensional * nozzle.throatInletCurvatureNonDimensional))
-
-    # Derive optional inputs from config file
-    if isinstance(inputsPath, str) and not debugMode:
-        if np.isnan(nozzle.coolantClass):
-            nozzle.coolantClass = 'oxidizer'
-        if np.isnan(nozzle.coolant):
-            # Get coolant species from coolant selection
-            if nozzle.coolantClass == 'fuel':
-                nozzle.coolant = nozzle.Fuel
-            elif nozzle.coolantClass == 'oxidizer':
-                nozzle.coolant = nozzle.Oxidizer
-        if np.isnan(nozzle.coolantMassFlow):
-            # Get coolant mass flow rate from O/F            
-            if nozzle.coolantClass == 'fuel':
-                nozzle.coolantMassFlow = nozzle.engineMassFlow / (1 + nozzle.OFRatio)
-            elif nozzle.coolantClass == 'oxidizer':
-                nozzle.coolantMassFlow = nozzle.engineMassFlow / (1 + 1 / nozzle.OFRatio)
-        if type(nozzle.truncationMethod) != str:
-            # Assume untruncated
-            nozzle.truncationMethod = 'none'
-        if not hasattr(nozzle, 'material') or type(nozzle.material) != str:
-            # Assume untruncated
-            nozzle.material = 'cu'

@@ -124,18 +124,6 @@ def exportData(nozzle, filename: str = 'default'):
     # Shove all .stl outputs into one .stl file
     #TODO
 
-    if nozzle.excelInstance != False:
-        # If there is still an excel instance open, close it and then
-        # copy the config file to the export folder
-        print(f'Closing any open Excel instances and copying Config File')
-
-        # Excel is MEAN
-        nozzle.excelInstance.Workbooks.Close()
-
-        # Store a copy of the workbook that was read, when it is still on disk
-        configWorkbook = getattr(nozzle, 'configWorkbookPath', '')
-        if configWorkbook and os.path.exists(configWorkbook):
-            shutil.copy(configWorkbook, os.path.join(nozzle.dataFolder, 'configFileNozzleCopy.xlsx'))
 
 def exportExhaustPropertiesFEA(nozzle) -> None:
 
