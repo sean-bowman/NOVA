@@ -1,0 +1,43 @@
+# Hidden folders and files
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# IDE
+.vs/
+.vscode/
+*.user
+
+# Temp files
+*.tmp
+*.tmp.*
+tmpclaude-*
+
+# Internal notes (not for publication)
+objectives.md
+
+# Temporary / generated job data
+temp/
+
+# Generated run outputs. Curated figures live in docs/images/ instead.
+*Outputs/
+runs/
+.pytest_cache/
+
+# Regression baselines are recorded deliberately, not carried in the repository.
+tests/baselines/
+
+# Vendored plotly bundle, dropped beside the interactive figures by
+# figures.py exportInteractiveFigures(). 4.4 MB, regenerated on every run.
+plotly.min.js
+
+# Interactive figure companions and cached run objects. The curated PNG gallery
+# featureShowcase/README.md refers to is kept; these regenerate from the same
+# build scripts and carry a random div id, so every rebuild is a whole-file diff.
+featureShowcase/*.html
+featureShowcase/*.pkl
+featureShowcase/*.npz

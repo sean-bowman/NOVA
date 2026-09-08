@@ -1,0 +1,53 @@
+# NOVA -- Nozzle Optimization for Variable Applications
+#
+# Install with:  pip install -r dependencies.txt
+# Target runtime: Python 3.10 (win-amd64)
+
+# -- Core numerics -- #
+numpy>=2.2
+scipy>=1.15
+pandas>=2.3
+sympy>=1.14
+
+# -- Combustion -- #
+# NASA CEA, via the rocketcea bindings. Ships a prebuilt cp310 win_amd64
+# wheel, so no Fortran compiler is required on Windows.
+rocketcea>=1.2.3
+
+# -- Fluid properties -- #
+# fluidProps() in utils.py dispatches REFPROP first, then falls back to
+# CoolProp. CoolProp alone is sufficient to run the tool.
+CoolProp>=8.0
+ctREFPROP>=0.10.5
+
+# -- Plotting -- #
+# Matplotlib is required. It draws every figure NOVA saves as a PNG and every
+# plot embedded in the GUI, because it is the only backend that renders into a
+# Tk canvas.
+matplotlib>=3.10
+
+# -- GUI -- #
+# tkinter ships with CPython. tkinterweb embeds the interactive plotly HTML
+# views in the 3D geometry tab; without it that tab falls back to the revolved
+# contour plus an "open in browser" button.
+tkinterweb>=4.0
+
+# -- Utilities -- #
+joblib>=1.5
+tqdm>=4.65
+
+# ---------------------------------------------------------------------------
+# Optional extras, each imported lazily by the one feature that needs it. A
+# JSON-driven run touches none of them.
+#
+#   plotly    -- interactive HTML companions for every result figure, and the
+#                3D channel-mesh / jacket / volute views. Without it those
+#                .html files are simply not written and the GUI's "Open
+#                interactive" buttons stay disabled; every PNG is unaffected.
+#   kaleido   -- static image export of plotly figures. Needs a Chrome install
+#                (`plotly_get_chrome`); only used to regenerate README figures.
+#   pywin32   -- Excel config input, utils.py readExcel()
+#   pypdf     -- PDF report stitching, utils.py stitchPDF()
+#
+# pip install plotly kaleido pywin32 pypdf
+# ---------------------------------------------------------------------------
