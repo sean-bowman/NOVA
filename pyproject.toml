@@ -21,6 +21,7 @@ dependencies = [
     'rocketcea>=1.2.3',
     'CoolProp>=8.0',
     'matplotlib>=3.10',
+    'pint>=0.24',
     'joblib>=1.5',
     'tqdm>=4.65',
 ]

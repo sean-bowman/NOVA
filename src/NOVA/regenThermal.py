@@ -182,7 +182,14 @@ def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber:
 
     The stagnation Prandtl number comes from 4 gamma / (9 gamma - 5) and the stagnation viscosity
     from the fit mu_0 = 1.184e-7 M^0.5 T_0^0.6. That constant is the SI form of SP-125's
-    46.6e-10 M^0.5 T^0.6 in lbm/(in s) with T in Rankine, which converts to 1.18408e-7.
+    46.6e-10 M^0.5 T^0.6 in lbm/(in s) with T in Rankine.
+
+    The exact conversion is 1.1840811e-7: 46.6e-10 lbm/(in s) is 8.3218128e-8 kg/(m s), and the
+    Rankine-to-kelvin change of variable multiplies it by (9/5)^0.6. The coefficient used here is
+    that value rounded to four figures, which is 6.8e-5 low. Through mu^0.2 in the Bartz
+    expression that reaches the gas-side coefficient as 1.4e-5, well inside the correlation's own
+    accuracy, so it is left as the number every recorded result was produced with rather than
+    changed for a correction nothing can measure.
 
     Sigma is the boundary layer correction, which carries the whole dependence on wall
     temperature and is why the caller has to converge the wall rather than solve it directly.

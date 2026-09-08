@@ -60,6 +60,7 @@ from typing import Any
 import numpy as np
 from scipy.interpolate import CubicSpline
 
+from . import units
 from .utils import DCM, revolveContour, InvalidInputError, VoluteGenerationError, createErrorContext
 from .Volute import Volute
 from .keepOut import keepOutEnvelope, revolveKeepOut
@@ -281,7 +282,7 @@ def solveRegenVolutes(state):
             if alloy == 84:
 
                 TdataF     = np.array([-423.4,-315.4,70,392,752,1112,1472])
-                TdataK     = (5/9)*(TdataF-32) + 273.15
+                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
                 UTSdataKSI = np.array([103,90,57,38,29,17,8])
                 UTSdataPA  = UTSdataKSI*6.895e6
 
@@ -292,7 +293,7 @@ def solveRegenVolutes(state):
             elif alloy == 42:
 
                 TdataF     = np.array([-320,70,392,752,1112,1472])
-                TdataK     = (5/9)*(TdataF-32) + 273.15
+                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
                 UTSdataKSI = np.array([76.6,52.3,37,28.3,16.3,8.9])
                 UTSdataPA  = UTSdataKSI*6.895e6
 
@@ -313,7 +314,7 @@ def solveRegenVolutes(state):
             if alloy == 84:
 
                 TdataF     = np.array([-423.4,-315.4,70,392,752,1112,1472])
-                TdataK     = (5/9)*(TdataF-32) + 273.15
+                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
                 YSdataKSI  = np.array([37,37,30,28,24,16,7])
                 YSdataPA   = YSdataKSI*6.895e6
 
@@ -324,7 +325,7 @@ def solveRegenVolutes(state):
             elif alloy == 42:
 
                 TdataF     = np.array([-320,70,392,752,1112,1472])
-                TdataK     = (5/9)*(TdataF-32) + 273.15
+                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
                 YSdataKSI  = np.array([33.5,25.8,24,20.4,15.1,7.4])
                 YSdataPA   = YSdataKSI*6.895e6
 
@@ -391,7 +392,7 @@ def solveRegenVolutes(state):
             inletVolute.interfaceCharLen           = state.channelRadius[-1]*2*1.1
         else:
             inletVolute.interfaceHydraulicDiameter = state.channelRadius[-1]*2*1.1
-        inletVolute.expandedHydraulicDiameter      = state.inletGraylocDiameter*0.0254 # hydraulic diameter for the grayloc interface, [in]->[m]
+        inletVolute.expandedHydraulicDiameter      = units.toSI(state.inletGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter
         # wall properties
         inletVolute.wallHoopStress                 = hoopStressTarget
         inletVolute.pressureDifferential           = state.coolantInitialPressure
@@ -495,7 +496,7 @@ def solveRegenVolutes(state):
         returnVolute.axialOffset                = state.xChannelCenterline2D[3] - state.channelRadius[0]
         # area distribution properties
         returnVolute.interfaceHydraulicDiameter = state.channelRadius[0]*2*1.2
-        returnVolute.expandedHydraulicDiameter  = state.returnGraylocDiameter*0.0254 # hydraulic diameter for the grayloc interface, [in]->[m]
+        returnVolute.expandedHydraulicDiameter  = units.toSI(state.returnGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter
         # wall properties
         returnVolute.wallHoopStress             = hoopStressTarget
         returnVolute.pressureDifferential       = state.coolantExitPressure

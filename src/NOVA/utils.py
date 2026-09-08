@@ -79,6 +79,8 @@ import matplotlib.pyplot as plt
 import pickle
 from typing import Callable, Optional, Any
 
+from . import units
+
 # Permissive numeric-input alias: these helpers accept arrays, lists, or scalars
 # interchangeably. Using this keeps static analysis from flagging valid array-like
 # call sites while documenting intent.
@@ -1069,7 +1071,7 @@ def convertToSCFM(fluid: str, massFlowrate: float, temperature: float, pressure:
 
     # Declare constants
     standardTemperatrue = 288.706 # 60 [degF]
-    standardPressure    = 101325  # 14.696 [psi]
+    standardPressure    = units.SCFM_STD_PRESSURE
 
     # Get fluid density with Refprop
     density = fluidProps(fluid, 'TP', 'D', temperature, pressure)
@@ -1078,257 +1080,14 @@ def convertToSCFM(fluid: str, massFlowrate: float, temperature: float, pressure:
     volumetricFlowrate = massFlowrate / density
 
     # Convert m^3 to ft^3
-    imperialFlowrate = volumetricFlowrate * 35.3147
+    imperialFlowrate = volumetricFlowrate / units.M3_PER_FT3
 
     # Convert ft^3 to SCFM (s to min)
     SCFM = imperialFlowrate * 60
 
     return SCFM
 
-def convertPressureToAltitude(pressure: float | np.ndarray) -> float | np.ndarray:
 
-    '''
-
-    Convert pressure to altitude using the US Standard Atmosphere 1976 model.
-
-    Implements the inverse of the full 7-layer atmosphere model from sea level
-    to 86 km, using proper barometric formulas for gradient and isothermal layers.
-
-    Parameters:
-    -----------
-    pressure : float or np.ndarray
-        Pressure(s) in Pa. Valid range: ~0.37 Pa (86 km) to ~108,000 Pa (-610 m)
-
-    Returns:
-    --------
-    float or np.ndarray : Altitude(s) in meters
-
-    Atmospheric Layers:
-    -------------------
-    Layer          | P_b (Pa)   | T_b (K) | L_b (K/m) | Type
-    ---------------|------------|---------|-----------|----------
-    Troposphere    | 101325.0   | 288.15  | -0.0065   | Gradient
-    Tropopause     | 22632.1    | 216.65  | 0         | Isothermal
-    Stratosphere 1 | 5474.89    | 216.65  | 0.001     | Gradient
-    Stratosphere 2 | 868.019    | 228.65  | 0.0028    | Gradient
-    Stratopause    | 110.906    | 270.65  | 0         | Isothermal
-    Mesosphere 1   | 66.9389    | 270.65  | -0.0028   | Gradient
-    Mesosphere 2   | 3.95642    | 214.65  | -0.002    | Gradient
-
-    References:
-    -----------
-    NASA Technical Report NASA-TM-X-74335, 'U.S. Standard Atmosphere, 1976'
-
-    Author: Sean Bowman
-    Date:   12/30/2025
-
-    '''
-
-    # Physical constants (US Standard Atmosphere 1976)
-    g0 = 9.80665       # Standard gravitational acceleration [m/s²]
-    M = 0.0289644      # Molar mass of dry air [kg/mol]
-    R = 8.31447        # Universal gas constant [J/(mol·K)]
-
-    # Layer definitions: (base altitude [m], base temperature [K], lapse rate [K/m])
-    layers = [
-        (0,     288.15, -0.0065),   # Troposphere
-        (11000, 216.65,  0.0),      # Tropopause (isothermal)
-        (20000, 216.65,  0.001),    # Stratosphere 1
-        (32000, 228.65,  0.0028),   # Stratosphere 2
-        (47000, 270.65,  0.0),      # Stratopause (isothermal)
-        (51000, 270.65, -0.0028),   # Mesosphere 1
-        (71000, 214.65, -0.002),    # Mesosphere 2
-    ]
-
-    # Precompute base pressures at each layer boundary
-    P0 = 101325.0
-    basePressures = [P0]
-
-    for i in range(len(layers) - 1):
-        hB, TB, LB = layers[i]
-        hNext = layers[i + 1][0]
-        PB = basePressures[i]
-
-        if LB == 0:
-            # Isothermal layer
-            PNext = PB * np.exp(-g0 * M * (hNext - hB) / (R * TB))
-        else:
-            # Gradient layer
-            exponent = g0 * M / (R * LB)
-            PNext = PB * (TB / (TB + LB * (hNext - hB))) ** exponent
-
-        basePressures.append(PNext)
-
-    def _calcAltitude(P: float) -> float:
-        '''Calculate altitude for a single pressure value.'''
-
-        # Handle invalid pressure
-        if P <= 0:
-            return float('inf')
-
-        # Handle pressures above sea level (below surface - extrapolate troposphere)
-        if P > P0:
-            hB, TB, LB = layers[0]
-            PB = basePressures[0]
-            # Inverse of gradient formula: h = h_b + (T_b/L_b) * ((P/P_b)^(-R*L_b/(g*M)) - 1)
-            exponent = -R * LB / (g0 * M)
-            return hB + (TB / LB) * ((P / PB) ** exponent - 1)
-
-        # Find the appropriate layer (search from highest pressure/lowest altitude)
-        layerIndex = len(layers) - 1
-        for i in range(len(basePressures)):
-            if P > basePressures[i]:
-                layerIndex = i - 1 if i > 0 else 0
-                break
-            elif i == len(basePressures) - 1:
-                layerIndex = len(layers) - 1
-
-        # Ensure we found a valid layer
-        if layerIndex < 0:
-            layerIndex = 0
-
-        hB, TB, LB = layers[layerIndex]
-        PB = basePressures[layerIndex]
-
-        if LB == 0:
-            # Isothermal layer: h = h_b - (R*T_b/(g*M)) * ln(P/P_b)
-            return hB - (R * TB / (g0 * M)) * np.log(P / PB)
-        else:
-            # Gradient layer: h = h_b + (T_b/L_b) * ((P/P_b)^(-R*L_b/(g*M)) - 1)
-            exponent = -R * LB / (g0 * M)
-            return hB + (TB / LB) * ((P / PB) ** exponent - 1)
-
-    # Handle scalar or array input
-    pressure = np.asarray(pressure)
-    isScalar = pressure.ndim == 0
-
-    if isScalar:
-        return float(_calcAltitude(float(pressure)))
-    else:
-        return np.array([_calcAltitude(p) for p in pressure.flat]).reshape(pressure.shape)
-
-def convertAltitudeToPressure(altitude: float | np.ndarray) -> float | np.ndarray:
-
-    '''
-
-    Convert altitude to pressure using the US Standard Atmosphere 1976 model.
-
-    Implements the full 7-layer atmosphere model from sea level to 86 km,
-    using proper barometric formulas for gradient and isothermal layers.
-
-    Parameters:
-    -----------
-    altitude : float or np.ndarray
-        Altitude(s) in meters. Valid range: -610 m to 86,000 m
-
-    Returns:
-    --------
-    float or np.ndarray : Pressure(s) in Pa
-
-    Atmospheric Layers:
-    -------------------
-    Layer          | h_b (m) | T_b (K) | L_b (K/m) | Type
-    ---------------|---------|---------|-----------|----------
-    Troposphere    | 0       | 288.15  | -0.0065   | Gradient
-    Tropopause     | 11000   | 216.65  | 0         | Isothermal
-    Stratosphere 1 | 20000   | 216.65  | 0.001     | Gradient
-    Stratosphere 2 | 32000   | 228.65  | 0.0028    | Gradient
-    Stratopause    | 47000   | 270.65  | 0         | Isothermal
-    Mesosphere 1   | 51000   | 270.65  | -0.0028   | Gradient
-    Mesosphere 2   | 71000   | 214.65  | -0.002    | Gradient
-
-    References:
-    -----------
-    NASA Technical Report NASA-TM-X-74335, 'U.S. Standard Atmosphere, 1976'
-
-    Author: Sean Bowman
-    Date:   12/30/2025
-
-    '''
-
-    import numpy as np
-
-    # Physical constants (US Standard Atmosphere 1976)
-    g0 = 9.80665       # Standard gravitational acceleration [m/s²]
-    M = 0.0289644      # Molar mass of dry air [kg/mol]
-    R = 8.31447        # Universal gas constant [J/(mol·K)]
-
-    # Layer definitions: (base altitude [m], base temperature [K], lapse rate [K/m])
-    # Lapse rate sign convention: negative = temperature decreases with altitude
-    layers = [
-        (0,     288.15, -0.0065),   # Troposphere
-        (11000, 216.65,  0.0),      # Tropopause (isothermal)
-        (20000, 216.65,  0.001),    # Stratosphere 1
-        (32000, 228.65,  0.0028),   # Stratosphere 2
-        (47000, 270.65,  0.0),      # Stratopause (isothermal)
-        (51000, 270.65, -0.0028),   # Mesosphere 1
-        (71000, 214.65, -0.002),    # Mesosphere 2
-    ]
-
-    # Precompute base pressures at each layer boundary
-    # Sea level pressure
-    P0 = 101325.0
-    basePressures = [P0]
-
-    for i in range(len(layers) - 1):
-        hB, TB, LB = layers[i]
-        hNext = layers[i + 1][0]
-        PB = basePressures[i]
-
-        if LB == 0:
-            # Isothermal layer
-            PNext = PB * np.exp(-g0 * M * (hNext - hB) / (R * TB))
-        else:
-            # Gradient layer
-            exponent = g0 * M / (R * LB)
-            PNext = PB * (TB / (TB + LB * (hNext - hB))) ** exponent
-
-        basePressures.append(PNext)
-
-    def _calcPressure(h: float) -> float:
-        '''Calculate pressure for a single altitude value.'''
-
-        # Handle altitudes below sea level (extrapolate troposphere)
-        if h < 0:
-            hB, TB, LB = layers[0]
-            PB = basePressures[0]
-            exponent = g0 * M / (R * LB)
-            return PB * (TB / (TB + LB * h)) ** exponent
-
-        # Handle altitudes above model range
-        if h >= 86000:
-            # Extrapolate using mesosphere 2 exponential decay
-            hB, TB, LB = layers[-1]
-            PB = basePressures[-1]
-            exponent = g0 * M / (R * LB)
-            return PB * (TB / (TB + LB * (h - hB))) ** exponent
-
-        # Find the appropriate layer
-        layerIndex = 0
-        for i in range(len(layers) - 1, -1, -1):
-            if h >= layers[i][0]:
-                layerIndex = i
-                break
-
-        hB, TB, LB = layers[layerIndex]
-        PB = basePressures[layerIndex]
-
-        if LB == 0:
-            # Isothermal layer
-            return PB * np.exp(-g0 * M * (h - hB) / (R * TB))
-        else:
-            # Gradient layer
-            exponent = g0 * M / (R * LB)
-            return PB * (TB / (TB + LB * (h - hB))) ** exponent
-
-    # Handle scalar or array input
-    altitude = np.asarray(altitude)
-    isScalar = altitude.ndim == 0
-
-    if isScalar:
-        return float(_calcPressure(float(altitude)))
-    else:
-        return np.array([_calcPressure(h) for h in altitude.flat]).reshape(altitude.shape)
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Geometry Generation Tools -- #

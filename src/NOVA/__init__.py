@@ -61,12 +61,10 @@ from .materials import (availableWallMaterials, materialProperties, resolveWallM
 from .ceaInterface import CEA, getAvailableFuels, getAvailableOxidizers
 
 # -- Fluid properties and the standard atmosphere -- #
-#
-# The atmosphere model is `utils`'. `units` carries a second implementation of the same two
-# functions; only one of them can own the name, and this is it.
 
-from .utils import (convertAltitudeToPressure, convertPressureToAltitude, fluidProps, fluidView,
-                    isentropicValues)
+from .units import (Quantity, convertAltitudeToPressure, convertPressureToAltitude, fromSI, toSI,
+                    ureg)
+from .utils import fluidProps, fluidView, isentropicValues
 
 # -- Geometry -- #
 
@@ -112,9 +110,9 @@ __all__ = [
     'sampleWallMaterial', 'wallMaterialCurves',
     # Thermochemistry
     'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
-    # Fluid properties and atmosphere
+    # Fluid properties, atmosphere and the unit registry
     'convertAltitudeToPressure', 'convertPressureToAltitude', 'fluidProps', 'fluidView',
-    'isentropicValues',
+    'isentropicValues', 'Quantity', 'ureg', 'toSI', 'fromSI',
     # Geometry
     'Volute', 'KeepOutEnvelope', 'keepOutEnvelope', 'packingClearance', 'revolveKeepOut',
     # Plume

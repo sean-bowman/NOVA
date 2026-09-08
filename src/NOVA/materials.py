@@ -34,6 +34,8 @@ import warnings
 
 import numpy as np
 
+from . import units
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Material and Surface Data -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -409,7 +411,7 @@ def wallMaterialCurves(material) -> dict:
         canonical = 'GRCop-42'
 
     entry = _WALLCURVEDATA[canonical]
-    temperatureK = np.asarray(entry['temperatureC'], dtype = float) + 273.15
+    temperatureK = np.asarray(entry['temperatureC'], dtype = float) + units.DEGC_OFFSET
     gridLength = temperatureK.size
 
     def asArray(value):

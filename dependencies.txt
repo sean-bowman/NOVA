@@ -32,6 +32,11 @@ matplotlib>=3.10
 # contour plus an "open in browser" button.
 tkinterweb>=4.0
 
+# -- Units -- #
+# The registry behind NOVA/units.py. Every conversion factor and physical constant in the
+# package is derived from it rather than transcribed.
+pint>=0.24
+
 # -- Utilities -- #
 joblib>=1.5
 tqdm>=4.65

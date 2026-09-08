@@ -23,6 +23,8 @@ Sean Bowman
 
 import os
 import warnings
+
+from . import units
 import functools
 import threading
 
@@ -53,17 +55,24 @@ __all__ = ['CEA', 'getAvailableFuels', 'getAvailableOxidizers']
 # Prandtl as (Cp * mu / k) reproduces CEA's own reported Pr exactly, and
 # rho * R * T recovers the input chamber pressure exactly.
 
-PA_PER_PSIA       = 6894.757293168361  # psia    -> Pa
-DEGR_TO_K         = 5.0 / 9.0          # degR    -> K
-FTPS_TO_MPS       = 0.3048             # ft/s    -> m/s
-LBMPFT3_TO_KGPM3  = 16.018463374       # lbm/ft3 -> kg/m3
-BTUPLBM_TO_JPKG   = 2326.0             # BTU/lbm -> J/kg          (enthalpies)
-CALPGK_TO_JPKGK   = 4184.0             # cal/g-K -> J/kg-K        (Cp, entropies)
-MILLIPOISE_TO_PAS = 1.0e-4             # millipoise    -> Pa-s
-MCALCMKS_TO_WMK   = 0.4184             # mcal/cm-K-s   -> W/m-K
-GRAVITY           = 9.80665            # m/s2, standard gravity
-R_UNIVERSAL       = 8314.46            # J/(kmol-K)
-SEA_LEVEL_PA      = 101325.0           # Pa
+# The definitional ones come from the package registry, so there is one place a factor is
+# defined and none where it is retyped.
+PA_PER_PSIA       = units.PA_PER_PSIA                     # psia    -> Pa
+DEGR_TO_K         = units.K_PER_DEGR                      # degR    -> K
+FTPS_TO_MPS       = units.M_PER_S_PER_FT_PER_S            # ft/s    -> m/s
+LBMPFT3_TO_KGPM3  = units.KG_PER_M3_PER_LBM_PER_FT3       # lbm/ft3 -> kg/m3
+BTUPLBM_TO_JPKG   = units.J_PER_KG_PER_BTU_PER_LBM        # BTU/lbm -> J/kg      (enthalpies)
+CALPGK_TO_JPKGK   = units.J_PER_KG_K_PER_CAL_PER_GK       # cal/g-K -> J/kg-K    (Cp, entropies)
+MILLIPOISE_TO_PAS = units.PA_S_PER_MILLIPOISE             # millipoise  -> Pa-s
+MCALCMKS_TO_WMK   = units.W_PER_M_K_PER_MCAL_CM_S_K       # mcal/cm-K-s -> W/m-K
+GRAVITY           = units.GRAVITY                         # m/s2, standard gravity
+SEA_LEVEL_PA      = units.PA_PER_ATM                      # Pa
+
+# This one is deliberately NOT the registry's molar gas constant. It is the value CEA itself
+# works in, and it is here because the empirical check above depends on it: rho * R * T recovers
+# the input chamber pressure exactly with 8314.46 and not with the CODATA 8314.462618. Matching
+# the tool being wrapped matters more here than matching the current best measurement.
+R_UNIVERSAL       = 8314.46            # J/(kmol-K), as CEA uses it
 
 # NOTE the asymmetry that makes this easy to get wrong: BTU/(lbm-degR) and
 # cal/(g-K) are numerically identical, but BTU/lbm (2326) and cal/g (4184)
