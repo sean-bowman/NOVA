@@ -60,15 +60,6 @@ try:
 except ImportError:
     from .utils import DCM
 
-# Optional GPU acceleration via CuPy, absent on machines without a CUDA build. The nearest
-# neighbour search below is the only thing that uses it, and it falls back to the CPU path.
-try:
-    import cupy as cp  # type: ignore[import]
-    GPU_AVAILABLE = True
-except ImportError:
-    cp = None
-    GPU_AVAILABLE = False
-
 @dataclass
 class ChannelGeometryInputs:
 
@@ -113,8 +104,6 @@ class ChannelGeometryInputs:
         Stations the printability audit marked, which the compression blends across.
     allNozzlePoints : Any
         Nozzle wall point cloud the compression search queries for the nearest wall point.
-    useGPU : bool
-        True attempts the CuPy nearest neighbour search before falling back to the CPU.
 
     '''
 
@@ -133,7 +122,6 @@ class ChannelGeometryInputs:
     printabilityCheck:    str   = 'off'
     nonPrintableIndices:  Any   = field(default_factory = list)
     allNozzlePoints:      Any   = None
-    useGPU:               bool  = False
 
 
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
@@ -651,55 +639,27 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
         # -- find nozzle index -- #
 
-        # GPU-accelerated nearest neighbor search if available
-        if GPU_AVAILABLE and geometry.useGPU != 'off':
-            try:
-                # Transfer data to GPU
-                points_gpu = cp.array(geometry.allNozzlePoints, dtype=cp.float32)
-                queries_gpu = cp.column_stack([
-                    cp.array(zChannelCenterline3D, dtype=cp.float32),
-                    cp.array(xChannelCenterline3D, dtype=cp.float32),
-                    cp.array(yChannelCenterline3D, dtype=cp.float32)
-                ])
+        if geometry.numCrossSections >= 500: # parallelize nozzle search
 
-                # Brute-force nearest neighbor on GPU (fast for typical dataset sizes)
-                diff = queries_gpu[:, None, :] - points_gpu[None, :, :]
-                distances = cp.linalg.norm(diff, axis=2)
-                nozzleIndex = cp.argmin(distances, axis=1)
-                nozzleIndex = cp.asnumpy(nozzleIndex)
+            def parallelNozzleSearch(pointQuery, allNozzlePoints):
 
-            except Exception as e:
-                warnings.warn(f'GPU nearest-neighbor search failed: {e}. Falling back to CPU.')
-                # Fall through to CPU implementation below
-                GPU_AVAILABLE_LOCAL = False
-            else:
-                GPU_AVAILABLE_LOCAL = True
+                nozzleIndex = KDTree(allNozzlePoints).query(pointQuery)[1]
+
+                return nozzleIndex
+
+            nozzleIndex = Parallel(n_jobs = int(cpu_count()/2-1))(delayed(parallelNozzleSearch)([zChannelCenterline3D[i],
+                                                                                                 xChannelCenterline3D[i],
+                                                                                                 yChannelCenterline3D[i]],
+                                                                                                 geometry.allNozzlePoints)
+                                    for i in tqdm(range(geometry.numCrossSections), desc="Scanning Nozzle Wall", colour="#ABD038"))
+
         else:
-            GPU_AVAILABLE_LOCAL = False
 
-        # CPU fallback (original implementation)
-        if not GPU_AVAILABLE_LOCAL:
-            if geometry.numCrossSections >= 500: # parallelize nozzle search
+            nozzleIndex = np.zeros((geometry.numCrossSections))
+            for i in tqdm(range(geometry.numCrossSections), desc="Scanning Nozzle Wall", colour="#ABD038"):
 
-                def parallelNozzleSearch(pointQuery, allNozzlePoints):
-
-                    nozzleIndex = KDTree(allNozzlePoints).query(pointQuery)[1]
-
-                    return nozzleIndex
-
-                nozzleIndex = Parallel(n_jobs = int(cpu_count()/2-1))(delayed(parallelNozzleSearch)([zChannelCenterline3D[i],
-                                                                                                     xChannelCenterline3D[i],
-                                                                                                     yChannelCenterline3D[i]],
-                                                                                                     geometry.allNozzlePoints)
-                                        for i in tqdm(range(geometry.numCrossSections), desc="Scanning Nozzle Wall", colour="#ABD038"))
-
-            else:
-
-                nozzleIndex = np.zeros((geometry.numCrossSections))
-                for i in tqdm(range(geometry.numCrossSections), desc="Scanning Nozzle Wall", colour="#ABD038"):
-
-                    pointQuery     = [zChannelCenterline3D[i], xChannelCenterline3D[i], yChannelCenterline3D[i]]
-                    nozzleIndex[i] = KDTree(geometry.allNozzlePoints).query(pointQuery)[1]
+                pointQuery     = [zChannelCenterline3D[i], xChannelCenterline3D[i], yChannelCenterline3D[i]]
+                nozzleIndex[i] = KDTree(geometry.allNozzlePoints).query(pointQuery)[1]
 
         # -- find compression index -- #
 

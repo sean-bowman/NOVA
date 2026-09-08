@@ -75,8 +75,7 @@ def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60
         numReturnInterfaceCS = 0,
         printabilityCheck    = 'off',
         nonPrintableIndices  = [],
-        allNozzlePoints      = nozzleWallCloud(numCrossSections),
-        useGPU               = False)
+        allNozzlePoints      = nozzleWallCloud(numCrossSections))
 
 def discretisedCircleArea(radius, numCSPointsChannel):
 

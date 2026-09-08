@@ -2462,7 +2462,7 @@ def plotly3DGeometry(xData: np.ndarray | list, yData: np.ndarray | list, zData: 
     
     '''
 
-    # Import plotly for plotting surfaces using the GPU
+    # Plotly renders in the browser, so the import is deferred to the call that needs it.
     import plotly.graph_objects as go
 
     # Instantiate a figure container
@@ -2497,7 +2497,7 @@ def plotlySurface(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.
     
     '''
 
-    # Import plotly for plotting surfaces using the GPU
+    # Plotly renders in the browser, so the import is deferred to the call that needs it.
     import plotly.graph_objects as go
 
     # Instantiate a figure container
@@ -2531,7 +2531,7 @@ def plotly3DLine(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.n
     
     '''
 
-    # Import plotly for plotting surfaces using the GPU
+    # Plotly renders in the browser, so the import is deferred to the call that needs it.
     import plotly.graph_objects as go
 
     # Instantiate a figure container and update the figure container with passed in data
@@ -2572,7 +2572,7 @@ def plotly2DLine(xData: np.ndarray | list, yData: np.ndarray | list, title: str 
     
     '''
 
-    # Import plotly for plotting surfaces using the GPU
+    # Plotly renders in the browser, so the import is deferred to the call that needs it.
     import plotly.graph_objects as go
 
     # Instantiate a figure container and update the figure container with passed in data

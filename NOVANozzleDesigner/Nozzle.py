@@ -173,16 +173,6 @@ except ImportError as e:
         # If both fail, raise the original error with more context
         raise ImportError(f'Could not import required modules. Original error: {e}. If the CEA interface is the problem, install its backend with "pip install rocketcea".')
 
-# Optional GPU acceleration via CuPy. Absent on machines without a CUDA build,
-# so import defensively and fall back to CPU. Defines the module-level names the
-# GPU nearest-neighbor search paths reference (cp, GPU_AVAILABLE).
-try:
-    import cupy as cp  # type: ignore[import]  # optional; not installed on CPU-only machines
-    GPU_AVAILABLE = True
-except ImportError:
-    cp = None
-    GPU_AVAILABLE = False
-
 # Progress tracking
 from tqdm import tqdm
 
@@ -656,9 +646,6 @@ class Nozzle:
         # Stations the printability audit marked as unsupported. Empty until that audit runs,
         # and read by the cross-section builder whether or not it has.
         self.nonPrintableIndices            = [] # [int]
-        # 'on' attempts the CuPy nearest-neighbour search in the cross-section builder before
-        # falling back to the CPU. No configuration sets it, so the CPU path is what runs.
-        self.useGPU                         = 'off' # 'on' , 'off'
 
         self.yChannel: np.ndarray = np.array([]) # [m]
         self.xChannel: np.ndarray = np.array([]) # [m]
@@ -1429,8 +1416,7 @@ class Nozzle:
             numReturnInterfaceCS = self.numReturnInterfaceCS,
             printabilityCheck    = self.printabilityCheck,
             nonPrintableIndices  = self.nonPrintableIndices,
-            allNozzlePoints      = self.allNozzlePoints,
-            useGPU               = self.useGPU)
+            allNozzlePoints      = self.allNozzlePoints)
 
     def regenThermalContext(self):
 

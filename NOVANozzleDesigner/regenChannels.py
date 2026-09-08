@@ -186,7 +186,6 @@ class RegenChannelState:
     theoreticalCharacteristicVelocity:         Any = None
     throatInletCurvatureNonDimensional:        Any = None
     throatOutletCurvatureNonDimensional:       Any = None
-    useGPU:                                    Any = None
     coolant:                                   Any = None
     coolantInitialPressure:                    Any = None
     coolantInitialTemperature:                 Any = None
@@ -371,8 +370,7 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
         numReturnInterfaceCS = state.numReturnInterfaceCS,
         printabilityCheck    = state.printabilityCheck,
         nonPrintableIndices  = state.nonPrintableIndices,
-        allNozzlePoints      = state.allNozzlePoints,
-        useGPU               = state.useGPU)
+        allNozzlePoints      = state.allNozzlePoints)
 
 def _sizingState(state) -> 'ChannelSizingState':
 
