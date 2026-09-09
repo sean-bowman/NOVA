@@ -34,7 +34,8 @@ repositoryRoot   = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
 # Every module the decomposition produced, plus the ones it built on.
 decomposedModules = (
-    'chamber', 'channelGeometry', 'channelSizing', 'characteristics', 'ceaInterface', 'config',
+    'ablative', 'chamber', 'channelGeometry', 'channelSizing', 'characteristics',
+    'ceaInterface', 'config',
     'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
     'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation',
     'nozzleVolutes',

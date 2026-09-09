@@ -7,7 +7,8 @@ Rocket nozzle contour, regenerative cooling and plume design.
 The package is a facade over a set of single-purpose modules. `Nozzle` carries a configuration
 and delegates each stage of a run to the module that owns it: `contour` for the wall, `chamber`
 for the converging section, `regenChannels`, `channelSizing` and `regenThermal` for the cooling
-jacket, `nozzleVolutes` for the manifolds, and `plume` for the exhaust downstream of the lip.
+jacket, `nozzleVolutes` for the manifolds, `plume` for the exhaust downstream of the lip, and
+`ablative` for a liner that is consumed rather than cooled.
 
 A minimal run reads a configuration and generates everything from it:
 
@@ -39,10 +40,10 @@ __version__ = '0.1.0'
 # Import order runs from the modules with no siblings of their own outward to the facade, so a
 # circular import would surface here rather than somewhere further in.
 
-from . import (ceaInterface, chamber, channelGeometry, channelSizing, characteristics, config,
-               contour, contourKernel, exports, figures, gasDynamics, keepOut, materials,
-               nozzleVolutes, plume, regenChannels, regenStations, regenThermal, units, utils,
-               validation)
+from . import (ablative, ceaInterface, chamber, channelGeometry, channelSizing,
+               characteristics, config, contour, contourKernel, exports, figures,
+               gasDynamics, keepOut, materials, nozzleVolutes, plume, regenChannels,
+               regenStations, regenThermal, units, utils, validation)
 
 # -- Gas dynamics -- #
 
@@ -53,11 +54,21 @@ from .gasDynamics import (areaMachRelation, conicalLength, divergenceLossFactor,
 
 # -- Materials -- #
 
-from .materials import (availableMaterialClasses, availableMaterials, availableWallMaterials,
-                        materialProfile, materialProperties, materialProperty,
-                        materialPropertyProvenance, maxUseTemperature, propertyIsMeasured,
-                        propertyProvenance, resolveWallMaterialName, roughnessTable,
-                        sampleWallMaterial, wallMaterialCurves)
+from .materials import (ablativeResponseData, ablativeResponseProvenance,
+                        availableAblativeMaterials, availableMaterialClasses,
+                        availableMaterials, availableWallMaterials, materialProfile,
+                        materialProperties, materialProperty, materialPropertyProvenance,
+                        maxUseTemperature, propertyIsMeasured, propertyProvenance,
+                        resolveWallMaterialName, roughnessTable, sampleWallMaterial,
+                        wallMaterialCurves)
+
+# -- Ablative material response -- #
+
+from .ablative import (AblationEnvironment, AblativeLinerResult, BPrimeTable,
+                       CharringMaterial, MaterialResponseResult, ablativeNozzleLiner,
+                       blowingCorrection, diffusionLimitedCharBPrime,
+                       elementMassFractionsFromMoles, propellantElementMassFractions,
+                       solveMaterialResponse)
 
 # -- Thermochemistry -- #
 
@@ -100,7 +111,8 @@ __all__ = [
     # Facade
     'Nozzle',
     # Submodules
-    'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing', 'characteristics', 'config',
+    'ablative', 'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing',
+    'characteristics', 'config',
     'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
     'nozzleVolutes', 'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'utils',
     'validation',
@@ -115,6 +127,12 @@ __all__ = [
     # Non-metallic and refractory materials
     'availableMaterialClasses', 'availableMaterials', 'materialProfile', 'materialProperty',
     'materialPropertyProvenance', 'maxUseTemperature',
+    # Ablative material response
+    'AblationEnvironment', 'AblativeLinerResult', 'BPrimeTable', 'CharringMaterial',
+    'MaterialResponseResult', 'ablativeNozzleLiner', 'ablativeResponseData',
+    'ablativeResponseProvenance', 'availableAblativeMaterials', 'blowingCorrection',
+    'diffusionLimitedCharBPrime', 'elementMassFractionsFromMoles',
+    'propellantElementMassFractions', 'solveMaterialResponse',
     # Thermochemistry
     'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
     # Fluid properties, atmosphere and the unit registry

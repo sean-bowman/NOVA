@@ -1318,3 +1318,251 @@ def materialPropertyProvenance(material: str, propertyName: str) -> tuple:
             material, propertyName, sorted(provenance)))
 
     return provenance[propertyName]
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Ablative Material Response Data -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+# A charring ablator needs more than the selection-grade numbers in _MATERIALCLASSES. Running a
+# material response demands, at minimum: virgin and char conductivity, specific heat and enthalpy
+# as curves; the Arrhenius kinetics of every decomposing component; and a surface thermochemistry
+# closure that returns the char removal rate and the wall enthalpy. This store carries the
+# materials that have all of it.
+#
+# It holds one material. TACOT is a theoretical composite published by the Ablation Workshop so
+# that codes can be compared on identical data, and it is the only charring ablator whose complete
+# response property set is in the open literature. Every real nozzle liner material -- MX-4926 and
+# the rest of the tape-wrapped carbon phenolic family -- has its property set in reports that are
+# access controlled or behind a licence.
+#
+# TACOT is NOT a stand-in for a nozzle liner. At 280 kg/m^3 virgin it is a low-density entry
+# heatshield material, roughly a fifth the density of the tape-wrapped carbon phenolic used in a
+# solid motor throat, and it chars and conducts accordingly. It is here so the solver can be
+# verified against published results, and so that a user supplying a real property set has a
+# worked example of the shape that set has to take.
+
+_ABLATIVERESPONSEDATA = {
+
+    'TACOT v3.0': {
+        'class':         'ablative',
+        'form':          'theoretical low-density carbon fibre preform in a phenolic matrix',
+        'application':   'Open benchmark for ablation code verification and inter-code comparison',
+        'virginDensity': 280.0,           # [kg/m^3]
+        'charDensity':   220.0,           # [kg/m^3]
+
+        # Shared temperature grid for every curve below. The values are the source's Rankine grid
+        # converted to kelvin, which is why they are not round numbers.
+        'temperature': [
+            255.5555556, 298, 444.4444444, 555.5555556, 644.4444444, 833.3333333, 1111.111111,
+            1388.888889, 1666.666667, 1944.444444, 2222.222222, 2777.777778, 3333.333333],
+
+        # Enthalpy is absolute: it carries the heat of formation, so the heat of pyrolysis falls
+        # out of the virgin-to-char enthalpy difference rather than being supplied separately.
+        # The datum is char at 298 K.
+        'virgin': {
+            'specificHeat': [                                                    # [J/kg-K]
+                879.228, 983.898, 1297.908, 1465.38, 1570.05, 1716.588, 1863.126, 1934.3016,
+                1980.3564, 1988.73, 2001.2904, 2009.664, 2009.664],
+            'thermalConductivity': [                                             # [W/m-K]
+                0.3975151382, 0.4024996541, 0.4162070726, 0.452967877, 0.4697906179, 0.4859902944,
+                0.5233741632, 0.5601349675, 0.6978322176, 0.872290272, 1.109054774, 1.750811189,
+                2.778867581],
+            'enthalpy': [                                                        # [J/kg]
+                -896682.5311, -857142.8571, -690063.9511, -536547.9511, -401639.9511, -91235.25114,
+                405947.2489, 933367.7489, 1477070.249, 2028332.249, 2582501.749, 3696655.749,
+                4813135.749],
+            'emissivity': 0.8,
+        },
+
+        'char': {
+            'specificHeat': [                                                    # [J/kg-K]
+                732.69, 782.9316, 1092.7548, 1318.842, 1431.8856, 1674.72, 1842.192, 1967.796,
+                2051.532, 2093.4, 2110.1472, 2135.268, 2152.0152],
+            'thermalConductivity': [                                             # [W/m-K]
+                0.3975151382, 0.4024996541, 0.4162070726, 0.452967877, 0.4697906179, 0.4859902944,
+                0.5233741632, 0.5601349675, 0.6049956101, 0.7289854416, 0.9221354304, 1.457970883,
+                2.317799866],
+            'enthalpy': [                                                        # [J/kg]
+                -32164.8584, 0, 137341.9264, 271319.5264, 393574.0864, 686975.7264, 1175435.726,
+                1704600.726, 2262840.726, 2838525.726, 3422351.726, 4601633.726, 5792545.726],
+            'emissivity': 0.9,
+        },
+
+        # Goldstein's two-phase resin decomposition, in the form CMA and FIAT take it:
+        #
+        #     d(rho_i)/dt = -A_i rho_i_v ((rho_i - rho_i_c) / rho_i_v)^psi_i exp(-E_i / (R T))
+        #
+        # Below the onset temperature the rate is zero. The bulk density follows from the
+        # component densities through the mixing rule
+        #
+        #     rho = (1 - porosity) [gamma (rho_A + rho_B) + (1 - gamma) rho_C]
+        #
+        # which returns 280 kg/m^3 for the virgin state and 220 for the char. Component C is the
+        # carbon reinforcement and does not decompose, which is why its rate constant is zero.
+        'pyrolysis': {
+            'resinVolumeFraction': 0.5,
+            'porosity':            0.8,
+            'components': (
+                {'name': 'A', 'virginDensity':  300.0, 'charDensity':    0.0,
+                 'preExponentialFactor': 1.2e4,  'activationTemperature':  8555.555556,
+                 'reactionOrder': 3.0, 'onsetTemperature': 333.3333333},
+                {'name': 'B', 'virginDensity':  900.0, 'charDensity':  600.0,
+                 'preExponentialFactor': 4.48e9, 'activationTemperature': 20444.44444,
+                 'reactionOrder': 3.0, 'onsetTemperature': 555.5555556},
+                {'name': 'C', 'virginDensity': 1600.0, 'charDensity': 1600.0,
+                 'preExponentialFactor': 0.0,    'activationTemperature': 0.0,
+                 'reactionOrder': 0.0, 'onsetTemperature': 5555.555556},
+            ),
+        },
+
+        # Elemental composition of the pyrolysis gas, mole fractions. This is what a surface
+        # thermochemistry closure needs; the molecular composition is a separate table.
+        'pyrolysisGasElements': {'C': 0.206, 'H': 0.679, 'O': 0.115},
+
+        # Char is pure carbon, so the diffusion-limited closure applies to it directly.
+        'charElements': {'C': 1.0},
+
+        # Names of the packaged tables that go with this material. The first is surface
+        # thermochemistry, for air rather than exhaust: see the note. The second is the
+        # equilibrium enthalpy of the pyrolysis gas, which is what fixes the heat of
+        # pyrolysis, since the solid enthalpy curves alone do not.
+        'surfaceThermochemistry': 'tacotBPrimeAir',
+        'pyrolysisGasProperties': 'tacotPyrolysisGas',
+
+        'basis': 'openBenchmark',
+
+        'provenance': {
+            'virgin':      ('TACOT v3.0 spreadsheet, Thermal Properties sheet, SI columns. '
+                            'Distributed with the Ablation Workshop test-case series; the sheet '
+                            'names its main source as Milos and Chen, Performance of a '
+                            'Low-Density Ablative Heat Shield Material, Journal of Spacecraft and '
+                            'Rockets 45(4), 2008.', 'openBenchmark'),
+            'char':        ('TACOT v3.0 spreadsheet, Thermal Properties sheet, SI columns.',
+                            'openBenchmark'),
+            'virginDensity': ('TACOT v3.0, Pyrolysis model sheet: 0.1 fibre and 0.1 matrix volume '
+                              'fraction at 1600 and 1200 kg/m^3 intrinsic gives 280 kg/m^3.',
+                              'openBenchmark'),
+            'charDensity':   ('TACOT v3.0, Pyrolysis model sheet: the matrix loses half its mass '
+                              'during pyrolysis, giving 220 kg/m^3.', 'openBenchmark'),
+            'pyrolysis':   ('TACOT v3.0, Pyrolysis model sheet, SI table. Kinetics after '
+                            'Goldstein 1965: two decomposing resin phases plus a non-decomposing '
+                            'carbon reinforcement.', 'openBenchmark'),
+            'pyrolysisGasElements': ('TACOT v3.0, Pyrolysis model sheet, quoting Sykes, '
+                                     'Decomposition Characteristics of a Char-Forming Phenolic '
+                                     'Polymer Used for Ablative Composites, NASA TN D-3810, 1967.',
+                                     'openBenchmark'),
+            'charElements': ('The reinforcement is carbon fibre and the residue of the phenolic '
+                             'is carbon, so the ablating surface is elemental carbon.',
+                             'openBenchmark'),
+            'surfaceThermochemistry': ('TACOT v3.0 B-prime sheet, generated with TARGET on the '
+                                       'CEA database for air at four pressures spanning 0.001 to '
+                                       '1 atm, 25 species, equal diffusion coefficients and '
+                                       'equilibrium at the wall.', 'openBenchmark'),
+            'pyrolysisGasProperties': ('TACOT v3.0, Pyrolysis model sheet: equilibrium '
+                                       'properties of the pyrolysis gas at four pressures '
+                                       'spanning 1e-5 to 1 atm, generated with TARGET on the '
+                                       'CEA database, condensed species excluded. The datum '
+                                       'is the same as the solid curves, which is what lets '
+                                       'the heat of pyrolysis fall out of the enthalpy '
+                                       'difference instead of being supplied.',
+                                       'openBenchmark'),
+        },
+
+        'notes': ('A theoretical material, not a procurable one. It exists so that ablation codes '
+                  'can be compared on identical inputs, and its property set is the only complete '
+                  'one in the open literature. Two limits matter before it is used for anything '
+                  'else. It is a low-density entry heatshield material at 280 kg/m^3 virgin, not '
+                  'a tape-wrapped nozzle liner at 1450. And its B-prime table is for air and '
+                  'stops at 1 atm, so it closes an arc-jet or entry problem and cannot close a '
+                  'rocket nozzle, where the edge gas is reducing combustion products at tens of '
+                  'atmospheres.'),
+    },
+
+}
+
+def availableAblativeMaterials() -> list:
+
+    '''
+
+    Materials whose full charring-ablator response property set is carried.
+
+    These are not the same as the ablatives in `availableMaterials('ablative')`. That list is
+    selection grade: density, strength, a use temperature. This one is the much shorter list of
+    materials that `NOVA.ablative` can actually run.
+
+    Returns:
+    --------
+    list
+        Sorted material names.
+
+    '''
+
+    return sorted(_ABLATIVERESPONSEDATA)
+
+def ablativeResponseData(material: str) -> dict:
+
+    '''
+
+    The complete response property set for one charring ablator.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableAblativeMaterials()`, matched case insensitively.
+
+    Returns:
+    --------
+    dict
+        The stored entry. Curves are plain lists on a shared temperature grid; the module source
+        documents the key layout.
+
+    Raises:
+    -------
+    KeyError
+        If the material carries no response data. There is no fallback and no substitution: a
+        response run on another material's kinetics is worse than no run.
+
+    '''
+
+    for name, entry in _ABLATIVERESPONSEDATA.items():
+        if name.lower() == material.strip().lower():
+            return entry
+
+    raise KeyError(
+        'No ablative response data for {!r}. Carried: {}. Selection-grade ablatives without a '
+        'response property set are listed by availableMaterials with the ablative class.'.format(
+            material, availableAblativeMaterials()))
+
+def ablativeResponseProvenance(material: str, propertyName: str) -> tuple:
+
+    '''
+
+    Where one piece of a charring ablator's response data came from.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableAblativeMaterials()`.
+    propertyName : str
+        A key of the material's 'provenance' entry.
+
+    Returns:
+    --------
+    tuple
+        (source, basis). A basis of 'openBenchmark' means a published inter-code comparison
+        dataset: the numbers are traceable and fixed, but they describe a theoretical material.
+
+    Raises:
+    -------
+    KeyError
+        If no provenance is recorded under that name.
+
+    '''
+
+    provenance = ablativeResponseData(material)['provenance']
+
+    if propertyName not in provenance:
+        raise KeyError('{!r} records no response provenance for {!r}. It records: {}.'.format(
+            material, propertyName, sorted(provenance)))
+
+    return provenance[propertyName]

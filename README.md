@@ -302,13 +302,14 @@ That is checked rather than asserted. `tests/testFacade.py` holds it structurall
 | `figures.py` | One figure description per view, rendered by both backends |
 | `keepOut.py` | The keep-out envelope behind the chamber that the jacket and volutes pack around |
 | `regenThermal.py` | The regenerative jacket thermal model: Bartz on the gas side, Gnielinski and the fluted blend on the coolant side, and the views that present them |
+| `ablative.py` | The charring ablator response: CMA in-depth conduction with a receding surface, Arrhenius pyrolysis, surface thermochemistry, and the station march that applies them along a contour |
 | `channelGeometry.py` | Cooling channel cross sections: the transport frame along the centreline, the circular and fluted profiles, and the printability blend |
 | `channelSizing.py` | The dynamic channel radius solve: converging each station's radius so the hot wall runs at the temperature it is allowed to |
 | `regenChannels.py` | The jacket build: volute interfaces, channel centreline, printability audit, the swept channels and the wall meshes |
-| `volutes.py` | The inlet and return scrolls, their walls sized against the coolant state, and their print supports |
+| `nozzleVolutes.py` | The inlet and return scrolls, their walls sized against the coolant state, and their print supports |
 | `chamber.py` | The combustion chamber and the converging section, traditional and sunken |
 | `regenStations.py` | Where the jacket ends, and the exhaust state at every station of both sections |
-| `config.py` | Reading a configuration from JSON, a dictionary or a workbook |
+| `config.py` | Reading a configuration from JSON or a dictionary |
 | `exports.py` | Contours, STL geometry, exhaust properties and the pickled run |
 | `validation.py` | Input validation as rule tables rather than branches, with one checker behind them |
 | `materials.py`, `units.py`, `utils.py`, `Volute.py` | Wall alloys, unit conversion, geometry helpers, volute construction |
