@@ -19,8 +19,15 @@ Usage, from the NOVA root:
     python tests/regressionHarness.py --compare           # compare against the baselines
     python tests/regressionHarness.py --compare --case regenCircle
 
-Baselines are written to tests/baselines/ and are not carried in the repository, so a fresh
-checkout records its own before it starts moving code.
+Baselines live in tests/baselines/ and are carried in the repository, so a fresh checkout can
+compare against the numbers the work was signed off on rather than against whatever the code
+happens to produce on the day it is cloned. They are pickled numpy, so the diff of a re-record
+is not readable: when a change moves numbers deliberately, the magnitude belongs in the commit
+message and in the report, and the pickle is only the evidence.
+
+A baseline is a record of this machine's answer. A different CEA, scipy or numpy build can move
+the last bits, so a comparison that fails on a fresh environment before any code has changed is
+telling you about the environment.
 
 Author: Sean Bowman
 

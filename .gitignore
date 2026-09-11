@@ -28,9 +28,6 @@ temp/
 runs/
 .pytest_cache/
 
-# Regression baselines are recorded deliberately, not carried in the repository.
-tests/baselines/
-
 # Vendored plotly bundle, dropped beside the interactive figures by
 # figures.py exportInteractiveFigures(). 4.4 MB, regenerated on every run.
 plotly.min.js
