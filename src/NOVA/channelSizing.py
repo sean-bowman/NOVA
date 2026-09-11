@@ -47,7 +47,6 @@ Author: Sean Bowman
 
 '''
 
-import os
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -58,9 +57,16 @@ from tqdm import tqdm
 from .utils import DCM, parallelOffset, ConvergenceFailureError, createErrorContext
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
-from .regenThermal import (flutedHeatTransferStudyPath,
-                           regenHeatTransferModel as solveRegenHeatTransfer,
+from .regenThermal import (regenHeatTransferModel as solveRegenHeatTransfer,
                            regenHeatTransferModelPlots as drawRegenHeatTransfer)
+
+# The quantities the thermal model returns per station and the sizing loop carries through to the
+# comparison figure. Held once because the per-station loop and the full-contour pass both fill
+# the same dictionary, and a key present in one and not the other reads as a silent zero.
+THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'machNumber',
+                   'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
+                   'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
+                   'reynoldsNumber')
 
 @dataclass
 class ChannelSizingState:
@@ -76,7 +82,7 @@ class ChannelSizingState:
     Parameters:
     -----------
     channelType : str
-        'circle', 'fluted' or 'dataMap'.
+        'circle' or 'fluted'.
     nChannel : int
         Channels around the nozzle.
     numCrossSections : int
@@ -416,22 +422,17 @@ def solveChannelRadii(state, geometry, thermal):
 
         # run single station regen heat transfer model
         if channelType == 'fluted':
-            heatTransferOutputs, plotOutputs, _, _, _, _ \
+            heatTransferOutputs, plotOutputs, _, _ \
                 = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True)
         elif channelType == 'circle':
-            _, _, heatTransferOutputs, plotOutputs, _, _ \
+            _, _, heatTransferOutputs, plotOutputs \
                 = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True)
-        elif channelType == 'dataMap':
-            _, _, _, _, heatTransferOutputs, plotOutputs \
-                = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True,showDataMap=True)
         # update local heat transfer dictionary
         hotWallTemperature                          = heatTransferOutputs['hotWallTemperature']
         heatTransferDict_i['newCoolantTemperature'] = heatTransferOutputs['coolantTemperature'][0]
         heatTransferDict_i['newCoolantPressure']    = heatTransferOutputs['coolantPressure'][0]
         # update global plot outputs
-        plotKeys = ['temperature','pressure','wallTemperature','velocity','machNumber','heatTransfer','density','viscosity','specificHeat',
-                    'nusseltNumber','exhaustConvectiveHeatTransferCoef','coolantConvectiveHeatTransferCoef','reynoldsNumber']
-        for key in plotKeys:
+        for key in THERMALPLOTKEYS:
             heatTransferPlots[key][state.numCrossSections - 1 - i] = plotOutputs[key][0]
 
         return heatTransferDict_i, heatTransferPlots, hotWallTemperature
@@ -883,9 +884,7 @@ def solveChannelRadii(state, geometry, thermal):
             heatTransferPlots = {}
             heatTransferPlots["xHotWall3D"] = xNozzle
             heatTransferPlots["rHotWall3D"] = rNozzle
-            plotKeys = ['temperature','pressure','wallTemperature','velocity','machNumber','heatTransfer','density','viscosity','specificHeat',
-                        'nusseltNumber','exhaustConvectiveHeatTransferCoef','coolantConvectiveHeatTransferCoef','reynoldsNumber']
-            for key in plotKeys:
+            for key in THERMALPLOTKEYS:
                 heatTransferPlots[key] = np.zeros(state.numCrossSections)
 
         # find max channel radius at each station
@@ -965,17 +964,13 @@ def solveChannelRadii(state, geometry, thermal):
             for key in keysHX:
                 heatTransferDict[key][i] = heatTransferDict_Update[key][0]
 
-        # The data map supplies a third comparison curve against the fluted and circular
-        # results. It is a supplied study rather than something the tool derives, so a run
-        # without one draws the two curves it can compute.
-        dataMapAvailable = os.path.exists(flutedHeatTransferStudyPath())
-
-        _, _, _, circleHeatTransferPlots, _, dataMapHeatTransferPlots = \
-            solveRegenHeatTransfer(thermal, heatTransferDict,showDataMap=dataMapAvailable,returnDict=True,plots=False)
+        # The circular result is solved alongside the fluted one so the two can be drawn
+        # against each other, which is what the fluted channel was adopted on.
+        _, _, _, circleHeatTransferPlots = \
+            solveRegenHeatTransfer(thermal, heatTransferDict,returnDict=True,plots=False)
 
         drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel,
                                          flutedResults=heatTransferPlots, circleResults=circleHeatTransferPlots,
-                                         dataMapResults=dataMapHeatTransferPlots if dataMapAvailable else None,
                                          titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
 
     if state.channelType == 'circle':

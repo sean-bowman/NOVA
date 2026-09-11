@@ -277,7 +277,7 @@ def _isFluted(source):
 
     '''True for a channel whose cross section carries flutes.'''
 
-    return read(source, 'channelType') in ('fluted', 'dataMap')
+    return read(source, 'channelType') == 'fluted'
 
 regenChannelRules = (
 

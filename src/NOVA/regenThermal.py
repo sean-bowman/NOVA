@@ -21,8 +21,6 @@ is what lets the fluted result be plotted against the circular one it replaced:
              factor.
     fluted   Spirally fluted channels. Coolant side is a fifty-fifty blend of Gnielinski with a
              spirally fluted correlation from Principles of Enhanced Heat Transfer.
-    dataMap  Fluted channels whose coolant side is read from a supplied CFD study rather than
-             correlated. NOVA ships without the study; see flutedHeatTransferStudyPath.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -69,8 +67,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
-from pandas import read_csv
-from scipy.interpolate import UnivariateSpline, interp1d
+from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 import matplotlib.pyplot as plt
@@ -108,25 +105,6 @@ def _plotlyGate(featureName: str) -> bool:
         print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
     return False
 
-def flutedHeatTransferStudyPath() -> str:
-
-    '''
-
-    Location of the flute heat transfer study the data-map channel model reads.
-
-    The study is a CFD sweep of one family of flute geometries against Reynolds number, so it
-    describes the flutes it was run for and nothing else. NOVA ships without one, and the fluted
-    channel type falls back to its analytical correlation when it is absent.
-
-    Returns:
-    --------
-    str
-        Absolute path the study is looked for at, whether or not it exists.
-
-    '''
-
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets',
-                        'FlutedChannelHeatTransferStudy.csv')
 
 @dataclass
 class RegenThermalContext:
@@ -358,7 +336,7 @@ def validateRegenHeatTransferInputs(inputsDict: dict) -> None:
     applyRules(inputsDict, regenThermalRules)
 
 def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperature: float = None,
-                           showDataMap: bool = False, returnDict: bool = False, plots: bool = True, titleFlare: str = '',
+                           returnDict: bool = False, plots: bool = True, titleFlare: str = '',
                            xReference = [], rReference = []):
 
     r'''
@@ -668,10 +646,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             isCircle              = inputsDict["isCircle"]
         else:
             runFluted             = False
-            showDataMap           = False
     else:
         runFluted                 = False
-        showDataMap               = False
     if 'circleCSA' in inputsDict and 'circleSA' in inputsDict:
         if inputsDict['circleCSA'] is not None and inputsDict['circleSA'] is not None:
             runCircle             = True
@@ -723,64 +699,13 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # Adiabatic cold wall
     if constantColdWallTemperature is not None:
         runAdiabaticColdWall = True
-        showDataMap = False
     else:
         runAdiabaticColdWall = False
 
-    # Read in fluted channel heat transfer study data
-    if showDataMap:
-        # The data map is a CFD study of one family of flute geometries, tabulated against
-        # Reynolds number. It is specific to the flutes it was run for, so it is a supplied
-        # input rather than something NOVA can derive, and the tool ships without one.
-        dataMapPath = flutedHeatTransferStudyPath()
-        if not os.path.exists(dataMapPath):
-            raise InvalidInputError(
-                message = ('The data-map fluted channel model needs a flute heat transfer study, '
-                           f'which is not present at {dataMapPath}. Supply one with columns '
-                           '[fluteHelixAngle, fluteAmplitudeCoef*100, unused, Reynolds, h, Nu, dP, f], '
-                           'or select a channel type that does not read the data map.'),
-                parameterName = 'channelType',
-                value = 'dataMap',
-                validRange = 'A flute heat transfer study CSV in src/NOVA/assets/')
-
-        flutedHeatTransferStudy = read_csv(dataMapPath)
-        '''
-        The data table has columns of:
-        0: h  - Heat Transfer Coef
-        1: Nu - Nusselt Number
-        2: dP - Pressure Drop
-        3: f  - Friction Factor
-        '''
-        propertyMatrix       = flutedHeatTransferStudy.values
-        whichFluteGeometry   = [fluteHelixAngle, fluteAmplitudeCoef * 100]
-        propertyMatrix       = propertyMatrix[propertyMatrix[:,0] == whichFluteGeometry[0]]
-        propertyMatrix       = propertyMatrix[propertyMatrix[:,1] == whichFluteGeometry[1]]
-        ReRange              = propertyMatrix[:,3]
-        remainingProperties  = propertyMatrix[:,4:]
-        dataMapInterpolators = []
-        for i, _ in enumerate(remainingProperties[0,:]):
-            dataMapInterpolators.append(UnivariateSpline(ReRange, remainingProperties[:,i], k = 1, s = 0))
 
     # Collapse array initializations
     if True:
 
-        # Data Map Based Fluted Cooling Channel Geometry and Flow Properties
-        dataMapCoolantTemperature, dataMapCoolantPressure, dataMapCoolantVelocity, \
-        dataMapCoolantMachNumber, dataMapCoolantReynoldsNumber, dataMapCoolantNusseltNumber, \
-        dataMapCoolantConvectiveHeatTransferCoef, dataMapExhaustConvectiveHeatTransferCoef, dataMapHeatTransfer, \
-        dataMapWallConductivity, dataMapHotWallTemperature, dataMapColdWallTemperature \
-        = [np.zeros(numCrossSections) for _ in range(12)]
-
-        dataMapCoolantTemperature[-1] = coolantInitialTemperature
-        dataMapCoolantPressure[-1]    = coolantInitialPressure
-
-        # Data Map Based Fluted Cooling Channel Thermophysical Properties
-        dataMapCoolantDensity, dataMapCoolantViscosity, dataMapCoolantSpecificHeat, \
-        dataMapCoolantGamma, dataMapCoolantThermalConductivity, dataMapCoolantSpeedOfSound, \
-        dataMapCoolantEnthalpy, dataMapCoolantPrandtlNumber \
-        = [np.zeros(numCrossSections) for _ in range(8)]
-
-        dataMapCoolantThermalConductivity[-1] = np.mean(wallThermalConductivityData)
 
         # Fluted Cooling Channel Geometry and Flow Properties
         flutedCoolantTemperature, flutedCoolantPressure, flutedCoolantVelocity, \
@@ -872,37 +797,6 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             K_bend = K_90 * (2 * turnAngle / np.pi)
 
             return K_bend
-
-        # Data Map Channel Properties
-        if showDataMap:
-
-            # Pull thermophysical properties at the current (T, P) with RefProp
-            dataMapCoolantDensity[i], dataMapCoolantViscosity[i], dataMapCoolantSpecificHeat[i], \
-            dataMapCoolantGamma[i], dataMapCoolantThermalConductivity[i], dataMapCoolantSpeedOfSound[i], \
-            dataMapCoolantEnthalpy[i], dataMapCoolantPrandtlNumber[i] \
-            = fluidProps(coolant, 'TP', 'D VIS Cp Cp/Cv TCX W H PRANDTL', dataMapCoolantTemperature[i], dataMapCoolantPressure[i])
-
-            # Calculate dependept flow properties
-            dataMapCoolantVelocity[i]       = mdot / (dataMapCoolantDensity[i] * gausFlutedCSA[i])
-            dataMapCoolantMachNumber[i]     = dataMapCoolantVelocity[i] / dataMapCoolantSpeedOfSound[i]
-            dataMapCoolantReynoldsNumber[i] = dataMapCoolantDensity[i] * flutedHydraulicDiameter[i] * dataMapCoolantVelocity[i] / dataMapCoolantViscosity[i]
-
-            # Calculate Nusselt Number
-            # Sample the data map values
-            dataMapFrictionFactor          = dataMapInterpolators[3](dataMapCoolantReynoldsNumber[i])
-            dataMapCoolantNusseltNumber[i] = dataMapInterpolators[1](dataMapCoolantReynoldsNumber[i])
-
-            # Calculate pressure drop and update downstream pressure for each channel section
-            momentumLossCoef = findKFactor(turnAngle[i], radiusOfCurvature[i], flutedHydraulicDiameter[i])
-
-            frictionPressureDrop = differentialPathLength[i] * dataMapFrictionFactor * flutedCoolantDensity[i] * flutedCoolantVelocity[i]**2 / (2 * flutedHydraulicDiameter[i])
-            momentumPressureDrop = momentumLossCoef * flutedCoolantDensity[i] * flutedCoolantVelocity[i]**2 / 2
-            totalPressureDrop    = frictionPressureDrop + momentumPressureDrop
-
-            if i > 0:
-                dataMapCoolantPressure[i-1] = dataMapCoolantPressure[i] - totalPressureDrop
-            if iterationMode == 'single':
-                dataMapCoolantPressure[i] = dataMapCoolantPressure[i] - totalPressureDrop
 
         # Fluted Channel Properties
         if runFluted:
@@ -1023,94 +917,6 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             # -- We don't know hot wall temperature, so converge to the correct hot wall temperature iteratively -- #
 
             def hotWallConvergenceLoops(throatRadiusOfCurvature):
-
-                # Data Map Hot Wall Temperature Convergence
-                if showDataMap:
-
-                    converged = False
-                    tolerance = 0.01
-                    initialWallTemperatureGuess = nearWallTemperature[i]
-                    hotWallTemperatureGuess = initialWallTemperatureGuess
-                    convergenceIteration = 0
-                    maxWallConvergenceIterations = 50
-
-                    while not converged and convergenceIteration < maxWallConvergenceIterations:
-                        convergenceIteration += 1
-
-                        # Check for NaN in hotWallTemperatureGuess before it propagates
-                        if np.isnan(hotWallTemperatureGuess):
-                            debug_file = dumpDebugInfo(locals(), i, time.time() - start_time)
-                            error_msg = f"NaN detected in Data Map convergence loop hotWallTemperatureGuess at iteration {i}, convergenceIteration {convergenceIteration}"
-                            error_msg += f"\nInitial guess was: {initialWallTemperatureGuess}"
-                            error_msg += f"\nSelf.regenSectionNearWallTemperature[i] = {nearWallTemperature[i]}"
-                            if debug_file:
-                                error_msg += f"\nDebug information saved to: {debug_file}"
-                            raise ValueError(error_msg)
-
-                        # Calculate wall thermal conductivity assuming the wall temperature
-                        dataMapWallConductivity[i] = wallThermalConductivityInterpolator[i](hotWallTemperatureGuess)
-
-                        # -- Calculate coolant-side convective/conductive heat transfer coefficient(s) -- #
-
-                        dataMapCoolantConvectiveHeatTransferCoef[i] = dataMapCoolantThermalConductivity[i] * dataMapCoolantNusseltNumber[i] / flutedHydraulicDiameter[i]
-
-                        dataMapCoolantConvectiveResistance = 1 / (dataMapCoolantConvectiveHeatTransferCoef[i] * gausFlutedSA[i]/2)
-
-                        # to calculate conductive resistance in the nozzle using a cylindrical model for conductive resistance, we frame our reference around
-                        # the nozzle axis becuase the assumption must be that the heat transfer problem is cylindrically symmetrical and that is only true
-                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling
-                        # "comes inwards" from all directions whereas from the channel axis, heating only comes in from one direction and cooling goes out in all directions
-                        conductiveResistance = np.log(1 + hotWallThickness / rHotWall3D[i]) / \
-                                            (2*np.pi * differentialPathLength[i] * dataMapWallConductivity[i])
-
-                        # -- Calculate exhaust-side convective heat transfer coefficient -- #
-
-                        dataMapExhaustConvectiveHeatTransferCoef[i] = bartzHeatTransferCoefficient(
-                            nearWallTemperature[i], nearWallMachNumber[i], exhaustGamma[i],
-                            exhaustGasConstant[i], exhaustMolecularWeight[i], hotWallTemperatureGuess,
-                            chamberPressure, theoreticalCharVel, throatDiameter,
-                            throatRadiusOfCurvature, throatArea, nozzleAreas[i])
-
-                        exhaustConvectiveResistance = 1 / (dataMapExhaustConvectiveHeatTransferCoef[i] * hotWallArea[i])
-
-                        # -- Calculate heat transfer and update temperatures -- #
-
-                        dataMapHeatTransfer[i]         = (nearWallTemperature[i] - dataMapCoolantTemperature[i]) / \
-                                                        (dataMapCoolantConvectiveResistance + conductiveResistance + exhaustConvectiveResistance)
-                        if i > 0:
-                            dataMapCoolantTemperature[i-1] = dataMapCoolantTemperature[i] + (dataMapHeatTransfer[i] / (mdot * dataMapCoolantSpecificHeat[i]))
-                        dataMapHotWallTemperature[i]   = nearWallTemperature[i] - (dataMapHeatTransfer[i] * exhaustConvectiveResistance)
-                        dataMapColdWallTemperature[i]  = dataMapCoolantTemperature[i] + (dataMapHeatTransfer[i] * dataMapCoolantConvectiveResistance)
-
-                        # Check convergence criteria
-                        residual = abs(hotWallTemperatureGuess - dataMapHotWallTemperature[i])
-
-                        if residual < tolerance:
-                            converged = True
-                            if iterationMode == 'single':
-                                dataMapCoolantTemperature[i] = dataMapCoolantTemperature[i] + (dataMapHeatTransfer[i] / (mdot * dataMapCoolantSpecificHeat[i]))
-
-                        else:
-                            hotWallTemperatureGuess = dataMapHotWallTemperature[i]
-
-                    if not converged:
-                        raise ConvergenceFailureError(
-                            message=f'Data map hot wall temperature convergence failed at station {i} after {maxWallConvergenceIterations} iterations',
-                            context={
-                                'stationIndex': i,
-                                'iterationCount': convergenceIteration,
-                                'residual': residual,
-                                'tolerance': tolerance,
-                                'hotWallTemperatureGuess': hotWallTemperatureGuess,
-                                'dataMapHotWallTemperature': dataMapHotWallTemperature[i],
-                                'dataMapHeatTransfer': dataMapHeatTransfer[i],
-                                'regenSectionNearWallTemperature': nearWallTemperature[i],
-                                'dataMapCoolantTemperature': dataMapCoolantTemperature[i]
-                            },
-                            iterations=convergenceIteration,
-                            tolerance=tolerance,
-                            residual=residual
-                        )
 
                 # Fluted Hot Wall Temperature Convergence
                 if runFluted:
@@ -1417,33 +1223,6 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         else:
             circleHeatTransferOutputs = {}
             circlePlotOutputs = {}
-        if showDataMap:
-            dataMapHeatTransferOutputs = {
-                'coolantPressure':     dataMapCoolantPressure,
-                'coolantTemperature':  dataMapCoolantTemperature,
-                'hotWallTemperature':  dataMapHotWallTemperature,
-                'coldWallTemperature': dataMapColdWallTemperature
-            }
-            dataMapPlotOutputs = {
-                'xHotWall3D'                        : xHotWall3D,
-                'rHotWall3D'                        : rHotWall3D,
-                'temperature'                       : dataMapCoolantTemperature,
-                'pressure'                          : dataMapCoolantPressure,
-                'wallTemperature'                   : dataMapHotWallTemperature,
-                'velocity'                          : dataMapCoolantVelocity,
-                'machNumber'                        : dataMapCoolantMachNumber,
-                'heatTransfer'                      : dataMapHeatTransfer,
-                'density'                           : dataMapCoolantDensity,
-                'viscosity'                         : dataMapCoolantViscosity,
-                'specificHeat'                      : dataMapCoolantSpecificHeat,
-                'nusseltNumber'                     : dataMapCoolantNusseltNumber,
-                'exhaustConvectiveHeatTransferCoef' : dataMapExhaustConvectiveHeatTransferCoef,
-                'coolantConvectiveHeatTransferCoef' : dataMapCoolantConvectiveHeatTransferCoef,
-                'reynoldsNumber'                    : dataMapCoolantReynoldsNumber
-            }
-        else:
-            dataMapHeatTransferOutputs = {}
-            dataMapPlotOutputs = {}
 
     else:
         if runFluted:
@@ -1482,14 +1261,12 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         else:
             circleHeatTransferOutputs = {}
             circlePlotOutputs = {}
-        dataMapHeatTransferOutputs = {}
-        dataMapPlotOutputs = {}
 
     # Plots
     if plots and context.plotsAdv == 'on' and _plotlyGate('the interactive heat transfer view'):
         if not runAdiabaticColdWall:
             regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel,\
-                                             flutedResults=flutedPlotOutputs, circleResults=circlePlotOutputs, dataMapResults=dataMapPlotOutputs, titleFlare=titleFlare,
+                                             flutedResults=flutedPlotOutputs, circleResults=circlePlotOutputs, titleFlare=titleFlare,
                                              xReference=xReference, rReference=rReference)
         else:
             regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel, adiabatic=True,\
@@ -1499,11 +1276,10 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # Return
     if returnDict:
         return flutedHeatTransferOutputs, flutedPlotOutputs, \
-                circleHeatTransferOutputs, circlePlotOutputs, \
-                dataMapHeatTransferOutputs, dataMapPlotOutputs
+                circleHeatTransferOutputs, circlePlotOutputs
 
 def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
-                                 flutedResults: dict = None, circleResults: dict = None, dataMapResults: dict = None,
+                                 flutedResults: dict = None, circleResults: dict = None,
                                  titleFlare: str = '', xReference = [], rReference = []):
 
     # Helper function to add a trace
@@ -1581,29 +1357,6 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 runCircle = False
         else:
             runCircle = False
-        # Data Map
-        if dataMapResults is not None:
-            if len(dataMapResults) != 0:
-                showDataMap                              = True
-                xHotWall3D                               = dataMapResults["xHotWall3D"]
-                rHotWall3D                               = dataMapResults["rHotWall3D"]
-                dataMapCoolantTemperature                = dataMapResults["temperature"]
-                dataMapCoolantPressure                   = dataMapResults["pressure"]
-                dataMapHotWallTemperature                = dataMapResults["wallTemperature"]
-                dataMapCoolantVelocity                   = dataMapResults["velocity"]
-                dataMapCoolantMachNumber                 = dataMapResults["machNumber"]
-                dataMapHeatTransfer                      = dataMapResults["heatTransfer"]
-                dataMapCoolantDensity                    = dataMapResults["density"]
-                dataMapCoolantViscosity                  = dataMapResults["viscosity"]
-                dataMapCoolantSpecificHeat               = dataMapResults["specificHeat"]
-                dataMapCoolantNusseltNumber              = dataMapResults["nusseltNumber"]
-                dataMapExhaustConvectiveHeatTransferCoef = dataMapResults["exhaustConvectiveHeatTransferCoef"]
-                dataMapCoolantConvectiveHeatTransferCoef = dataMapResults["coolantConvectiveHeatTransferCoef"]
-                dataMapCoolantReynoldsNumber             = dataMapResults["reynoldsNumber"]
-            else:
-                showDataMap = False
-        else:
-            showDataMap = False
 
         # -- Process Results -- #
 
@@ -1668,7 +1421,6 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 'Supercritical': 'cyan',
                 'Subcritical': 'blue',
                 'Circular': 'magenta',
-                'Data Map': 'yellow',
                 'GRCop Melting Temp': 'red',
                 'Nozzle': 'grey'
         }
@@ -1771,32 +1523,6 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
             # Reynolds
             add_trace(4, 3, xHotWall3D, circleCoolantReynoldsNumber, 'Circular', colors['Circular'])
 
-        if showDataMap:
-            # Coolant Pressure
-            add_trace(1, 1, xHotWall3D, dataMapCoolantPressure/1e6, 'Data Map', colors['Data Map'])
-            # Coolant Temperature
-            add_trace(1, 2, xHotWall3D, dataMapCoolantTemperature, 'Data Map', colors['Data Map'])
-            # Wall Temperature
-            add_trace(1, 3, xHotWall3D, dataMapHotWallTemperature, 'Data Map', colors['Data Map'])
-            # Velocity
-            add_trace(2, 1, xHotWall3D, dataMapCoolantVelocity, 'Data Map', colors['Data Map'])
-            # Mach
-            add_trace(2, 2, xHotWall3D, dataMapCoolantMachNumber, 'Data Map', colors['Data Map'])
-            # Heat Transfer
-            add_trace(2, 3, xHotWall3D, dataMapHeatTransfer, 'Data Map', colors['Data Map'])
-            # Density
-            add_trace(3, 1, xHotWall3D, dataMapCoolantDensity, 'Data Map', colors['Data Map'])
-            # Viscosity
-            add_trace(3, 2, xHotWall3D, dataMapCoolantViscosity, 'Data Map', colors['Data Map'])
-            # Specific Heat
-            add_trace(3, 3, xHotWall3D, dataMapCoolantSpecificHeat, 'Data Map', colors['Data Map'])
-            # Nusselt
-            add_trace(4, 1, xHotWall3D, dataMapCoolantNusseltNumber, 'Data Map', colors['Data Map'])
-            # Heat Transfer Coef
-            add_trace(4, 2, xHotWall3D, dataMapCoolantConvectiveHeatTransferCoef, 'Coolant - Data Map', colors['Data Map'])
-            add_trace(4, 2, xHotWall3D, dataMapExhaustConvectiveHeatTransferCoef, 'Exhaust - Data Map', colors['Data Map'], dash='dot')
-            # Reynolds
-            add_trace(4, 3, xHotWall3D, dataMapCoolantReynoldsNumber, 'Data Map', colors['Data Map'])
 
         # Update layout for all subplots
         for i in range(1, 13):

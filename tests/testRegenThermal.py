@@ -37,7 +37,7 @@ import numpy as np
 import pytest
 
 from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
-                          flutedHeatTransferStudyPath, validateRegenHeatTransferInputs)
+                          validateRegenHeatTransferInputs)
 
 class TestBartzViscosityConstant:
 
@@ -290,19 +290,6 @@ class TestContext:
         fields = set(RegenThermalContext.__dataclass_fields__)
 
         assert fields == {'material', 'dataFolder', 'plotsAdv', 'plotsDocs', 'export', 'debugMode'}
-
-class TestStudyPath:
-
-    '''The flute study is looked for inside NOVA, not in a sibling repository.'''
-
-    def testItResolvesInsideThePackage(self):
-
-        path = flutedHeatTransferStudyPath()
-        packageDirectory = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-        assert path.endswith(os.path.join('assets', 'FlutedChannelHeatTransferStudy.csv'))
-        assert path.startswith(os.path.join(packageDirectory, 'src', 'NOVA'))
-        assert 'propulsionDesign' not in path
 
 class TestInputValidation:
 

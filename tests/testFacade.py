@@ -225,6 +225,36 @@ class TestStateObjectsAreComplete:
 
         assert missing == []
 
+    def testTheSizingStateBuilderPassesEveryInputField(self):
+
+        # testEveryFieldReachedIsDeclared catches a field the solve reads but the dataclass does
+        # not declare. This catches the other direction: a field declared on ChannelSizingState
+        # that regenChannels._sizingState forgets to pass. That one is silent, because the field
+        # keeps its dataclass default and the solve runs on a None or a NaN it was never given.
+        source = moduleSource('channelSizing')
+        tree = ast.parse(source)
+
+        # The dataclass splits its inputs from its outputs with a comment, which the AST drops,
+        # so the split is found in the text and the fields filtered by line number.
+        marker = '# -- What the solve produces -- #'
+        assert source.count(marker) == 1, 'the input/output marker moved or was duplicated'
+        outputsBegin = source[:source.index(marker)].count('\n') + 1
+
+        declaration = [node for node in ast.walk(tree)
+                       if isinstance(node, ast.ClassDef) and node.name == 'ChannelSizingState'][0]
+        inputFields = {node.target.id for node in declaration.body
+                       if isinstance(node, ast.AnnAssign) and node.lineno < outputsBegin}
+
+        builder = [node for node in ast.walk(ast.parse(moduleSource('regenChannels')))
+                   if isinstance(node, ast.FunctionDef) and node.name == '_sizingState'][0]
+        constructions = [node for node in ast.walk(builder)
+                         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                         and node.func.id == 'ChannelSizingState']
+        assert len(constructions) == 1, '_sizingState builds the state once'
+        passed = {keyword.arg for keyword in constructions[0].keywords}
+
+        assert inputFields <= passed, sorted(inputFields - passed)
+
     def testEveryOutputTupleNamesDeclaredFields(self):
 
         pairs = (('regenChannels', 'RegenChannelState', 'regenChannelOutputs'),

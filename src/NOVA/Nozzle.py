@@ -101,8 +101,7 @@ try:
     from .channelGeometry import (ChannelGeometryInputs,
                                   generateCrossSections as buildCrossSections,
                                   getMaxChannelRadius as maxChannelRadius)
-    from .regenThermal import (RegenThermalContext, flutedHeatTransferStudyPath,
-                               validateRegenHeatTransferInputs,
+    from .regenThermal import (RegenThermalContext, validateRegenHeatTransferInputs,
                                regenHeatTransferModel as solveRegenHeatTransfer,
                                regenHeatTransferModelPlots as drawRegenHeatTransfer)
     from .gasDynamics import (prandtlMeyerAngle, machFromPrandtlMeyerAngle, machAngle,
@@ -669,7 +668,6 @@ class Nozzle:
         self.coolantFinalPressure                     = None     # [Pa]
         self.flutedHeatTransferOutputs                = None     # [dict]
         self.circleHeatTransferOutputs                = None     # [dict]
-        self.dataMapHeatTransferOutputs               = None     # [dict]
 
         # -- Plume -- #
 
@@ -1348,7 +1346,7 @@ class Nozzle:
                                    debugMode  = self.debugMode)
 
     def regenHeatTransferModel(self, inputsDict: dict, constantColdWallTemperature: float = None,
-                               showDataMap: bool = False, returnDict: bool = False, plots: bool = True,
+                               returnDict: bool = False, plots: bool = True,
                                titleFlare: str = '', xReference = [], rReference = []):
 
         """
@@ -1367,8 +1365,6 @@ class Nozzle:
         constantColdWallTemperature : float
             Fixes the cold wall temperature rather than solving for it, which runs the adiabatic
             comparison case [K].
-        showDataMap : bool
-            Also solve the data-map fluted channel, which needs the flute heat transfer study.
         returnDict : bool
             Return the per-station results rather than only drawing them.
         plots : bool
@@ -1388,13 +1384,13 @@ class Nozzle:
 
         return solveRegenHeatTransfer(self.regenThermalContext(), inputsDict,
                                       constantColdWallTemperature = constantColdWallTemperature,
-                                      showDataMap = showDataMap, returnDict = returnDict,
+                                      returnDict = returnDict,
                                       plots = plots, titleFlare = titleFlare,
                                       xReference = xReference, rReference = rReference)
 
     def regenHeatTransferModelPlots(self, coolant, nChannel, adiabatic = False,
                                     flutedResults: dict = None, circleResults: dict = None,
-                                    dataMapResults: dict = None, titleFlare: str = '',
+                                    titleFlare: str = '',
                                     xReference = [], rReference = []):
 
         """
@@ -1413,7 +1409,7 @@ class Nozzle:
             Channel count, reported in the titles.
         adiabatic : bool
             Draw the adiabatic cold wall comparison rather than the solved case.
-        flutedResults, circleResults, dataMapResults : dict
+        flutedResults, circleResults : dict
             Plotting dictionaries from the model. A family left as None is not drawn.
         titleFlare : str
             Appended to figure titles.
@@ -1424,8 +1420,7 @@ class Nozzle:
 
         return drawRegenHeatTransfer(self.regenThermalContext(), coolant, nChannel,
                                      adiabatic = adiabatic, flutedResults = flutedResults,
-                                     circleResults = circleResults, dataMapResults = dataMapResults,
-                                     titleFlare = titleFlare,
+                                     circleResults = circleResults, titleFlare = titleFlare,
                                      xReference = xReference, rReference = rReference)
 
     # -- Data Exporting Methods -- #

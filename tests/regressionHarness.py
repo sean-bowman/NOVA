@@ -174,6 +174,13 @@ def compareStates(reference: dict, candidate: dict) -> list:
 
     Differences between two captured states, most structural first.
 
+    Two kinds are reported and they mean different things. A **structural** difference is a change
+    to the attribute set itself: an attribute added, removed, retyped or reshaped. A **value**
+    difference is a number, string or array element that moved. Only the second says the physics
+    changed. The distinction matters because `captureState` walks `vars(nozzle)`, so adding or
+    removing an attribute registers here even when nothing computed moves, and a run that reports
+    only structural differences has left every result exactly as it was.
+
     Parameters:
     -----------
     reference, candidate : dict
@@ -182,7 +189,8 @@ def compareStates(reference: dict, candidate: dict) -> list:
     Returns:
     --------
     list
-        One string per difference. Empty means bit-identical.
+        One (kind, message) pair per difference, where kind is 'structural' or 'value'. Empty
+        means bit-identical.
 
     '''
 
@@ -192,21 +200,24 @@ def compareStates(reference: dict, candidate: dict) -> list:
     added   = sorted(set(candidate) - set(reference))
 
     for name in missing:
-        differences.append(f'{name}: present in baseline, absent now')
+        differences.append(('structural', f'{name}: present in baseline, absent now'))
     for name in added:
-        differences.append(f'{name}: absent from baseline, present now')
+        differences.append(('structural', f'{name}: absent from baseline, present now'))
 
     for name in sorted(set(reference) & set(candidate)):
 
         before, after = reference[name], candidate[name]
 
         if isinstance(before, np.ndarray) != isinstance(after, np.ndarray):
-            differences.append(f'{name}: type changed, {type(before).__name__} to {type(after).__name__}')
+            differences.append(('structural',
+                                f'{name}: type changed, {type(before).__name__} '
+                                f'to {type(after).__name__}'))
             continue
 
         if isinstance(before, np.ndarray):
             if before.shape != after.shape:
-                differences.append(f'{name}: shape changed, {before.shape} to {after.shape}')
+                differences.append(('structural',
+                                    f'{name}: shape changed, {before.shape} to {after.shape}'))
                 continue
             # NaN is a legitimate value here, so it has to compare equal to itself.
             unequal = ~((before == after) | (np.isnan(before) & np.isnan(after))) \
@@ -215,19 +226,62 @@ def compareStates(reference: dict, candidate: dict) -> list:
             if count:
                 worst = float(np.nanmax(np.abs(before[unequal] - after[unequal]))) \
                         if before.dtype.kind == 'f' else float('nan')
-                differences.append(f'{name}: {count} of {before.size} elements differ, '
-                                   f'largest difference {worst:.6e}')
+                differences.append(('value',
+                                    f'{name}: {count} of {before.size} elements differ, '
+                                    f'largest difference {worst:.6e}'))
             continue
 
         if isinstance(before, float) and isinstance(after, float):
             if not (before == after or (np.isnan(before) and np.isnan(after))):
-                differences.append(f'{name}: {before!r} to {after!r}')
+                differences.append(('value', f'{name}: {before!r} to {after!r}'))
             continue
 
         if before != after:
-            differences.append(f'{name}: {before!r} to {after!r}')
+            differences.append(('value', f'{name}: {before!r} to {after!r}'))
 
     return differences
+
+def reportDifferences(differences: list, headline: str) -> int:
+
+    '''
+
+    Print a set of differences, split by kind, and return how many of them moved a value.
+
+    Structural differences are printed but not counted. An attribute that appeared or vanished is
+    a change to the shape of the state object, and the caller has to decide whether it was meant;
+    it is not evidence that a number moved.
+
+    Parameters:
+    -----------
+    differences : list
+        (kind, message) pairs from compareStates.
+    headline : str
+        What the comparison was against, used in the printed summary.
+
+    Returns:
+    --------
+    int
+        Count of value differences.
+
+    '''
+
+    structural = [message for kind, message in differences if kind == 'structural']
+    value      = [message for kind, message in differences if kind == 'value']
+
+    if value:
+        print(f'   CHANGED: {len(value)} value differences {headline}')
+        for message in value[:40]:
+            print(f'      {message}')
+    if structural:
+        print(f'   {len(structural)} structural differences {headline}, no value moved by them')
+        for message in structural[:20]:
+            print(f'      {message}')
+    if not differences:
+        print(f'   identical {headline}')
+    elif not value:
+        print(f'   no value differences {headline}')
+
+    return len(value)
 
 def baselinePath(caseName: str) -> str:
 
@@ -288,31 +342,23 @@ def main() -> int:
 
         if arguments.verify:
             repeat = captureState(runCase(caseName, arguments.scratch))
-            differences = compareStates(state, repeat)
-            if differences:
+            moved = reportDifferences(compareStates(state, repeat), 'between two runs')
+            if moved:
                 failures += 1
-                print(f'   NOT DETERMINISTIC: {len(differences)} differences between two runs')
-                for line in differences[:20]:
-                    print(f'      {line}')
-            else:
-                print('   deterministic: two runs identical to the bit')
 
         if arguments.record:
             writeBaseline(caseName, state)
             print(f'   baseline written to {baselinePath(caseName)}')
 
         if arguments.compare:
-            differences = compareStates(readBaseline(caseName), state)
-            if differences:
+            moved = reportDifferences(compareStates(readBaseline(caseName), state),
+                                      'against the baseline')
+            if moved:
                 failures += 1
-                print(f'   CHANGED: {len(differences)} differences against the baseline')
-                for line in differences[:40]:
-                    print(f'      {line}')
-            else:
-                print('   identical to the baseline')
 
     print()
-    print('all cases clean' if failures == 0 else f'{failures} case(s) reported differences')
+    print('all cases clean' if failures == 0
+          else f'{failures} case(s) moved a value against the baseline')
 
     return 1 if failures else 0
 

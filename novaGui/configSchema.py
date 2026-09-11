@@ -286,7 +286,7 @@ groups = [
               help = 'Hot wall alloy. Drives the temperature-dependent thermal conductivity in the '
                      'heat transfer model; sampled properties are shown below.'),
         Field('channelType', 'Channel type', 'choice',
-              choices = [('Fluted', 'fluted'), ('Circular', 'circle'), ('Data map', 'dataMap')],
+              choices = [('Fluted', 'fluted'), ('Circular', 'circle')],
               default = 'fluted', showWhen = _coolingOn, help = 'Cooling channel cross-section family.'),
         Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),

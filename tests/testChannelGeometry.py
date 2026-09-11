@@ -321,24 +321,7 @@ class TestSingleStation:
 
 class TestChannelTypeAliasing:
 
-    '''The data-map family differs from fluted only in how the coolant side is correlated.'''
-
-    def testDataMapIsTreatedAsFluted(self):
-
-        numStations = 30
-        geometry = circularInputs(numCrossSections = numStations)
-        geometry.channelType = 'fluted'
-        geometry.numFlutes = 8
-        geometry.fluteAmplitudeCoef = 0.3
-        geometry.fluteHelixAngle = 15.0
-
-        x, y, z = straightCentreline(numStations)
-        radius = np.full(numStations, 0.002)
-
-        asFluted  = generateCrossSections(geometry, x, y, z, radius, 'fluted')[3]
-        asDataMap = generateCrossSections(geometry, x, y, z, radius, 'dataMap')[3]
-
-        assert np.allclose(asFluted['gausFlutedCSA'], asDataMap['gausFlutedCSA'], rtol = 0, atol = 0)
+    '''Only two cross-section families exist, and anything else is refused rather than guessed.'''
 
     def testAnUnknownFamilyIsRefused(self):
 

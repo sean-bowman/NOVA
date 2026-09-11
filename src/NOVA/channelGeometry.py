@@ -77,8 +77,7 @@ class ChannelGeometryInputs:
     nChannel : int
         Channels around the nozzle, which sets how much of the annulus each one may occupy.
     channelType : str
-        'circle' or 'fluted'. 'dataMap' is treated as fluted, since it differs only in how the
-        coolant side is correlated.
+        'circle' or 'fluted'.
     hotWallThickness : float
         Wall between the coolant and the exhaust [m].
     infillThickness : float
@@ -543,10 +542,8 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         return xGausFluted, yGausFluted, gausFlutedCSA, gausFlutedSA, isCircle
 
     # Input validation
-    if crossSectionStyle == 'dataMap':
-        crossSectionStyle = 'fluted'
     if crossSectionStyle.lower() != 'fluted' and crossSectionStyle != 'circle':
-        raise Exception("Please specify crossSectionStyle 'circle', 'fluted', or 'dataMap'.")
+        raise Exception("Please specify crossSectionStyle 'circle' or 'fluted'.")
 
     if crossSectionStyle.lower() == 'fluted':
         # The flute profile is built by scaling a wave by its amplitude and normalising by the
