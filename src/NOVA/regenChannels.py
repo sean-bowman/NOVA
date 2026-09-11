@@ -154,7 +154,9 @@ class RegenChannelState:
     rRegenNozzle:                              Any = None
     regenSectionNearWallMachNumber:            Any = None
     regenSectionNearWallPressure:              Any = None
+    regenSectionNearWallRecoveryTemperature:   Any = None
     regenSectionNearWallTemperature:           Any = None
+    drivingTemperatureModel:                   Any = None
     returnVoluteAxialOffset:                   Any = None
     returnVoluteFlareLen:                      Any = None
     returnVoluteRadialOffset:                  Any = None
@@ -198,6 +200,7 @@ class RegenChannelState:
     rReturnInterface:                          Any = None
     regenSectionNearWallMachNumberTrimmed:     Any = None
     regenSectionNearWallPressureTrimmed:       Any = None
+    regenSectionNearWallRecoveryTemperatureTrimmed: Any = None
     regenSectionNearWallTemperatureTrimmed:    Any = None
     wrapAngles:                                Any = None
     xAllChannels:                              Any = None
@@ -257,6 +260,7 @@ _buildOutputs = (
     'rInletInterface', 'rNozzleShell', 'rRegenNozzleInterfaced', 'rRegenNozzleTrimmed',
     'rReturnInterface', 'regenSectionNearWallMachNumberTrimmed',
     'regenSectionNearWallPressureTrimmed', 'regenSectionNearWallTemperatureTrimmed',
+    'regenSectionNearWallRecoveryTemperatureTrimmed',
     'returnVoluteFlareRad', 'wrapAngles', 'xAllChannels', 'xChannel', 'xChannelCenterline2D',
     'xChannelCenterline3D', 'xChannelDefeatured', 'xInletInterface', 'xNozzleColdWallMesh',
     'xNozzleHotWallMesh', 'xNozzleShell', 'xNozzleShellMesh', 'xRegenNozzleInterfaced',
@@ -398,6 +402,8 @@ def _sizingState(state) -> 'ChannelSizingState':
         molecularWeightRegenSectionTrimmed = state.molecularWeightRegenSectionTrimmed,
         gasConstantRegenSectionTrimmed     = state.gasConstantRegenSectionTrimmed,
         regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed,
+        regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed,
+        drivingTemperatureModel                = state.drivingTemperatureModel,
         regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed,
         regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed,
         dcrData                            = state.dcrData,
@@ -523,6 +529,7 @@ def solveRegenChannels(state, thermal):
             state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSection[trimIndeces]
             state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSection[trimIndeces]
             state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperature[trimIndeces]
+            state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperature[trimIndeces]
             state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumber[trimIndeces]
             state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressure[trimIndeces]
 
@@ -608,6 +615,7 @@ def solveRegenChannels(state, thermal):
                 state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSectionTrimmed[returnTurnaroundIndex:]
                 state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSectionTrimmed[returnTurnaroundIndex:]
                 state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed[returnTurnaroundIndex:]
+                state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed[returnTurnaroundIndex:]
                 state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed[returnTurnaroundIndex:]
                 state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed[returnTurnaroundIndex:]
 
@@ -625,6 +633,7 @@ def solveRegenChannels(state, thermal):
         state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSection.copy()
         state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSection.copy()
         state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperature.copy()
+        state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperature.copy()
         state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumber.copy()
         state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressure.copy()
 
@@ -654,6 +663,8 @@ def solveRegenChannels(state, thermal):
                 chunkInterpolate(xOld, state.gasConstantRegenSectionTrimmed,         state.xRegenNozzleTrimmed)
             state.regenSectionNearWallTemperatureTrimmed = \
                 chunkInterpolate(xOld, state.regenSectionNearWallTemperatureTrimmed, state.xRegenNozzleTrimmed)
+            state.regenSectionNearWallRecoveryTemperatureTrimmed = \
+                chunkInterpolate(xOld, state.regenSectionNearWallRecoveryTemperatureTrimmed, state.xRegenNozzleTrimmed)
             state.regenSectionNearWallMachNumberTrimmed = \
                 chunkInterpolate(xOld, state.regenSectionNearWallMachNumberTrimmed,  state.xRegenNozzleTrimmed)
             state.regenSectionNearWallPressureTrimmed = \

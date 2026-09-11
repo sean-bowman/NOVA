@@ -62,6 +62,14 @@ harnessCases = {
         'config': 'regenExampleFluted.json',
         'description': 'Full jacket with fluted channels and both volutes',
     },
+    # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
+    # and the physical choice. This case pins the static-temperature model that preceded it, so
+    # it stays reachable and its answer stays recorded rather than only described.
+    'regenCircleStatic': {
+        'config': 'regenExample.json',
+        'description': 'Circular channels driven by the static temperature rather than recovery',
+        'overrides': {'drivingTemperatureModel': 'static'},
+    },
 }
 
 harnessOverrides = {
@@ -87,6 +95,9 @@ def runCase(caseName: str, scratchFolder: str) -> object:
     scratchFolder : str
         Directory the run is allowed to write into.
 
+    A case may carry its own 'overrides', applied after the shared ones, which is how two cases
+    can share a configuration file and differ only in what is being pinned.
+
     Returns:
     --------
     Nozzle
@@ -104,6 +115,7 @@ def runCase(caseName: str, scratchFolder: str) -> object:
     with io.open(configPath, encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update(harnessOverrides)
+    config.update(case.get('overrides', {}))
     config['filename'] = caseName
 
     os.makedirs(scratchFolder, exist_ok = True)

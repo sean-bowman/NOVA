@@ -54,7 +54,8 @@ import numpy as np
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-from .utils import DCM, parallelOffset, ConvergenceFailureError, createErrorContext
+from .utils import (DCM, parallelOffset, ConvergenceFailureError, createErrorContext,
+                    InvalidInputError)
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
 from .regenThermal import (regenHeatTransferModel as solveRegenHeatTransfer,
@@ -63,6 +64,61 @@ from .regenThermal import (regenHeatTransferModel as solveRegenHeatTransfer,
 # The quantities the thermal model returns per station and the sizing loop carries through to the
 # comparison figure. Held once because the per-station loop and the full-contour pass both fill
 # the same dictionary, and a key present in one and not the other reads as a silent zero.
+def drivingTemperatureArray(state):
+
+    """
+
+    The gas temperature the heat flux is driven by, at every trimmed station.
+
+    Convection into a wall is driven by the adiabatic wall temperature, which for a turbulent
+    boundary layer is the static temperature raised by the recovery factor times the dynamic rise.
+    Driving it with the static temperature instead understates the flux by the whole of that rise,
+    which is negligible in the chamber and approaches a factor of two by the end of a supersonic
+    jacket.
+
+    Parameters:
+    -----------
+    state : ChannelSizingState
+        Carries both arrays and the choice between them.
+
+    Returns:
+    --------
+    numpy.ndarray
+        Driving temperature at each trimmed station [K].
+
+    Raises:
+    -------
+    InvalidInputError
+        If the model is not one of the two, or if the recovery temperature was asked for and the
+        run did not produce one.
+
+    """
+
+    # Unset means the physical choice. The dataclass starts every field at None, so the
+    # default is resolved here rather than declared there.
+    model = state.drivingTemperatureModel or 'recovery'
+
+    if model == 'static':
+        return state.regenSectionNearWallTemperatureTrimmed
+
+    if model != 'recovery':
+        raise InvalidInputError(
+            message = 'Unknown driving temperature model.',
+            parameterName = 'drivingTemperatureModel',
+            value = model,
+            validRange = "'recovery' or 'static'")
+
+    if state.regenSectionNearWallRecoveryTemperatureTrimmed is None:
+        raise InvalidInputError(
+            message = 'The recovery temperature was asked for and the run did not produce one. '
+                      'It is built alongside the other near-wall properties, so a run that '
+                      'reached the jacket should carry it.',
+            parameterName = 'regenSectionNearWallRecoveryTemperatureTrimmed',
+            value = None,
+            validRange = 'one value per trimmed station')
+
+    return state.regenSectionNearWallRecoveryTemperatureTrimmed
+
 THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'machNumber',
                    'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
                    'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
@@ -120,7 +176,14 @@ class ChannelSizingState:
     gasConstantRegenSectionTrimmed : Any
         Specific gas constant at each trimmed station [J/kg K].
     regenSectionNearWallTemperatureTrimmed : Any
-        Near-wall exhaust temperature at each trimmed station [K].
+        Near-wall static exhaust temperature at each trimmed station [K].
+    regenSectionNearWallRecoveryTemperatureTrimmed : Any
+        Near-wall recovery temperature at each trimmed station [K]. This is the adiabatic
+        wall temperature, and it is what the heat flux is actually driven by.
+    drivingTemperatureModel : str
+        'recovery' or 'static'. Which of the two above drives the solve. 'static' exists to
+        reproduce results recorded before the recovery temperature was carried through, and
+        it understates the flux by the whole recovery rise.
     regenSectionNearWallMachNumberTrimmed : Any
         Near-wall Mach number at each trimmed station [-].
     regenSectionNearWallPressureTrimmed : Any
@@ -160,6 +223,8 @@ class ChannelSizingState:
     molecularWeightRegenSectionTrimmed:     Any   = None
     gasConstantRegenSectionTrimmed:         Any   = None
     regenSectionNearWallTemperatureTrimmed: Any   = None
+    regenSectionNearWallRecoveryTemperatureTrimmed: Any = None
+    drivingTemperatureModel:                Any   = None
     regenSectionNearWallMachNumberTrimmed:  Any   = None
     regenSectionNearWallPressureTrimmed:    Any   = None
     dcrData:                                dict  = field(default_factory = dict)
@@ -410,6 +475,7 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["gasConstant"]         = np.array([state.gasConstantRegenSectionTrimmed         [state.numCrossSections - 1 - i]])
         heatTransferDict_i["nearWallMachNumber"]  = np.array([state.regenSectionNearWallMachNumberTrimmed  [state.numCrossSections - 1 - i]])
         heatTransferDict_i["nearWallTemperature"] = np.array([state.regenSectionNearWallTemperatureTrimmed [state.numCrossSections - 1 - i]])
+        heatTransferDict_i["drivingTemperature"]  = np.array([drivingTemperatureArray(state)      [state.numCrossSections - 1 - i]])
         heatTransferDict_i["nearWallPressure"]    = np.array([state.regenSectionNearWallPressureTrimmed    [state.numCrossSections - 1 - i]])
 
         # get geometry properties for heat transfer
@@ -954,6 +1020,7 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict["gasConstant"]         = state.gasConstantRegenSectionTrimmed
         heatTransferDict["nearWallMachNumber"]  = state.regenSectionNearWallMachNumberTrimmed
         heatTransferDict["nearWallTemperature"] = state.regenSectionNearWallTemperatureTrimmed
+        heatTransferDict["drivingTemperature"]  = drivingTemperatureArray(state)
         heatTransferDict["nearWallPressure"]    = state.regenSectionNearWallPressureTrimmed
         keysHX = ["gausFlutedCSA","gausFlutedSA","circleCSA","circleSA","differentialPathLength","fluteAmplitudeGauss","flutePitch","turnAngle","radiusOfCurvature","isCircle"]
         for key in keysHX:

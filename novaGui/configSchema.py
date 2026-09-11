@@ -288,6 +288,13 @@ groups = [
         Field('channelType', 'Channel type', 'choice',
               choices = [('Fluted', 'fluted'), ('Circular', 'circle')],
               default = 'fluted', showWhen = _coolingOn, help = 'Cooling channel cross-section family.'),
+        Field('drivingTemperatureModel', 'Driving gas temperature', 'choice',
+              choices = [('Recovery', 'recovery'), ('Static', 'static')],
+              default = 'recovery', showWhen = _coolingOn,
+              help = 'Which gas temperature drives the heat flux. Recovery is the adiabatic '
+                     'wall temperature and is the physical choice. Static reproduces results '
+                     'recorded before the recovery temperature was carried through, and '
+                     'understates the flux by the whole recovery rise.'),
         Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
         Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',

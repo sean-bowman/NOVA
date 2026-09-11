@@ -1246,7 +1246,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                     # be written out, since the solve sees only the station it was handed.
                     try:
                         solution = solveStationWallTemperature(
-                            drivingTemperature         = nearWallTemperature[i],
+                            drivingTemperature         = drivingTemperature[i],
                             gasStaticTemperature       = nearWallTemperature[i],
                             gasMachNumber              = nearWallMachNumber[i],
                             gasGamma                   = exhaustGamma[i],
@@ -1325,7 +1325,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                     # be written out, since the solve sees only the station it was handed.
                     try:
                         solution = solveStationWallTemperature(
-                            drivingTemperature         = nearWallTemperature[i],
+                            drivingTemperature         = drivingTemperature[i],
                             gasStaticTemperature       = nearWallTemperature[i],
                             gasMachNumber              = nearWallMachNumber[i],
                             gasGamma                   = exhaustGamma[i],
@@ -1353,7 +1353,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                             blowingFactor              = blowingFactor,
                             wallEmissivity             = wallEmissivity,
                             gasEmissivity              = gasEmissivity[i],
-                            tolerance                  = 0.1)
+                            tolerance                  = 0.01)
                     except ValueError as error:
                         debugFile = dumpDebugInfo(locals(), i, time.time() - start_time)
                         raise ValueError('{} Station {}, circle channel.{}'.format(
@@ -1385,14 +1385,14 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                                 'stationIndex': i,
                                 'iterationCount': solution.iterations,
                                 'residual': solution.residual,
-                                'tolerance': 0.1,
+                                'tolerance': 0.01,
                                 'circleHotWallTemperature': solution.hotWallTemperature,
                                 'circleHeatTransfer': solution.heatTransfer,
                                 'regenSectionNearWallTemperature': nearWallTemperature[i],
                                 'circleCoolantTemperature': circleCoolantTemperature[i]
                             },
                             iterations = solution.iterations,
-                            tolerance = 0.1,
+                            tolerance = 0.01,
                             residual = solution.residual)
 
             hotWallConvergenceLoops(throatRadiusOfCurvature)

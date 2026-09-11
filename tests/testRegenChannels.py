@@ -251,3 +251,97 @@ class TestModuleIndependence:
                      and node.value.id == 'self']
 
         assert offenders == []
+
+class TestDrivingTemperatureChoice:
+
+    '''
+
+    Which gas temperature the jacket is driven by, and the default being the physical one.
+
+    Convection into a wall is driven by the adiabatic wall temperature, not by the static
+    temperature. NOVA computes the recovery temperature in `chamber` and used to drop it before
+    the solve, which understated the flux by the whole recovery rise: negligible in the chamber,
+    a factor of 1.83 at the supersonic end of the shipped example's jacket.
+
+    The static model is kept so the earlier answer stays reachable and recorded rather than only
+    described. It is not a default anybody should choose.
+
+    '''
+
+    def state(self, **overrides):
+
+        '''A sizing state carrying both arrays and whichever model the caller wants.'''
+
+        from NOVA.channelSizing import ChannelSizingState
+
+        arguments = dict(
+            regenSectionNearWallTemperatureTrimmed = np.array([1000.0, 1500.0, 2000.0]),
+            regenSectionNearWallRecoveryTemperatureTrimmed = np.array([1100.0, 1900.0, 3200.0]))
+        arguments.update(overrides)
+
+        return ChannelSizingState(**arguments)
+
+    def testTheDefaultIsTheRecoveryTemperature(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        # Unset means the physical choice, not the historical one.
+        chosen = drivingTemperatureArray(self.state())
+
+        assert np.array_equal(chosen, np.array([1100.0, 1900.0, 3200.0]))
+
+    def testTheRecoveryModelIsSelectableByName(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        chosen = drivingTemperatureArray(self.state(drivingTemperatureModel = 'recovery'))
+
+        assert np.array_equal(chosen, np.array([1100.0, 1900.0, 3200.0]))
+
+    def testTheStaticModelIsStillReachable(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        chosen = drivingTemperatureArray(self.state(drivingTemperatureModel = 'static'))
+
+        assert np.array_equal(chosen, np.array([1000.0, 1500.0, 2000.0]))
+
+    def testTheRecoveryTemperatureIsNeverBelowTheStaticOne(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        state = self.state()
+        recovery = drivingTemperatureArray(state)
+        static = drivingTemperatureArray(self.state(drivingTemperatureModel = 'static'))
+
+        assert np.all(recovery >= static)
+
+    def testAnUnknownModelIsRefused(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+        from NOVA.utils import InvalidInputError
+
+        with pytest.raises(InvalidInputError):
+            drivingTemperatureArray(self.state(drivingTemperatureModel = 'stagnation'))
+
+    def testAMissingRecoveryArraySaysSoRatherThanFallingBack(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+        from NOVA.utils import InvalidInputError
+
+        # Quietly falling back to the static array would reintroduce the whole defect without
+        # anything in the output saying it had happened.
+        with pytest.raises(InvalidInputError):
+            drivingTemperatureArray(
+                self.state(regenSectionNearWallRecoveryTemperatureTrimmed = None))
+
+    def testTheStateCarriesTheRecoveryArrayThroughToSizing(self):
+
+        from NOVA.channelSizing import ChannelSizingState
+
+        # The trimmed recovery array has to be a declared field, or _sizingState cannot pass it
+        # and the solve silently runs on None.
+        assert 'regenSectionNearWallRecoveryTemperatureTrimmed' in \
+               ChannelSizingState.__dataclass_fields__
+        assert 'regenSectionNearWallRecoveryTemperatureTrimmed' in \
+               RegenChannelState.__dataclass_fields__

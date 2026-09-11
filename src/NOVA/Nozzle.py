@@ -478,6 +478,7 @@ class Nozzle:
         self.xRegenNozzle: np.ndarray | None          = None     # [m]
         self.rRegenNozzle: np.ndarray | None          = None     # [m]
         self.regenSectionNearWallTemperature: np.ndarray | None = None # [K]
+        self.regenSectionNearWallRecoveryTemperature: np.ndarray | None = None # [K]
         self.regenSectionNearWallPressure: np.ndarray | None = None # [Pa]
         self.regenSectionNearWallVelocity             = None     # [m/s]
         self.regenSectionNearWallMachNumber: np.ndarray | None = None # [-]
@@ -544,6 +545,7 @@ class Nozzle:
         self.molecularWeightRegenSectionTrimmed: np.ndarray | None = None # [kg/mol]
         self.gasConstantRegenSectionTrimmed: np.ndarray | None = None # [J/K]
         self.regenSectionNearWallTemperatureTrimmed: np.ndarray | None = None # [K]
+        self.regenSectionNearWallRecoveryTemperatureTrimmed: np.ndarray | None = None # [K]
         self.regenSectionNearWallMachNumberTrimmed: np.ndarray | None = None # [-]
         self.regenSectionNearWallPressureTrimmed: np.ndarray | None = None # [Pa]
 
@@ -657,6 +659,7 @@ class Nozzle:
         # -- Heat Transfer Model -- #
 
         # Inputs
+        self.drivingTemperatureModel                  = 'recovery' # [str]
         self.coolant                                  = None     # [case sensitive string of RefProp fluid name]
         self.coolantInitialTemperature: float | None  = None     # [K]
         self.coolantInitialPressure: float | None     = None     # [Pa]

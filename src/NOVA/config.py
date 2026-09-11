@@ -229,6 +229,11 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.nChannelUpperBound             = inputsPath['nChannelUpperBound']
         nozzle.nChannelLowerBound             = inputsPath['nChannelLowerBound']
         nozzle.maxWallTemperature             = inputsPath['maxWallTemperature']
+        # Optional, and defaulted to the physically right answer. 'static' reproduces
+        # results recorded before the recovery temperature was carried through to the
+        # solve, and understates the flux by the whole recovery rise.
+        nozzle.drivingTemperatureModel        = inputsPath.get('drivingTemperatureModel',
+                                                              'recovery')
         nozzle.numFlutes                      = inputsPath['numFlutes']
         nozzle.fluteAmplitudeCoef             = inputsPath['fluteAmplitudeCoef']
         nozzle.fluteHelixAngle                = inputsPath['fluteHelixAngle']
