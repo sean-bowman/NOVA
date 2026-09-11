@@ -58,7 +58,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-from .utils import arcSpline, chunkInterpolate, plotLine, ThermalConstraintError, createErrorContext
+from .utils import (arcSpline, chunkInterpolate, plotLine, ThermalConstraintError,
+                    createErrorContext, InvalidInputError)
+from .filmCooling import filmCoolantState, filmCoolingArrays
 from .ceaInterface import CEA
 
 @dataclass
@@ -75,6 +77,12 @@ class RegenStationState:
 
     # -- The contour and the propellants the stations are sampled from -- #
     Fuel:                                        Any = None
+    filmCooling:                                 Any = None
+    filmCoolant:                                 Any = None
+    filmInjectionAxialPosition:                  Any = None
+    filmInletTemperature:                        Any = None
+    filmMassFlow:                                Any = None
+    filmSlotHeight:                              Any = None
     OFRatio:                                     Any = None
     Oxidizer:                                    Any = None
     allMachNumbers:                              Any = None
@@ -138,6 +146,10 @@ class RegenStationState:
     viscosityRegenSection:                       Any = None
     xExtension:                                  Any = None
     xRegenNozzle:                                Any = None
+    regenSectionFilmDrivingTemperature:          Any = None
+    regenSectionFilmEffectiveness:               Any = None
+    filmCoolantVelocity:                         Any = None
+    filmSurvivalLength:                          Any = None
 
 # The fields a split hands back to a Nozzle. Kept beside the class so that adding a field
 # and forgetting to surface it is a one-line fix rather than a silent drop.
@@ -151,9 +163,94 @@ regenStationOutputs = (
     'rRegenNozzle', 'regenSectionNearWallMachNumber', 'regenSectionNearWallPressure',
     'regenSectionNearWallRecoveryTemperature', 'regenSectionNearWallTemperature',
     'regenSectionNearWallVelocity', 'reynoldsExtension', 'reynoldsNumberRegenSection',
+    'regenSectionFilmDrivingTemperature', 'regenSectionFilmEffectiveness',
+    'filmCoolantVelocity', 'filmSurvivalLength',
     'specificHeatExtension', 'specificHeatRegenSection', 'thermalCondExtension',
     'thermalConductivityRegenSection', 'viscosityExtension', 'viscosityRegenSection',
     'xExtension', 'xRegenNozzle')
+
+def solveRegenSectionFilm(state):
+
+    """
+
+    Solve the film along the regen section, if one was asked for.
+
+    The film marches forward from its slot with the gas, while the jacket marches backward from
+    the coolant inlet, so it cannot be solved inside the jacket loop. It does not need to be: the
+    film state depends on the core flow and on its own mass flow, not on the wall temperature, so
+    it is solved once here from the station properties and handed on as a driving temperature.
+
+    The one coupling this misses is a wall hot enough to dry the film early. That is second order
+    and is recorded as a limitation rather than modelled.
+
+    Parameters:
+    -----------
+    state : RegenStationState
+        Carries the station properties and the film definition. Modified in place.
+
+    Returns:
+    --------
+    None
+
+    Raises:
+    -------
+    InvalidInputError
+        Through the film solve, if the definition is not usable.
+
+    """
+
+    if state.filmCooling != 'on':
+        return
+
+    required = ('filmCoolant', 'filmMassFlow', 'filmInletTemperature',
+                'filmInjectionAxialPosition', 'filmSlotHeight')
+    absent = [name for name in required
+              if getattr(state, name) is None
+              or (isinstance(getattr(state, name), float) and np.isnan(getattr(state, name)))]
+    if absent:
+        raise InvalidInputError(
+            message = 'Film cooling is switched on and the definition is incomplete. A film needs '
+                      'a coolant, a flow, a temperature, somewhere to enter and a slot to enter '
+                      'through.',
+            parameterName = ', '.join(absent),
+            value = None,
+            validRange = 'all of ' + ', '.join(required))
+
+    slotIndex = int(np.argmin(np.abs(state.xRegenNozzle - state.filmInjectionAxialPosition)))
+
+    coolant = filmCoolantState(
+        species     = state.filmCoolant,
+        temperature = state.filmInletTemperature,
+        pressure    = float(state.regenSectionNearWallPressure[slotIndex]),
+        massFlow    = state.filmMassFlow,
+        slotHeight  = state.filmSlotHeight,
+        slotRadius  = float(state.rRegenNozzle[slotIndex]))
+
+    # The correlation wants gas properties at the mean of the gas and coolant temperatures. What
+    # NOVA carries is the gas temperature, which overstates the conductivity, overstates the
+    # correlating group and so understates the effectiveness. That is the safe direction, and the
+    # size of it has not been quantified.
+    film = filmCoolingArrays(
+        axialPosition             = state.xRegenNozzle,
+        radius                    = state.rRegenNozzle,
+        gasVelocity               = state.regenSectionNearWallVelocity,
+        recoveryTemperature       = state.regenSectionNearWallRecoveryTemperature,
+        meanThermalConductivity   = state.thermalConductivityRegenSection,
+        meanDensity               = state.densityRegenSection,
+        meanViscosity             = state.viscosityRegenSection,
+        meanPrandtlNumber         = state.prandtlNumberRegenSection,
+        injectionPosition         = state.filmInjectionAxialPosition,
+        slotHeight                = state.filmSlotHeight,
+        coolantMassFlow           = state.filmMassFlow,
+        coolantSpecificHeat       = coolant.specificHeat,
+        coolantTemperature        = state.filmInletTemperature,
+        coolantThermalDiffusivity = coolant.thermalDiffusivity,
+        coolantVelocity           = coolant.velocity)
+
+    state.regenSectionFilmEffectiveness      = film.effectiveness
+    state.regenSectionFilmDrivingTemperature = film.drivingTemperature
+    state.filmCoolantVelocity                = coolant.velocity
+    state.filmSurvivalLength                 = film.survivalLength
 
 def solveRegenStations(state):
 
@@ -532,6 +629,11 @@ def solveRegenStations(state):
         state.densityRegenSection                     = densityRegen
         state.reynoldsNumberRegenSection              = reynoldsRegen
         state.molecularWeightRegenSection             = molecularWeightRegen
+
+        # The film is solved here rather than in the jacket because it marches the other way:
+        # forward from its slot with the gas, while the jacket marches back from the coolant
+        # inlet. Everything it needs is in the station properties just assigned.
+        solveRegenSectionFilm(state)
 
     if state.truncationMethod != 'none':
 

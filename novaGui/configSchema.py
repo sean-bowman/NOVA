@@ -147,6 +147,9 @@ def _anyVolute(config: dict) -> bool:
     return (config.get('makeInletVolute') in (True, 'on')
             or config.get('makeReturnVolute') in (True, 'on'))
 
+def _filmCoolingOn(config: dict) -> bool:
+    return config.get('filmCooling') in (True, 'on')
+
 def _printabilityOn(config: dict) -> bool:
     return _coolingOn(config) and config.get('printabilityCheck') in (True, 'on')
 
@@ -348,6 +351,32 @@ groups = [
         Field('maxOverhangAngle', 'Max overhang angle', 'float', default = None, unit = 'deg', showWhen = _printabilityOn,
               help = 'Maximum self-supporting overhang from vertical.'),
     ], collapsed = True, expandWhen = _coolingOn),
+
+    Group('Film Cooling', [
+        Field('filmCooling', 'Film cooling', 'bool', default = False,
+              help = 'Inject a sheet of coolant along the wall. It lowers the temperature '
+                     'the wall is driven by rather than carrying heat away, and it works '
+                     'with a jacket rather than instead of one.'),
+        Field('filmCoolant', 'Film coolant species', 'text', default = None,
+              showWhen = _filmCoolingOn,
+              help = 'REFPROP or CoolProp fluid name. It has to be a gas at its slot '
+                     'conditions: the closure describes a gaseous film.'),
+        Field('filmMassFlow', 'Film coolant flow', 'float', default = None, unit = 'kg/s',
+              showWhen = _filmCoolingOn,
+              help = 'Coolant through the film ring. This is propellant bypassing the '
+                     'injector, so it costs performance.'),
+        Field('filmInletTemperature', 'Film coolant temperature', 'float', default = None,
+              unit = 'K', showWhen = _filmCoolingOn,
+              help = 'Coolant temperature leaving the slot.'),
+        Field('filmInjectionAxialPosition', 'Injection position', 'float', default = None,
+              unit = 'm', showWhen = _filmCoolingOn,
+              help = 'Axial position of the slot. One ring only; the correlation is '
+                     'written for a single continuous slot.'),
+        Field('filmSlotHeight', 'Slot height', 'float', default = None, unit = 'm',
+              showWhen = _filmCoolingOn,
+              help = 'Radial height of the annular slot. It sets the injection velocity '
+                     'through the flow area, and the correlation rewards a narrow slot.'),
+    ], collapsed = True, expandWhen = _filmCoolingOn),
 
     Group('Volutes', [
         Field('makeInletVolute', 'Generate inlet volute', 'bool', default = False,

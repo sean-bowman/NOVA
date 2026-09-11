@@ -660,6 +660,20 @@ class Nozzle:
 
         # Inputs
         self.drivingTemperatureModel                  = 'recovery' # [str]
+
+        # Film cooling. A sheet of coolant between the wall and the exhaust lowers the
+        # temperature the wall is driven by; it does not carry heat away like a jacket.
+        self.filmCooling                              = 'off'    # [str]
+        self.filmCoolant                              = None     # [fluid name]
+        self.filmMassFlow                             = None     # [kg/s]
+        self.filmInletTemperature                     = None     # [K]
+        self.filmInjectionAxialPosition               = None     # [m]
+        self.filmSlotHeight                           = None     # [m]
+        self.regenSectionFilmDrivingTemperature       = None     # [K]
+        self.regenSectionFilmDrivingTemperatureTrimmed = None    # [K]
+        self.regenSectionFilmEffectiveness            = None     # [-]
+        self.filmCoolantVelocity                      = None     # [m/s]
+        self.filmSurvivalLength                       = None     # [m]
         self.coolant                                  = None     # [case sensitive string of RefProp fluid name]
         self.coolantInitialTemperature: float | None  = None     # [K]
         self.coolantInitialPressure: float | None     = None     # [Pa]

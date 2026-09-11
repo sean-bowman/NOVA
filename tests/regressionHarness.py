@@ -65,6 +65,20 @@ harnessCases = {
     # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
     # and the physical choice. This case pins the static-temperature model that preceded it, so
     # it stays reachable and its answer stays recorded rather than only described.
+    # A hydrogen film injected at the chamber end of the same jacket. It pins the film path and
+    # records what a film that is badly matched in velocity actually buys, which is not much.
+    'regenCircleFilm': {
+        'config': 'regenExample.json',
+        'description': 'Circular channels with a hydrogen film injected at the chamber end',
+        'overrides': {
+            'filmCooling': True,
+            'filmCoolant': 'Hydrogen',
+            'filmMassFlow': 0.30,
+            'filmInletTemperature': 250.0,
+            'filmInjectionAxialPosition': -1.0,
+            'filmSlotHeight': 0.0015,
+        },
+    },
     'regenCircleStatic': {
         'config': 'regenExample.json',
         'description': 'Circular channels driven by the static temperature rather than recovery',

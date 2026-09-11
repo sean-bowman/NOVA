@@ -70,6 +70,11 @@ def drivingTemperatureArray(state):
 
     The gas temperature the heat flux is driven by, at every trimmed station.
 
+    Three things can supply it, in order of precedence: a film coolant, which lowers it
+    toward the coolant temperature over the length the film survives; the recovery
+    temperature, which is the adiabatic wall temperature and the right answer without a
+    film; and the static temperature, which is kept only to reproduce earlier results.
+
     Convection into a wall is driven by the adiabatic wall temperature, which for a turbulent
     boundary layer is the static temperature raised by the recovery factor times the dynamic rise.
     Driving it with the static temperature instead understates the flux by the whole of that rise,
@@ -97,6 +102,23 @@ def drivingTemperatureArray(state):
     # Unset means the physical choice. The dataclass starts every field at None, so the
     # default is resolved here rather than declared there.
     model = state.drivingTemperatureModel or 'recovery'
+
+    if state.regenSectionFilmDrivingTemperatureTrimmed is not None:
+
+        # A film was solved, and it was built on the recovery temperature. Asking for the
+        # static model as well describes nothing: the film's effectiveness is defined
+        # against the adiabatic wall temperature, so the two cannot both be the potential.
+        if model == 'static':
+            raise InvalidInputError(
+                message = 'Film cooling and the static driving temperature cannot be '
+                          'combined. Film effectiveness is defined against the adiabatic '
+                          'wall temperature, so a film built on it cannot then be driven '
+                          'by the static temperature instead.',
+                parameterName = 'drivingTemperatureModel',
+                value = model,
+                validRange = "'recovery', or switch the film off")
+
+        return state.regenSectionFilmDrivingTemperatureTrimmed
 
     if model == 'static':
         return state.regenSectionNearWallTemperatureTrimmed
@@ -180,6 +202,10 @@ class ChannelSizingState:
     regenSectionNearWallRecoveryTemperatureTrimmed : Any
         Near-wall recovery temperature at each trimmed station [K]. This is the adiabatic
         wall temperature, and it is what the heat flux is actually driven by.
+    regenSectionFilmDrivingTemperatureTrimmed : Any
+        Driving temperature with a film coolant between the wall and the exhaust [K], or
+        None where no film was asked for. When present it supersedes both of the above,
+        because it was built from the recovery temperature and is what the wall now sees.
     drivingTemperatureModel : str
         'recovery' or 'static'. Which of the two above drives the solve. 'static' exists to
         reproduce results recorded before the recovery temperature was carried through, and
@@ -224,6 +250,7 @@ class ChannelSizingState:
     gasConstantRegenSectionTrimmed:         Any   = None
     regenSectionNearWallTemperatureTrimmed: Any   = None
     regenSectionNearWallRecoveryTemperatureTrimmed: Any = None
+    regenSectionFilmDrivingTemperatureTrimmed: Any = None
     drivingTemperatureModel:                Any   = None
     regenSectionNearWallMachNumberTrimmed:  Any   = None
     regenSectionNearWallPressureTrimmed:    Any   = None

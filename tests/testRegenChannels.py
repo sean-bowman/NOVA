@@ -345,3 +345,118 @@ class TestDrivingTemperatureChoice:
                ChannelSizingState.__dataclass_fields__
         assert 'regenSectionNearWallRecoveryTemperatureTrimmed' in \
                RegenChannelState.__dataclass_fields__
+
+class TestFilmSupersedesTheDrivingTemperature:
+
+    '''
+
+    A film between the wall and the exhaust replaces the potential, it does not correct it.
+
+    Effectiveness is defined against the adiabatic wall temperature, so the film array is built
+    from the recovery temperature and then supersedes both of the alternatives. Combining it with
+    the static model describes nothing, and is refused rather than silently resolved one way.
+
+    '''
+
+    def state(self, **overrides):
+
+        from NOVA.channelSizing import ChannelSizingState
+
+        arguments = dict(
+            regenSectionNearWallTemperatureTrimmed = np.array([1000.0, 1500.0, 2000.0]),
+            regenSectionNearWallRecoveryTemperatureTrimmed = np.array([1100.0, 1900.0, 3200.0]),
+            regenSectionFilmDrivingTemperatureTrimmed = np.array([400.0, 900.0, 2600.0]))
+        arguments.update(overrides)
+
+        return ChannelSizingState(**arguments)
+
+    def testTheFilmArrayIsUsedWhenPresent(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        chosen = drivingTemperatureArray(self.state())
+
+        assert np.array_equal(chosen, np.array([400.0, 900.0, 2600.0]))
+
+    def testItStillWinsWhenTheRecoveryModelIsNamed(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        chosen = drivingTemperatureArray(self.state(drivingTemperatureModel = 'recovery'))
+
+        assert np.array_equal(chosen, np.array([400.0, 900.0, 2600.0]))
+
+    def testCombiningItWithTheStaticModelIsRefused(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+        from NOVA.utils import InvalidInputError
+
+        with pytest.raises(InvalidInputError):
+            drivingTemperatureArray(self.state(drivingTemperatureModel = 'static'))
+
+    def testWithoutAFilmTheRecoveryTemperatureIsBack(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        chosen = drivingTemperatureArray(
+            self.state(regenSectionFilmDrivingTemperatureTrimmed = None))
+
+        assert np.array_equal(chosen, np.array([1100.0, 1900.0, 3200.0]))
+
+    def testTheFilmNeverDrivesTheWallHarderThanNoFilmWould(self):
+
+        from NOVA.channelSizing import drivingTemperatureArray
+
+        state = self.state()
+        withFilm = drivingTemperatureArray(state)
+        withoutFilm = drivingTemperatureArray(
+            self.state(regenSectionFilmDrivingTemperatureTrimmed = None))
+
+        assert np.all(withFilm <= withoutFilm)
+
+class TestIncompleteFilmDefinition:
+
+    '''A film switched on with pieces missing says which pieces, rather than failing deeper in.'''
+
+    def state(self, **overrides):
+
+        from NOVA.regenStations import RegenStationState
+
+        arguments = dict(filmCooling = 'on', filmCoolant = 'Hydrogen', filmMassFlow = 0.3,
+                         filmInletTemperature = 250.0, filmInjectionAxialPosition = -1.0,
+                         filmSlotHeight = 0.0015)
+        arguments.update(overrides)
+
+        return RegenStationState(**arguments)
+
+    @pytest.mark.parametrize('missing', ['filmCoolant', 'filmMassFlow', 'filmInletTemperature',
+                                         'filmInjectionAxialPosition', 'filmSlotHeight'])
+    def testEachMissingPieceIsNamed(self, missing):
+
+        from NOVA.regenStations import solveRegenSectionFilm
+        from NOVA.utils import InvalidInputError
+
+        with pytest.raises(InvalidInputError) as raised:
+            solveRegenSectionFilm(self.state(**{missing: None}))
+
+        assert missing in str(raised.value)
+
+    def testANaNCountsAsMissing(self):
+
+        # config.setInputs rewrites every null to NaN, so a film key left null in a JSON file
+        # arrives as NaN rather than None and has to be caught the same way.
+        from NOVA.regenStations import solveRegenSectionFilm
+        from NOVA.utils import InvalidInputError
+
+        with pytest.raises(InvalidInputError):
+            solveRegenSectionFilm(self.state(filmMassFlow = float('nan')))
+
+    def testAFilmSwitchedOffDoesNothingAtAll(self):
+
+        from NOVA.regenStations import solveRegenSectionFilm
+
+        state = self.state(filmCooling = 'off', filmCoolant = None, filmMassFlow = None)
+        solveRegenSectionFilm(state)
+
+        assert state.regenSectionFilmDrivingTemperature is None
+        assert state.regenSectionFilmEffectiveness is None

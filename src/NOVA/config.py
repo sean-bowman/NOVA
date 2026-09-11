@@ -175,7 +175,8 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         for key in ('visualizeContour', 'plotsBasic', 'plotsAdv', 'plotJacket',
                     'plotsDebug', 'export', 'printabilityCheck',
                     'makeCoolingChannels', 'makeInletVolute', 'makeReturnVolute',
-                    'plotKeepOut', 'inletVolutePrintability', 'returnVolutePrintability'):
+                    'plotKeepOut', 'inletVolutePrintability', 'returnVolutePrintability',
+                    'filmCooling'):
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
 
@@ -234,6 +235,17 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         # solve, and understates the flux by the whole recovery rise.
         nozzle.drivingTemperatureModel        = inputsPath.get('drivingTemperatureModel',
                                                               'recovery')
+
+        # -- Film Cooling -- #
+        #
+        # Optional throughout. A configuration that names none of these describes an engine
+        # with no film, which is what every configuration written before this did.
+        nozzle.filmCooling                    = inputsPath.get('filmCooling', 'off')
+        nozzle.filmCoolant                    = inputsPath.get('filmCoolant')
+        nozzle.filmMassFlow                   = inputsPath.get('filmMassFlow')
+        nozzle.filmInletTemperature           = inputsPath.get('filmInletTemperature')
+        nozzle.filmInjectionAxialPosition     = inputsPath.get('filmInjectionAxialPosition')
+        nozzle.filmSlotHeight                 = inputsPath.get('filmSlotHeight')
         nozzle.numFlutes                      = inputsPath['numFlutes']
         nozzle.fluteAmplitudeCoef             = inputsPath['fluteAmplitudeCoef']
         nozzle.fluteHelixAngle                = inputsPath['fluteHelixAngle']

@@ -76,11 +76,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .utils import InvalidInputError
+from .utils import InvalidInputError, fluidProps
 
 __all__ = [
-    'FilmCoolingResult', 'HATCHPAPELLONSET', 'filmCoolingArrays', 'filmDrivingTemperature',
-    'filmTransferCoefficient', 'hatchPapellEffectiveness', 'velocityRatioCorrection',
+    'FilmCoolantState', 'FilmCoolingResult', 'HATCHPAPELLONSET', 'filmCoolantState',
+    'filmCoolingArrays', 'filmDrivingTemperature', 'filmTransferCoefficient',
+    'hatchPapellEffectiveness', 'velocityRatioCorrection',
 ]
 
 # The correlating group below which the wall has not yet warmed above the coolant, so the
@@ -491,3 +492,120 @@ def filmCoolingArrays(axialPosition, radius, gasVelocity, recoveryTemperature,
         filmMassFlux       = np.zeros(stations),
         injectionIndex     = injectionIndex,
         survivalLength     = survivalLength)
+
+@dataclass
+class FilmCoolantState:
+
+    """
+
+    The coolant properties the correlation needs, derived rather than asked for.
+
+    Attributes:
+    -----------
+    density : float
+        Coolant density at the slot [kg/m^3].
+    specificHeat : float
+        Coolant specific heat at the slot [J/kg-K].
+    thermalConductivity : float
+        Coolant thermal conductivity at the slot [W/m-K].
+    thermalDiffusivity : float
+        Coolant thermal diffusivity at the slot [m^2/s], which is what the correlation's
+        diffusion group is written in.
+    velocity : float
+        Coolant velocity leaving the slot [m/s], from the mass flow and the slot area.
+    slotArea : float
+        Flow area of the annular slot [m^2].
+
+    """
+
+    density:             float
+    specificHeat:        float
+    thermalConductivity: float
+    thermalDiffusivity:  float
+    velocity:            float
+    slotArea:            float
+
+def filmCoolantState(species: str, temperature: float, pressure: float, massFlow: float,
+                     slotHeight: float, slotRadius: float) -> FilmCoolantState:
+
+    """
+
+    Coolant state at the slot, from the species and the geometry it leaves through.
+
+    Three of the five quantities the correlation wants are properties of the coolant at its own
+    slot conditions, and the other two follow from the slot area. Asking a user for a thermal
+    diffusivity and a slot velocity separately invites the two to disagree with each other and
+    with the mass flow; deriving them cannot.
+
+    The slot is taken as an annulus of the given height around the wall, so its area is
+    `2 pi r S`. That is the geometry SP-8124 recommends for gaseous injection, a continuous slot
+    with ribs no thicker than structure requires.
+
+    Parameters:
+    -----------
+    species : str
+        Coolant name, as `utils.fluidProps` takes it.
+    temperature : float
+        Coolant temperature at the slot [K].
+    pressure : float
+        Static pressure at the slot [Pa].
+    massFlow : float
+        Film coolant flow [kg/s].
+    slotHeight : float
+        Radial height of the slot [m].
+    slotRadius : float
+        Wall radius at the slot [m].
+
+    Returns:
+    --------
+    FilmCoolantState
+
+    Raises:
+    -------
+    InvalidInputError
+        If the slot has no area, the flow is not positive, or the property call returns something
+        unusable.
+
+    """
+
+    if slotHeight <= 0.0 or slotRadius <= 0.0:
+        raise InvalidInputError(
+            message = 'A slot with no height or no radius has no area to inject through.',
+            parameterName = 'slotHeight/slotRadius',
+            value = (slotHeight, slotRadius),
+            validRange = 'both greater than zero')
+
+    if massFlow <= 0.0:
+        raise InvalidInputError(
+            message = 'A film with no mass flow cools nothing.',
+            parameterName = 'massFlow',
+            value = massFlow,
+            validRange = 'greater than zero')
+
+    density, specificHeat, conductivity = fluidProps(
+        species, 'TP', 'D Cp TCX', temperature, pressure)
+
+    density = float(np.atleast_1d(density)[0])
+    specificHeat = float(np.atleast_1d(specificHeat)[0])
+    conductivity = float(np.atleast_1d(conductivity)[0])
+
+    if not all(np.isfinite(value) and value > 0.0
+               for value in (density, specificHeat, conductivity)):
+        raise InvalidInputError(
+            message = 'The coolant property lookup returned something unusable at {} K and '
+                      '{:.0f} Pa. A film coolant has to be a gas at its slot conditions; a '
+                      'two-phase or supercritical state is outside what this closure '
+                      'describes.'.format(temperature, pressure),
+            parameterName = 'species/temperature/pressure',
+            value = (species, temperature, pressure),
+            validRange = 'a single-phase gas')
+
+    slotArea = 2.0 * np.pi * slotRadius * slotHeight
+
+    return FilmCoolantState(
+        density             = density,
+        specificHeat        = specificHeat,
+        thermalConductivity = conductivity,
+        thermalDiffusivity  = conductivity / (density * specificHeat),
+        velocity            = massFlow / (density * slotArea),
+        slotArea            = slotArea)
