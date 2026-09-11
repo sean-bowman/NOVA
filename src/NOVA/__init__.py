@@ -42,7 +42,8 @@ __version__ = '0.1.0'
 
 from . import (ablative, ceaInterface, chamber, channelGeometry, channelSizing,
                characteristics, config, contour, contourKernel, exports, figures,
-               gasDynamics, keepOut, materials, nozzleVolutes, plume, radiativeCooling,
+               filmCooling, gasDynamics, keepOut, materials, nozzleVolutes, plume,
+               radiativeCooling,
                regenChannels, regenStations, regenThermal, units, utils, validation)
 
 # -- Gas dynamics -- #
@@ -69,6 +70,12 @@ from .ablative import (AblationEnvironment, AblativeLinerResult, BPrimeTable,
                        blowingCorrection, diffusionLimitedCharBPrime,
                        elementMassFractionsFromMoles, propellantElementMassFractions,
                        solveMaterialResponse)
+
+# -- Film cooling -- #
+
+from .filmCooling import (FilmCoolingResult, filmCoolingArrays, filmDrivingTemperature,
+                          filmTransferCoefficient, hatchPapellEffectiveness,
+                          velocityRatioCorrection)
 
 # -- Radiative heat transfer -- #
 
@@ -119,7 +126,8 @@ __all__ = [
     # Submodules
     'ablative', 'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing',
     'characteristics', 'config', 'contour', 'contourKernel', 'exports', 'figures',
-    'gasDynamics', 'keepOut', 'materials', 'nozzleVolutes', 'plume', 'radiativeCooling',
+    'filmCooling', 'gasDynamics', 'keepOut', 'materials', 'nozzleVolutes', 'plume',
+    'radiativeCooling',
     'regenChannels', 'regenStations', 'regenThermal', 'units', 'utils', 'validation',
     # Gas dynamics
     'areaMachRelation', 'conicalLength', 'divergenceLossFactor', 'machAngle', 'machFromAreaRatio',
@@ -138,6 +146,9 @@ __all__ = [
     'ablativeResponseProvenance', 'availableAblativeMaterials', 'blowingCorrection',
     'diffusionLimitedCharBPrime', 'elementMassFractionsFromMoles',
     'propellantElementMassFractions', 'solveMaterialResponse',
+    # Film cooling
+    'FilmCoolingResult', 'filmCoolingArrays', 'filmDrivingTemperature',
+    'filmTransferCoefficient', 'hatchPapellEffectiveness', 'velocityRatioCorrection',
     # Radiative heat transfer
     'cylinderMeanBeamLength', 'effectiveGasSideDriving', 'meanBeamLength',
     'netWallRadiativeFlux', 'radiationEquilibriumTemperature', 'wallRadiationCoefficient',
