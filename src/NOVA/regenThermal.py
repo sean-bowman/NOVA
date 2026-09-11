@@ -226,6 +226,198 @@ def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber:
 
     return (constantBartzPart *             (throatArea / localArea)**0.9 *             boundaryLayerCorrectionFactor)
 
+@dataclass
+class StationWallSolution:
+
+    """
+
+    The converged wall state at one station, for one channel cross section.
+
+    Scalars only. The caller owns the arrays, which is what lets the two channel families share
+    this solve without either of them learning the other's variable names.
+
+    Attributes:
+    -----------
+    coolantConvectiveCoefficient : float
+        Coolant-side convective coefficient [W/m^2 K].
+    exhaustConvectiveCoefficient : float
+        Gas-side convective coefficient from Bartz [W/m^2 K].
+    wallConductivity : float
+        Wall conductivity sampled at the converged hot wall temperature [W/m K].
+    heatTransfer : float
+        Heat through the wall at this station, per channel [W]. A power, not a flux: the areas
+        are already folded into the three resistances.
+    hotWallTemperature, coldWallTemperature : float
+        The two faces of the wall [K].
+    coolantTemperatureRise : float
+        Temperature the coolant gains crossing this station [K]. The caller decides which
+        station it lands on, because that depends on which way the march runs.
+    iterations : int
+        Passes the fixed point took.
+    residual : float
+        Final change in the hot wall temperature between passes [K].
+    converged : bool
+        False means the iteration ceiling was reached, and the values above are the last iterate.
+
+    """
+
+    coolantConvectiveCoefficient: float
+    exhaustConvectiveCoefficient: float
+    wallConductivity:             float
+    heatTransfer:                 float
+    hotWallTemperature:           float
+    coldWallTemperature:          float
+    coolantTemperatureRise:       float
+    iterations:                   int
+    residual:                     float
+    converged:                    bool
+
+def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMachNumber,
+                                gasGamma, gasConstant, gasMolecularWeight,
+                                coolantTemperature, coolantThermalConductivity,
+                                coolantNusseltNumber, coolantSpecificHeat, coolantMassFlow,
+                                hydraulicDiameter, coolantWettedArea,
+                                hotWallArea, hotWallThickness, wallRadius, pathLength,
+                                conductivityInterpolator,
+                                chamberPressure, characteristicVelocity, throatDiameter,
+                                throatRadiusOfCurvature, throatArea, localArea,
+                                tolerance: float = 0.01,
+                                maximumIterations: int = 50) -> StationWallSolution:
+
+    """
+
+    Converge the hot wall temperature at one station against a three-resistance network.
+
+    The wall temperature is not known in advance and cannot be solved directly, because two of
+    the three resistances depend on it: the wall conductivity is a function of temperature, and
+    the Bartz boundary layer correction carries the whole of the gas-side dependence on the wall.
+    So it is iterated. A guess sets both, the network sets a heat flow, the flow sets a new wall
+    temperature, and the pass repeats until the two agree.
+
+    Successive substitution is enough because the map contracts hard: the only wall-temperature
+    dependence of the gas-side coefficient is through the boundary layer correction, and it is
+    weak. Typical stations converge in a handful of passes.
+
+    The conduction resistance is cylindrical about the **nozzle** axis rather than the channel
+    axis, because the assumption of cylindrical symmetry is only true about the nozzle: from
+    there heat goes outward in every direction and cooling comes inward from every direction,
+    while from a channel axis the heat arrives from one side only.
+
+    Parameters:
+    -----------
+    drivingTemperature : float
+        Gas temperature the heat flows from [K]. This is the quantity a film coolant reduces.
+    gasStaticTemperature : float
+        Static gas temperature [K], passed to Bartz, which forms its own total temperature and
+        writes its boundary layer correction in the static value.
+    gasMachNumber : float
+        Local Mach number [-].
+    gasGamma, gasConstant, gasMolecularWeight : float
+        Exhaust ratio of specific heats [-], specific gas constant [J/kg K] and molecular
+        weight [kg/kmol].
+    coolantTemperature : float
+        Bulk coolant temperature entering this station [K].
+    coolantThermalConductivity : float
+        Coolant conductivity [W/m K].
+    coolantNusseltNumber : float
+        Coolant-side Nusselt number from whichever correlation the family uses [-].
+    coolantSpecificHeat : float
+        Coolant specific heat [J/kg K].
+    coolantMassFlow : float
+        Coolant mass flow through one channel [kg/s].
+    hydraulicDiameter : float
+        Channel hydraulic diameter [m].
+    coolantWettedArea : float
+        Coolant-side area of this station, per channel [m^2].
+    hotWallArea : float
+        Gas-side area of this station, per channel [m^2].
+    hotWallThickness : float
+        Wall between coolant and exhaust [m].
+    wallRadius : float
+        Hot wall radius from the nozzle axis [m].
+    pathLength : float
+        Length of this station along the channel [m].
+    conductivityInterpolator : callable
+        Wall conductivity against temperature.
+    chamberPressure, characteristicVelocity : float
+        Chamber stagnation pressure [Pa] and characteristic velocity [m/s].
+    throatDiameter, throatRadiusOfCurvature, throatArea : float
+        Throat geometry Bartz needs [m], [m], [m^2].
+    localArea : float
+        Flow area at this station [m^2].
+    tolerance : float
+        Convergence tolerance on the hot wall temperature [K].
+    maximumIterations : int
+        Passes allowed before the caller is told it did not converge.
+
+    Returns:
+    --------
+    StationWallSolution
+
+    Raises:
+    -------
+    ValueError
+        If the wall temperature guess goes NaN, which means an upstream quantity is already bad
+        and letting it propagate would bury the cause a hundred stations later.
+
+    """
+
+    hotWallTemperatureGuess = drivingTemperature
+    converged = False
+    convergenceIteration = 0
+    residual = float('nan')
+
+    while not converged and convergenceIteration < maximumIterations:
+
+        convergenceIteration += 1
+
+        if np.isnan(hotWallTemperatureGuess):
+            raise ValueError(
+                'The hot wall temperature guess went NaN on pass {} of the station solve. The '
+                'driving temperature was {}.'.format(convergenceIteration, drivingTemperature))
+
+        wallConductivity = float(conductivityInterpolator(hotWallTemperatureGuess))
+
+        coolantConvectiveCoefficient = coolantThermalConductivity * coolantNusseltNumber \
+                                       / hydraulicDiameter
+        coolantConvectiveResistance = 1 / (coolantConvectiveCoefficient * coolantWettedArea)
+
+        conductiveResistance = np.log(1 + hotWallThickness / wallRadius) / \
+                               (2*np.pi * pathLength * wallConductivity)
+
+        exhaustConvectiveCoefficient = bartzHeatTransferCoefficient(
+            gasStaticTemperature, gasMachNumber, gasGamma,
+            gasConstant, gasMolecularWeight, hotWallTemperatureGuess,
+            chamberPressure, characteristicVelocity, throatDiameter,
+            throatRadiusOfCurvature, throatArea, localArea)
+
+        exhaustConvectiveResistance = 1 / (exhaustConvectiveCoefficient * hotWallArea)
+
+        heatTransfer = (drivingTemperature - coolantTemperature) / \
+                       (coolantConvectiveResistance + conductiveResistance
+                        + exhaustConvectiveResistance)
+        hotWallTemperature  = drivingTemperature - (heatTransfer * exhaustConvectiveResistance)
+        coldWallTemperature = coolantTemperature + (heatTransfer * coolantConvectiveResistance)
+
+        residual = abs(hotWallTemperatureGuess - hotWallTemperature)
+
+        if residual < tolerance:
+            converged = True
+        else:
+            hotWallTemperatureGuess = hotWallTemperature
+
+    return StationWallSolution(
+        coolantConvectiveCoefficient = coolantConvectiveCoefficient,
+        exhaustConvectiveCoefficient = exhaustConvectiveCoefficient,
+        wallConductivity             = wallConductivity,
+        heatTransfer                 = heatTransfer,
+        hotWallTemperature           = hotWallTemperature,
+        coldWallTemperature          = coldWallTemperature,
+        coolantTemperatureRise       = heatTransfer / (coolantMassFlow * coolantSpecificHeat),
+        iterations                   = convergenceIteration,
+        residual                     = residual,
+        converged                    = converged)
+
 # What the thermal model needs in its input dictionary before it will run. Written as a table
 # rather than as branches: see validation.py.
 #
@@ -921,201 +1113,147 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 # Fluted Hot Wall Temperature Convergence
                 if runFluted:
 
-                    converged = False
-                    tolerance = 0.01
-                    initialWallTemperatureGuess = nearWallTemperature[i]
-                    hotWallTemperatureGuess = initialWallTemperatureGuess
-                    convergenceIteration = 0
-                    maxWallConvergenceIterations = 50
+                    # The solve raises on a NaN wall temperature rather than letting one propagate
+                    # a hundred stations downstream. Catching it here is what lets the local state
+                    # be written out, since the solve sees only the station it was handed.
+                    try:
+                        solution = solveStationWallTemperature(
+                            drivingTemperature         = nearWallTemperature[i],
+                            gasStaticTemperature       = nearWallTemperature[i],
+                            gasMachNumber              = nearWallMachNumber[i],
+                            gasGamma                   = exhaustGamma[i],
+                            gasConstant                = exhaustGasConstant[i],
+                            gasMolecularWeight         = exhaustMolecularWeight[i],
+                            coolantTemperature         = flutedCoolantTemperature[i],
+                            coolantThermalConductivity = flutedCoolantThermalConductivity[i],
+                            coolantNusseltNumber       = flutedCoolantNusseltNumber[i],
+                            coolantSpecificHeat        = flutedCoolantSpecificHeat[i],
+                            coolantMassFlow            = mdot,
+                            hydraulicDiameter          = flutedHydraulicDiameter[i],
+                            coolantWettedArea          = gausFlutedSA[i]/2,
+                            hotWallArea                = hotWallArea[i],
+                            hotWallThickness           = hotWallThickness,
+                            wallRadius                 = rHotWall3D[i],
+                            pathLength                 = differentialPathLength[i],
+                            conductivityInterpolator   = wallThermalConductivityInterpolator[i],
+                            chamberPressure            = chamberPressure,
+                            characteristicVelocity     = theoreticalCharVel,
+                            throatDiameter             = throatDiameter,
+                            throatRadiusOfCurvature    = throatRadiusOfCurvature,
+                            throatArea                 = throatArea,
+                            localArea                  = nozzleAreas[i],
+                            tolerance                  = 0.01)
+                    except ValueError as error:
+                        debugFile = dumpDebugInfo(locals(), i, time.time() - start_time)
+                        raise ValueError('{} Station {}, fluted channel.{}'.format(
+                            error, i, ' Local state written to {}.'.format(debugFile)
+                            if debugFile else '')) from error
 
-                    while not converged and convergenceIteration < maxWallConvergenceIterations:
+                    flutedWallConductivity[i]                  = solution.wallConductivity
+                    flutedCoolantConvectiveHeatTransferCoef[i] = solution.coolantConvectiveCoefficient
+                    flutedExhaustConvectiveHeatTransferCoef[i] = solution.exhaustConvectiveCoefficient
+                    flutedHeatTransfer[i]                      = solution.heatTransfer
+                    flutedHotWallTemperature[i]                = solution.hotWallTemperature
+                    flutedColdWallTemperature[i]               = solution.coldWallTemperature
 
-                        convergenceIteration += 1
+                    # The march runs from the coolant inlet toward the chamber, so the heat picked
+                    # up here raises the coolant at the next station down the index. A single
+                    # station has no next one, so it takes the rise itself.
+                    if i > 0:
+                        flutedCoolantTemperature[i-1] = flutedCoolantTemperature[i] + solution.coolantTemperatureRise
+                    if solution.converged and iterationMode == 'single':
+                        flutedCoolantTemperature[i] = flutedCoolantTemperature[i] + solution.coolantTemperatureRise
 
-                        # Check for NaN in hotWallTemperatureGuess before it propagates
-                        if np.isnan(hotWallTemperatureGuess):
-                            debug_file = dumpDebugInfo(locals(), i, time.time() - start_time)
-                            error_msg = f"NaN detected in Fluted convergence loop hotWallTemperatureGuess at iteration {i}, convergenceIteration {convergenceIteration}"
-                            error_msg += f"\nInitial guess was: {initialWallTemperatureGuess}"
-                            error_msg += f"\nNearWallTemperature[i] = {nearWallTemperature[i]}"
-                            if debug_file:
-                                error_msg += f"\nDebug information saved to: {debug_file}"
-                            raise ValueError(error_msg)
-
-                        # Calculate wall thermal conductivity assuming the wall temperature
-                        flutedWallConductivity[i] = wallThermalConductivityInterpolator[i](hotWallTemperatureGuess)
-
-                        # -- Calculate coolant-side convective/conductive heat transfer coefficient(s) -- #
-
-                        flutedCoolantConvectiveHeatTransferCoef[i] = flutedCoolantThermalConductivity[i] * flutedCoolantNusseltNumber[i] / flutedHydraulicDiameter[i]
-
-                        flutedCoolantConvectiveResistance = 1 / (flutedCoolantConvectiveHeatTransferCoef[i] * gausFlutedSA[i]/2)
-
-                        # to calculate conductive resistance in the nozzle using a cylindrical model for conductive resistance, we frame our reference around
-                        # the nozzle axis becuase the assumption must be that the heat transfer problem is cylindrically symmetrical and that is only true
-                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling
-                        # "comes inwards" from all directions whereas from the channel axis, heating only comes in from one direction and cooling goes out in all directions
-                        conductiveResistance = np.log(1 + hotWallThickness / rHotWall3D[i]) / \
-                                            (2*np.pi * differentialPathLength[i] * flutedWallConductivity[i])
-
-                        # -- Calculate exhaust-side convective heat transfer coefficient -- #
-
-                        flutedExhaustConvectiveHeatTransferCoef[i] = bartzHeatTransferCoefficient(
-                            nearWallTemperature[i], nearWallMachNumber[i], exhaustGamma[i],
-                            exhaustGasConstant[i], exhaustMolecularWeight[i], hotWallTemperatureGuess,
-                            chamberPressure, theoreticalCharVel, throatDiameter,
-                            throatRadiusOfCurvature, throatArea, nozzleAreas[i])
-
-                        exhaustConvectiveResistance = 1 / (flutedExhaustConvectiveHeatTransferCoef[i] * hotWallArea[i])
-
-                        # -- Calculate heat transfer and update temperatures -- #
-
-                        flutedHeatTransfer[i]         = (nearWallTemperature[i] - flutedCoolantTemperature[i]) / \
-                                                        (flutedCoolantConvectiveResistance + conductiveResistance + exhaustConvectiveResistance)
-                        if i > 0:
-                            flutedCoolantTemperature[i-1] = flutedCoolantTemperature[i] + (flutedHeatTransfer[i] / (mdot * flutedCoolantSpecificHeat[i]))
-                        flutedHotWallTemperature[i]       = nearWallTemperature[i] - (flutedHeatTransfer[i] * exhaustConvectiveResistance)
-                        flutedColdWallTemperature[i]      = flutedCoolantTemperature[i] + (flutedHeatTransfer[i] * flutedCoolantConvectiveResistance)
-
-                        # Check convergence criteria
-                        residual = abs(hotWallTemperatureGuess - flutedHotWallTemperature[i])
-
-                        if residual < tolerance:
-                            converged = True
-                            if iterationMode == 'single':
-                                flutedCoolantTemperature[i] = flutedCoolantTemperature[i] + (flutedHeatTransfer[i] / (mdot * flutedCoolantSpecificHeat[i]))
-
-                        else:
-                            hotWallTemperatureGuess = flutedHotWallTemperature[i]
-
-                    if not converged:
+                    if not solution.converged:
                         raise ConvergenceFailureError(
-                            message=f'Fluted hot wall temperature convergence failed at station {i} after {maxWallConvergenceIterations} iterations',
-                            context={
+                            message = 'Fluted hot wall temperature convergence failed at station '
+                                      '{} after {} iterations'.format(i, solution.iterations),
+                            context = {
                                 'stationIndex': i,
-                                'iterationCount': convergenceIteration,
-                                'residual': residual,
-                                'tolerance': tolerance,
-                                'hotWallTemperatureGuess': hotWallTemperatureGuess,
-                                'flutedHotWallTemperature': flutedHotWallTemperature[i],
-                                'flutedColdWallTemperature': flutedColdWallTemperature[i],
-                                'flutedHeatTransfer': flutedHeatTransfer[i],
+                                'iterationCount': solution.iterations,
+                                'residual': solution.residual,
+                                'tolerance': 0.01,
+                                'flutedHotWallTemperature': solution.hotWallTemperature,
+                                'flutedColdWallTemperature': solution.coldWallTemperature,
+                                'flutedHeatTransfer': solution.heatTransfer,
                                 'regenSectionNearWallTemperature': nearWallTemperature[i],
                                 'flutedCoolantTemperature': flutedCoolantTemperature[i]
                             },
-                            iterations=convergenceIteration,
-                            tolerance=tolerance,
-                            residual=residual
-                        )
+                            iterations = solution.iterations,
+                            tolerance = 0.01,
+                            residual = solution.residual)
 
                 # Circle Hot Wall Temperature Convergence
                 if runCircle:
 
-                    converged = False
-                    tolerance = 0.1
-                    initialWallTemperatureGuess = nearWallTemperature[i]
-                    hotWallTemperatureGuess = initialWallTemperatureGuess
-                    convergenceIteration = 0
-                    maxWallConvergenceIterations = 50
+                    # The solve raises on a NaN wall temperature rather than letting one propagate
+                    # a hundred stations downstream. Catching it here is what lets the local state
+                    # be written out, since the solve sees only the station it was handed.
+                    try:
+                        solution = solveStationWallTemperature(
+                            drivingTemperature         = nearWallTemperature[i],
+                            gasStaticTemperature       = nearWallTemperature[i],
+                            gasMachNumber              = nearWallMachNumber[i],
+                            gasGamma                   = exhaustGamma[i],
+                            gasConstant                = exhaustGasConstant[i],
+                            gasMolecularWeight         = exhaustMolecularWeight[i],
+                            coolantTemperature         = circleCoolantTemperature[i],
+                            coolantThermalConductivity = circleCoolantThermalConductivity[i],
+                            coolantNusseltNumber       = circleCoolantNusseltNumber[i],
+                            coolantSpecificHeat        = circleCoolantSpecificHeat[i],
+                            coolantMassFlow            = mdot,
+                            hydraulicDiameter          = circleHydraulicDiameter[i],
+                            coolantWettedArea          = circleSA[i]/2,
+                            hotWallArea                = hotWallArea[i],
+                            hotWallThickness           = hotWallThickness,
+                            wallRadius                 = rHotWall3D[i],
+                            pathLength                 = differentialPathLength[i],
+                            conductivityInterpolator   = wallThermalConductivityInterpolator[i],
+                            chamberPressure            = chamberPressure,
+                            characteristicVelocity     = theoreticalCharVel,
+                            throatDiameter             = throatDiameter,
+                            throatRadiusOfCurvature    = throatRadiusOfCurvature,
+                            throatArea                 = throatArea,
+                            localArea                  = nozzleAreas[i],
+                            tolerance                  = 0.1)
+                    except ValueError as error:
+                        debugFile = dumpDebugInfo(locals(), i, time.time() - start_time)
+                        raise ValueError('{} Station {}, circle channel.{}'.format(
+                            error, i, ' Local state written to {}.'.format(debugFile)
+                            if debugFile else '')) from error
 
-                    while not converged and convergenceIteration < maxWallConvergenceIterations:
-                        convergenceIteration += 1
+                    circleWallConductivity[i]                  = solution.wallConductivity
+                    circleCoolantConvectiveHeatTransferCoef[i] = solution.coolantConvectiveCoefficient
+                    circleExhaustConvectiveHeatTransferCoef[i] = solution.exhaustConvectiveCoefficient
+                    circleHeatTransfer[i]                      = solution.heatTransfer
+                    circleHotWallTemperature[i]                = solution.hotWallTemperature
+                    circleColdWallTemperature[i]               = solution.coldWallTemperature
 
-                        # Check for NaN in hotWallTemperatureGuess before it propagates
-                        if np.isnan(hotWallTemperatureGuess):
-                            debug_file = dumpDebugInfo(locals(), i, time.time() - start_time)
-                            error_msg = f"NaN detected in Circle convergence loop hotWallTemperatureGuess at iteration {i}, convergenceIteration {convergenceIteration}"
-                            error_msg += f"\nInitial guess was: {initialWallTemperatureGuess}"
-                            error_msg += f"\nSelf.regenSectionNearWallTemperature[i] = {nearWallTemperature[i]}"
-                            if debug_file:
-                                error_msg += f"\nDebug information saved to: {debug_file}"
-                            raise ValueError(error_msg)
+                    # The march runs from the coolant inlet toward the chamber, so the heat picked
+                    # up here raises the coolant at the next station down the index. A single
+                    # station has no next one, so it takes the rise itself.
+                    if i > 0:
+                        circleCoolantTemperature[i-1] = circleCoolantTemperature[i] + solution.coolantTemperatureRise
+                    if solution.converged and iterationMode == 'single':
+                        circleCoolantTemperature[i] = circleCoolantTemperature[i] + solution.coolantTemperatureRise
 
-                        # Calculate wall thermal conductivity assuming the wall temperature
-                        circleWallConductivity[i] = wallThermalConductivityInterpolator[i](hotWallTemperatureGuess)
-
-                        # -- Calculate coolant-side convective/conductive heat transfer coefficient(s) -- #
-
-                        circleCoolantConvectiveHeatTransferCoef[i] = circleCoolantThermalConductivity[i] * circleCoolantNusseltNumber[i] / circleHydraulicDiameter[i]
-
-                        circleCoolantConvectiveResistance = 1 / (circleCoolantConvectiveHeatTransferCoef[i] * circleSA[i]/2)
-
-                        # to calculate conductive resistance in the nozzle using a cylindrical model for conductive resistance, we frame our reference around
-                        # the nozzle axis becuase the assumption must be that the heat transfer problem is cylindrically symmetrical and that is only true
-                        # for the nozzle axis, not for the cooling channel axis. e.g. from nozzle axis, heating "goes outwards" in all directions and cooling
-                        # "comes inwards" from all directions whereas from the channel axis, heating only comes in from one direction and cooling goes out in all directions
-                        conductiveResistance = np.log(1 + hotWallThickness / rHotWall3D[i]) / \
-                                            (2*np.pi * differentialPathLength[i] * circleWallConductivity[i])
-
-                        # -- Calculate exhaust-side convective heat transfer coefficient -- #
-
-                        circleExhaustConvectiveHeatTransferCoef[i] = bartzHeatTransferCoefficient(
-                            nearWallTemperature[i], nearWallMachNumber[i], exhaustGamma[i],
-                            exhaustGasConstant[i], exhaustMolecularWeight[i], hotWallTemperatureGuess,
-                            chamberPressure, theoreticalCharVel, throatDiameter,
-                            throatRadiusOfCurvature, throatArea, nozzleAreas[i])
-
-                        exhaustConvectiveResistance = 1 / (circleExhaustConvectiveHeatTransferCoef[i] * hotWallArea[i])
-
-                        # -- Calculate heat transfer and update temperatures -- #
-
-                        if True: # check if there are any nans anywhere in here
-                            for name, value in locals().items():
-                                try:
-                                    # Check scalars
-                                    if isinstance(value, (float, int)) and math.isnan(value):
-                                        print(f"{name} is NaN (scalar)")
-                                        if context.debugMode:
-                                            breakpoint()
-                                        else:
-                                            raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
-
-                                    # Check arrays
-                                    if isinstance(value, np.ndarray) and np.isnan(value).any():
-                                        print(f"{name} contains NaN (array)")
-                                        if context.debugMode:
-                                            breakpoint()
-                                        else:
-                                            raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
-                                except:
-                                    pass  # Ignore variables that can't be NaN
-
-                        circleHeatTransfer[i]         = (nearWallTemperature[i] - circleCoolantTemperature[i]) / \
-                                                        (circleCoolantConvectiveResistance + conductiveResistance + exhaustConvectiveResistance)
-                        if i > 0:
-                            circleCoolantTemperature[i-1] = circleCoolantTemperature[i] + (circleHeatTransfer[i] / (mdot * circleCoolantSpecificHeat[i]))
-                        circleHotWallTemperature[i]   = nearWallTemperature[i] - (circleHeatTransfer[i] * exhaustConvectiveResistance)
-                        circleColdWallTemperature[i]  = circleCoolantTemperature[i] + (circleHeatTransfer[i] * circleCoolantConvectiveResistance)
-
-                        # Check convergence criteria
-                        residual = abs(hotWallTemperatureGuess - circleHotWallTemperature[i])
-
-                        if residual < tolerance:
-                            converged = True
-                            if iterationMode == 'single':
-                                circleCoolantTemperature[i] = circleCoolantTemperature[i] + (circleHeatTransfer[i] / (mdot * circleCoolantSpecificHeat[i]))
-
-                        else:
-                            hotWallTemperatureGuess = circleHotWallTemperature[i]
-
-                    if not converged:
+                    if not solution.converged:
                         raise ConvergenceFailureError(
-                            message=f'Circle hot wall temperature convergence failed at station {i} after {maxWallConvergenceIterations} iterations',
-                            context={
+                            message = 'Circle hot wall temperature convergence failed at station '
+                                      '{} after {} iterations'.format(i, solution.iterations),
+                            context = {
                                 'stationIndex': i,
-                                'iterationCount': convergenceIteration,
-                                'residual': residual,
-                                'tolerance': tolerance,
-                                'hotWallTemperatureGuess': hotWallTemperatureGuess,
-                                'circleHotWallTemperature': circleHotWallTemperature[i],
-                                'circleHeatTransfer': circleHeatTransfer[i],
+                                'iterationCount': solution.iterations,
+                                'residual': solution.residual,
+                                'tolerance': 0.1,
+                                'circleHotWallTemperature': solution.hotWallTemperature,
+                                'circleHeatTransfer': solution.heatTransfer,
                                 'regenSectionNearWallTemperature': nearWallTemperature[i],
                                 'circleCoolantTemperature': circleCoolantTemperature[i]
                             },
-                            iterations=convergenceIteration,
-                            tolerance=tolerance,
-                            residual=residual
-                        )
+                            iterations = solution.iterations,
+                            tolerance = 0.1,
+                            residual = solution.residual)
 
             hotWallConvergenceLoops(throatRadiusOfCurvature)
 
