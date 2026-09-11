@@ -24,7 +24,7 @@ import pytest
 from NOVA import materials
 from NOVA.materials import (availableMaterialClasses, availableMaterials, availableWallMaterials,
                             materialProfile, materialProperty, materialPropertyProvenance,
-                            maxUseTemperature)
+                            maxUseTemperature, surfaceEmissivity)
 
 # --------------------------------------------------------------------------------------------- #
 # -- The two stores stay apart -- #
@@ -398,3 +398,83 @@ def testTheLpbfC103IsStrongerThanWrought():
         assert tensileStrength[condition] > yieldStrength[condition], condition
 
     assert yieldStrength['lpbfStressRelieved'] > yieldStrength['wrought']
+
+
+# --------------------------------------------------------------------------------------------- #
+# -- Surface emissivity -- #
+# --------------------------------------------------------------------------------------------- #
+
+class TestSurfaceEmissivity:
+
+    '''
+
+    Emissivity is a surface property, not an alloy property, and the store treats it that way.
+
+    A radiation-cooled wall settles where its own emissivity puts it. The equilibrium temperature
+    goes as the inverse fourth root, so the number is the design driver and a guess propagates
+    straight into it. The store therefore carries one only where a source describes the surface,
+    and refuses everywhere else rather than substituting.
+
+    '''
+
+    def testTheCoatedColumbiumValueIsCarried(self):
+
+        assert surfaceEmissivity('C103', 'r512eCoatedOxidised') == 0.7
+
+    def testItIsKeyedOnASurfaceConditionRatherThanOnTheAlloy(self):
+
+        stored = surfaceEmissivity('C103')
+
+        assert isinstance(stored, dict)
+        assert all('coated' in key.lower() or 'bare' in key.lower() for key in stored), sorted(stored)
+
+    def testTheValueIsPhysical(self):
+
+        for value in surfaceEmissivity('C103').values():
+            assert 0.0 < value <= 1.0
+
+    def testTheSourceNamesItsCaveats(self):
+
+        source, basis = materialPropertyProvenance('C103', 'emissivity')
+
+        # Three things have to survive any edit of this entry: the substrates measured were not
+        # C103, the environment was an oxidising arc rather than a vacuum extension, and no
+        # beginning-of-life value is recorded.
+        assert 'FS-85' in source
+        assert 'torr' in source
+        assert 'beginning-of-life' in source
+        assert basis == 'literatureReview'
+
+    def testNoBeginningOfLifeValueIsInvented(self):
+
+        # The sourced value is the degraded one. Storing a fresh-surface number alongside it
+        # without a source would make the aged value look like the pessimistic end of a measured
+        # range rather than the only thing anybody measured.
+        assert len(surfaceEmissivity('C103')) == 1
+
+    @pytest.mark.parametrize('alloy', ['GRCop-42', 'OFHC Copper', 'Inconel 718'])
+    def testTheWallAlloysCarryNone(self, alloy):
+
+        # There is no published emissivity for these at the surface finish a printed chamber has.
+        # The refusal is the honest answer and the configuration supplies the number instead.
+        with pytest.raises(KeyError):
+            surfaceEmissivity(alloy)
+
+    def testAMaterialWithoutOneSaysSoRatherThanGuessing(self):
+
+        with pytest.raises(KeyError) as raised:
+            surfaceEmissivity('ATJ Graphite')
+
+        assert 'surface property' in str(raised.value)
+
+    def testAnUnknownMaterialIsDistinguishedFromAnUnsourcedOne(self):
+
+        with pytest.raises(KeyError) as raised:
+            surfaceEmissivity('NotAMaterial')
+
+        assert 'Unknown material' in str(raised.value)
+
+    def testAnUnknownSurfaceConditionIsRefused(self):
+
+        with pytest.raises(KeyError):
+            surfaceEmissivity('C103', 'polishedBare')

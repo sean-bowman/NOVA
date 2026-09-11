@@ -872,6 +872,11 @@ _MATERIALCLASSES = {
             'yieldStrength':   {'wrought': 276.0e6, 'lpbfStressRelieved': 411.0e6},   # [Pa]
             'tensileStrength': {'wrought': 386.0e6, 'lpbfStressRelieved': 560.0e6},   # [Pa]
             'elongation':      {'wrought': 20.0, 'lpbfStressRelieved': 16.7},         # [%]
+            # A radiation-cooled wall sits where its own emissivity puts it: the equilibrium
+            # temperature goes as the inverse fourth root, so a factor of four here is a factor
+            # of 1.41 in wall temperature. Only the degraded value is sourced, and it is the
+            # conservative one, because lower emissivity means a hotter wall.
+            'emissivity':      {'r512eCoatedOxidised': 0.7},                          # [-]
         },
         'maxUseTemperatureC': {'inert': 1400.0, 'oxidising': 400.0},
         'basis': 'literatureReview',
@@ -894,6 +899,22 @@ _MATERIALCLASSES = {
                                    '400 degC and is always used with a silicide coating, '
                                    'typically R512E, in any oxidising service.',
                                    'literatureReview'),
+            'emissivity':      ('Levine and Merutka, Performance of Coated Columbium and Tantalum '
+                                'Alloys in Plasma Arc Reentry Simulation Tests, NASA Lewis '
+                                'Research Center and US Army Air Mobility R&D Laboratory, NTRS '
+                                '19740015000. Its summary reports large emittance losses, '
+                                'generally to below 0.7, from surface refractory metal pentoxides '
+                                'forming on R512E coated columbium. Three caveats, and they '
+                                'matter. The substrates tested were FS-85, Cb-752 and C-129Y '
+                                'rather than C103, so the value transfers on the coating being '
+                                'the emitting surface. The environment was a plasma arc at 4.9 '
+                                'torr of air for fifty half-hour cycles near 1390 degC, which '
+                                'oxidises far harder than a vacuum nozzle extension, so this is '
+                                'how far the emittance can fall rather than where it sits in '
+                                'service. And no beginning-of-life value is recorded here because '
+                                'none was found: an extension sized on 0.7 is sized on the hot '
+                                'case, which is the right direction to be wrong in.',
+                                'literatureReview'),
         },
         'notes': ('The classic radiatively cooled extension material. Its temperature-dependent '
                   'strength is published only as a figure in the sources found, so no curve is '
@@ -1250,6 +1271,69 @@ def materialProperty(material: str, propertyName: str, variant: str = None):
             material, propertyName, variant, sorted(properties[propertyName])))
 
     return properties[propertyName][variant]
+
+def surfaceEmissivity(material: str, condition: str = None):
+
+    """
+
+    Total hemispherical emissivity of a material's surface, where one is carried.
+
+    Emissivity is a property of a surface rather than of an alloy. Oxide state and roughness set
+    it, a polished and an oxidised sample of the same metal differ by an order of magnitude, and
+    it moves over a firing as the surface changes. So it is keyed on a surface condition, and the
+    store carries a value only where one could be traced to a source describing that condition.
+
+    Most materials here carry none, and that is the honest state rather than an omission. There
+    is no published emissivity for the copper wall alloys at the surface finish a printed
+    regenerative chamber actually has. A radiation term that needs one takes it from the
+    configuration, where whoever supplies it owns it.
+
+    Parameters:
+    -----------
+    material : str
+        A name from `availableMaterials()` or `availableWallMaterials()`.
+    condition : str | None
+        Which surface condition to read. None returns the whole mapping.
+
+    Returns:
+    --------
+    float | dict
+        Emissivity [-], or the mapping of every stored condition when `condition` is None.
+
+    Raises:
+    -------
+    KeyError
+        If the material carries no emissivity, or carries none for that surface condition. A
+        guessed emissivity propagates to the fourth root of wall temperature, so the store
+        refuses rather than substitutes.
+
+    """
+
+    carried = sorted(name for name, entry in _MATERIALCLASSES.items()
+                     if 'emissivity' in entry['properties'])
+
+    known = resolveWallMaterialName(material) is not None             or any(name.lower() == material.strip().lower() for name in _MATERIALCLASSES)
+    if not known:
+        raise KeyError('Unknown material {!r}. Wall alloys: {}. Everything else: {}.'.format(
+            material, availableWallMaterials(), availableMaterials()))
+
+    try:
+        stored = materialProperty(material, 'emissivity')
+    except KeyError:
+        raise KeyError(
+            'No emissivity is carried for {!r}. Emissivity is a surface property, not an alloy '
+            'property, and the store holds one only where a source describes the surface. '
+            'Supply one through the configuration instead. Carried for: {}.'.format(
+                material, carried))
+
+    if condition is None:
+        return stored
+
+    if condition not in stored:
+        raise KeyError('{!r} carries no emissivity for the surface condition {!r}. It has: '
+                       '{}.'.format(material, condition, sorted(stored)))
+
+    return stored[condition]
 
 def maxUseTemperature(material: str, atmosphere: str = 'oxidising') -> float:
 

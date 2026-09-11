@@ -60,7 +60,7 @@ from .materials import (ablativeResponseData, ablativeResponseProvenance,
                         materialProperties, materialProperty, materialPropertyProvenance,
                         maxUseTemperature, propertyIsMeasured, propertyProvenance,
                         resolveWallMaterialName, roughnessTable, sampleWallMaterial,
-                        wallMaterialCurves)
+                        surfaceEmissivity, wallMaterialCurves)
 
 # -- Ablative material response -- #
 
@@ -126,7 +126,7 @@ __all__ = [
     'wallMaterialCurves',
     # Non-metallic and refractory materials
     'availableMaterialClasses', 'availableMaterials', 'materialProfile', 'materialProperty',
-    'materialPropertyProvenance', 'maxUseTemperature',
+    'materialPropertyProvenance', 'maxUseTemperature', 'surfaceEmissivity',
     # Ablative material response
     'AblationEnvironment', 'AblativeLinerResult', 'BPrimeTable', 'CharringMaterial',
     'MaterialResponseResult', 'ablativeNozzleLiner', 'ablativeResponseData',
