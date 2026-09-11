@@ -66,7 +66,7 @@ from .regenThermal import (regenHeatTransferModel as solveRegenHeatTransfer,
 THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'machNumber',
                    'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
                    'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
-                   'reynoldsNumber')
+                   'reynoldsNumber', 'radiativeHeatTransfer', 'drivingTemperature')
 
 @dataclass
 class ChannelSizingState:

@@ -37,7 +37,7 @@ import numpy as np
 import pytest
 
 from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
-                          validateRegenHeatTransferInputs)
+                          solveStationWallTemperature, validateRegenHeatTransferInputs)
 
 class TestBartzViscosityConstant:
 
@@ -338,3 +338,112 @@ class TestInputValidation:
 
         with pytest.raises(Exception):
             validateRegenHeatTransferInputs(inputs)
+
+class TestStationSolveIdentities:
+
+    '''
+
+    Radiation and film cooling live inside the station solve unconditionally, and both have to be
+    exactly absent when they are not asked for.
+
+    This is the property the whole extension rests on. A jacket run that names no emissivity and
+    no film has to reproduce, to the bit, one from before either existed. That is asserted with
+    `==` rather than with `approx`, because a tolerance here would hide exactly the drift it is
+    meant to catch. The regression harness makes the same check across a whole contour; this
+    makes it on one station, where a failure says which term did it.
+
+    '''
+
+    def station(self, **overrides):
+
+        '''One station of a plausible throat, with whatever the caller wants changed.'''
+
+        arguments = dict(
+            drivingTemperature         = 3400.0,
+            gasStaticTemperature       = 3400.0,
+            gasMachNumber              = 1.0,
+            gasGamma                   = 1.2,
+            gasConstant                = 378.0,
+            gasMolecularWeight         = 22.0,
+            coolantTemperature         = 120.0,
+            coolantThermalConductivity = 0.12,
+            coolantNusseltNumber       = 350.0,
+            coolantSpecificHeat        = 14000.0,
+            coolantMassFlow            = 0.05,
+            hydraulicDiameter          = 0.0022,
+            coolantWettedArea          = 6.0e-5,
+            hotWallArea                = 5.0e-5,
+            hotWallThickness           = 0.001,
+            wallRadius                 = 0.05,
+            pathLength                 = 0.006,
+            conductivityInterpolator   = lambda temperature: 320.0,
+            chamberPressure            = 5.0e6,
+            characteristicVelocity     = 1800.0,
+            throatDiameter             = 0.1,
+            throatRadiusOfCurvature    = 0.075,
+            throatArea                 = np.pi * 0.05**2,
+            localArea                  = np.pi * 0.05**2)
+        arguments.update(overrides)
+
+        return solveStationWallTemperature(**arguments)
+
+    def testAbsentAndExplicitlyZeroAgreeToTheBit(self):
+
+        absent = self.station()
+        zeroed = self.station(filmMassFlux = 0.0, wallEmissivity = 0.0, gasEmissivity = 0.0)
+
+        for field in absent.__dataclass_fields__:
+            assert getattr(absent, field) == getattr(zeroed, field), field
+
+    def testAnEmissivityWithoutAGasEmissivityStillDoesNothing(self):
+
+        # Radiation needs both. A wall emissivity on its own describes a surface with nothing to
+        # exchange with, and the term has to stay exactly zero rather than nearly zero.
+        absent = self.station()
+        walled = self.station(wallEmissivity = 0.85, gasEmissivity = 0.0)
+
+        assert walled.radiationCoefficient == 0.0
+        assert walled.heatTransfer == absent.heatTransfer
+
+    def testTheTermsAreNotVacuous(self):
+
+        # The tests above are only worth having if the terms do something when asked. Radiation
+        # adds a second path into the wall, so the flux rises; blowing removes convective
+        # coefficient, so it falls.
+        absent = self.station()
+        radiating = self.station(wallEmissivity = 0.85, gasEmissivity = 0.25)
+        blown = self.station(filmMassFlux = 0.4)
+
+        assert radiating.radiationCoefficient > 0.0
+        assert radiating.heatTransfer > absent.heatTransfer
+        assert blown.blowingReduction < 1.0
+        assert blown.heatTransfer < absent.heatTransfer
+
+    def testTheBlowingReductionIsExactlyOneWithoutAFilm(self):
+
+        assert self.station().blowingReduction == 1.0
+
+    def testRadiationIsReportedAsItsOwnShareOfTheFlux(self):
+
+        radiating = self.station(wallEmissivity = 0.85, gasEmissivity = 0.25)
+
+        # The reported radiative flow is the coefficient times its own area and potential, and it
+        # is a fraction of the total rather than all of it.
+        expected = radiating.radiationCoefficient * 5.0e-5 * (3400.0 - radiating.hotWallTemperature)
+
+        assert radiating.radiativeHeatTransfer == pytest.approx(expected, rel = 1.0e-12)
+        assert 0.0 < radiating.radiativeHeatTransfer < radiating.heatTransfer
+
+    def testTheWallStillSitsBetweenTheCoolantAndTheGas(self):
+
+        for solution in (self.station(),
+                         self.station(wallEmissivity = 0.85, gasEmissivity = 0.25),
+                         self.station(filmMassFlux = 0.4)):
+            assert 120.0 < solution.coldWallTemperature < solution.hotWallTemperature < 3400.0
+
+    def testItConverges(self):
+
+        solution = self.station(wallEmissivity = 0.85, gasEmissivity = 0.25)
+
+        assert solution.converged
+        assert solution.residual < 0.01

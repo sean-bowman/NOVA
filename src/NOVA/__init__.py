@@ -42,8 +42,8 @@ __version__ = '0.1.0'
 
 from . import (ablative, ceaInterface, chamber, channelGeometry, channelSizing,
                characteristics, config, contour, contourKernel, exports, figures,
-               gasDynamics, keepOut, materials, nozzleVolutes, plume, regenChannels,
-               regenStations, regenThermal, units, utils, validation)
+               gasDynamics, keepOut, materials, nozzleVolutes, plume, radiativeCooling,
+               regenChannels, regenStations, regenThermal, units, utils, validation)
 
 # -- Gas dynamics -- #
 
@@ -69,6 +69,12 @@ from .ablative import (AblationEnvironment, AblativeLinerResult, BPrimeTable,
                        blowingCorrection, diffusionLimitedCharBPrime,
                        elementMassFractionsFromMoles, propellantElementMassFractions,
                        solveMaterialResponse)
+
+# -- Radiative heat transfer -- #
+
+from .radiativeCooling import (cylinderMeanBeamLength, effectiveGasSideDriving,
+                               meanBeamLength, netWallRadiativeFlux,
+                               radiationEquilibriumTemperature, wallRadiationCoefficient)
 
 # -- Thermochemistry -- #
 
@@ -112,10 +118,9 @@ __all__ = [
     'Nozzle',
     # Submodules
     'ablative', 'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing',
-    'characteristics', 'config',
-    'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
-    'nozzleVolutes', 'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'utils',
-    'validation',
+    'characteristics', 'config', 'contour', 'contourKernel', 'exports', 'figures',
+    'gasDynamics', 'keepOut', 'materials', 'nozzleVolutes', 'plume', 'radiativeCooling',
+    'regenChannels', 'regenStations', 'regenThermal', 'units', 'utils', 'validation',
     # Gas dynamics
     'areaMachRelation', 'conicalLength', 'divergenceLossFactor', 'machAngle', 'machFromAreaRatio',
     'machFromPrandtlMeyerAngle', 'machFromPressureRatio', 'prandtlMeyerAngle', 'radiusMachRelation',
@@ -133,6 +138,9 @@ __all__ = [
     'ablativeResponseProvenance', 'availableAblativeMaterials', 'blowingCorrection',
     'diffusionLimitedCharBPrime', 'elementMassFractionsFromMoles',
     'propellantElementMassFractions', 'solveMaterialResponse',
+    # Radiative heat transfer
+    'cylinderMeanBeamLength', 'effectiveGasSideDriving', 'meanBeamLength',
+    'netWallRadiativeFlux', 'radiationEquilibriumTemperature', 'wallRadiationCoefficient',
     # Thermochemistry
     'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
     # Fluid properties, atmosphere and the unit registry

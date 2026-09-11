@@ -84,7 +84,9 @@ except ImportError:
     plotlyAvailable = False
 
 from .utils import (fluidProps, ConvergenceFailureError, InvalidInputError)
+from .ablative import blowingCorrection
 from .materials import wallMaterialCurves
+from .radiativeCooling import effectiveGasSideDriving, wallRadiationCoefficient
 from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
 
 _plotlyNotices = set()
@@ -104,7 +106,6 @@ def _plotlyGate(featureName: str) -> bool:
         _plotlyNotices.add(featureName)
         print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
     return False
-
 
 @dataclass
 class RegenThermalContext:
@@ -241,7 +242,14 @@ class StationWallSolution:
     coolantConvectiveCoefficient : float
         Coolant-side convective coefficient [W/m^2 K].
     exhaustConvectiveCoefficient : float
-        Gas-side convective coefficient from Bartz [W/m^2 K].
+        Gas-side convective coefficient from Bartz, after any blowing correction [W/m^2 K].
+    radiationCoefficient : float
+        Gas-to-wall radiative coefficient on the gas-to-wall temperature difference [W/m^2 K].
+        Exactly zero when either emissivity is.
+    radiativeHeatTransfer : float
+        The radiative part of the heat through this station, per channel [W].
+    blowingReduction : float
+        Factor a film coolant reduced the convective coefficient by [-]. Exactly one with no film.
     wallConductivity : float
         Wall conductivity sampled at the converged hot wall temperature [W/m K].
     heatTransfer : float
@@ -263,6 +271,9 @@ class StationWallSolution:
 
     coolantConvectiveCoefficient: float
     exhaustConvectiveCoefficient: float
+    radiationCoefficient:         float
+    radiativeHeatTransfer:        float
+    blowingReduction:             float
     wallConductivity:             float
     heatTransfer:                 float
     hotWallTemperature:           float
@@ -281,6 +292,8 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
                                 conductivityInterpolator,
                                 chamberPressure, characteristicVelocity, throatDiameter,
                                 throatRadiusOfCurvature, throatArea, localArea,
+                                filmMassFlux: float = 0.0, blowingFactor: float = 0.5,
+                                wallEmissivity: float = 0.0, gasEmissivity: float = 0.0,
                                 tolerance: float = 0.01,
                                 maximumIterations: int = 50) -> StationWallSolution:
 
@@ -345,6 +358,16 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         Throat geometry Bartz needs [m], [m], [m^2].
     localArea : float
         Flow area at this station [m^2].
+    filmMassFlux : float
+        Film coolant leaving the wall here [kg/m^2 s]. Thickens the boundary layer and reduces
+        the convective coefficient. Zero leaves the coefficient untouched, to the bit.
+    blowingFactor : float
+        Lambda in the blowing correlation [-].
+    wallEmissivity : float
+        Emissivity of the gas-side wall surface [-]. Zero switches radiation off exactly.
+    gasEmissivity : float
+        Total emissivity of the combustion gas over its mean beam length [-]. Zero switches
+        radiation off exactly.
     tolerance : float
         Convergence tolerance on the hot wall temperature [K].
     maximumIterations : int
@@ -391,12 +414,33 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
             chamberPressure, characteristicVelocity, throatDiameter,
             throatRadiusOfCurvature, throatArea, localArea)
 
-        exhaustConvectiveResistance = 1 / (exhaustConvectiveCoefficient * hotWallArea)
+        # Film coolant leaving the wall thickens the boundary layer and pushes the temperature
+        # gradient away from it. The blowing parameter is formed from the converged coefficient
+        # rather than a frozen estimate, which costs one logarithm a pass and removes an
+        # approximation. With no film the correction is exactly one and the product is exact.
+        blowingReduction = 1.0
+        if filmMassFlux != 0.0:
+            stagnationSpecificHeat = (gasGamma / (gasGamma - 1.0)) * gasConstant
+            blowingReduction = blowingCorrection(
+                filmMassFlux * stagnationSpecificHeat / exhaustConvectiveCoefficient,
+                blowingFactor)
+            exhaustConvectiveCoefficient = exhaustConvectiveCoefficient * blowingReduction
 
-        heatTransfer = (drivingTemperature - coolantTemperature) / \
+        # Convection and radiation do not share a driving potential, so they are combined into
+        # the one coefficient and one temperature that reproduce their sum exactly. With no
+        # radiation both come back untouched and the network below is the one it always was.
+        radiationCoefficient = wallRadiationCoefficient(
+            wallEmissivity, gasEmissivity, gasStaticTemperature, hotWallTemperatureGuess)
+        gasSideCoefficient, gasSideTemperature = effectiveGasSideDriving(
+            exhaustConvectiveCoefficient, radiationCoefficient,
+            drivingTemperature, gasStaticTemperature)
+
+        exhaustConvectiveResistance = 1 / (gasSideCoefficient * hotWallArea)
+
+        heatTransfer = (gasSideTemperature - coolantTemperature) / \
                        (coolantConvectiveResistance + conductiveResistance
                         + exhaustConvectiveResistance)
-        hotWallTemperature  = drivingTemperature - (heatTransfer * exhaustConvectiveResistance)
+        hotWallTemperature  = gasSideTemperature - (heatTransfer * exhaustConvectiveResistance)
         coldWallTemperature = coolantTemperature + (heatTransfer * coolantConvectiveResistance)
 
         residual = abs(hotWallTemperatureGuess - hotWallTemperature)
@@ -409,6 +453,10 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
     return StationWallSolution(
         coolantConvectiveCoefficient = coolantConvectiveCoefficient,
         exhaustConvectiveCoefficient = exhaustConvectiveCoefficient,
+        radiationCoefficient         = radiationCoefficient,
+        radiativeHeatTransfer        = radiationCoefficient * hotWallArea
+                                       * (gasStaticTemperature - hotWallTemperature),
+        blowingReduction             = blowingReduction,
         wallConductivity             = wallConductivity,
         heatTransfer                 = heatTransfer,
         hotWallTemperature           = hotWallTemperature,
@@ -437,6 +485,24 @@ def _hasCircularSection(inputs):
     '''True when the dictionary carries a circular cross section to solve.'''
 
     return read(inputs, 'circleCSA') is not None and read(inputs, 'circleSA') is not None
+
+def _hasDrivingTemperature(inputs):
+
+    '''True when the caller supplied its own gas-side driving temperature.'''
+
+    return read(inputs, 'drivingTemperature') is not None
+
+def _hasWallRadiation(inputs):
+
+    '''True when a wall emissivity was supplied, which is what switches radiation on.'''
+
+    return read(inputs, 'wallEmissivity') is not None
+
+def _hasFilmCooling(inputs):
+
+    '''True when a film coolant mass flux was supplied.'''
+
+    return read(inputs, 'filmMassFlux') is not None
 
 regenThermalRules = (
 
@@ -493,6 +559,20 @@ regenThermalRules = (
               positive = True, sameLengthAs = 'xHotWall3D', when = _hasCircularSection),
     arrayRule('circleSA', 'Circular wetted area', units = 'm^2',
               positive = True, sameLengthAs = 'xHotWall3D', when = _hasCircularSection),
+
+    # -- What the solve can be given, and runs without -- #
+    #
+    # Every rule here is guarded, because none of these is required. A dictionary that names none
+    # of them describes a jacket with no radiation and no film, which is the case the model
+    # reproduces bit for bit.
+    arrayRule('drivingTemperature', 'Gas-side driving temperature', units = 'K',
+              positive = True, sameLengthAs = 'xHotWall3D', when = _hasDrivingTemperature),
+    numericRule('wallEmissivity', 'Hot wall surface emissivity',
+                minimum = 0, maximum = 1, exclusiveMinimum = False, exclusiveMaximum = False,
+                when = _hasWallRadiation,
+                note = 'A property of the surface, not of the alloy. Oxide and roughness set it'),
+    arrayRule('filmMassFlux', 'Film coolant mass flux at the wall', units = 'kg/m^2 s',
+              sameLengthAs = 'xHotWall3D', when = _hasFilmCooling),
 )
 
 def validateRegenHeatTransferInputs(inputsDict: dict) -> None:
@@ -872,6 +952,44 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     nozzleAreas             = np.pi * rHotWall3D**2
     nozzleCircumference     = 2 * np.pi * rHotWall3D
     hotWallArea             = (nozzleCircumference / nChannel) * abs(differentialPathLength)
+
+    # -- What the solve is driven by, and the two terms that are absent unless asked for -- #
+
+    def optionalInput(name, default):
+
+        '''One optional entry, per station, with None and NaN both meaning it was not given.'''
+
+        value = inputsDict.get(name)
+        if value is None:
+            value = default
+        array = np.atleast_1d(np.asarray(value, dtype = float))
+        array = np.where(np.isnan(array), default, array)
+
+        return array if array.size == numCrossSections \
+               else np.full(numCrossSections, array.flat[0])
+
+    def optionalScalar(name, default):
+
+        '''One optional scalar, with None and NaN both meaning it was not given.'''
+
+        value = inputsDict.get(name)
+
+        return default if value is None or np.isnan(value) else float(value)
+
+    # Named for what it is rather than for what produced it. A film coolant writes it, and so
+    # does the choice between a static and a recovery temperature; the solve never learns which.
+    # Absent, it is *bound* to the near-wall temperature rather than copied, so the subtraction
+    # downstream has literally the same operand and a run without it is bit-identical.
+    drivingTemperature = inputsDict.get('drivingTemperature')
+    if drivingTemperature is None:
+        drivingTemperature = nearWallTemperature
+
+    # Both default to zero, and zero is exact here: the radiative coefficient returns exactly 0.0
+    # and the blowing correction exactly 1.0, so neither moves a bit of the answer.
+    wallEmissivity = optionalScalar('wallEmissivity', 0.0)
+    blowingFactor  = optionalScalar('blowingFactor', 0.5)
+    gasEmissivity  = optionalInput('gasEmissivity', 0.0)
+    filmMassFlux   = optionalInput('filmMassFlux', 0.0)
     if runFluted:
         flutedHydraulicDiameter = np.sqrt(4 * gausFlutedCSA / np.pi)
     if runCircle:
@@ -894,10 +1012,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     else:
         runAdiabaticColdWall = False
 
-
     # Collapse array initializations
     if True:
-
 
         # Fluted Cooling Channel Geometry and Flow Properties
         flutedCoolantTemperature, flutedCoolantPressure, flutedCoolantVelocity, \
@@ -917,6 +1033,12 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
         flutedCoolantThermalConductivity[-1] = np.mean(wallThermalConductivityData)
 
+        # Radiation is reported separately from the total so a reader can see how
+        # much of the flux it actually is, and the blowing factor so a film-cooled run
+        # shows how much of the coefficient it removed. Inert values unless asked for.
+        flutedRadiativeHeatTransfer = np.zeros(numCrossSections)
+        flutedBlowingReduction      = np.ones(numCrossSections)
+
         # Circular Cooling Channel Geometry and Flow Properties (for comparison)
         circleCoolantTemperature, circleCoolantPressure, circleCoolantVelocity, \
         circleCoolantMachNumber, circleCoolantReynoldsNumber, circleCoolantNusseltNumber, \
@@ -934,6 +1056,12 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         = [np.zeros(numCrossSections) for _ in range(8)]
 
         circleCoolantThermalConductivity[-1] = np.mean(wallThermalConductivityData)
+
+        # Radiation is reported separately from the total so a reader can see how
+        # much of the flux it actually is, and the blowing factor so a film-cooled run
+        # shows how much of the coefficient it removed. Inert values unless asked for.
+        circleRadiativeHeatTransfer = np.zeros(numCrossSections)
+        circleBlowingReduction      = np.ones(numCrossSections)
 
         thermalPerformanceFactor = np.zeros(numCrossSections)
 
@@ -1142,6 +1270,10 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                             throatRadiusOfCurvature    = throatRadiusOfCurvature,
                             throatArea                 = throatArea,
                             localArea                  = nozzleAreas[i],
+                            filmMassFlux               = filmMassFlux[i],
+                            blowingFactor              = blowingFactor,
+                            wallEmissivity             = wallEmissivity,
+                            gasEmissivity              = gasEmissivity[i],
                             tolerance                  = 0.01)
                     except ValueError as error:
                         debugFile = dumpDebugInfo(locals(), i, time.time() - start_time)
@@ -1155,6 +1287,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                     flutedHeatTransfer[i]                      = solution.heatTransfer
                     flutedHotWallTemperature[i]                = solution.hotWallTemperature
                     flutedColdWallTemperature[i]               = solution.coldWallTemperature
+                    flutedRadiativeHeatTransfer[i]             = solution.radiativeHeatTransfer
+                    flutedBlowingReduction[i]                  = solution.blowingReduction
 
                     # The march runs from the coolant inlet toward the chamber, so the heat picked
                     # up here raises the coolant at the next station down the index. A single
@@ -1215,6 +1349,10 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                             throatRadiusOfCurvature    = throatRadiusOfCurvature,
                             throatArea                 = throatArea,
                             localArea                  = nozzleAreas[i],
+                            filmMassFlux               = filmMassFlux[i],
+                            blowingFactor              = blowingFactor,
+                            wallEmissivity             = wallEmissivity,
+                            gasEmissivity              = gasEmissivity[i],
                             tolerance                  = 0.1)
                     except ValueError as error:
                         debugFile = dumpDebugInfo(locals(), i, time.time() - start_time)
@@ -1228,6 +1366,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                     circleHeatTransfer[i]                      = solution.heatTransfer
                     circleHotWallTemperature[i]                = solution.hotWallTemperature
                     circleColdWallTemperature[i]               = solution.coldWallTemperature
+                    circleRadiativeHeatTransfer[i]             = solution.radiativeHeatTransfer
+                    circleBlowingReduction[i]                  = solution.blowingReduction
 
                     # The march runs from the coolant inlet toward the chamber, so the heat picked
                     # up here raises the coolant at the next station down the index. A single
@@ -1329,7 +1469,9 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 'nusseltNumber'                     : flutedCoolantNusseltNumber,
                 'exhaustConvectiveHeatTransferCoef' : flutedExhaustConvectiveHeatTransferCoef,
                 'coolantConvectiveHeatTransferCoef' : flutedCoolantConvectiveHeatTransferCoef,
-                'reynoldsNumber'                    : flutedCoolantReynoldsNumber
+                'reynoldsNumber'                    : flutedCoolantReynoldsNumber,
+                'radiativeHeatTransfer'             : flutedRadiativeHeatTransfer,
+                'drivingTemperature'                : drivingTemperature
             }
         else:
             flutedHeatTransferOutputs = {}
@@ -1356,7 +1498,9 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 'nusseltNumber'                     : circleCoolantNusseltNumber,
                 'exhaustConvectiveHeatTransferCoef' : circleExhaustConvectiveHeatTransferCoef,
                 'coolantConvectiveHeatTransferCoef' : circleCoolantConvectiveHeatTransferCoef,
-                'reynoldsNumber'                    : circleCoolantReynoldsNumber
+                'reynoldsNumber'                    : circleCoolantReynoldsNumber,
+                'radiativeHeatTransfer'             : circleRadiativeHeatTransfer,
+                'drivingTemperature'                : drivingTemperature
             }
         else:
             circleHeatTransferOutputs = {}
@@ -1468,6 +1612,8 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 flutedExhaustConvectiveHeatTransferCoef = flutedResults["exhaustConvectiveHeatTransferCoef"]
                 flutedCoolantConvectiveHeatTransferCoef = flutedResults["coolantConvectiveHeatTransferCoef"]
                 flutedCoolantReynoldsNumber             = flutedResults["reynoldsNumber"]
+                flutedRadiativeHeatTransfer             = flutedResults["radiativeHeatTransfer"]
+                flutedDrivingTemperature                = flutedResults["drivingTemperature"]
             else:
                 runFluted = False
         else:
@@ -1491,6 +1637,8 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 circleExhaustConvectiveHeatTransferCoef = circleResults["exhaustConvectiveHeatTransferCoef"]
                 circleCoolantConvectiveHeatTransferCoef = circleResults["coolantConvectiveHeatTransferCoef"]
                 circleCoolantReynoldsNumber             = circleResults["reynoldsNumber"]
+                circleRadiativeHeatTransfer             = circleResults["radiativeHeatTransfer"]
+                circleDrivingTemperature                = circleResults["drivingTemperature"]
             else:
                 runCircle = False
         else:
@@ -1633,6 +1781,13 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
             add_trace(4, 2, xHotWall3D, flutedExhaustConvectiveHeatTransferCoef, 'Exhaust - Fluted', colors['Fluted'], dash='dot')
             # Reynolds
             add_trace(4, 3, xHotWall3D, flutedCoolantReynoldsNumber, 'Fluted', colors['Fluted'])
+            # The gas-side driving temperature belongs beside the wall it drives, and the
+            # radiative share beside the total it is part of. Neither earns a panel of its own.
+            add_trace(1, 3, xHotWall3D, flutedDrivingTemperature, 'Driving gas - Fluted',
+                      colors['Fluted'], dash = 'dash')
+            if np.any(flutedRadiativeHeatTransfer):
+                add_trace(2, 3, xHotWall3D, flutedRadiativeHeatTransfer, 'Radiative - Fluted',
+                          colors['Fluted'], dash = 'dot')
 
         if runCircle:
             # Coolant Pressure
@@ -1660,7 +1815,11 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
             add_trace(4, 2, xHotWall3D, circleExhaustConvectiveHeatTransferCoef, 'Exhaust - Circular', colors['Circular'], dash='dot')
             # Reynolds
             add_trace(4, 3, xHotWall3D, circleCoolantReynoldsNumber, 'Circular', colors['Circular'])
-
+            add_trace(1, 3, xHotWall3D, circleDrivingTemperature, 'Driving gas - Circular',
+                      colors['Circular'], dash = 'dash')
+            if np.any(circleRadiativeHeatTransfer):
+                add_trace(2, 3, xHotWall3D, circleRadiativeHeatTransfer, 'Radiative - Circular',
+                          colors['Circular'], dash = 'dot')
 
         # Update layout for all subplots
         for i in range(1, 13):

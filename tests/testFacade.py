@@ -37,7 +37,8 @@ decomposedModules = (
     'ablative', 'chamber', 'channelGeometry', 'channelSizing', 'characteristics',
     'ceaInterface', 'config',
     'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
-    'plume', 'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation',
+    'plume', 'radiativeCooling', 'regenChannels', 'regenStations', 'regenThermal', 'units',
+    'validation',
     'nozzleVolutes',
 )
 
