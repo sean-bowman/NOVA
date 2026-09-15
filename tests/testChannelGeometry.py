@@ -7,21 +7,21 @@ against a correlation, and that is what is done here.
 
 **The maximum channel radius is exact.** The largest channel that fits between adjacent radial
 planes is a circle inscribed in a wedge of half-angle pi/n and tangent externally to the wall
-circle. Its centre sits at distance d from the axis with radius r = d sin(theta), and tangency to
+circle. Its center sits at distance d from the axis with radius r = d sin(theta), and tangency to
 the wall gives d = R + r, so
 
     r = R sin(theta) / (1 - sin(theta))
 
 That is a derivation, not a fit, and the implementation is held to it exactly.
 
-**The transport frame is orthonormal, right-handed and twist-minimising.** Those three are what
+**The transport frame is orthonormal, right-handed and twist-minimizing.** Those three are what
 distinguish a parallel transport frame from a Frenet frame, and each is checkable: the frame
 vectors are unit and mutually orthogonal at every station, the triad is right-handed, and for a
 planar curve the frame acquires no rotation about the tangent at all, which is the property that
 keeps flutes from winding up where the curve happens to bend.
 
 **A circular cross section is a circle.** Its points lie at exactly the channel radius from the
-centreline, in the plane normal to the local tangent, and its area is exactly pi r squared.
+centerline, in the plane normal to the local tangent, and its area is exactly pi r squared.
 
 Author: Sean Bowman
 
@@ -89,9 +89,9 @@ def discretisedCircleArea(radius, numCSPointsChannel):
 
     return 0.5 * segments * radius**2 * np.sin(2 * np.pi / segments)
 
-def straightCentreline(numStations, length = 0.3, radius = 0.06):
+def straightCenterline(numStations, length = 0.3, radius = 0.06):
 
-    '''A centreline running straight along the nozzle axis at constant radius.'''
+    '''A centerline running straight along the nozzle axis at constant radius.'''
 
     z = np.linspace(0.0, length, numStations)
     x = np.full(numStations, radius)
@@ -131,13 +131,13 @@ class TestMaxChannelRadius:
         channelRadius, _ = getMaxChannelRadius(geometry, np.array([wallRadius]), 0)
         offsetWall = wallRadius + geometry.hotWallThickness - geometry.infillThickness
 
-        # Centre distance from the axis follows from tangency to the offset wall.
-        centreDistance = offsetWall + channelRadius + geometry.infillThickness / 2
-        pitch = 2 * centreDistance * np.sin(np.pi / nChannel)
+        # Center distance from the axis follows from tangency to the offset wall.
+        centerDistance = offsetWall + channelRadius + geometry.infillThickness / 2
+        pitch = 2 * centerDistance * np.sin(np.pi / nChannel)
 
         # Neighbours are separated by the infill, so the gap is the infill thickness exactly.
         assert pitch - 2 * channelRadius == pytest.approx(geometry.infillThickness, rel = 1e-9)
-        assert centreDistance - channelRadius >= offsetWall - 1e-12
+        assert centerDistance - channelRadius >= offsetWall - 1e-12
 
     def testMoreChannelsMeansSmallerChannels(self):
 
@@ -171,7 +171,7 @@ class TestCircularCrossSection:
     def sweep(self, numStations = 30, numPoints = 48, channelRadius = 0.002):
 
         geometry = circularInputs(numCrossSections = numStations, numCSPointsChannel = numPoints)
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, channelRadius)
 
         xChannel, yChannel, zChannel, heatTransfer = generateCrossSections(
@@ -195,9 +195,9 @@ class TestCircularCrossSection:
 
         assert np.max(np.abs(distance - channelRadius)) < 1e-12
 
-    def testTheCrossSectionIsNormalToTheCentreline(self):
+    def testTheCrossSectionIsNormalToTheCenterline(self):
 
-        # A straight centreline along z means every cross section must lie in a constant-z plane.
+        # A straight centerline along z means every cross section must lie in a constant-z plane.
         (_, _, z), (_, _, zChannel), _, _ = self.sweep()
 
         assert np.max(np.abs(zChannel - z[None, :])) < 1e-12
@@ -217,7 +217,7 @@ class TestCircularCrossSection:
 
 class TestTransportFrame:
 
-    '''Orthonormal, right-handed and twist-minimising, which is what makes it a transport frame.'''
+    '''Orthonormal, right-handed and twist-minimizing, which is what makes it a transport frame.'''
 
     def sweptSection(self, x, y, z, channelRadius = 0.002, numPoints = 64):
 
@@ -232,7 +232,7 @@ class TestTransportFrame:
 
     def testTheSectionPlaneIsNormalToTheTangentOnACurvedPath(self):
 
-        # A helical centreline: the tangent turns continuously, so a section that is not built
+        # A helical centerline: the tangent turns continuously, so a section that is not built
         # in the normal plane will show up immediately.
         numStations = 60
         angle = np.linspace(0.0, 2.0, numStations)
@@ -246,7 +246,7 @@ class TestTransportFrame:
         tangent = np.gradient(stations, axis = 0)
         tangent /= np.linalg.norm(tangent, axis = 1)[:, None]
 
-        # Every offset from the centreline must be perpendicular to the local tangent.
+        # Every offset from the centerline must be perpendicular to the local tangent.
         offsets = points - stations[None, :, :]
         alongTangent = np.einsum('psc,sc->ps', offsets, tangent)
 
@@ -289,10 +289,10 @@ class TestTransportFrame:
         # It may sit anywhere out of plane, but it must not drift as the curve bends.
         assert np.ptp(outOfPlane) < 1e-9
 
-    def testAStraightCentrelineGivesAConstantFrame(self):
+    def testAStraightCenterlineGivesAConstantFrame(self):
 
         numStations = 25
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
 
         points = self.sweptSection(x, y, z)
         stations = np.stack([x, y, z], axis = -1)
@@ -309,7 +309,7 @@ class TestSingleStation:
 
         numStations = 30
         geometry = circularInputs(numCrossSections = numStations)
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.linspace(0.0015, 0.0025, numStations)
 
         _, _, _, full = generateCrossSections(geometry, x, y, z, radius, 'circle')
@@ -327,7 +327,7 @@ class TestChannelTypeAliasing:
 
         numStations = 10
         geometry = circularInputs(numCrossSections = numStations)
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, 0.002)
 
         with pytest.raises(Exception, match = 'crossSectionStyle'):
@@ -351,7 +351,7 @@ class TestFlutedCrossSection:
 
         numStations = 30
         geometry = self.flutedGeometry(numStations)
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, 0.002)
 
         heatTransfer = generateCrossSections(geometry, x, y, z, radius, 'fluted')[3]
@@ -363,7 +363,7 @@ class TestFlutedCrossSection:
 
         # Fluting is done to buy surface area, so it must buy some.
         numStations = 30
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, 0.002)
 
         fluted = generateCrossSections(self.flutedGeometry(numStations),
@@ -378,7 +378,7 @@ class TestFlutedCrossSection:
 
         # The limiting case: as the flute amplitude goes to zero the section must become the
         # circle it modulates. Checked by convergence rather than at zero, because the flute
-        # profile is built by scaling a wave by its own amplitude and normalising by the same
+        # profile is built by scaling a wave by its own amplitude and normalizing by the same
         # amplitude, which is singular there.
         #
         # The target is the discretised circle, not pi r squared. The two families report area on
@@ -386,7 +386,7 @@ class TestFlutedCrossSection:
         # integrates its own polygon with the trapezoidal rule. See
         # testTheTwoFamiliesMeasureAreaDifferently below.
         numStations, numPoints = 30, 60
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, 0.002)
         interior = slice(1, -1)
 
@@ -408,7 +408,7 @@ class TestFlutedCrossSection:
         # A flute of no amplitude is not a flute, and the profile construction divides by the
         # amplitude, so asking for one used to return NaN geometry without saying anything.
         numStations = 10
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, 0.002)
 
         with pytest.raises(Exception, match = 'fluteAmplitudeCoef'):
@@ -423,7 +423,7 @@ class TestTurnAngle:
 
         numStations = 30
         geometry = circularInputs(numCrossSections = numStations)
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, 0.002)
 
         heatTransfer = generateCrossSections(geometry, x, y, z, radius, 'circle')[3]
@@ -433,7 +433,7 @@ class TestTurnAngle:
 
     def testACircularArcReportsItsOwnRadius(self):
 
-        # A centreline bent into a circle of known radius must report that radius back.
+        # A centerline bent into a circle of known radius must report that radius back.
         numStations = 200
         bendRadius = 0.05
         angle = np.linspace(0.0, np.pi / 2, numStations)
@@ -464,7 +464,7 @@ class TestAreaBasis:
         # a systematic offset in the comparison, set by numCSPointsChannel rather than by
         # anything geometric.
         numStations, channelRadius = 30, 0.002
-        x, y, z = straightCentreline(numStations)
+        x, y, z = straightCenterline(numStations)
         radius = np.full(numStations, channelRadius)
 
         for numPoints, expectedDeficit in ((24, 0.012392), (48, 0.002976), (60, 0.001889)):

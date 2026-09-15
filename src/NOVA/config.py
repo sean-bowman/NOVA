@@ -17,7 +17,7 @@ treats NaN and None and absent as the same thing.
 
 **Program flags are strings, not booleans.** Every flag is compared against 'on' and 'off'
 throughout the tool, but JSON stores them as booleans, and `False == 'on'` is quietly False
-rather than an error. Without the normalisation here every plot and every export would be
+rather than an error. Without the normalization here every plot and every export would be
 silently disabled by a configuration that looks correct.
 
 **A literal zero is not the same as unset.** An axial offset of zero is a specified offset. The
@@ -57,6 +57,10 @@ import numpy as np
 
 from .utils import InvalidInputError
 from .ceaInterface import CEA
+from .contour import divergingSectionFamily
+from .contourKernel import transonicModels
+from .contourOptimization import designVariableBounds, isMonotoneWall
+from .gasDynamics import effectiveGamma
 
 def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
@@ -123,8 +127,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
     '''
 
-    warnings.filterwarnings('ignore')
-
     # -- Determine input type -- #
 
     # debugMode is a solver flag rather than an input format: it makes a station that fails
@@ -176,7 +178,7 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
                     'plotsDebug', 'export', 'printabilityCheck',
                     'makeCoolingChannels', 'makeInletVolute', 'makeReturnVolute',
                     'plotKeepOut', 'inletVolutePrintability', 'returnVolutePrintability',
-                    'filmCooling'):
+                    'filmCooling', 'makeRadiativeExtension'):
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
 
@@ -236,6 +238,15 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.drivingTemperatureModel        = inputsPath.get('drivingTemperatureModel',
                                                               'recovery')
 
+        # Which gamma the constant-gamma contour solve runs in. 'chamber' is the default and is
+        # the value the solve has always used. 'effective' is chosen so the pressure ratio and
+        # the area ratio agree with the thermochemistry at the design point, which cuts the
+        # pressure error threefold and leaves the temperature error about where it was but
+        # negative rather than positive. It is not the default because the thermal model reads
+        # its driving temperature off this same solve, and a wall gas biased cold undersizes a
+        # jacket. See the gammaModel note in gasDynamics.effectiveGamma.
+        nozzle.gammaModel                     = inputsPath.get('gammaModel', 'chamber')
+
         # -- Film Cooling -- #
         #
         # Optional throughout. A configuration that names none of these describes an engine
@@ -246,6 +257,38 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.filmInletTemperature           = inputsPath.get('filmInletTemperature')
         nozzle.filmInjectionAxialPosition     = inputsPath.get('filmInjectionAxialPosition')
         nozzle.filmSlotHeight                 = inputsPath.get('filmSlotHeight')
+
+        # Which closure solves the film. 'hatchPapell' is the correlation with a stated
+        # accuracy from its own source; 'sp8124Entrainment' is the model whose empirical
+        # multiplier is how NASA SP-8124 accounts for acceleration and flow turning.
+        nozzle.filmCoolingModel               = inputsPath.get('filmCoolingModel',
+                                                               'hatchPapell')
+        nozzle.filmCoolantMixtureRatio        = inputsPath.get('filmCoolantMixtureRatio',
+                                                               0.0)
+        nozzle.filmEntrainmentMultiplier      = inputsPath.get('filmEntrainmentMultiplier',
+                                                               3.5)
+
+        # -- Radiation-Cooled Extension -- #
+        #
+        # The conductivity is asked for rather than looked up because the materials store
+        # carries curves only for the jacket alloys, and its fallback to GRCop-42 would give
+        # a refractory shell eight times the conductivity it has.
+        nozzle.makeRadiativeExtension         = inputsPath.get('makeRadiativeExtension',
+                                                               'off')
+        nozzle.extensionMaterial              = inputsPath.get('extensionMaterial')
+        nozzle.extensionThickness             = inputsPath.get('extensionThickness')
+        nozzle.extensionThermalConductivity   = inputsPath.get(
+                                                    'extensionThermalConductivity')
+        nozzle.extensionInnerEmissivity       = inputsPath.get('extensionInnerEmissivity')
+        nozzle.extensionOuterEmissivity       = inputsPath.get('extensionOuterEmissivity')
+        nozzle.extensionOuterViewFactor       = inputsPath.get('extensionOuterViewFactor',
+                                                               1.0)
+        nozzle.extensionSinkTemperature       = inputsPath.get('extensionSinkTemperature',
+                                                               0.0)
+        nozzle.extensionGasEmissivity         = inputsPath.get('extensionGasEmissivity', 0.0)
+        nozzle.extensionAtmosphere            = inputsPath.get('extensionAtmosphere',
+                                                               'inert')
+        nozzle.extensionJointTemperature      = inputsPath.get('extensionJointTemperature')
         nozzle.numFlutes                      = inputsPath['numFlutes']
         nozzle.fluteAmplitudeCoef             = inputsPath['fluteAmplitudeCoef']
         nozzle.fluteHelixAngle                = inputsPath['fluteHelixAngle']
@@ -361,19 +404,143 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         raise ValueError(f"truncateOn must be 'areaRatio', 'wallPressure' or 'length', not "
                          f"'{nozzle.truncateOn}'")
 
+    # Which diverging section family was asked for. Resolved here, once, so a spelling that names
+    # nothing is rejected while the configuration is still being read rather than reaching the
+    # dispatch. The value on the Nozzle is left exactly as it was written: it is a public
+    # attribute the regression harness compares as a string, and rewriting it to a canonical form
+    # would move a baseline without moving a number.
+    divergingSectionFamily(nozzle.divergingSectionType)
+
+    # -- The throat the characteristics are launched from -- #
+    #
+    # Both arcs were reachable only by editing the class. They are Rao's values by default, and
+    # SP-8120 has something to say about each: the entrant ratio must stay above 0.6, and about
+    # 1.0 is the best compromise between nozzle efficiency and the throat area exposed near Mach
+    # 1, with 1.5 merely the commonly used figure. The exit arc of 0.382 is Rao's own and is the
+    # value the thrust-optimized parabola construction assumes, so moving it moves what a
+    # published bell would be compared against.
+    inletCurvature = inputsPath.get('throatInletCurvature', None)
+    if inletCurvature not in (None, [], '') and not np.isnan(np.float64(inletCurvature)):
+        nozzle.throatInletCurvatureNonDimensional = float(inletCurvature)
+    outletCurvature = inputsPath.get('throatOutletCurvature', None)
+    if outletCurvature not in (None, [], '') and not np.isnan(np.float64(outletCurvature)):
+        nozzle.throatOutletCurvatureNonDimensional = float(outletCurvature)
+
+    if nozzle.throatInletCurvatureNonDimensional <= 0.6:
+        raise InvalidInputError(
+            message = 'SP-8120 requires the throat entrant radius ratio to stay above 0.6, and '
+                      'recommends about 1.0. Below that the wall turns the flow faster than the '
+                      'transonic solution the starting line is drawn from can describe.',
+            parameterName = 'throatInletCurvature',
+            value = nozzle.throatInletCurvatureNonDimensional,
+            validRange = 'greater than 0.6, about 1.0 preferred, 1.5 conventional')
+    if nozzle.throatOutletCurvatureNonDimensional <= 0.0:
+        raise InvalidInputError(
+            message = 'The throat exit arc radius has to be positive.',
+            parameterName = 'throatOutletCurvature',
+            value = nozzle.throatOutletCurvatureNonDimensional, validRange = 'greater than 0')
+
+    # Which transonic solution the starting line carries. 'sauer' is what NOVA has always used and
+    # stays the default, so a configuration that does not mention this cannot move.
+    nozzle.transonicModel = inputsPath.get('transonicModel', None) or 'sauer'
+    if nozzle.transonicModel not in transonicModels:
+        raise InvalidInputError(
+            message = 'No transonic model by that name. Sauer is the first term of the series '
+                      'the others carry further; the second-order term is 29 per cent as large '
+                      'as the first at the conventional throat curvature of 1.5 and 43 per cent '
+                      'at the 1.0 SP-8120 prefers, so this choice is worth making deliberately.',
+            parameterName = 'transonicModel', value = nozzle.transonicModel,
+            validRange = ' or '.join(repr(name) for name in transonicModels))
+
+    # A sharp throat under a series written in inverse powers of the curvature is where that
+    # series stops behaving, so say so rather than returning its answer.
+    if (nozzle.throatInletCurvatureNonDimensional < 1.5
+            and nozzle.transonicModel == 'secondOrder'):
+        # Printed rather than warned, because NOVA reports its run-time notices by printing them
+        # and a notice about a model choice belongs with the rest of the run's output.
+        print(f'Note: a throat curvature of {nozzle.throatInletCurvatureNonDimensional} with the '
+              f"'secondOrder' transonic model. Kliegel and Quan report that form as favourable "
+              f"only above about 1.5; 'smallRadius' is the one that behaves below it.")
+
+    # A pinned wall for the thrust-optimized contour, which otherwise searches for one.
+    #
+    # Four numbers: the inflection and exit wall angles in DEGREES, then the two control-point
+    # tensions. Absent, the family searches exactly as before, so nothing that does not mention
+    # this key can move. Present, the search is skipped and that wall is solved, which is what
+    # makes a searched contour reachable from a regression case: a gate that re-ran a twenty
+    # minute optimization on every invocation would not be run, and a gate that is not run is
+    # not a gate.
+    designVariables = inputsPath.get('divergingSectionDesignVariables', None)
+    if designVariables in (None, [], ''):
+        nozzle.divergingSectionDesignVariables = None
+    else:
+        values = [float(value) for value in designVariables]
+        if len(values) != 4:
+            raise InvalidInputError(
+                message = 'A thrust-optimized contour is fixed by four numbers: the inflection '
+                          'and exit wall angles in degrees, then the inflection and exit '
+                          'tensions.',
+                parameterName = 'divergingSectionDesignVariables',
+                value = designVariables, validRange = 'exactly four numbers')
+
+        vector = (np.radians(values[0]), np.radians(values[1]), values[2], values[3])
+        names = ('inflection angle', 'exit angle', 'inflection tension', 'exit tension')
+        for value, name, (lower, upper) in zip(vector, names, designVariableBounds):
+            if not lower <= value <= upper:
+                shown = np.degrees(value) if 'angle' in name else value
+                limits = ((np.degrees(lower), np.degrees(upper)) if 'angle' in name
+                          else (lower, upper))
+                raise InvalidInputError(
+                    message = f'The {name} is outside the range the search itself is bounded to, '
+                              f'so a wall pinned here could not have been found by searching.',
+                    parameterName = 'divergingSectionDesignVariables', value = shown,
+                    validRange = f'{limits[0]:.4g} to {limits[1]:.4g}')
+
+        # A wall whose tangent angle is not monotone has a wave in it, and the characteristics
+        # solve turns a wave into a compression fan that is an artefact of the drawing.
+        if not isMonotoneWall(vector):
+            raise InvalidInputError(
+                message = 'Those four numbers draw a wall whose tangent angle is not monotone '
+                          'from the inflection to the exit. The search refuses such a wall '
+                          'without solving it, and a pinned one is refused here for the same '
+                          'reason.',
+                parameterName = 'divergingSectionDesignVariables', value = designVariables,
+                validRange = 'a control polygon that turns one way only')
+
+        nozzle.divergingSectionDesignVariables = vector
+
     # Characteristics launched from the throat arc. Everything the contour delivers converges
     # with this; see docs/NozzleContourValidation.md for how much is left at the default.
     requested = getattr(nozzle, 'numCharacteristicsRequested', None)
     nozzle.numCharacteristicsRequested = 50 if requested in (None, [], '') else int(requested)
     nozzle.chamberRGasConstant          = 8314 / nozzle.ceaOutput.ceaResults['combustionChamberMolecularWeight']
-    nozzle.chamberGamma                 = nozzle.ceaOutput.ceaResults['combustionChamberGamma']
     nozzle.throatGamma                  = nozzle.ceaOutput.ceaResults['throatGamma']
+
+    # -- The one gamma the constant-gamma solve runs in -- #
+    #
+    # A real exhaust recombines as it expands and its isentropic exponent climbs the whole way,
+    # so there is no single right answer and the solve has to pick one. Both candidates are
+    # recorded whichever is chosen, because the difference between them is the size of the
+    # approximation and a reader should be able to see it without rerunning anything.
+    nozzle.combustionChamberGamma       = nozzle.ceaOutput.ceaResults['combustionChamberGamma']
+    nozzle.effectiveGamma               = effectiveGamma(
+        nozzle.chamberPressure / nozzle.targetExitPressure, nozzle.expansionRatio)
+    if nozzle.gammaModel == 'chamber':
+        nozzle.chamberGamma             = nozzle.combustionChamberGamma
+    elif nozzle.gammaModel == 'effective':
+        nozzle.chamberGamma             = nozzle.effectiveGamma
+    else:
+        raise InvalidInputError(
+            message = 'No gamma model by that name. The chamber value is what the solve used '
+                      'before the effective one existed and is kept so those results stay '
+                      'reachable; it is the hottest and most dissociated gas in the engine and '
+                      'the least like the gas doing the expanding.',
+            parameterName = 'gammaModel',
+            value = nozzle.gammaModel,
+            validRange = "'effective' or 'chamber'")
     nozzle.chamberStagnationTemperature = nozzle.ceaOutput.ceaResults['combustionChamberTemperature']
     nozzle.maxAdiabaticVelocity         = np.sqrt(nozzle.chamberGamma * nozzle.chamberRGasConstant) * \
                                         np.sqrt(2 * nozzle.chamberStagnationTemperature / (nozzle.chamberGamma - 1))
     nozzle.exitMachNumber               = nozzle.ceaOutput.ceaResults['exitMach']
     nozzle.idealMachNumber              = np.sqrt(2/(nozzle.chamberGamma - 1) * ((nozzle.chamberPressure / nozzle.targetExitPressure)** \
                                                                                 ((nozzle.chamberGamma - 1) / nozzle.chamberGamma) - 1))
-    nozzle.epsilonSauer                 = (nozzle.throatRadiusNonDimensional / 8) * np.sqrt(2 * (nozzle.chamberGamma + 1) * \
-                                            nozzle.throatRadiusNonDimensional / nozzle.throatInletCurvatureNonDimensional)
-    nozzle.flowParameterSauer           = np.sqrt(2 / ((nozzle.chamberGamma + 1) * nozzle.throatRadiusNonDimensional * nozzle.throatInletCurvatureNonDimensional))

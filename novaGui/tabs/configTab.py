@@ -2,7 +2,7 @@
 
 '''
 
-The configuration form. Renders every field in configSchema as a labelled
+The configuration form. Renders every field in configSchema as a labeled
 editor inside collapsible sections, round-trips the values to and from JSON in
 the nozzleConfig schema, and runs light cross-field checks before a solve.
 
@@ -77,7 +77,7 @@ class ConfigTab(ttk.Frame):
         self._applyDynamics()
         self._refreshWarnings()
 
-    # -- Dynamic form behaviour -- #
+    # -- Dynamic form behavior -- #
 
     def _onChange(self) -> None:
 

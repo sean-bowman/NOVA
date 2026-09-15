@@ -4,7 +4,7 @@
 
 One unit registry, and every conversion factor in NOVA derived from it.
 
-Everything inside NOVA is mass-base SI: metres, kilograms, seconds, kelvin, pascals, and degrees
+Everything inside NOVA is mass-base SI: meters, kilograms, seconds, kelvin, pascals, and degrees
 for angles. Conversion belongs at the boundary, where a catalogue figure in psi or a MIL spec in
 Btu/lbm is read, and not in the solvers. This module is that boundary.
 

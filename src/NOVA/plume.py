@@ -389,7 +389,7 @@ def _exitWallAngle(x: np.ndarray, r: np.ndarray) -> float:
 # becomes a free constant-pressure streamline.
 #
 # Equation numbers refer to that report. Sign conventions follow it: the net is built BELOW the
-# centre line, so y <= 0, theta is negative where the flow turns away from the axis, and mu is
+# center line, so y <= 0, theta is negative where the flow turns away from the axis, and mu is
 # positive. The scheme is a lattice, point to point, and does not iterate. Point C on
 # second-family line j comes from A, point i of line j-1, and B, point i-1 of line j.
 #
@@ -593,7 +593,7 @@ def freeJetBoundaryPoint(gas, A, B):
 
 def freeJetNearAxisPoint(gas, A, B):
     '''
-    PlumeNode one off the centre line, subroutine OFCNT. B lies on the centre line, so y_B = 0 and
+    PlumeNode one off the center line, subroutine OFCNT. B lies on the center line, so y_B = 0 and
     theta_B = 0 and the B-side source term m_B dx_B / y_B is 0/0. Eq (C27) drops it entirely:
     GTC = (-GWA - GWA*C1 + GWB)/(GWA*D1 + GWB*D2), with D1 = tan(mu_A) and D2 = tan(mu_B).
     '''
@@ -610,7 +610,7 @@ def freeJetNearAxisPoint(gas, A, B):
     thetaC = (-A.W - A.W * c1 + B.W) / (A.W * math.tan(A.mu) + B.W * math.tan(B.mu))   # (C27)
     return _finish(gas, xC, yC, thetaC, _WC(A, thetaC, xC, lA), 'nearAxis')
 
-def freeJetCentreLineTarget(gas, A):
+def freeJetCenterLineTarget(gas, A):
     '''
     Where A's first-family characteristic reaches the axis, subroutine CENTL.
 
@@ -631,13 +631,13 @@ def freeJetCentreLineTarget(gas, A):
         return None
     return xC, gas.muFromW(WC), WC                                          # (C12)
 
-def freeJetCentreLinePoint(gas, A):
+def freeJetCenterLinePoint(gas, A):
     '''y = 0 and theta = 0 by symmetry. Eq (C28), then the general-point relations.'''
-    target = freeJetCentreLineTarget(gas, A)
+    target = freeJetCenterLineTarget(gas, A)
     if target is None:
         return None
     xC, _, WC = target
-    return _finish(gas, xC, 0.0, 0.0, WC, 'centreLine')
+    return _finish(gas, xC, 0.0, 0.0, WC, 'centerLine')
 
 def _freeJetCrossed(x, y, xMin, xMax, yMin, yMax, first, second, slope, intercept):
     '''
@@ -705,14 +705,14 @@ def freeJetCrossing(gas, aPoints, index, reference):
 
 def freeJetLeadingCharacteristic(gas, exitMach, thetaN, nozzleRadius, numPoints=60):
     '''
-    Points along the leading characteristic, Appendix A. Working below the centre line, the lip
+    Points along the leading characteristic, Appendix A. Working below the center line, the lip
     is at y = -nozzleRadius.
 
     Contoured nozzle (thetaN = 0): parallel exit flow, so the leading characteristic is the
     straight Mach line from the lip.
 
     Conical nozzle (thetaN > 0): radial source flow, so it is curved and follows (A2), (A3),
-    (A6). The Mach number at the centre line comes from (A1).
+    (A6). The Mach number at the center line comes from (A1).
     '''
     if abs(thetaN) < 1e-12:
         machEnd = exitMach
@@ -724,9 +724,9 @@ def freeJetLeadingCharacteristic(gas, exitMach, thetaN, nozzleRadius, numPoints=
                 for i in range(numPoints)]
 
     # Conical nozzle: radial (source) flow. Eq (A1) fixes the Mach number where the leading
-    # characteristic meets the centre line.
-    nuCentre = gas.nu(exitMach) + 2.0 * thetaN                              # (A1)
-    machEnd = gas.machFromNu(nuCentre)
+    # characteristic meets the center line.
+    nuCenter = gas.nu(exitMach) + 2.0 * thetaN                              # (A1)
+    machEnd = gas.machFromNu(nuCenter)
     exponent = (gas.gamma + 1.0) / (4.0 * (gas.gamma - 1.0))
 
     def logRadius(mach):
@@ -766,7 +766,7 @@ def freeJetLeadingCharacteristic(gas, exitMach, thetaN, nozzleRadius, numPoints=
 
 def freeJetCornerRays(gas, exitMach, thetaN, nozzleRadius, boundaryMach, numRays=40):
     '''
-    Centred expansion fan at the lip. All rays share the lip location; the state steps from the
+    Centerd expansion fan at the lip. All rays share the lip location; the state steps from the
     exit condition to the jet-boundary condition. Initial turning angle alpha_N = nu_1 - nu_N +
     theta_N, as given in the body of the report.
     '''
@@ -777,7 +777,7 @@ def freeJetCornerRays(gas, exitMach, thetaN, nozzleRadius, boundaryMach, numRays
     rays = []
     for mach in machSteps:
         turning = gas.nu(mach) - gas.nu(exitMach)
-        theta = -(turning + thetaN)          # below the centre line: turning away from the axis
+        theta = -(turning + thetaN)          # below the center line: turning away from the axis
         rays.append(PlumeNode(0.0, -nozzleRadius, theta, mach, gas, 'cornerRay'))
     return rays
 
@@ -793,7 +793,7 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
     first line the A points are the corner expansion rays, which all share the lip location.
 
     Once the leading characteristic is exhausted the net has reached the axis and each line
-    instead starts on the centre line. That approach is sub-stepped in thirds, and the first-family
+    instead starts on the center line. That approach is sub-stepped in thirds, and the first-family
     characteristics are watched for crossings, which are the internal shock.
 
     `initialLine` replaces the leading characteristic with an explicit data line, ordered from the
@@ -803,7 +803,7 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
     starts from that. Passing the exit plane of the characteristic mesh instead removes the
     assumption. `exitMach` and `thetaN` are then read from the first point of the line.
 
-    Returns a dict with the lines, the boundary polyline, the centre-line points and the shock.
+    Returns a dict with the lines, the boundary polyline, the center-line points and the shock.
     '''
     boundaryMach = gas.machFromPressureRatio(ambientOverTotal)
     if initialLine is None:
@@ -824,7 +824,7 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
 
     lines = []
     boundary = [boundaryOrigin]
-    centreLine = []
+    centerLine = []
     shock = []
     stop = 'maxLines'
 
@@ -837,16 +837,16 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
     boundaryX = [boundaryOrigin.x]
     boundaryY = [boundaryOrigin.y]
 
-    # The centre-line march is sub-stepped in thirds, statements 700, 740 and 760. Jumping
+    # The center-line march is sub-stepped in thirds, statements 700, 740 and 760. Jumping
     # straight to where the source characteristic meets the axis puts the next line's first
     # off-axis point a rounding error away from the axis, and CENTL from there advances almost
-    # nothing, so the net stalls after a single shock cell. Instead the centre line takes two
+    # nothing, so the net stalls after a single shock cell. Instead the center line takes two
     # steps of a third holding the source point, then lands the true CENTL point on the third and
     # releases the source point forward by one. `cellPhase` is the report's ICELL, cycling 3, 2, 1.
     cellPhase = 3
     deltaX = deltaMu = deltaW = 0.0
     axisPoint = leading[-1]
-    centreX, centreMu, centreW = axisPoint.x, axisPoint.mu, axisPoint.W
+    centerX, centerMu, centerW = axisPoint.x, axisPoint.mu, axisPoint.W
 
     while len(lines) < maxLines:
         sourceIndex = 1
@@ -855,40 +855,40 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
             startIndex += 1
         else:
             if len(previous) < 3:
-                stop = 'centreLineExhausted'
+                stop = 'centerLineExhausted'
                 break
 
             if cellPhase == 3:
-                target = freeJetCentreLineTarget(gas, previous[1])
+                target = freeJetCenterLineTarget(gas, previous[1])
                 if target is None:
-                    stop = 'centreLineFailed'
+                    stop = 'centerLineFailed'
                     break
-                deltaX = (target[0] - centreX) / 3.0
-                deltaMu = (target[1] - centreMu) / 3.0
-                deltaW = (target[2] - centreW) / 3.0
-                centreX, centreMu, centreW = centreX + deltaX, centreMu + deltaMu, centreW + deltaW
+                deltaX = (target[0] - centerX) / 3.0
+                deltaMu = (target[1] - centerMu) / 3.0
+                deltaW = (target[2] - centerW) / 3.0
+                centerX, centerMu, centerW = centerX + deltaX, centerMu + deltaMu, centerW + deltaW
                 cellPhase = 2
             elif cellPhase == 2:
-                centreX, centreMu, centreW = centreX + deltaX, centreMu + deltaMu, centreW + deltaW
+                centerX, centerMu, centerW = centerX + deltaX, centerMu + deltaMu, centerW + deltaW
                 cellPhase = 1
             else:
-                target = freeJetCentreLineTarget(gas, previous[1])
+                target = freeJetCenterLineTarget(gas, previous[1])
                 if target is None:
-                    stop = 'centreLineFailed'
+                    stop = 'centerLineFailed'
                     break
-                centreX, centreMu, centreW = target
+                centerX, centerMu, centerW = target
                 # The true CENTL point releases the source point forward, so the line advances.
                 sourceIndex = 2
                 cellPhase = 3
 
-            start = _finish(gas, centreX, 0.0, 0.0, centreW, 'centreLine')
+            start = _finish(gas, centerX, 0.0, 0.0, centerW, 'centerLine')
             if start is None:
-                stop = 'centreLineFailed'
+                stop = 'centerLineFailed'
                 break
             # Over a sub-step the report carries mu as its own interpolated quantity rather than
             # recovering it from W, so the two disagree slightly until the cycle closes on CENTL.
-            start.mu = centreMu
-            centreLine.append(start)
+            start.mu = centerMu
+            centerLine.append(start)
 
         line = [start]
         generals = []
@@ -921,7 +921,7 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
             return point.y < boundaryY[slot - 1] + weight * (boundaryY[slot] - boundaryY[slot - 1])
 
         # CENTL and OFCNT take the same A entry, and the general loop continues from the next
-        # one. Starting the loop earlier would hand it an A point upstream of the new centre-line
+        # one. Starting the loop earlier would hand it an A point upstream of the new center-line
         # start, whose characteristic never reaches the line being built.
         #
         # The A array is walked by index rather than iterated, because TEST may splice a shock
@@ -966,7 +966,7 @@ def solveFreeJetNet(gas, exitMach, thetaN, nozzleRadius, ambientOverTotal,
     return {
         'boundaryMach': boundaryMach, 'lipTurn': lipTurn,
         'leading': leading, 'rays': rays, 'lines': lines,
-        'boundary': boundary, 'centreLine': centreLine, 'shock': shock, 'stop': stop,
+        'boundary': boundary, 'centerLine': centerLine, 'shock': shock, 'stop': stop,
         'nodes': [p for ln in lines for p in ln],
     }
 
@@ -982,7 +982,7 @@ def freeJetInitialLine(gas, seed, numPoints = 200):
     plane replaces the assumption with the solution already in hand.
 
     Ordering and signs follow the report. The line runs from the lip to the axis, lengths are in
-    units of the lip radius, y is negative below the centre line, and theta is negative where the
+    units of the lip radius, y is negative below the center line, and theta is negative where the
     flow turns away from the axis.
 
     Parameters:
@@ -1007,7 +1007,7 @@ def freeJetInitialLine(gas, seed, numPoints = 200):
     lipRadius = seed['exitRadius']
     if not lipRadius or not scale:
         return None
-    # The column is normalised on its own outermost point rather than on the reported exit radius.
+    # The column is normalized on its own outermost point rather than on the reported exit radius.
     # The mesh is curvilinear, so the column gathered within a tolerance of the exit station can
     # reach a per cent or so beyond the lip, and a first point outside the jet boundary ends the
     # march on the line it starts.
@@ -1075,7 +1075,7 @@ def freeJetInitialLine(gas, seed, numPoints = 200):
 #
 # These unit processes carry the same compatibility relations as `axisymmetricMethodOfCharacteristics`
 # inside `truncatedIdealContour`, in the same velocity formulation and the same sign convention:
-# r is positive above the centre line and the flow angle is positive turning away from it. They are
+# r is positive above the center line and the flow angle is positive turning away from it. They are
 # written at module scope because the nozzle version is a closure over the contour solver and
 # cannot be called from outside it. `testPlumeMarch` checks the interior point against the nozzle
 # solver directly, so the two cannot drift apart silently.
@@ -1244,7 +1244,7 @@ def plumeAxisPoint(flow: PlumeFlow, second: PlumePoint, tolerance: float = 1e-8,
 
     '''
 
-    Point where a second-family characteristic reaches the centre line.
+    Point where a second-family characteristic reaches the center line.
 
     Symmetry fixes the flow angle at zero, so the single compatibility relation along that
     characteristic determines the velocity rather than the angle.
@@ -1287,7 +1287,7 @@ def plumeNearAxisPoint(flow: PlumeFlow, axisPoint: PlumePoint, second: PlumePoin
 
     """
 
-    First point off the centre line, where the first-family parent sits on the axis.
+    First point off the center line, where the first-family parent sits on the axis.
 
     The axisymmetric source term carries dr / r, which is singular there, so the first-family
     relation cannot be applied as written. The nozzle solver meets the same problem at the axis
@@ -1525,7 +1525,7 @@ def plumeShockCrossing(flow: PlumeFlow, aPoints: list, index: int, reference: Pl
 
     # The candidate has to lie beyond the characteristic the march is building along, or it
     # belongs to a line already computed. That is the report's second family; mirrored above the
-    # centre line it is the first, so the slope is theta + mu rather than theta - mu.
+    # center line it is the first, so the slope is theta + mu rather than theta - mu.
     slope = math.tan(reference.flowAngle + reference.machAngle)
     intercept = reference.r - reference.x * slope
 
@@ -1563,7 +1563,7 @@ def plumeMassFlux(flow: PlumeFlow, line: list) -> float:
 
     Mass flow through a characteristic line [kg/s].
 
-    Every line of the march spans the jet from the centre line to the free boundary, so every one
+    Every line of the march spans the jet from the center line to the free boundary, so every one
     of them carries the whole mass flow and they must all carry the same. Checking that needs
     nothing external, which makes it the one measure of solution quality available at any
     operating point, including those with no correlation to compare against.
@@ -1591,7 +1591,7 @@ def plumeMachDisk(flow: PlumeFlow, net: dict, sonicThreshold: float = 1.05) -> d
 
     Locate the Mach disk in a solved plume field.
 
-    Taken from the solution rather than from a correlation. The disk is where the centre-line flow
+    Taken from the solution rather than from a correlation. The disk is where the center-line flow
     can no longer stay supersonic, so its station is the first on the axis at which the Mach number
     falls to one, and its radius is found by scanning outward from there to the triple point, the
     radial station where the flow is again sonic. That is the procedure the coflowing-jet study
@@ -1604,7 +1604,7 @@ def plumeMachDisk(flow: PlumeFlow, net: dict, sonicThreshold: float = 1.05) -> d
     that point, so it is reused rather than restated.
 
     Exactly sonic is not a state this net can hold: every node is supersonic by construction, and
-    a centre line that truly reached Mach one would end the march rather than record it. So the
+    a center line that truly reached Mach one would end the march rather than record it. So the
     test is made against `sonicThreshold`, a Mach number close enough to one that the core is
     plainly about to fail, and `minimumAxisMach` is always reported so a caller can see how near it
     came rather than only whether it crossed.
@@ -1624,7 +1624,7 @@ def plumeMachDisk(flow: PlumeFlow, net: dict, sonicThreshold: float = 1.05) -> d
 
     axis = sorted((point for point in nodes if point.r <= 1e-9), key = lambda point: point.x)
     if len(axis) < 3:
-        return dict(absent, reason = 'the march did not reach the centre line')
+        return dict(absent, reason = 'the march did not reach the center line')
 
     minimumAxisMach = min(point.mach for point in axis)
     absent = dict(absent, minimumAxisMach = minimumAxisMach)
@@ -1645,7 +1645,7 @@ def plumeMachDisk(flow: PlumeFlow, net: dict, sonicThreshold: float = 1.05) -> d
     upstream = max((point.mach for point in axis if point.x < sonic.x), default = float('nan'))
     return {'present': True, 'x': sonic.x, 'diameter': diameter, 'upstreamMach': upstream,
             'minimumAxisMach': minimumAxisMach,
-            'reason': f'the centre line fell to Mach {sonic.mach:.3f}'}
+            'reason': f'the center line fell to Mach {sonic.mach:.3f}'}
 
 def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
 
@@ -1708,11 +1708,11 @@ def plumeCornerFan(flow: PlumeFlow, lip: PlumePoint, boundaryMach: float,
 
     '''
 
-    Centred expansion fan at the lip, where the wall boundary condition becomes a free one.
+    Centerd expansion fan at the lip, where the wall boundary condition becomes a free one.
 
     The wall stops constraining the flow at the lip, so it turns through a Prandtl-Meyer expansion
     from the wall state to the ambient pressure. Every ray shares the lip position and they differ
-    only in how far through the turn they sit, which is what makes the fan centred.
+    only in how far through the turn they sit, which is what makes the fan centerd.
 
     '''
     lipNu = prandtlMeyerAngle(lip.mach, flow.gamma)
@@ -1753,7 +1753,7 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     unexplained rather than resolved.
 
     Structure follows TN D-2327 p.37 in NOVA's sign convention, where r is positive above the
-    centre line. Each line is a first-family characteristic running from a start point outward
+    center line. Each line is a first-family characteristic running from a start point outward
     until it reaches the free boundary. Point C at index i on line j takes its second-family
     neighbour from index i of line j-1 and its first-family neighbour from index i-1 of line j.
     Start points come from the exit plane, lip first.
@@ -1848,7 +1848,7 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
             startIndex += 1
         else:
             if len(previous) < 3:
-                stop = 'centreLineExhausted'
+                stop = 'centerLineExhausted'
                 break
             if cellPhase == 3:
                 target = plumeAxisPoint(flow, previous[1])
@@ -1899,7 +1899,7 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
                     shock.append(merged)
                     continue
             second = aPoints[index]
-            # A line that starts on the centre line needs the singular treatment for its first
+            # A line that starts on the center line needs the singular treatment for its first
             # step, because the first-family source term is dr / r with r zero at the parent.
             if first.r <= 1e-12:
                 point = plumeNearAxisPoint(flow, first, second)
@@ -1957,10 +1957,10 @@ def advancePlumeFront(flow: PlumeFlow, front: list, boundaryMach: float) -> list
     Step a whole data line one increment downstream.
 
     The march computes one characteristic at a time, from a start point out to the boundary. That
-    leaves the centre line trailing far behind the boundary, because a line started on the axis
+    leaves the center line trailing far behind the boundary, because a line started on the axis
     reaches the boundary in one pass while the axis advances by a single step, and the solved
     region comes out as a wedge rather than a slab. It also needs a rule for where each new line
-    starts, which is what the centre-line restart and its sub-stepping in thirds exist to supply.
+    starts, which is what the center-line restart and its sub-stepping in thirds exist to supply.
 
     Advancing the front removes both. Every point moves together:
 
@@ -1973,7 +1973,7 @@ def advancePlumeFront(flow: PlumeFlow, front: list, boundaryMach: float) -> list
     sits on the first-family characteristic of its inner neighbour, so crossing the two again
     returns it unchanged. That costs the front one point per step, which the refinement puts back.
 
-    `front` runs from the axis outward, index 0 on the centre line and the last point on the free
+    `front` runs from the axis outward, index 0 on the center line and the last point on the free
     boundary. Returns the new front, or None when it cannot be completed.
 
     """
@@ -2021,7 +2021,7 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     intersection returns a point already there. The exit plane is the natural choice, being a
     station rather than a wave.
 
-    The lip corner is the price. A centred fan turns the flow through a finite angle at a single
+    The lip corner is the price. A centerd fan turns the flow through a finite angle at a single
     point, which a front cannot hold, so the turning is instead spread over the first few steps as
     the free boundary condition rotates the outermost point. That smears the expansion near the
     lip and washes out downstream.
@@ -2042,7 +2042,7 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
                 'massDriftWorst': float('nan'), 'massDriftFinal': float('nan')}
 
     boundaryMach = flow.machFromStaticPressure(ambientPressure)
-    # The march works from the lip inward; the front indexes from the centre line outward.
+    # The march works from the lip inward; the front indexes from the center line outward.
     front = list(reversed(initialLine)) if initialLine[0].r > initialLine[-1].r             else list(initialLine)
     if boundaryMach <= front[-1].mach:
         return {'lines': [], 'boundary': [], 'nodes': [], 'shock': [],
@@ -2088,7 +2088,7 @@ def _resamplePlumeLine(flow: PlumeFlow, line: list, count: int) -> list:
     Each line carries one more point than the one before it, because it places an interior point
     against every entry of its parent and then adds its own boundary point. Left alone that grows
     without bound: the lines reach thousands of points, every one is walked against its parent,
-    and the march slows until the centre line advances by a ten-thousandth of a jet radius per
+    and the march slows until the center line advances by a ten-thousandth of a jet radius per
     line and stops. The report avoids this by counting the line length down rather than up,
     statements 302 and 404, so its net coarsens as it marches.
 
@@ -2098,7 +2098,7 @@ def _resamplePlumeLine(flow: PlumeFlow, line: list, count: int) -> list:
     carry the axis and the boundary.
 
     Redistribution also fixes the spacing near the axis, where the march otherwise leaves its
-    first point a rounding distance out and the next centre-line point then advances by about that
+    first point a rounding distance out and the next center-line point then advances by about that
     much. The count is never raised: interpolated points satisfy no characteristic relation, and
     padding a short line with them destabilises the march that reads it.
 
@@ -2463,7 +2463,7 @@ def plumeCharacteristicSeed(contour) -> dict:
                                      march produced [m]
         'xMesh', 'rMesh'             full characteristic mesh, three blocks [m]
         'machMesh', 'flowAngleMesh'  Mach number [-] and flow angle [rad] on that mesh
-        'scalingFactor'              multiplier taking the non-dimensional mesh to metres
+        'scalingFactor'              multiplier taking the non-dimensional mesh to meters
         'gamma', 'gasConstant'       chamber ratio of specific heats [-] and R [J/kg-K]
         'stagnationPressure'         chamber stagnation pressure [Pa]
         'stagnationTemperature'      chamber stagnation temperature [K]
@@ -2521,7 +2521,7 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
     ambientPressure : float
         Back pressure the jet discharges into [Pa].
     numRays : int
-        Rays in the centred fan at the lip. Raising it helps a uniform exit and hurts a
+        Rays in the centerd fan at the lip. Raising it helps a uniform exit and hurts a
         contoured one, and why is not yet understood, so it is left where the real handover
         works.
     exitPoints : int

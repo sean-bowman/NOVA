@@ -104,7 +104,7 @@ class MplPane(ttk.Frame):
 
         '''
 
-        Replace the plot with a centred note.
+        Replace the plot with a centerd note.
 
         '''
 
@@ -234,7 +234,7 @@ def drawRevolvedContour(pane: MplPane, nozzle, sweepDeg: float = 300.0) -> None:
 
     '''
 
-    Surface-of-revolution view of the wall contour, with the cooling channel centrelines
+    Surface-of-revolution view of the wall contour, with the cooling channel centerlines
     overlaid when a jacket was generated. This is a fast orientation view; the interactive
     export carries the full meshes.
 

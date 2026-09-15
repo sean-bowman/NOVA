@@ -25,10 +25,10 @@ Author: Sean Bowman
 import numpy as np
 import pytest
 
-from NOVA.radiativeCooling import (STEFANBOLTZMANN, cylinderMeanBeamLength,
+from NOVA.radiativeCooling import (RadiativeShell, STEFANBOLTZMANN, cylinderMeanBeamLength,
                                    effectiveGasSideDriving, meanBeamLength,
                                    netWallRadiativeFlux, radiationEquilibriumTemperature,
-                                   wallRadiationCoefficient)
+                                   radiativeNozzleExtension, wallRadiationCoefficient)
 from NOVA.utils import ConvergenceFailureError, InvalidInputError
 
 # A hot wall in a chamber, and a station out in the diverging section. The pair spans the range
@@ -354,3 +354,263 @@ class TestPhysicalConstant:
         from NOVA.ablative import STEFANBOLTZMANN as ablativeConstant
 
         assert STEFANBOLTZMANN == ablativeConstant
+
+def conicalExtension(stations = 61):
+
+    '''A straight conical extension and the exhaust along it, shared by the solver tests.'''
+
+    return dict(
+        axialPosition = np.linspace(0.0, 0.60, stations),
+        radius = np.linspace(0.10, 0.32, stations),
+        machNumber = np.linspace(2.6, 3.8, stations),
+        staticTemperature = np.linspace(1500.0, 900.0, stations),
+        recoveryTemperature = np.linspace(2600.0, 1900.0, stations))
+
+def exhaust():
+
+    '''The engine the extension hangs off, held fixed across the solver tests.'''
+
+    return dict(chamberPressure = 6.895e6, characteristicVelocity = 2300.0,
+                exhaustGamma = 1.20, exhaustGasConstant = 520.0, exhaustMolecularWeight = 16.0,
+                throatRadius = 0.05, throatRadiusOfCurvature = 0.04)
+
+def shell(**overrides):
+
+    '''A thin coated shell, varied from by the tests that need to.'''
+
+    arguments = dict(thermalConductivity = 45.0, thickness = 5.0e-4, innerEmissivity = 0.0,
+                     outerEmissivity = 0.8, gasEmissivity = 0.0)
+    arguments.update(overrides)
+
+    return RadiativeShell(**arguments)
+
+class TestTheExtensionSolverAgainstAnswersItDidNotProduce:
+
+    '''
+
+    The four verification checks. Each compares the solver to something computed another way.
+
+    '''
+
+    def testWithConductionOffEveryStationSitsAtItsOwnEquilibrium(self):
+
+        # Conductivity small enough that conduction cannot move anything, which isolates the
+        # pointwise balance. Then a scalar root find at each station is the exact answer.
+        contour = conicalExtension()
+        result = radiativeNozzleExtension(shell(thermalConductivity = 1.0e-9), **contour,
+                                          **exhaust())
+
+        independent = np.array([radiationEquilibriumTemperature(
+            result.extensionConvectiveCoefficient[i],
+            contour['recoveryTemperature'][i], 0.8, 0.0, 0.0, 1.0)
+            for i in range(contour['axialPosition'].size)])
+
+        assert np.max(np.abs(result.extensionWallTemperature - independent) / independent) < 1.0e-9
+
+    def testTheConductionOperatorIsSecondOrder(self):
+
+        # Method of manufactured solutions on a cylinder, where r drops out and the operator is
+        # k t d2T/ds2 with a known second derivative. The observed order is reported by the
+        # refinement rather than assumed.
+        conductivity, thickness, cylinderRadius, length = 45.0, 5.0e-4, 0.20, 0.5
+        amplitude, offset, wave = 300.0, 1200.0, 2.0 * np.pi / length
+
+        errors = []
+        for stations in (41, 81, 161, 321):
+
+            axial = np.linspace(0.0, length, stations)
+            exact = offset + amplitude * np.sin(wave * axial)
+            faceSpacing = np.diff(axial)
+            faceConductance = cylinderRadius * conductivity * thickness / faceSpacing
+            cellLength = np.zeros(stations)
+            cellLength[0] = 0.5 * faceSpacing[0]
+            cellLength[-1] = 0.5 * faceSpacing[-1]
+            cellLength[1:-1] = 0.5 * (faceSpacing[:-1] + faceSpacing[1:])
+
+            conduction = np.zeros(stations)
+            flowing = faceConductance * np.diff(exact)
+            conduction[:-1] += flowing
+            conduction[1:] -= flowing
+            conduction /= cylinderRadius * cellLength
+
+            analytic = -conductivity * thickness * amplitude * wave**2 * np.sin(wave * axial)
+            errors.append(np.max(np.abs(conduction[1:-1] - analytic[1:-1])))
+
+        orders = [np.log2(before / after) for before, after in zip(errors, errors[1:])]
+
+        assert all(abs(order - 2.0) < 0.05 for order in orders), orders
+
+    def testTheEnergyBalanceCloses(self):
+
+        # Power in equals power out plus what leaves through the joint. This is the check that
+        # catches an arc length or a wall area written wrong, which a converged residual alone
+        # would not.
+        result = radiativeNozzleExtension(shell(), **conicalExtension(), **exhaust())
+
+        assert result.extensionEnergyBalanceResidual < 1.0e-8
+
+    def testHalvingTheEmissivityStaysUnderTheQuarterPowerBound(self):
+
+        # With no convection the balance gives T to the inverse fourth root of emissivity, so
+        # halving it would raise the wall by 2^0.25. Convection holds it strictly below that,
+        # because a hotter wall takes in less.
+        contour, engine = conicalExtension(), exhaust()
+        high = radiativeNozzleExtension(shell(outerEmissivity = 0.8), **contour, **engine)
+        low = radiativeNozzleExtension(shell(outerEmissivity = 0.4), **contour, **engine)
+
+        ratio = low.extensionPeakWallTemperature / high.extensionPeakWallTemperature
+
+        assert 1.0 < ratio < 2.0**0.25
+
+class TestTheExtensionSolverBehavior:
+
+    '''The shape the physics requires, separately from the numbers.'''
+
+    def testAHigherConductivityFlattensTheDistribution(self):
+
+        contour, engine = conicalExtension(), exhaust()
+        spans = []
+        for conductivity in (1.0e-9, 45.0, 400.0):
+            result = radiativeNozzleExtension(shell(thermalConductivity = conductivity),
+                                              **contour, **engine)
+            wall = result.extensionWallTemperature
+            spans.append(wall.max() - wall.min())
+
+        assert spans[0] > spans[1] > spans[2]
+
+    def testConductionBarelyMovesAThinShell(self):
+
+        # Worth pinning: a two-dimensional wall solve would buy very little here, and the reason
+        # is that the conduction length is a centimeter against a contour of half a meter.
+        contour, engine = conicalExtension(), exhaust()
+        thin = radiativeNozzleExtension(shell(thermalConductivity = 1.0e-9),
+                                        **contour, **engine).extensionWallTemperature
+        conducting = radiativeNozzleExtension(shell(thermalConductivity = 400.0),
+                                              **contour,
+                                              **engine).extensionWallTemperature
+        span = thin.max() - thin.min()
+        narrowed = span - (conducting.max() - conducting.min())
+
+        assert narrowed / span < 0.05
+
+    def testTheJointTemperatureIsHeldExactly(self):
+
+        result = radiativeNozzleExtension(shell(upstreamTemperature = 900.0),
+                                          **conicalExtension(), **exhaust())
+
+        assert result.extensionWallTemperature[0] == 900.0
+
+    def testTheJointDoesNotReachFarDownItsOwnContour(self):
+
+        # sqrt(k t / h) is about ten millimeters on this shell, so a joint held four hundred
+        # kelvin below equilibrium should be invisible within a few stations.
+        contour, engine = conicalExtension(), exhaust()
+        free = radiativeNozzleExtension(shell(), **contour, **engine)
+        held = radiativeNozzleExtension(shell(upstreamTemperature = 900.0), **contour, **engine)
+        difference = np.abs(held.extensionWallTemperature - free.extensionWallTemperature)
+
+        assert difference[0] > 400.0
+        assert np.all(difference[6:] < 1.0)
+
+    def testTheStartingGuessIsTheZeroConductionAnswer(self):
+
+        # The equilibrium array is returned so the reader can see what conduction did, and with
+        # conduction off the two must coincide.
+        result = radiativeNozzleExtension(shell(thermalConductivity = 1.0e-9),
+                                          **conicalExtension(), **exhaust())
+
+        assert result.extensionWallTemperature == pytest.approx(
+            result.extensionEquilibriumTemperature, rel = 1.0e-9)
+
+    def testABandTermSignedByTheStaticGasCoolsAHotterWall(self):
+
+        # On an extension the wall is driven by the recovery temperature and the band exchange is
+        # written in the static one. A wall above the static gas radiates into it, so the gas is
+        # a second sink rather than a source. The sign is the station's, not an assumption.
+        contour, engine = conicalExtension(), exhaust()
+        transparent = radiativeNozzleExtension(shell(innerEmissivity = 0.8), **contour, **engine)
+        absorbing = radiativeNozzleExtension(shell(innerEmissivity = 0.8, gasEmissivity = 0.30),
+                                             **contour, **engine)
+
+        assert np.all(absorbing.extensionWallTemperature[0]
+                      < transparent.extensionWallTemperature[0])
+        assert absorbing.extensionGasRadiativeFlux[0] < 0.0
+
+    def testAColderExhaustGivesAColderWall(self):
+
+        contour, engine = conicalExtension(), exhaust()
+        hot = radiativeNozzleExtension(shell(), **contour, **engine)
+        contour['recoveryTemperature'] = contour['recoveryTemperature'] - 400.0
+        cool = radiativeNozzleExtension(shell(), **contour, **engine)
+
+        assert cool.extensionPeakWallTemperature < hot.extensionPeakWallTemperature
+
+    def testTheThroughThicknessDropIsSmallEnoughToLump(self):
+
+        result = radiativeNozzleExtension(shell(), **conicalExtension(), **exhaust())
+
+        assert np.max(result.extensionThroughThicknessDrop) \
+               < 0.01 * result.extensionPeakWallTemperature
+
+    def testTheMarginIsReportedAgainstTheMaterialLimit(self):
+
+        contour = conicalExtension()
+        contour['recoveryTemperature'] = np.linspace(1400.0, 1000.0, 61)
+        contour['staticTemperature'] = np.linspace(800.0, 500.0, 61)
+        result = radiativeNozzleExtension(
+            shell(innerEmissivity = 0.7, outerEmissivity = 0.7, material = 'C103',
+                  atmosphere = 'inert'), **contour, **exhaust())
+
+        # 1400 degC in kelvin, which is the store's inert limit for C103.
+        assert result.extensionTemperatureLimit == pytest.approx(1673.15)
+        assert result.extensionTemperatureMargin == pytest.approx(
+            result.extensionTemperatureLimit - result.extensionPeakWallTemperature)
+
+    def testNoMaterialMeansNoMargin(self):
+
+        result = radiativeNozzleExtension(shell(), **conicalExtension(), **exhaust())
+
+        assert result.extensionTemperatureLimit is None
+        assert result.extensionTemperatureMargin is None
+
+class TestExtensionSolverRefusals:
+
+    '''What the solver will not pretend to answer.'''
+
+    def testTwoStationsAreBothBoundaries(self):
+
+        with pytest.raises(InvalidInputError):
+            radiativeNozzleExtension(
+                shell(), axialPosition = np.array([0.0, 0.1]), radius = np.array([0.1, 0.2]),
+                machNumber = np.array([2.6, 3.0]), staticTemperature = np.array([1500.0, 1200.0]),
+                recoveryTemperature = np.array([2600.0, 2200.0]), **exhaust())
+
+    def testMismatchedStationArraysAreRefused(self):
+
+        contour = conicalExtension()
+        contour['radius'] = contour['radius'][:-1]
+
+        with pytest.raises(InvalidInputError):
+            radiativeNozzleExtension(shell(), **contour, **exhaust())
+
+    def testAShellWithNoThicknessIsRefused(self):
+
+        with pytest.raises(InvalidInputError):
+            radiativeNozzleExtension(shell(thickness = 0.0), **conicalExtension(), **exhaust())
+
+    def testAShellWithNoConductivityIsRefused(self):
+
+        with pytest.raises(InvalidInputError):
+            radiativeNozzleExtension(shell(thermalConductivity = 0.0), **conicalExtension(),
+                                     **exhaust())
+
+    def testASurfaceThatRadiatesNothingIsRefused(self):
+
+        # There is no equilibrium at all: the wall heats until something else carries the flux,
+        # which is a different problem from the one this solves.
+        with pytest.raises(InvalidInputError):
+            radiativeNozzleExtension(shell(outerEmissivity = 0.0), **conicalExtension(),
+                                     **exhaust())
+        with pytest.raises(InvalidInputError):
+            radiativeNozzleExtension(shell(outerViewFactor = 0.0), **conicalExtension(),
+                                     **exhaust())

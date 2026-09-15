@@ -265,7 +265,7 @@ _WALLCURVEDATA = {
     },
 
     'OFHC Copper': {
-        # Cryogenic segment from the NIST fit for RRR = 50, normalised by x0.9962 onto the
+        # Cryogenic segment from the NIST fit for RRR = 50, normalized by x0.9962 onto the
         # room-temperature value below; the two sources differ by 0.4 % at 298 K.
         'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
                                 25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
@@ -340,7 +340,7 @@ _WALLCURVEDATA = {
     },
 
     'Al 6061-T6': {
-        # Cryogenic segment from the NIST fit, normalised by x1.0770 onto the room-temperature
+        # Cryogenic segment from the NIST fit, normalized by x1.0770 onto the room-temperature
         # value below; the two sources differ by 7.1 % at 298 K.
         'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
                                 25, 100, 200, 300, 400],
@@ -370,7 +370,7 @@ _WALLCURVEDATA = {
     },
 
     'Inconel 718': {
-        # Cryogenic conductivity from the NIST fit, normalised by x1.1468 onto the
+        # Cryogenic conductivity from the NIST fit, normalized by x1.1468 onto the
         # room-temperature value below; the two sources differ by 12.8 % at 298 K, the largest
         # join disagreement in this table. Yield and elongation are measured across the whole
         # grid, spliced from two Special Metals tables that differ by 1.8 % where they overlap.
@@ -405,7 +405,7 @@ _WALLCURVEDATA = {
             'thermalConductivity': ('NIST cryogenic database fit, 4-300 K, stated 2 %; Special '
                                     'Metals bulletin above 298 K. The two disagree by 12.8 % at '
                                     'the join, the largest in this table, and the cryogenic '
-                                    'segment is normalised onto the Special Metals value.',
+                                    'segment is normalized onto the Special Metals value.',
                                     (-253.1, 900)),
             'yieldStrength':       ('Special Metals INCONEL alloy 718 bulletin. Table 21, forging '
                                     'aged 1800 F/45 min + 1325 F/8 hr, for -423 to -110 F; Table '
@@ -435,14 +435,14 @@ _WALLCURVEDATA = {
             'thermalConductivity': ('Special Metals INCONEL alloy 625 bulletin.', (21, 982)),
             'yieldStrength':       ('Annealed room-temperature value, held flat. The Special '
                                     'Metals bulletin gives the temperature dependence only as a '
-                                    'figure, and digitising a plot is not a source.', (21, 21)),
+                                    'figure, and digitizing a plot is not a source.', (21, 21)),
             'cte':                 ('Room-temperature value held flat.', (21, 21)),
             'elongation':          ('Annealed room-temperature value, held flat.', (21, 21)),
         },
     },
 
     '316L': {
-        # Cryogenic segment from the NIST fit for type 316, normalised by x0.9568 onto the
+        # Cryogenic segment from the NIST fit for type 316, normalized by x0.9568 onto the
         # room-temperature value below; the two sources differ by 4.5 % at 298 K.
         'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
                                 25, 100, 200, 300, 400, 500, 600, 700, 800, 900],
@@ -473,7 +473,7 @@ _WALLCURVEDATA = {
     },
 
     'Ti-6Al-4V': {
-        # Cryogenic segment from the NIST fit, normalised by x0.9095 onto the room-temperature
+        # Cryogenic segment from the NIST fit, normalized by x0.9095 onto the room-temperature
         # value below; the two sources differ by 9.9 % at 293 K.
         'temperatureC':        [-253.1, -233.1, -196.1, -183.1, -153.1, -113.1, -73.1, -23.1,
                                 20, 100, 200, 300, 400, 500, 600, 700, 800],
@@ -629,7 +629,7 @@ _MATERIALCLASSES = {
 
     'C/SiC': {
         'class':        'composite',
-        'form':         'carbon fibre, silicon carbide matrix, CVI or RS',
+        'form':         'carbon fiber, silicon carbide matrix, CVI or RS',
         'application':  'Nozzle extensions where bare carbon-carbon would oxidise',
         'density':      2050.0,        # [kg/m^3], 2.0 to 2.1
         'properties': {
@@ -661,7 +661,7 @@ _MATERIALCLASSES = {
 
     'SiC/SiC': {
         'class':        'composite',
-        'form':         'silicon carbide fibre and matrix, 2D woven or 3D braided',
+        'form':         'silicon carbide fiber and matrix, 2D woven or 3D braided',
         'application':  'Hot structure, turbine and nozzle components in oxidising service',
         'density':      2700.0,        # [kg/m^3], 2.4 to 3.0
         'properties': {
@@ -725,7 +725,7 @@ _MATERIALCLASSES = {
         'notes': ('The material NOVA cannot currently model. An ablative needs virgin and char '
                   'conductivity as separate curves, a pyrolysis gas mass flux, and a recession '
                   'rate against local heat flux; this entry has none of those. It is here so the '
-                  'material can be compared on density and strength, not so it can be analysed. '
+                  'material can be compared on density and strength, not so it can be analyzed. '
                   'The DTIC reports that carry virgin and char conductivity to 5000 degF are '
                   'access controlled.'),
     },
@@ -1417,7 +1417,7 @@ def materialPropertyProvenance(material: str, propertyName: str) -> tuple:
 # that codes can be compared on identical data, and it is the only charring ablator whose complete
 # response property set is in the open literature. Every real nozzle liner material -- MX-4926 and
 # the rest of the tape-wrapped carbon phenolic family -- has its property set in reports that are
-# access controlled or behind a licence.
+# access controlled or behind a license.
 #
 # TACOT is NOT a stand-in for a nozzle liner. At 280 kg/m^3 virgin it is a low-density entry
 # heatshield material, roughly a fifth the density of the tape-wrapped carbon phenolic used in a
@@ -1429,7 +1429,7 @@ _ABLATIVERESPONSEDATA = {
 
     'TACOT v3.0': {
         'class':         'ablative',
-        'form':          'theoretical low-density carbon fibre preform in a phenolic matrix',
+        'form':          'theoretical low-density carbon fiber preform in a phenolic matrix',
         'application':   'Open benchmark for ablation code verification and inter-code comparison',
         'virginDensity': 280.0,           # [kg/m^3]
         'charDensity':   220.0,           # [kg/m^3]
@@ -1523,7 +1523,7 @@ _ABLATIVERESPONSEDATA = {
                             'Rockets 45(4), 2008.', 'openBenchmark'),
             'char':        ('TACOT v3.0 spreadsheet, Thermal Properties sheet, SI columns.',
                             'openBenchmark'),
-            'virginDensity': ('TACOT v3.0, Pyrolysis model sheet: 0.1 fibre and 0.1 matrix volume '
+            'virginDensity': ('TACOT v3.0, Pyrolysis model sheet: 0.1 fiber and 0.1 matrix volume '
                               'fraction at 1600 and 1200 kg/m^3 intrinsic gives 280 kg/m^3.',
                               'openBenchmark'),
             'charDensity':   ('TACOT v3.0, Pyrolysis model sheet: the matrix loses half its mass '
@@ -1535,7 +1535,7 @@ _ABLATIVERESPONSEDATA = {
                                      'Decomposition Characteristics of a Char-Forming Phenolic '
                                      'Polymer Used for Ablative Composites, NASA TN D-3810, 1967.',
                                      'openBenchmark'),
-            'charElements': ('The reinforcement is carbon fibre and the residue of the phenolic '
+            'charElements': ('The reinforcement is carbon fiber and the residue of the phenolic '
                              'is carbon, so the ablating surface is elemental carbon.',
                              'openBenchmark'),
             'surfaceThermochemistry': ('TACOT v3.0 B-prime sheet, generated with TARGET on the '

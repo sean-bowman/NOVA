@@ -6,7 +6,7 @@ The three-dimensional shape of a cooling channel, built one cross section at a t
 
 A channel is a curve wrapped around the nozzle wall and a profile swept along it. This module
 builds the profile and orients it. The curve itself is built elsewhere; what arrives here is a
-centreline in three dimensions, a channel radius at each station, and the family of profile the
+centerline in three dimensions, a channel radius at each station, and the family of profile the
 channel is drawn from.
 
 A frame is constructed at every station from the local tangent, and the profile is drawn in the
@@ -546,7 +546,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         raise Exception("Please specify crossSectionStyle 'circle' or 'fluted'.")
 
     if crossSectionStyle.lower() == 'fluted':
-        # The flute profile is built by scaling a wave by its amplitude and normalising by the
+        # The flute profile is built by scaling a wave by its amplitude and normalizing by the
         # same amplitude, which is singular at zero. A section of no amplitude is a circle, so
         # ask for one rather than for a flute that has none.
         if not np.isfinite(geometry.fluteAmplitudeCoef) or geometry.fluteAmplitudeCoef <= 0:

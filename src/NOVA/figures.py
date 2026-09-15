@@ -93,7 +93,7 @@ class RevolvedFigure:
 
     '''
 
-    Surface of revolution of the wall contour, with cooling channel centrelines when a jacket
+    Surface of revolution of the wall contour, with cooling channel centerlines when a jacket
     was generated.
 
     '''
@@ -273,7 +273,7 @@ def plumeFigure(nozzle):
         notes = list(structure.notes),
     )
 
-# Quantity key -> (Nozzle attribute, colour bar label, plotly colorscale, figure title)
+# Quantity key -> (Nozzle attribute, color bar label, plotly colorscale, figure title)
 fieldDefinitions = {
     'mach':        ('allMachNumbers',  'Mach number [-]',  'Viridis', 'Mach contours'),
     'pressure':    ('allPressures',    'Pressure [Pa]',    'RdBu_r',  'Pressure contours'),
@@ -333,7 +333,7 @@ def _baseLayout(title: str, xLabel: str, yLabel: str) -> dict:
 
     '''
 
-    Dark layout matching the GUI, with the colour bar laid horizontally under the plot so a
+    Dark layout matching the GUI, with the color bar laid horizontally under the plot so a
     wide axisymmetric figure keeps the full figure width.
 
     '''
@@ -463,7 +463,7 @@ def plotlyRevolved(data: RevolvedFigure):
             figure.add_trace(go.Scatter3d(
                 x = np.abs(lines[index]), y = yLines[index], z = zLines[index],
                 mode = 'lines', line = dict(color = palette['green'], width = 3),
-                showlegend = index == 0, name = 'Channel centrelines',
+                showlegend = index == 0, name = 'Channel centerlines',
             ))
 
     figure.update_layout(
@@ -489,7 +489,7 @@ def plotlyField(data: FieldFigure):
 
     Interactive field over the characteristic mesh, or None without plotly.
 
-    The mesh is curvilinear, so the field is drawn as a coloured point cloud rather than a
+    The mesh is curvilinear, so the field is drawn as a colored point cloud rather than a
     filled contour: plotly's contour trace needs a regular grid, and hovering a point to read
     its exact value is more useful for inspection than banded fill anyway.
 

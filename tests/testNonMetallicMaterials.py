@@ -140,12 +140,12 @@ def testAnUnknownMaterialRaisesRatherThanSubstituting():
 # -- Provenance and grade -- #
 # --------------------------------------------------------------------------------------------- #
 
-recognisedBases = {'producerDatasheet', 'literatureReview', 'literatureRepresentative'}
+recognizedBases = {'producerDatasheet', 'literatureReview', 'literatureRepresentative'}
 
 def testEveryMaterialDeclaresItsGrade():
 
     for name in availableMaterials():
-        assert materialProfile(name)['basis'] in recognisedBases, name
+        assert materialProfile(name)['basis'] in recognizedBases, name
 
 def testEveryStoredPropertyHasProvenance():
 
@@ -163,7 +163,7 @@ def testEveryStoredPropertyHasProvenance():
             source, basis = materialPropertyProvenance(name, propertyName)
 
             assert isinstance(source, str) and len(source) > 20, (name, propertyName)
-            assert basis in recognisedBases, (name, propertyName, basis)
+            assert basis in recognizedBases, (name, propertyName, basis)
 
 def testTheTemperatureLimitsCarryProvenance():
 
@@ -173,7 +173,7 @@ def testTheTemperatureLimitsCarryProvenance():
         source, basis = materialPropertyProvenance(name, 'maxUseTemperatureC')
 
         assert isinstance(source, str) and len(source) > 20, name
-        assert basis in recognisedBases, name
+        assert basis in recognizedBases, name
 
 def testAskingForProvenanceOfAnAbsentPropertyRaises():
 

@@ -4,7 +4,7 @@ Tests for the contour generators and the reference contours they are compared ag
 
 Nothing here runs the full characteristics solve, which is slow and is exercised end to end by the
 showcase. What is tested is the geometry the solve is judged by: the scaling that carries a
-non-dimensional contour into metres, the conical length reference, and the Rao parabolic
+non-dimensional contour into meters, the conical length reference, and the Rao parabolic
 construction that most published bells are drawn from.
 
 The Rao tests matter beyond this module. A generated contour is compared against the parabolic

@@ -10,7 +10,7 @@ What is checked instead is everything that can be checked without one:
     Huzel and Huang, NASA SP-125, and is verified as that conversion rather than taken on trust;
   - the dimensions, which must reduce to kg s^-3 K^-1, that is W/(m^2 K), exactly;
   - the exponent each input enters with, driven one at a time against the published form;
-  - the limiting behaviour, since the coefficient must fall as the area ratio grows and must rise
+  - the limiting behavior, since the coefficient must fall as the area ratio grows and must rise
     as the wall gets colder.
 
 Those establish that the implementation is the correlation it claims to be. They do not establish
@@ -75,7 +75,7 @@ class TestBartzDimensions:
 
     '''The correlation reduces to the units of a heat transfer coefficient, exactly.'''
 
-    def testTheExponentsBalanceToWattsPerSquareMetreKelvin(self):
+    def testTheExponentsBalanceToWattsPerSquareMeterKelvin(self):
 
         # Bartz as implemented, factor by factor, in base SI dimensions:
         #
@@ -90,11 +90,11 @@ class TestBartzDimensions:
         #
         # A heat transfer coefficient is W/(m^2 K), which in base units is kg s^-3 K^-1.
         kilogram = 0.2 * 1 + 0.8 * 1
-        metre    = -0.2 + 0.2 * (-1) + 2 + 0.8 * (-1 - 1)
+        meter    = -0.2 + 0.2 * (-1) + 2 + 0.8 * (-1 - 1)
         second   = 0.2 * (-1) + (-2) + 0.8 * (-2 + 1)
         kelvin   = -1
 
-        assert (kilogram, metre, second, kelvin) == (1.0, 0.0, -3.0, -1.0)
+        assert (kilogram, meter, second, kelvin) == (1.0, 0.0, -3.0, -1.0)
 
     def testTheImplementationTransformsLikeThoseDimensions(self):
 
@@ -106,7 +106,7 @@ class TestBartzDimensions:
         # One factor cannot be rescaled from outside: the stagnation viscosity comes from the
         # fit 1.184e-7 M^0.5 T^0.6, whose constant carries units, so it stays at its SI value
         # whatever the caller does. Holding it fixed removes its contribution of 0.2 x (-1) to the
-        # metre exponent, so the coefficient scales as L^0.2 rather than staying put. That the
+        # meter exponent, so the coefficient scales as L^0.2 rather than staying put. That the
         # residual is exactly L^0.2 and nothing else is what confirms every other exponent.
         #
         # It also says something about the correlation as implemented: the embedded fit ties it
@@ -136,7 +136,7 @@ class TestBartzDimensions:
 
     def testHoldingTheSpecificHeatFixedTooGivesTheDeficitItShould(self):
 
-        # Freezing the specific heat as well removes a further +2 from the metre exponent, so the
+        # Freezing the specific heat as well removes a further +2 from the meter exponent, so the
         # deficit becomes 0.2 + 2 = 1.8 and the coefficient scales as L^-1.8. Two independent
         # deficits landing exactly where the exponents predict leaves no room for a compensating
         # pair of errors.
@@ -219,7 +219,7 @@ class TestBartzAlgebra:
 
         assert ratio == pytest.approx(2.0 ** -0.1, rel = 1e-12)
 
-class TestBartzBehaviour:
+class TestBartzBehavior:
 
     '''The coefficient behaves the way a boundary layer does.'''
 

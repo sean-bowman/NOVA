@@ -94,6 +94,8 @@ try:
     from .chamber import (ConvergingSectionState, convergingSectionOutputs,
                           solveConvergingSection)
     from .regenStations import RegenStationState, regenStationOutputs, solveRegenStations
+    from .radiativeCooling import (RadiativeShell, radiativeExtensionOutputs,
+                                   radiativeNozzleExtension)
     from .config import setInputs as readConfiguration
     from .exports import (exportData as writeExportData,
                           exportExhaustPropertiesFEA as writeExhaustPropertiesFEA,
@@ -113,9 +115,11 @@ try:
     from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
                                 limitingCharacteristicIntersection, throatIntersection)
     from .contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
-                          conicalContour, raoParabolicContour, raoWallAngles,
-                          wallAnglesFromContour,
+                          conicalContour, divergingSectionFamily, raoParabolicContour,
+                          raoWallAngles, wallAnglesFromContour,
                           truncatedIdealContour as solveTruncatedIdealContour,
+                          thrustOptimizedParabolicContour as solveThrustOptimizedParabolicContour,
+                          thrustOptimizedContour as solveThrustOptimizedContourWall,
                           solveDesignPoint)
 except ImportError as error:
     raise ImportError('Could not import NOVA\'s modules: {}. If the CEA interface is the problem, install its backend with "pip install rocketcea".'.format(error)) from error
@@ -189,8 +193,8 @@ from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNod
                     fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
                     obliqueShockDeflection, obliqueShockState, _exitWallAngle,
                     freeJetRefineLine, freeJetGeneralPoint, freeJetSameFamilyPoint,
-                    freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCentreLineTarget,
-                    freeJetCentreLinePoint, freeJetCrossing, freeJetLeadingCharacteristic,
+                    freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCenterLineTarget,
+                    freeJetCenterLinePoint, freeJetCrossing, freeJetLeadingCharacteristic,
                     freeJetCornerRays, solveFreeJetNet, freeJetInitialLine,
                     plumeInteriorPoint, plumeAxisPoint, plumeNearAxisPoint,
                     plumeFreeBoundaryPoint, plumeSameFamilyPoint, plumeShockCrossing,
@@ -444,6 +448,9 @@ class Nozzle:
         self.throatRadiusNonDimensional               = 1        # [-] Non-dimensional
         self.throatInletCurvatureNonDimensional       = 1.5      # [-] Non-dimensional
         self.throatOutletCurvatureNonDimensional      = 0.382    # [-] Non-dimensional
+        self.transonicModel                           = 'sauer'  # [str] starting-line solution
+        self.initialWallAngleFraction                 = 0.25     # [-] of the design Prandtl-Meyer angle
+        self.divergingSectionDesignVariables          = None     # [tuple] pins the searched wall
         self.nozzleScalingFactor: float | None        = None     # [-] Non-dimensional
 
         # Calculated Properties
@@ -451,14 +458,18 @@ class Nozzle:
         # CEA
         self.ceaOutput: Any                           = None     # CEA object; set once CEA runs, guarded by hasattr
         self.chamberRGasConstant: float | None        = None     # [-]
+        # The one exponent the constant-gamma solve runs in, and the two candidates for it.
+        # Both candidates are recorded whichever is selected, because the gap between them
+        # is the size of the approximation.
+        self.gammaModel                               = 'chamber' # [str]
+        self.combustionChamberGamma                   = None     # [-]
+        self.effectiveGamma                           = None     # [-]
         self.chamberGamma: float | None               = None     # [-]
         self.throatGamma: float | None                = None     # [-]
         self.chamberStagnationTemperature: float | None = None   # [K]
         self.maxAdiabaticVelocity: float | None       = None     # [m/s]
         self.exitMachNumber                           = None     # [-]
         self.idealMachNumber: float | None            = None     # [-]
-        self.epsilonSauer: float | None               = None     # [-]
-        self.flowParameterSauer: float | None         = None     # [-]
 
         # Truncated Ideal Contour/Converging Section
         self.numCharacteristics                       = None     # [int]
@@ -672,6 +683,40 @@ class Nozzle:
         self.regenSectionFilmDrivingTemperature       = None     # [K]
         self.regenSectionFilmDrivingTemperatureTrimmed = None    # [K]
         self.regenSectionFilmEffectiveness            = None     # [-]
+        self.regenSectionFilmPropertyCorrection       = None     # [-]
+        self.filmCoolingModel                         = 'hatchPapell' # [str]
+        self.filmCoolantMixtureRatio                  = 0.0      # [-]
+        self.filmEntrainmentMultiplier                = 3.5      # [-]
+        self.regenSectionFilmEntrainmentFlowRatio     = None     # [-]
+        self.regenSectionFilmWallMixtureRatio         = None     # [-]
+        self.regenSectionFilmEntrainmentMultiplier    = None     # [-]
+
+        # Radiation-cooled extension. Past the end of the jacket the wall survives by
+        # radiating, and the balance there is nonlinear in a way the jacket's is not.
+        self.makeRadiativeExtension                   = 'off'    # [str]
+        self.extensionMaterial                        = None     # [material name]
+        self.extensionThickness                       = None     # [m]
+        self.extensionThermalConductivity             = None     # [W/m-K]
+        self.extensionInnerEmissivity                 = None     # [-]
+        self.extensionOuterEmissivity                 = None     # [-]
+        self.extensionOuterViewFactor                 = 1.0      # [-]
+        self.extensionSinkTemperature                 = 0.0      # [K]
+        self.extensionGasEmissivity                   = 0.0      # [-]
+        self.extensionAtmosphere                      = 'inert'  # [str]
+        self.extensionJointTemperature                = None     # [K]
+        self.radiativeExtensionSolution               = None     # [RadiativeExtensionResult]
+        self.extensionWallTemperature                 = None     # [K]
+        self.extensionEquilibriumTemperature          = None     # [K]
+        self.extensionConvectiveCoefficient           = None     # [W/m^2 K]
+        self.extensionConvectiveFlux                  = None     # [W/m^2]
+        self.extensionGasRadiativeFlux                = None     # [W/m^2]
+        self.extensionEmittedFlux                     = None     # [W/m^2]
+        self.extensionConductionFlux                  = None     # [W/m^2]
+        self.extensionThroughThicknessDrop            = None     # [K]
+        self.extensionPeakWallTemperature             = None     # [K]
+        self.extensionTemperatureLimit                = None     # [K]
+        self.extensionTemperatureMargin               = None     # [K]
+        self.extensionEnergyBalanceResidual           = None     # [-]
         self.filmCoolantVelocity                      = None     # [m/s]
         self.filmSurvivalLength                       = None     # [m]
         self.coolant                                  = None     # [case sensitive string of RefProp fluid name]
@@ -789,7 +834,7 @@ class Nozzle:
         Read a configuration onto this object and run the thermochemistry for its design point.
 
         The reader is `config.setInputs`, which handles a JSON path, a dictionary or a workbook
-        path and normalises the differences between them.
+        path and normalizes the differences between them.
 
         Parameters:
         -----------
@@ -844,7 +889,8 @@ class Nozzle:
                                 self.chamberStagnationTemperature)
         throat = ThroatGeometry(self.chamberGamma, self.throatRadiusNonDimensional,
                                 self.throatInletCurvatureNonDimensional,
-                                self.throatOutletCurvatureNonDimensional)
+                                self.throatOutletCurvatureNonDimensional,
+                                transonicModel = getattr(self, 'transonicModel', 'sauer'))
 
         solution = ContourSolution(
             gas = gas, throat = throat,
@@ -888,6 +934,148 @@ class Nozzle:
         else:
             return solution.thrustCoef
 
+    def thrustOptimizedParabolicContour(self, lengthFraction: float, wallAngles: tuple = None,
+                                        assignOutputsToObject: bool = True) -> float:
+
+        """
+
+        Build a thrust-optimized parabolic diverging section, the family most flight bells are.
+
+        The solve is `contour.thrustOptimizedParabolicContour`. Unlike the truncated ideal contour
+        this needs no design-point iteration: the area ratio and the length are properties of a
+        wall drawn before the flow is touched, so both are delivered exactly and there is nothing
+        to converge.
+
+        Parameters:
+        -----------
+        lengthFraction : float
+            Length as a fraction of the 15 degree cone of the same area ratio [-].
+        wallAngles : tuple
+            (thetaInflection, thetaExit) in radians, overriding the Rao chart.
+        assignOutputsToObject : bool
+            True fills in the mesh, the near-wall arrays and the derived performance.
+
+        Returns:
+        --------
+        float
+            Thrust coefficient. The full solution is on the object.
+
+        """
+
+        gas = CharacteristicGas(self.chamberGamma, self.chamberRGasConstant,
+                                self.chamberStagnationTemperature)
+        throat = ThroatGeometry(self.chamberGamma, self.throatRadiusNonDimensional,
+                                self.throatInletCurvatureNonDimensional,
+                                self.throatOutletCurvatureNonDimensional,
+                                transonicModel = getattr(self, 'transonicModel', 'sauer'))
+
+        solution = ContourSolution(
+            gas = gas, throat = throat,
+            chamberPressure = self.chamberPressure,
+            engineMassFlow = self.engineMassFlow,
+            throatGamma = self.throatGamma,
+            idealMachNumber = self.idealMachNumber,
+            targetExitPressure = self.targetExitPressure,
+            numContourPoints = self.numContourPoints,
+            requestedAreaRatio = float(self.expansionRatio),
+            truncateOn = self.truncateOn,
+            numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
+            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'],
+            plotsDocs = self.plotsDocs)
+
+        solution = solveThrustOptimizedParabolicContour(
+            solution, lengthFraction, wallAngles = wallAngles,
+            assignOutputsToObject = assignOutputsToObject)
+
+        for name in contourSolutionOutputs:
+            value = getattr(solution, name)
+            if value is not None:
+                setattr(self, name, value)
+
+        self.nozzleContourSolution = solution
+        return solution.thrustCoef
+
+    def thrustOptimizedContour(self, lengthFraction: float, designVariables: tuple = None,
+                               **optimizerSettings) -> float:
+
+        """
+
+        Build a thrust-optimized diverging section by searching the cubic-Bezier bell family.
+
+        The search is `contourOptimization.solveThrustOptimizedContour`, which starts from the
+        chart parabola and can therefore only improve on it. Passing `designVariables` skips the
+        search and solves that one wall, which is what the optimizer's own objective does and what
+        a study sweeping the design space wants.
+
+        `searchFamily = 'quadratic'`, forwarded through `optimizerSettings`, confines the search
+        to the parabola surface inside the cubic box: the two wall angles are varied and the
+        tensions follow from them. Running both families at one design point is what separates
+        what the chart reading costs from what the cubic's extra freedom buys, which a search
+        against the chart parabola alone cannot do.
+
+        The optimization record is kept on `nozzleContourOptimization`: the noise floor, the
+        perturbation margin and the gain over the parabola. An optimizer that stops is not an
+        optimum, and those three are what say whether this one is.
+
+        Parameters:
+        -----------
+        lengthFraction : float
+            Length as a fraction of the 15 degree cone of the same area ratio [-].
+        designVariables : tuple
+            (inflectionAngle, exitAngle, inflectionTension, exitTension). None runs the search.
+        optimizerSettings : dict
+            Passed through to `contourOptimization.solveThrustOptimizedContour`. Forwarded rather
+            than re-declared here, so a setting added to the driver does not have to be added to
+            this signature as well and cannot go missing from it.
+
+        Returns:
+        --------
+        float
+            Thrust coefficient. The full solution is on the object.
+
+        """
+
+        from .contourOptimization import solveThrustOptimizedContour
+
+        if designVariables is None:
+            record = solveThrustOptimizedContour(self, lengthFraction, **optimizerSettings)
+            designVariables = record['designVariables']
+        else:
+            record = None
+
+        gas = CharacteristicGas(self.chamberGamma, self.chamberRGasConstant,
+                                self.chamberStagnationTemperature)
+        throat = ThroatGeometry(self.chamberGamma, self.throatRadiusNonDimensional,
+                                self.throatInletCurvatureNonDimensional,
+                                self.throatOutletCurvatureNonDimensional,
+                                transonicModel = getattr(self, 'transonicModel', 'sauer'))
+
+        solution = ContourSolution(
+            gas = gas, throat = throat,
+            chamberPressure = self.chamberPressure,
+            engineMassFlow = self.engineMassFlow,
+            throatGamma = self.throatGamma,
+            idealMachNumber = self.idealMachNumber,
+            targetExitPressure = self.targetExitPressure,
+            numContourPoints = self.numContourPoints,
+            requestedAreaRatio = float(self.expansionRatio),
+            truncateOn = self.truncateOn,
+            numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
+            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'],
+            plotsDocs = self.plotsDocs)
+
+        solution = solveThrustOptimizedContourWall(solution, lengthFraction, designVariables,
+                                                   assignOutputsToObject = True)
+
+        for name in contourSolutionOutputs:
+            value = getattr(solution, name)
+            if value is not None:
+                setattr(self, name, value)
+
+        self.nozzleContourSolution = solution
+        self.nozzleContourOptimization = record
+        return solution.thrustCoef
+
     def pressureMatchTruncatedIdealContour(self, lengthFraction: float | str,
                                            lowerBound: float = 0.65, upperBound: float = 0.9):
 
@@ -904,7 +1092,7 @@ class Nozzle:
         -----------
         lengthFraction : float | str
             Requested length as a fraction of the 15 degree cone of the same area ratio. A string
-            instead sweeps for the fraction that maximises the thrust coefficient.
+            instead sweeps for the fraction that maximizes the thrust coefficient.
         lowerBound, upperBound : float
             Bounds on the length fraction for that sweep.
 
@@ -1064,7 +1252,8 @@ class Nozzle:
 
         throat = ThroatGeometry(self.chamberGamma, self.throatRadiusNonDimensional,
                                 self.throatInletCurvatureNonDimensional,
-                                self.throatOutletCurvatureNonDimensional)
+                                self.throatOutletCurvatureNonDimensional,
+                                transonicModel = getattr(self, 'transonicModel', 'sauer'))
 
         self.nozzleScalingFactor = throatScalingFactor(
             self.engineMassFlow, self.chamberPressure, self.throatGamma,
@@ -1115,7 +1304,7 @@ class Nozzle:
         Returns:
         --------
         PlumeStructure
-            Cell train, Mach disk and boundary, with its own notes on what is and is not modelled.
+            Cell train, Mach disk and boundary, with its own notes on what is and is not modeled.
 
         """
 
@@ -1209,6 +1398,81 @@ class Nozzle:
                 setattr(self, name, value)
 
         self.regenChannelSolution = state
+
+    def radiativeExtensionInputs(self):
+
+        """
+
+        The shell an uncooled extension is made of, and the exhaust running past it.
+
+        Returns:
+        --------
+        tuple
+            The `RadiativeShell` and a dict of the solver's remaining arguments.
+
+        """
+
+        # The joint is adiabatic unless a temperature is given for it. The jacket solve does not
+        # surface a per-station hot wall temperature onto the Nozzle, so there is nothing to read
+        # it from automatically; an adiabatic flange lets no heat out and is the conservative
+        # reading of an unknown one.
+        shell = RadiativeShell(
+            thermalConductivity = self.extensionThermalConductivity,
+            thickness           = self.extensionThickness,
+            innerEmissivity     = self.extensionInnerEmissivity,
+            outerEmissivity     = self.extensionOuterEmissivity,
+            outerViewFactor     = self.extensionOuterViewFactor,
+            sinkTemperature     = self.extensionSinkTemperature,
+            gasEmissivity       = self.extensionGasEmissivity,
+            upstreamTemperature = self.extensionJointTemperature,
+            material            = self.extensionMaterial,
+            atmosphere          = self.extensionAtmosphere)
+
+        return shell, dict(
+            axialPosition          = self.xExtension,
+            radius                 = self.rExtension,
+            machNumber             = self.extensionNearWallMachNumber,
+            staticTemperature      = self.extensionNearWallTemperature,
+            recoveryTemperature    = self.extensionNearWallRecoveryTemperature,
+            chamberPressure        = self.chamberPressure,
+            characteristicVelocity = self.theoreticalCharacteristicVelocity,
+            exhaustGamma           = self.gammaExtension,
+            exhaustGasConstant     = self.gasConstantExtension,
+            exhaustMolecularWeight = self.molecularWeightExtension,
+            throatRadius           = float(np.min(self.rNozzleWall)),
+            throatRadiusOfCurvature = 0.5 * self.nozzleScalingFactor
+                                      * (self.throatInletCurvatureNonDimensional
+                                         + self.throatOutletCurvatureNonDimensional))
+
+    def generateRadiativeExtension(self):
+
+        """
+
+        Solve the wall temperature of the uncooled extension beyond the jacket.
+
+        The solve itself is `radiativeCooling.radiativeNozzleExtension`, a damped Newton on the
+        nonlinear balance between convection in, conduction along the shell, and radiation out.
+        This method supplies the shell and the station state and copies the result back.
+
+        The extension arrays come from `truncateForRegen`, so a configuration with no truncation
+        has no extension and nothing is solved.
+
+        Raises:
+        -------
+        InvalidInputError
+            If the shell is incompletely specified or radiates nothing.
+        ConvergenceFailureError
+            If the balance does not settle.
+
+        """
+
+        shell, arguments = self.radiativeExtensionInputs()
+        result = radiativeNozzleExtension(shell, **arguments)
+
+        for name in radiativeExtensionOutputs:
+            setattr(self, name, getattr(result, name))
+
+        self.radiativeExtensionSolution = result
 
     def regenVoluteState(self):
 
@@ -1448,8 +1712,8 @@ class Nozzle:
 
         Write the contours, geometry, exhaust properties and pickled run to the output directory.
 
-        The writers are in `exports`. Contour and geometry files are written in millimetres,
-        which is what a CAD package expects; the object itself is metre-based.
+        The writers are in `exports`. Contour and geometry files are written in millimeters,
+        which is what a CAD package expects; the object itself is meter-based.
 
         Parameters:
         -----------
@@ -1497,13 +1761,24 @@ class Nozzle:
 
         # -- Nozzle Contour -- #
 
-        # Generate the diverging section
-        if self.divergingSectionType == 'Conical':
-            # Generate a conical diverging section
-            self.conicalNozzle(conicalHalfAngle = self.conicalHalfAngle)
-        else:
-            # Generate a pressure-matched truncated ideal contour diverging section
-            self.pressureMatchTruncatedIdealContour(self.lengthFraction)
+        # Generate the diverging section. One resolver decides which family was asked for, so an
+        # unrecognized value raises rather than quietly building a truncated ideal contour.
+        match divergingSectionFamily(self.divergingSectionType):
+            case 'conical':
+                self.conicalNozzle(conicalHalfAngle = self.conicalHalfAngle)
+            case 'truncatedIdeal':
+                self.pressureMatchTruncatedIdealContour(self.lengthFraction)
+            case 'thrustOptimizedParabola':
+                self.thrustOptimizedParabolicContour(self.lengthFraction)
+            case 'thrustOptimizedContour':
+                # A pinned vector skips the search. Absent, this searches as it always has.
+                self.thrustOptimizedContour(
+                    self.lengthFraction,
+                    designVariables = getattr(self, 'divergingSectionDesignVariables', None))
+            case family:
+                raise NotImplementedError(
+                    f'The {family} diverging section is not built yet. The contour families that '
+                    f'run today are the truncated ideal contour and the cone.')
 
         # Generate the converging section
         self.convergingSection()
@@ -1522,9 +1797,14 @@ class Nozzle:
             if self.makeInletVolute == 'on' or self.makeReturnVolute == 'on':
                 self.generateRegenVolutes()
 
+        # -- Radiation-Cooled Extension -- #
+
+        if self.makeRadiativeExtension == 'on':
+            self.generateRadiativeExtension()
+
         # -- Exhaust Plume -- #
 
-        # Correlated structure only; see plumeStructure() for what is and is not modelled.
+        # Correlated structure only; see plumeStructure() for what is and is not modeled.
         if not np.isnan(np.float64(self.plumeAmbientPressure if self.plumeAmbientPressure not in ([], None) else np.nan)):
             self.plumeStructure(float(self.plumeAmbientPressure))
 

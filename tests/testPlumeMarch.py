@@ -138,7 +138,7 @@ def testFreeBoundaryHoldsAmbientPressureAndReturnsTheAngle(flow):
     assert point.flowAngle != previous.flowAngle, 'the angle is solved for, not carried over'
 
 def testAxisPointHoldsSymmetry(flow):
-    '''On the centre line the flow angle is zero and the radius is zero, by symmetry.'''
+    '''On the center line the flow angle is zero and the radius is zero, by symmetry.'''
     point = plumeAxisPoint(flow, PlumePoint(0.90, 0.05, 4.30, np.radians(3.0), flow))
 
     assert point is not None
@@ -165,7 +165,7 @@ def testNearAxisPointStaysRegularAsTheRadiusFalls(flow):
 
 def testCornerFanTurnsFromTheWallStateToAmbient(flow):
     '''
-    The lip fan is centred: every ray leaves the same point and they differ only in how far
+    The lip fan is centerd: every ray leaves the same point and they differ only in how far
     through the Prandtl-Meyer turn they sit.
     '''
     lip = PlumePoint(0.90, 0.40, 3.00, np.radians(10.0), flow)
@@ -173,7 +173,7 @@ def testCornerFanTurnsFromTheWallStateToAmbient(flow):
     fan = plumeCornerFan(flow, lip, boundaryMach, numRays = 20)
 
     assert len(fan) == 21
-    assert all(ray.x == lip.x and ray.r == lip.r for ray in fan), 'the fan is centred at the lip'
+    assert all(ray.x == lip.x and ray.r == lip.r for ray in fan), 'the fan is centerd at the lip'
     assert fan[0].mach == pytest.approx(lip.mach)
     assert fan[-1].mach == pytest.approx(boundaryMach)
     assert fan[0].flowAngle == pytest.approx(lip.flowAngle)
@@ -267,7 +267,7 @@ def testSameFamilyPointClosesForRealCrossingsAndRefusesDistantOnes(flow):
 
     A vanishing convergence is a different matter. Two rays a ten-thousandth of a degree apart
     meet thousands of jet radii downstream, which is not a coalescence and must not be reported as
-    one. The corrector diverges on those and the point is refused, which is the behaviour wanted.
+    one. The corrector diverges on those and the point is refused, which is the behavior wanted.
     """
     from NOVA.Nozzle import plumeSameFamilyPoint
     inner = PlumePoint(0.900, 0.300, 4.000, np.radians(8.0), flow)
@@ -379,7 +379,7 @@ def testLineLengthStaysBounded(flow):
     '''
     Every line places an interior point against each entry of its parent and then adds its own
     boundary point, so left alone the lines grow by one per line. At thousands of points each the
-    march slows until the centre line stops advancing. Holding the length fixed is what lets it
+    march slows until the center line stops advancing. Holding the length fixed is what lets it
     run far enough to see a period at all.
     '''
     radii = np.linspace(1.0, 0.0, 140)
@@ -534,7 +534,7 @@ def testObliqueShockStateDetaches(flow):
 def testMarchSolvesAnOverexpandedJet(flow):
     '''
     An overexpanded lip turns the flow inward, which is the same fan run with a falling Mach
-    number. Refusing these outright excluded sea-level operation of any vacuum-optimised nozzle.
+    number. Refusing these outright excluded sea-level operation of any vacuum-optimized nozzle.
     '''
     radii = np.linspace(1.0, 0.0, 140)
     line = [PlumePoint(0.0, radius, 3.0, 0.0, flow, 'exit') for radius in radii]
@@ -574,7 +574,7 @@ def testMachDiskIsAbsentFromAShockFreeNet(flow):
 
 def testMachDiskIsFoundWhenTheCoreDecelerates(flow):
     '''
-    The criterion itself, on a field built to trip it: the disk sits at the first centre-line
+    The criterion itself, on a field built to trip it: the disk sits at the first center-line
     station that falls to near sonic, and its diameter spans to the triple point, the radius at
     which the flow is supersonic again.
     '''

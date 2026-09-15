@@ -50,6 +50,8 @@ from scipy.interpolate import interp1d
 from math import dist
 from tqdm import tqdm
 
+from .utils import showFigure
+
 try:
     from utils import *
     # Explicit re-imports so static analysis can resolve names the wildcard
@@ -468,7 +470,7 @@ class Volute:
                                         scene_aspectmode = 'data',
                                         template = 'plotly_dark',
                                         showlegend = False)
-            fig.show()
+            showFigure(fig)
 
         # Step 4: Export geometry (if user specified)
         if self.export == 'on':

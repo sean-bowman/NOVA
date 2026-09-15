@@ -147,8 +147,15 @@ def _anyVolute(config: dict) -> bool:
     return (config.get('makeInletVolute') in (True, 'on')
             or config.get('makeReturnVolute') in (True, 'on'))
 
+def _radiativeExtensionOn(config: dict) -> bool:
+    return config.get('makeRadiativeExtension') in (True, 'on')
+
 def _filmCoolingOn(config: dict) -> bool:
     return config.get('filmCooling') in (True, 'on')
+
+def _entrainmentModelOn(config: dict) -> bool:
+    return _filmCoolingOn(config) \
+           and config.get('filmCoolingModel') == 'sp8124Entrainment'
 
 def _printabilityOn(config: dict) -> bool:
     return _coolingOn(config) and config.get('printabilityCheck') in (True, 'on')
@@ -352,11 +359,100 @@ groups = [
               help = 'Maximum self-supporting overhang from vertical.'),
     ], collapsed = True, expandWhen = _coolingOn),
 
+    Group('Radiative Extension', [
+        Field('makeRadiativeExtension', 'Radiation-cooled extension', 'bool', default = False,
+              help = 'Solve the wall temperature of the uncooled extension beyond the jacket. '
+                     'It needs a truncation, because with none the jacket runs the whole '
+                     'contour and there is no extension to solve.'),
+        Field('extensionMaterial', 'Extension material', 'text', default = 'C103',
+              showWhen = _radiativeExtensionOn,
+              help = 'Named only to look up a temperature limit for the margin report. Leave it '
+                     'empty to skip the margin.'),
+        Field('extensionAtmosphere', 'Service atmosphere', 'choice',
+              choices = [('Inert or vacuum', 'inert'), ('Oxidising', 'oxidising'),
+                         ('Oxidising, coated', 'oxidisingCoated')],
+              default = 'inert', showWhen = _radiativeExtensionOn,
+              help = 'Which of the material\'s limits applies. For C103 the inert and oxidising '
+                     'limits differ by a factor of three, so this is a design choice rather '
+                     'than a label.'),
+        Field('extensionThickness', 'Shell thickness', 'float', default = 0.0005, unit = 'm',
+              showWhen = _radiativeExtensionOn,
+              help = 'Sets conduction along the shell and the through-thickness drop the lumped '
+                     'treatment neglects. The drop is reported so it can be checked.'),
+        Field('extensionThermalConductivity', 'Shell conductivity', 'float', default = 45.0,
+              unit = 'W/m-K', showWhen = _radiativeExtensionOn,
+              help = 'Supplied rather than looked up: the materials store carries conductivity '
+                     'curves only for the jacket alloys and would substitute GRCop-42, which '
+                     'conducts eight times better than a refractory metal.'),
+        Field('extensionInnerEmissivity', 'Inner emissivity', 'float', default = 0.7,
+              showWhen = _radiativeExtensionOn,
+              help = 'Gas-side surface. Sets how much band radiation the wall exchanges with '
+                     'the exhaust, which on an extension is usually a loss rather than a gain.'),
+        Field('extensionOuterEmissivity', 'Outer emissivity', 'float', default = 0.7,
+              showWhen = _radiativeExtensionOn,
+              help = 'The one that governs. Wall temperature goes as the inverse fourth root of '
+                     'it, so halving it costs about nineteen per cent. Only the degraded R512E '
+                     'coated value has a source in the store.'),
+        Field('extensionOuterViewFactor', 'Outer view factor', 'float', default = 1.0,
+              showWhen = _radiativeExtensionOn,
+              help = 'Fraction of the outward emission that reaches the sink. One for a surface '
+                     'looking at open space, less where it sees vehicle structure.'),
+        Field('extensionSinkTemperature', 'Sink temperature', 'float', default = 4.0, unit = 'K',
+              showWhen = _radiativeExtensionOn,
+              help = 'What the outer surface radiates to. Its fourth power is negligible '
+                     'against any wall temperature, so the exact value rarely matters.'),
+        Field('extensionGasEmissivity', 'Gas emissivity', 'float', default = 0.0,
+              showWhen = _radiativeExtensionOn,
+              help = 'Total emissivity of the exhaust over the mean beam length. Zero makes the '
+                     'gas transparent and removes the band term exactly.'),
+        Field('extensionJointTemperature', 'Joint temperature', 'float', default = None,
+              unit = 'K', showWhen = _radiativeExtensionOn,
+              help = 'Wall temperature where the shell meets whatever is upstream. Empty makes '
+                     'the joint adiabatic, which lets no heat out through the flange and is the '
+                     'conservative reading of an unknown one.'),
+    ], collapsed = True, expandWhen = _radiativeExtensionOn),
+
+    Group('Gas Model', [
+        Field('gammaModel', 'Ratio of specific heats', 'choice',
+              choices = [('Chamber value', 'chamber'),
+                         ('Effective, fitted to the design point', 'effective')],
+              default = 'chamber',
+              help = 'A real exhaust recombines as it expands and has no single ratio of '
+                     'specific heats, so the contour solve picks one. The chamber value is '
+                     'the default and the one the solve has always used. The effective '
+                     'value is fitted so the pressure ratio and the area ratio agree with '
+                     'the thermochemistry at the design point: it cuts the pressure error '
+                     'threefold and biases the gas temperature cold, which undersizes a '
+                     'cooling jacket. Choose it for contour and performance work, not for '
+                     'a jacket. Both values are reported either way.'),
+    ], collapsed = True),
+
     Group('Film Cooling', [
         Field('filmCooling', 'Film cooling', 'bool', default = False,
               help = 'Inject a sheet of coolant along the wall. It lowers the temperature '
                      'the wall is driven by rather than carrying heat away, and it works '
                      'with a jacket rather than instead of one.'),
+        Field('filmCoolingModel', 'Film closure', 'choice',
+              choices = [('Hatch and Papell (TN D-130)', 'hatchPapell'),
+                         ('SP-8124 entrainment', 'sp8124Entrainment')],
+              default = 'hatchPapell', showWhen = _filmCoolingOn,
+              help = 'Hatch and Papell states its own accuracy but was fitted in a '
+                     'constant-area duct and cannot see acceleration or turning. The '
+                     'SP-8124 entrainment model accounts for both through an empirical '
+                     'multiplier read off a design chart, so it is calibrated rather than '
+                     'validated. On a hydrogen film the two disagree by hundreds of '
+                     'kelvin.'),
+        Field('filmEntrainmentMultiplier', 'Entrainment multiplier at the slot', 'float',
+              default = 3.5, showWhen = _entrainmentModelOn,
+              help = 'psi_m where the coolant enters. SP-8124 3.5.2 recommends 3 to 4 and '
+                     'does not narrow it further; across that band alone the peak driving '
+                     'temperature moves about a hundred kelvin. It is the single largest '
+                     'lever in the model.'),
+        Field('filmCoolantMixtureRatio', 'Film coolant mixture ratio', 'float',
+              default = 0.0, showWhen = _entrainmentModelOn,
+              help = 'Oxidiser to fuel ratio of the coolant itself. Zero is a pure fuel '
+                     'film, which is the usual case and the one that leaves the wall gas '
+                     'fuel-rich.'),
         Field('filmCoolant', 'Film coolant species', 'text', default = None,
               showWhen = _filmCoolingOn,
               help = 'REFPROP or CoolProp fluid name. It has to be a gas at its slot '

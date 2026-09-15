@@ -14,13 +14,13 @@ What happens here is the sequence, and the sequence matters:
     1. Volute interfaces. The regen section is trimmed back at each end to leave a straight
        circular run where a volute attaches, and the turnaround geometry the return volute routes
        around is laid out. Everything downstream works on the trimmed section.
-    2. Channel radii. The sizing solve, station by station, which also produces the 2D centreline
+    2. Channel radii. The sizing solve, station by station, which also produces the 2D centerline
        the channel follows and the coolant exit condition.
-    3. Channel centreline. The 2D centreline is wrapped into three dimensions around the nozzle,
+    3. Channel centerline. The 2D centerline is wrapped into three dimensions around the nozzle,
        and the hot wall, cold wall and shell surfaces are built from it.
     4. Printability audit. Where the channel would print unsupported, those stations are recorded
        so the cross-section builder can compress the flutes toward a circle across them.
-    5. Three-dimensional channels. The cross sections are swept along the wrapped centreline into
+    5. Three-dimensional channels. The cross sections are swept along the wrapped centerline into
        the surfaces that get exported, and the nozzle wall point cloud is built.
     6. Cooling jacket. Optionally, all channels merged into one volume rather than kept separate.
 
@@ -37,7 +37,7 @@ carry physical meaning come from the three modules it calls, and each of those c
 validation status, which this inherits unchanged.
 
 What the geometry can be held to is consistency, and the tests do that: a channel that fits
-between its neighbours, a centreline that stays on the wall it was offset from, and surfaces that
+between its neighbours, a centerline that stays on the wall it was offset from, and surfaces that
 close.
 
 ----------------------------------------------------------------------
@@ -68,7 +68,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from .utils import (DCM, arcSpline, chunkInterpolate, intersection, parallelOffset, plotLine,
-                    revolveContour, GeometricConstraintError, InvalidInputError)
+                    revolveContour, GeometricConstraintError, InvalidInputError,
+                    headlessPlots, showFigure)
 from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
@@ -1100,9 +1101,9 @@ def solveRegenChannels(state, thermal):
                                     showlegend = False)
             if state.export == 'on':
                 print(f'Saving Three Channel Mesh View to .html')
-                plot(fig, filename = state.dataFolder + '\\threeChannelMeshViewInterfaced.html')
+                plot(fig, filename = state.dataFolder + '\\threeChannelMeshViewInterfaced.html', auto_open = not headlessPlots())
             else:
-                fig.show()
+                showFigure(fig)
 
             if state.plotJacket == 'on' and _plotlyGate('the full regen jacket view'):
 
@@ -1132,9 +1133,9 @@ def solveRegenChannels(state, thermal):
                                 #   scene_camera = dict(eye = dict(x = 0, y = 2, z = 0))) # good for comparing wrap angles
                 if state.export == 'on':
                     print(f'Saving Full Regen Jacket View to .html')
-                    plot(fig, filename = state.dataFolder + '\\regenJacketView.html')
+                    plot(fig, filename = state.dataFolder + '\\regenJacketView.html', auto_open = not headlessPlots())
                 else:
-                    fig.show()
+                    showFigure(fig)
         else:
 
             # -- One Channel Mesh View -- #
@@ -1180,8 +1181,8 @@ def solveRegenChannels(state, thermal):
                                     showlegend = False)
             if state.export == 'on':
                 print(f'Saving Three Channel Mesh View to .html')
-                plot(fig, filename = state.dataFolder + '\\threeChannelMeshViewInterfaced.html')
+                plot(fig, filename = state.dataFolder + '\\threeChannelMeshViewInterfaced.html', auto_open = not headlessPlots())
             else:
-                fig.show()
+                showFigure(fig)
 
     return state

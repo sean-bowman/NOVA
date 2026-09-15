@@ -61,7 +61,7 @@ class TestConstruction:
     def testOrderingRunsShoulderToHub(self):
 
         # Both consumers read index 0 as the outermost point and index -1 as the innermost:
-        # the sunken section takes its outer arc centre from the first point, and the volute
+        # the sunken section takes its outer arc center from the first point, and the volute
         # packing check closes its ramp from the last.
         envelope = keepOutEnvelope(chamberRadius, numPoints = 40)
 

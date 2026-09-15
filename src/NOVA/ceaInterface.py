@@ -427,7 +427,7 @@ _KEYGROUPS = {
 _KEYTOGROUP = {key: group for group, keys in _KEYGROUPS.items() for key in keys}
 
 # Keys that only exist when the case actually defines an exit station, matching
-# the legacy wrapper's behaviour.
+# the legacy wrapper's behavior.
 _EXITONLYKEYS = frozenset([
     'exitMach', 'exitTemperature', 'exitPressure', 'exitMolecularWeight',
     'exitGasConstant', 'exitGamma', 'exitHeatCapacity', 'exitThermalConductivity',

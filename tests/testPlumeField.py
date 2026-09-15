@@ -59,7 +59,7 @@ def prandtlCell(exitMach, staticRatio):
 def testLeadingCharacteristicReachesTheReportedAxisState():
     '''
     The report works one case through Appendix A: for M_j 5.0 at a 15 degree wall angle the
-    leading characteristic meets the centre line at nu 106.92 degrees and M 12.02. An independent
+    leading characteristic meets the center line at nu 106.92 degrees and M 12.02. An independent
     implementation has to reproduce it.
     '''
     gas = PlumeGas(GAMMA)
@@ -156,7 +156,7 @@ def testMatchedJetHasNoWaveStructure():
 
 def testMarchIsStableAgainstAnUlpOfAmbientPressure():
     '''
-    The approach to the centre line is sub-stepped in thirds rather than taken in one jump. Taken
+    The approach to the center line is sub-stepped in thirds rather than taken in one jump. Taken
     in one jump the branch is chaotic, and a one-ulp change of ambient pressure changes how far
     the march gets. Anything read off a chaotic march is noise, so this is a precondition for
     reporting any of the numbers above.
@@ -170,24 +170,24 @@ def testMarchIsStableAgainstAnUlpOfAmbientPressure():
             ambient = float(np.nextafter(ambient, 1.0))
         net = solveFreeJetNet(gas, 3.0, 0.0, 1.0, ambient, numRays = 40, numLeading = 200,
                               maxLines = 1500)
-        results.append((len(net['lines']), len(net['centreLine']), net['boundary'][-1].x))
+        results.append((len(net['lines']), len(net['centerLine']), net['boundary'][-1].x))
 
-    # The structure of the march must not move at all. Chaos here showed up as the centre-line
+    # The structure of the march must not move at all. Chaos here showed up as the center-line
     # count dropping from three points to one and the boundary ending at 6.77 instead of 11.27,
     # so a count that holds is the meaningful statement. The end station is allowed to respond to
     # the perturbation the way any well-conditioned calculation does, in the last few digits.
-    counts = {(lines, centre) for lines, centre, _ in results}
+    counts = {(lines, center) for lines, center, _ in results}
     assert len(counts) == 1, f'march structure is not reproducible: {results}'
     ends = [end for _, _, end in results]
     assert max(ends) - min(ends) < 1e-9 * abs(ends[0]), f'boundary end moved: {ends}'
 
-def testCentreLineMarchAdvancesPastTheFirstCell():
+def testCenterLineMarchAdvancesPastTheFirstCell():
     '''
-    Without the sub-stepping the march produces a single centre-line point and stops. The whole
+    Without the sub-stepping the march produces a single center-line point and stops. The whole
     downstream field depends on it advancing.
     '''
     _, _, net = solvedBoundary(3.0, 1.5)
-    assert len(net['centreLine']) > 100
+    assert len(net['centerLine']) > 100
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- What Nozzle.plumeField refuses, and how it grades what it does not -- #
@@ -254,7 +254,7 @@ def testPlumeFieldRefusesASeparatedNozzle():
 def testPlumeFieldGradesRatherThanRefusesAnOverexpandedJet():
     '''
     Overexpanded jets used to be refused outright, which excluded sea-level operation of any
-    vacuum-optimised nozzle. They are solved now, and what decides whether the answer is usable is
+    vacuum-optimized nozzle. They are solved now, and what decides whether the answer is usable is
     the conservation it reports rather than the operating point it sits at.
     '''
     result = _solveRefusal(3.0, 0.8, 0.0, mesh = True)
@@ -282,8 +282,8 @@ def _syntheticSeed(wallAngleDeg = 14.0, wallMach = 4.0, axisMach = 4.8, lipRadiu
 
 def testInitialLineReproducesTheExitPlane():
     '''
-    The line has to come back with the mesh's own states, ordered lip to axis, normalised on the
-    lip radius, with y negative below the centre line and theta negative turning away from it.
+    The line has to come back with the mesh's own states, ordered lip to axis, normalized on the
+    lip radius, with y negative below the center line and theta negative turning away from it.
     '''
     from NOVA.Nozzle import freeJetInitialLine
     line = freeJetInitialLine(PlumeGas(GAMMA), _syntheticSeed(), numPoints = 60)

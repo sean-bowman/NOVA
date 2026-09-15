@@ -94,6 +94,97 @@ def machFromPressureRatio(stagnationOverStatic: float, gamma: float) -> float:
     return float(np.sqrt(2.0 / (gamma - 1.0)
                          * (stagnationOverStatic**((gamma - 1.0) / gamma) - 1.0)))
 
+# -- Choosing the one gamma a constant-gamma solve is run in -- #
+
+def effectiveGamma(stagnationOverStatic: float, areaRatio: float,
+                   lowerBound: float = 1.01, upperBound: float = 1.99) -> float:
+
+    '''
+
+    The gamma at which a calorically perfect gas reaches a given pressure ratio and area ratio
+    together.
+
+    A real exhaust has no single gamma. It recombines as it expands, so the isentropic exponent
+    climbs along the nozzle, and a constant-gamma solve has to pick one value to stand for all of
+    them. Taking the chamber value is the obvious choice and the worst one, because the chamber is
+    where the gas is hottest and most dissociated and least like the gas doing the expanding.
+
+    What this returns instead is the value that makes the two relations the contour is built from
+    agree with each other at the design point. Given the chamber-to-exit pressure ratio and the
+    area ratio that thermochemistry says produces it, there is one gamma for which
+
+        areaMachRelation(machFromPressureRatio(pressureRatio, gamma), gamma) = areaRatio
+
+    and it is bracketed by the chamber and exit values. Below the root the implied area ratio is
+    too large, above it too small, so the function is monotone and the root is unique.
+
+    **This is calibration, not physics.** The gas is still treated as calorically perfect and the
+    characteristics mesh is still built on one exponent. What changes is that the exponent is
+    chosen to reproduce an answer from the thermochemistry rather than lifted from one end of the
+    expansion. It closes the design point exactly and says nothing about any other operating
+    point; a contour run far from the pressure ratio it was calibrated at inherits the same error
+    the chamber value carried.
+
+    **It buys pressure and does not buy temperature, which is why it is not the default.** One
+    exponent cannot reproduce both the pressure-area relation and the specific heat, and this one
+    is fitted to the first. Measured against CEA on the LOX/LH2 reference engine over area ratios
+    2 to 40, one-dimensionally so the comparison is like for like:
+
+        static pressure       12.8 % mean absolute error at the chamber gamma, 4.2 % here
+        static temperature    10.1 % at the chamber gamma, 11.0 % here
+
+    Temperature is a wash in magnitude and not in sign. The chamber value runs the gas hot as it
+    expands and this one runs it cold, and NOVA's thermal model reads its driving temperature off
+    this same solve, so a cold bias undersizes a cooling jacket. Selecting it through
+    `gammaModel` is therefore a decision about which answer is being asked for: it is the better
+    exponent for contour geometry and performance, and the worse one for a jacket. Both are
+    recorded on every run whichever is selected. Removing the choice means giving the
+    characteristics solve local properties rather than one exponent, which is a different solver.
+
+    Parameters:
+    -----------
+    stagnationOverStatic : float
+        Chamber stagnation pressure over exit static pressure [-].
+    areaRatio : float
+        Exit area over throat area that the thermochemistry pairs with that pressure ratio [-].
+    lowerBound, upperBound : float
+        Bracket for the root find [-]. The defaults span every gas; narrowing them is only
+        useful to catch a design point that has gone wrong somewhere earlier.
+
+    Returns:
+    --------
+    float
+        Ratio of specific heats reproducing both the pressure ratio and the area ratio [-].
+
+    Raises:
+    -------
+    ValueError
+        If the pressure ratio or area ratio is not supersonic, or if no gamma in the bracket
+        reproduces the pair, which means the two did not come from the same expansion.
+
+    '''
+
+    if stagnationOverStatic <= 1.0 or areaRatio <= 1.0:
+        raise ValueError('An effective gamma is defined by a supersonic expansion. A pressure '
+                         'ratio of {:.4f} and an area ratio of {:.4f} do not describe '
+                         'one.'.format(stagnationOverStatic, areaRatio))
+
+    def mismatch(gamma):
+
+        '''Area ratio the pressure ratio implies at this gamma, less the one asked for.'''
+
+        return areaMachRelation(machFromPressureRatio(stagnationOverStatic, gamma),
+                                gamma) - areaRatio
+
+    lower, upper = mismatch(lowerBound), mismatch(upperBound)
+    if lower * upper > 0.0:
+        raise ValueError('No ratio of specific heats between {:.2f} and {:.2f} reaches an area '
+                         'ratio of {:.4f} at a pressure ratio of {:.1f}. The two did not come '
+                         'from the same expansion.'.format(lowerBound, upperBound, areaRatio,
+                                                           stagnationOverStatic))
+
+    return float(brentq(mismatch, lowerBound, upperBound, xtol = 1.0e-14, rtol = 1.0e-15))
+
 # -- Characteristic angles -- #
 
 def machAngle(mach: float) -> float:
@@ -237,14 +328,35 @@ def machFromAreaRatio(areaRatio: float, gamma: float, branch: str = 'supersonic'
         return float(brentq(residual, 1.0 + 1e-9, upperBound))
 
     if branch == 'subsonic':
-        # Deliberately unguarded ahead of the solve, and on the same initial guess and tolerances
-        # the converging section has always used. A station whose radius rounds to the throat
-        # radius has to reach the same answer it reached before this function existed.
+
+        # An area ratio computed as a radius over the throat radius can land microscopically
+        # below one at the throat itself, and below one this branch has no root for the solver
+        # to find. Only that case is intercepted. An area ratio of exactly one still goes to the
+        # solver on the guess and tolerances the converging section has always used, so every
+        # station that already solved reaches the same answer to the bit.
+        if areaRatio < 1.0:
+            if areaRatio >= 1.0 - 1e-9:
+                return 1.0
+            raise ValueError(f'An area ratio of {areaRatio:.9f} is below the throat, so no '
+                             f'subsonic solution exists.')
+
         result = fsolve(residual, 0.001, full_output = True, maxfev = 200, xtol = 1e-6)
         machNumber, exitFlag, message = result[0][0], result[2], result[3]
-        if exitFlag != 1:
+
+        # The area-Mach relation is flat at the sonic point, so fsolve reports a stalled
+        # iteration there even when the root it holds is good to a part in ten million. The
+        # residual is the thing worth trusting; the flag alone made whether a contour solved
+        # depend on the propellant.
+        if exitFlag != 1 and abs(residual(machNumber)) > 1e-6 * areaRatio:
             raise ValueError(f'Subsonic area-Mach solver did not converge at an area ratio of '
                              f'{areaRatio:.6f}: {message}')
+
+        # The solver can also land just the other side of the sonic point. Overshooting by less
+        # than its own tolerance is convergence rather than failure, so it is clamped instead of
+        # rejected. A root below one is returned exactly as the solver found it.
+        if 1.0 < machNumber <= 1.0 + 1e-6:
+            machNumber = 1.0
+
         if machNumber <= 0 or machNumber > 1.0 or not np.isfinite(machNumber):
             raise ValueError(f'Subsonic area-Mach solver produced an invalid result at an area '
                              f'ratio of {areaRatio:.6f}: M = {machNumber}')

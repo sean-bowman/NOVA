@@ -61,7 +61,8 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 
 from . import units
-from .utils import DCM, revolveContour, InvalidInputError, VoluteGenerationError, createErrorContext
+from .utils import (DCM, revolveContour, InvalidInputError, VoluteGenerationError,
+                    createErrorContext, headlessPlots, showFigure)
 from .Volute import Volute
 from .keepOut import keepOutEnvelope, revolveKeepOut
 from .validation import applyRules, arrayRule, presentRule
@@ -102,8 +103,8 @@ def _plotlyGate(featureName: str) -> bool:
 
 regenVoluteRules = (
     arrayRule('channelRadius', 'Channel radius distribution', units = 'm', positive = True),
-    presentRule('xChannelCenterline2D', 'Channel centreline axial coordinate'),
-    presentRule('rChannelCenterline2D', 'Channel centreline radius'),
+    presentRule('xChannelCenterline2D', 'Channel centerline axial coordinate'),
+    presentRule('rChannelCenterline2D', 'Channel centerline radius'),
 )
 
 def validateRegenVoluteInputs(state) -> None:
@@ -786,8 +787,8 @@ def solveRegenVolutes(state):
                                     template = 'plotly_dark',
                                     showlegend = False)
         if state.export == 'on':
-            plot(fig, filename = state.dataFolder + '\\VoluteView.html')
+            plot(fig, filename = state.dataFolder + '\\VoluteView.html', auto_open = not headlessPlots())
         else:
-            fig.show()
+            showFigure(fig)
 
     return state

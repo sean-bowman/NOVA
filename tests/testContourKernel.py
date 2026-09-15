@@ -35,7 +35,7 @@ def throat():
 def testDefaultsAreTheRaoThroat(throat):
     '''
     A 1.5 throat-radius entrant arc and a 0.382 throat-radius exit arc. These are Rao's preferred
-    throat geometry and the same two numbers the thrust-optimised parabolic construction uses, so
+    throat geometry and the same two numbers the thrust-optimized parabolic construction uses, so
     a contour built here and a published bell start from the same throat.
     '''
     assert throat.inletCurvature == 1.5
@@ -55,14 +55,14 @@ def testSauerConstantsMatchTheirDefinitions(throat):
 def testThroatArcPointsLieOnTheirCircle(throat):
     '''
     Geometry, checkable exactly: every point of the downstream arc sits at the arc radius from the
-    arc centre, and the arc starts at the throat plane with the wall parallel to the axis.
+    arc center, and the arc starts at the throat plane with the wall parallel to the axis.
     '''
     angles = np.linspace(0.0, np.radians(35.0), 40)
     x, r = throat.wallPoints(angles)
 
     assert x[0] == pytest.approx(0.0, abs = 1e-15)
     assert r[0] == pytest.approx(throat.throatRadius, rel = 1e-14)
-    distance = np.hypot(x, r - throat.exitArcCentreRadius)
+    distance = np.hypot(x, r - throat.exitArcCenterRadius)
     assert np.allclose(distance, throat.exitArcRadius, atol = 1e-14)
 
 def testThroatArcTurnsTheWallByTheRequestedAngle(throat):
@@ -141,7 +141,7 @@ def testTheNeglectedTransonicTermAtThisCurvature():
 def testTheSeriesMisbehavesAtSmallCurvatureWhichIsWhyItsRangeIsStated():
     '''
     Kliegel and Quan note that the series is ill-behaved for small R: taken literally the throat
-    wall velocity maximises near R = 1 and turns subsonic below about R = 0.5, which is
+    wall velocity maximizes near R = 1 and turns subsonic below about R = 0.5, which is
     impossible. Kliegel and Levine recast it in powers of R + 1 to fix that.
 
     NOVA runs at R = 1.5, above the range where the reformulation is needed, which is the reason
@@ -181,7 +181,7 @@ def testCharacteristicMeetsTheThroatArcOnTheThroatArc(gas, throat):
     assert result is not False
     mach, wallAngle, x, r = result
 
-    distance = np.hypot(x, r - throat.exitArcCentreRadius)
+    distance = np.hypot(x, r - throat.exitArcCenterRadius)
     assert distance == pytest.approx(throat.exitArcRadius, rel = 1e-9)
     assert wallAngle == pytest.approx(np.arcsin(x / throat.exitArcRadius), rel = 1e-9)
     assert mach > 1.0

@@ -79,6 +79,50 @@ harnessCases = {
             'filmSlotHeight': 0.0015,
         },
     },
+    'regenCircleEntrainment': {
+        'config': 'regenExample.json',
+        'description': 'The same hydrogen film solved by the SP-8124 entrainment model',
+        'overrides': {
+            'filmCooling': True,
+            'filmCoolant': 'Hydrogen',
+            'filmMassFlow': 0.30,
+            'filmInletTemperature': 250.0,
+            'filmInjectionAxialPosition': -1.0,
+            'filmSlotHeight': 0.0015,
+            'filmCoolingModel': 'sp8124Entrainment',
+        },
+    },
+    'contourEffectiveGamma': {
+        'config': 'regenExample.json',
+        'description': 'The contour solved at the effective gamma rather than the chamber value',
+        'overrides': {'gammaModel': 'effective', 'makeCoolingChannels': False},
+    },
+    # The prescribed-wall path, which shares the kernel with the truncated ideal contour and
+    # nothing else: the wall is drawn before the flow is solved and marched forward rather than
+    # traced as a streamline. It has its own case because a change to the march moves this and
+    # leaves every truncated ideal baseline untouched, which is exactly the kind of half-visible
+    # move a single-family gate cannot catch.
+    'contourParabola': {
+        'config': 'loxLh2Example.json',
+        'description': 'A thrust-optimized parabola, drawn from the chart and marched forward',
+        'overrides': {'divergingSectionType': 'top', 'makeCoolingChannels': False},
+    },
+    # The searched family, on a pinned wall rather than a search, because a gate that re-ran a
+    # twenty minute optimization every time would not get run.
+    #
+    # The wall is the chart parabola turned four degrees harder at the inflection, and the four
+    # degrees are the point of the case rather than an arbitrary offset. At the chart angles this
+    # contour carries no internal shock, so a case pinned there would duplicate `contourParabola`
+    # and protect none of the capture path. Four degrees puts a front in the nozzle that is still
+    # weak, 0.8 degrees of deflection with 99.999 per cent of the stagnation pressure surviving,
+    # so the baseline records a number the weak-shock treatment actually supports while covering
+    # the detector, the jump, the downstream debit and the coefficient it is subtracted from.
+    'contourToc': {
+        'config': 'loxLh2Example.json',
+        'description': 'A pinned thrust-optimized contour carrying a weak internal shock',
+        'overrides': {'divergingSectionType': 'toc', 'makeCoolingChannels': False,
+                      'divergingSectionDesignVariables': [35.0, 8.0, 0.312534, 0.367698]},
+    },
     'regenCircleStatic': {
         'config': 'regenExample.json',
         'description': 'Circular channels driven by the static temperature rather than recovery',
@@ -118,6 +162,10 @@ def runCase(caseName: str, scratchFolder: str) -> object:
         The generated object, with every attribute the run set.
 
     '''
+
+    # A case is a full nozzle generation, so it draws everything a design run draws. The
+    # harness runs seven of them and nobody should have to close the windows.
+    os.environ.setdefault('NOVA_HEADLESS', '1')
 
     import matplotlib
     matplotlib.use('Agg', force = True)

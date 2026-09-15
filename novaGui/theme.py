@@ -5,7 +5,7 @@
 Copper-amber dark theme for the NOVA GUI, matching the personal style system:
 a soft deep blue-grey base (#1a1e2a) with a single warm metallic accent
 (#E0975A) carrying links, active tabs, focus states and calls to action. Green
-is reserved for status (pass / healthy) and never used as a brand colour.
+is reserved for status (pass / healthy) and never used as a brand color.
 
 applyTheme() restyles every ttk widget class the GUI uses and registers option
 defaults for the classic Tk widgets (Text, Canvas, Menu, Listbox). styleFigure()
@@ -90,7 +90,7 @@ def enableDpiAwareness() -> None:
 
     import ctypes
 
-    # Per-monitor v2 where available (correct behaviour when dragged between monitors),
+    # Per-monitor v2 where available (correct behavior when dragged between monitors),
     # falling back through per-monitor v1 to the system-wide call on older Windows.
     try:
         ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
@@ -428,7 +428,7 @@ def styleFigure(fig) -> None:
 
     '''
 
-    Recolour an existing Matplotlib figure and all of its axes to the GUI
+    Recolor an existing Matplotlib figure and all of its axes to the GUI
     palette. Used when displaying figures the GUI did not create with the rc
     overlay in force.
 
@@ -442,7 +442,7 @@ def styleAxes(ax) -> None:
 
     '''
 
-    Recolour a single Matplotlib Axes to the GUI palette.
+    Recolor a single Matplotlib Axes to the GUI palette.
 
     '''
 

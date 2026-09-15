@@ -2,7 +2,7 @@
 
 '''
 
-Validation and behaviour tests for the plume correlations in src/NOVA/Nozzle.py.
+Validation and behavior tests for the plume correlations in src/NOVA/Nozzle.py.
 
 Each correlation is checked against the source it was taken from, and against limiting cases
 where the answer is known independently: the Tam and Tanna diameter must collapse to the exit
@@ -329,7 +329,7 @@ def testStructureBoundaryStaysOffTheAxis():
 
     """
 
-    A capped amplitude exists so the boundary never lies flat on the centre line. Whatever the
+    A capped amplitude exists so the boundary never lies flat on the center line. Whatever the
     pressure ratio, the drawn radius stays strictly positive.
 
     """

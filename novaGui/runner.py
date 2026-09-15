@@ -28,6 +28,11 @@ import importlib
 import threading
 import traceback
 
+# Set before NOVA is imported anywhere. The patch in _loadNova only reaches the plot name
+# bound in NOVA.Nozzle, and three other modules bind it themselves; this reaches all of
+# them, and selects the matplotlib backend at the moment that choice is still free.
+os.environ.setdefault('NOVA_HEADLESS', '1')
+
 from . import theme
 from . import configSchema
 from .progress import StageTracker

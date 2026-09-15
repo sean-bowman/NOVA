@@ -1,7 +1,7 @@
 {
   "visualizeContour": true,
   "numContourPoints": 100,
-  "contourType": "rao",
+  "contourType": "trad",
   "chamberDiameter": 0.0,
   "raoThroatAngle": 0.0,
   "chamberInterfaceAngle": 0.0,

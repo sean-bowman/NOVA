@@ -2,7 +2,7 @@
 
 '''
 
-Validation and behaviour tests for src/NOVA/materials.py.
+Validation and behavior tests for src/NOVA/materials.py.
 
 The thermal conductivity curves are checked at reference temperatures against the values in
 their cited sources, and the error is quantified. Room-temperature pure-copper and austenitic
@@ -405,7 +405,7 @@ def testMaterialsWithoutCryogenicDataStillClamp():
 
     '''
 
-    The five with no cryogenic source keep the old behaviour and say so through their provenance.
+    The five with no cryogenic source keep the old behavior and say so through their provenance.
     Nothing here pretends to know what it does not.
 
     '''

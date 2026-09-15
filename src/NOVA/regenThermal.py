@@ -83,7 +83,8 @@ except ImportError:
     go = plot = make_subplots = None
     plotlyAvailable = False
 
-from .utils import (fluidProps, ConvergenceFailureError, InvalidInputError)
+from .utils import (fluidProps, ConvergenceFailureError, InvalidInputError,
+                    headlessPlots, showFigure)
 from .ablative import blowingCorrection
 from .materials import wallMaterialCurves
 from .radiativeCooling import effectiveGasSideDriving, wallRadiationCoefficient
@@ -1859,14 +1860,14 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 # Save the final heat transfer figure to the data folder
                 plt.savefig(context.dataFolder + '\\heatTransferModelOutput.png', bbox_inches = 'tight')
 
-            plot(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html')
+            plot(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
 
         else:
 
             if context.plotsDocs == 'on':
                 plt.show(block = False)
 
-            fig.show()
+            showFigure(fig)
 
     if adiabatic:
 
@@ -2040,11 +2041,11 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
                 # Save the final heat transfer figure to the data folder
                 plt.savefig(context.dataFolder + '\\heatTransferModelOutput.png', bbox_inches = 'tight')
 
-            plot(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html')
+            plot(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
 
         else:
 
             if context.plotsDocs == 'on':
                 plt.show(block = False)
 
-            fig.show()
+            showFigure(fig)

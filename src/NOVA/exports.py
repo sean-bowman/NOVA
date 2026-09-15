@@ -6,7 +6,7 @@ Writing a finished nozzle out in the forms other tools read.
 
 Four kinds of thing come out of a run and each has its own consumer:
 
-    contours      Text files of wall coordinates, in millimetres, which is what a CAD package
+    contours      Text files of wall coordinates, in millimeters, which is what a CAD package
                   imports as a sketch.
     geometry      STL of the channels, the jacket, the shell and the volutes, for CAD and for
                   print preparation.
@@ -24,14 +24,14 @@ Everything is written into the run's own output directory, which the nozzle reso
 **Nothing here is a model.** Export can lose a field, change its units or write a file the
 consumer cannot read; it cannot get physics wrong, because it computes nothing. The unit
 conversions are the one thing worth checking and the tests check them: contours are written in
-millimetres, the object is metre-based, and the factor between them appears once per array.
+millimeters, the object is meter-based, and the factor between them appears once per array.
 
 The exhaust property export writes what the one-dimensional station properties say, and those
 carry the disclosure recorded in `regenStations`: they are not the near-wall state the
 characteristics solve returns, and near the throat the two differ by up to 42 per cent in Mach
 number. A structural analysis reading these files is reading the one-dimensional value.
 
-All units are mass base SI on the object. Contour and geometry files are written in millimetres,
+All units are mass base SI on the object. Contour and geometry files are written in millimeters,
 which is the convention CAD packages expect.
 
 Author: Sean Bowman

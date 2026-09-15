@@ -30,7 +30,7 @@ module, which is where the implementation detail is documented.
                         Units
 ----------------------------------------------------------------------
 
-Every quantity crossing a public boundary is SI: metres, kilograms, seconds, kelvin, pascals,
+Every quantity crossing a public boundary is SI: meters, kilograms, seconds, kelvin, pascals,
 and degrees for angles. Conversions belong at the edge, in `units`, not in the solvers.
 
 '''
@@ -73,15 +73,20 @@ from .ablative import (AblationEnvironment, AblativeLinerResult, BPrimeTable,
 
 # -- Film cooling -- #
 
-from .filmCooling import (FilmCoolingResult, filmCoolingArrays, filmDrivingTemperature,
+from .filmCooling import (FilmCoolingResult, entrainmentAdiabaticWallTemperature,
+                          entrainmentEffectiveness, entrainmentFilmArrays,
+                          entrainmentMultiplier, filmCoolingArrays, filmDrivingTemperature,
                           filmTransferCoefficient, hatchPapellEffectiveness,
-                          velocityRatioCorrection)
+                          referenceEntrainmentFraction, referenceTemperatureCorrection,
+                          velocityRatioCorrection, velocityRatioFunction, wallMixtureRatio)
 
 # -- Radiative heat transfer -- #
 
-from .radiativeCooling import (cylinderMeanBeamLength, effectiveGasSideDriving,
+from .radiativeCooling import (RadiativeExtensionResult, RadiativeShell,
+                               cylinderMeanBeamLength, effectiveGasSideDriving,
                                meanBeamLength, netWallRadiativeFlux,
-                               radiationEquilibriumTemperature, wallRadiationCoefficient)
+                               radiationEquilibriumTemperature, radiativeNozzleExtension,
+                               wallRadiationCoefficient)
 
 # -- Thermochemistry -- #
 
@@ -147,11 +152,16 @@ __all__ = [
     'diffusionLimitedCharBPrime', 'elementMassFractionsFromMoles',
     'propellantElementMassFractions', 'solveMaterialResponse',
     # Film cooling
-    'FilmCoolingResult', 'filmCoolingArrays', 'filmDrivingTemperature',
-    'filmTransferCoefficient', 'hatchPapellEffectiveness', 'velocityRatioCorrection',
+    'FilmCoolingResult', 'entrainmentAdiabaticWallTemperature', 'entrainmentEffectiveness',
+    'entrainmentFilmArrays', 'entrainmentMultiplier', 'filmCoolingArrays',
+    'filmDrivingTemperature', 'filmTransferCoefficient', 'hatchPapellEffectiveness',
+    'referenceEntrainmentFraction', 'referenceTemperatureCorrection',
+    'velocityRatioCorrection', 'velocityRatioFunction', 'wallMixtureRatio',
     # Radiative heat transfer
-    'cylinderMeanBeamLength', 'effectiveGasSideDriving', 'meanBeamLength',
-    'netWallRadiativeFlux', 'radiationEquilibriumTemperature', 'wallRadiationCoefficient',
+    'RadiativeExtensionResult', 'RadiativeShell', 'cylinderMeanBeamLength',
+    'effectiveGasSideDriving', 'meanBeamLength', 'netWallRadiativeFlux',
+    'radiationEquilibriumTemperature', 'radiativeNozzleExtension',
+    'wallRadiationCoefficient',
     # Thermochemistry
     'CEA', 'getAvailableFuels', 'getAvailableOxidizers',
     # Fluid properties, atmosphere and the unit registry

@@ -70,6 +70,7 @@ from scipy.optimize import brentq, fsolve
 
 from .utils import (arcSpline, isentropicValues, parallelOffset,
                     GeometricConstraintError, InvalidInputError)
+from .contour import divergingSectionFamily
 from .gasDynamics import machFromAreaRatio
 from .keepOut import keepOutEnvelope
 from .validation import (Overlay, applyRules, arrayRule, choiceRule, integerRule,
@@ -86,7 +87,7 @@ def _isNotConical(source):
 
     '''True when the diverging section was solved rather than drawn as a cone.'''
 
-    return read(source, 'divergingSectionType') != 'Conical'
+    return divergingSectionFamily(read(source, 'divergingSectionType')) != 'conical'
 
 convergingSectionRules = (
 
@@ -97,6 +98,10 @@ convergingSectionRules = (
 
     # -- How the section is built -- #
     choiceRule('contourType', 'Converging section type', choices = ('trad',)),
+    # Presence only. Which spellings are legal is decided once, where the configuration is
+    # read, by the same resolver the dispatch uses; a literal choice list here would have to
+    # enumerate every capitalisation and would disagree with that resolver the moment one was
+    # missed.
     presentRule('divergingSectionType', 'Diverging section type'),
     numericRule('nozzleScalingFactor', 'Nozzle scaling factor', units = 'm', minimum = 0),
     integerRule('numContourPoints', 'Contour points', minimum = 100, exclusiveMinimum = False),
@@ -526,7 +531,7 @@ def solveConvergingSection(state, raoThroatAngle: float = 'default', chamberInte
             xNozzle, rNozzle  = arcSpline(xNozzleWallCoarse, rNozzleWallCoarse, newNumPoints = state.numContourPoints)
 
             # Calculate flow properties only if not geometry-only mode
-            if not geometryOnly and state.divergingSectionType != 'Conical':
+            if not geometryOnly and divergingSectionFamily(state.divergingSectionType) != 'conical':
 
                 # Wall properties
                 temperatureWall, pressureWall, velocityWall, machNumberWall = calculateConvergingFlowProperties(xConvergingSection, rConvergingSection)
@@ -551,8 +556,9 @@ def solveConvergingSection(state, raoThroatAngle: float = 'default', chamberInte
     state.xNozzleWall = xNozzle
     state.rNozzleWall = rNozzle
 
-    # Only assign flow properties if calculated
-    if not geometryOnly and state.divergingSectionType.lower != 'conical':
+    # Only assign flow properties if calculated. This condition has to be the same one that
+    # guarded the calculation above, or the assignment reads names that were never bound.
+    if not geometryOnly and divergingSectionFamily(state.divergingSectionType) != 'conical':
         state.nozzleNearWallTemperature         = nozzleNearWallTemperature
         state.nozzleNearWallPressure            = nozzleNearWallPressure
         state.nozzleNearWallVelocity            = nozzleNearWallVelocity

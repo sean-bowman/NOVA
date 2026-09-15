@@ -288,9 +288,9 @@ def testWallProjectionReturnsAPhysicalState(gas):
     positive radius.
     '''
     geometry = (np.radians(8.0), 0.30, 0.100, np.radians(12.0), 0.31, 0.140)
-    mach, optimisedMach, optimisedAngle, x, r = wallCharacteristicProjection(gas, 2.6, geometry)
+    mach, optimizedMach, optimizedAngle, x, r = wallCharacteristicProjection(gas, 2.6, geometry)
 
     assert np.isfinite(mach) and mach > 1.0
     assert np.isfinite(x) and np.isfinite(r) and r > 0.0
-    assert optimisedMach > 1.0
-    assert np.radians(0.0) < optimisedAngle < np.radians(30.0)
+    assert optimizedMach > 1.0
+    assert np.radians(0.0) < optimizedAngle < np.radians(30.0)

@@ -35,7 +35,7 @@ from the characteristics solve. The two are inconsistent with each other, and th
 the heat flux is highest.
 
 Closing that gap means sampling the flowfield rather than a one-dimensional station, which is a
-change to what is modelled rather than to how it is computed.
+change to what is modeled rather than to how it is computed.
 
 **The split itself is arithmetic**: an interpolation onto a temperature or an area ratio, and the
 tests hold it to the station it names.
@@ -60,7 +60,7 @@ from scipy.interpolate import interp1d
 
 from .utils import (arcSpline, chunkInterpolate, plotLine, ThermalConstraintError,
                     createErrorContext, InvalidInputError)
-from .filmCooling import filmCoolantState, filmCoolingArrays
+from .filmCooling import filmCoolantState, filmCoolingArrays, entrainmentFilmArrays
 from .ceaInterface import CEA
 
 @dataclass
@@ -77,8 +77,13 @@ class RegenStationState:
 
     # -- The contour and the propellants the stations are sampled from -- #
     Fuel:                                        Any = None
+    chamberGamma:                                Any = None
+    engineMassFlow:                              Any = None
     filmCooling:                                 Any = None
     filmCoolant:                                 Any = None
+    filmCoolantMixtureRatio:                     Any = None
+    filmCoolingModel:                            Any = None
+    filmEntrainmentMultiplier:                   Any = None
     filmInjectionAxialPosition:                  Any = None
     filmInletTemperature:                        Any = None
     filmMassFlow:                                Any = None
@@ -148,6 +153,10 @@ class RegenStationState:
     xRegenNozzle:                                Any = None
     regenSectionFilmDrivingTemperature:          Any = None
     regenSectionFilmEffectiveness:               Any = None
+    regenSectionFilmPropertyCorrection:          Any = None
+    regenSectionFilmEntrainmentFlowRatio:        Any = None
+    regenSectionFilmWallMixtureRatio:            Any = None
+    regenSectionFilmEntrainmentMultiplier:       Any = None
     filmCoolantVelocity:                         Any = None
     filmSurvivalLength:                          Any = None
 
@@ -164,6 +173,8 @@ regenStationOutputs = (
     'regenSectionNearWallRecoveryTemperature', 'regenSectionNearWallTemperature',
     'regenSectionNearWallVelocity', 'reynoldsExtension', 'reynoldsNumberRegenSection',
     'regenSectionFilmDrivingTemperature', 'regenSectionFilmEffectiveness',
+    'regenSectionFilmPropertyCorrection', 'regenSectionFilmEntrainmentFlowRatio',
+    'regenSectionFilmWallMixtureRatio', 'regenSectionFilmEntrainmentMultiplier',
     'filmCoolantVelocity', 'filmSurvivalLength',
     'specificHeatExtension', 'specificHeatRegenSection', 'thermalCondExtension',
     'thermalConductivityRegenSection', 'viscosityExtension', 'viscosityRegenSection',
@@ -181,7 +192,7 @@ def solveRegenSectionFilm(state):
     it is solved once here from the station properties and handed on as a driving temperature.
 
     The one coupling this misses is a wall hot enough to dry the film early. That is second order
-    and is recorded as a limitation rather than modelled.
+    and is recorded as a limitation rather than modeled.
 
     Parameters:
     -----------
@@ -226,31 +237,86 @@ def solveRegenSectionFilm(state):
         slotHeight  = state.filmSlotHeight,
         slotRadius  = float(state.rRegenNozzle[slotIndex]))
 
-    # The correlation wants gas properties at the mean of the gas and coolant temperatures. What
-    # NOVA carries is the gas temperature, which overstates the conductivity, overstates the
-    # correlating group and so understates the effectiveness. That is the safe direction, and the
-    # size of it has not been quantified.
-    film = filmCoolingArrays(
-        axialPosition             = state.xRegenNozzle,
-        radius                    = state.rRegenNozzle,
-        gasVelocity               = state.regenSectionNearWallVelocity,
-        recoveryTemperature       = state.regenSectionNearWallRecoveryTemperature,
-        meanThermalConductivity   = state.thermalConductivityRegenSection,
-        meanDensity               = state.densityRegenSection,
-        meanViscosity             = state.viscosityRegenSection,
-        meanPrandtlNumber         = state.prandtlNumberRegenSection,
-        injectionPosition         = state.filmInjectionAxialPosition,
-        slotHeight                = state.filmSlotHeight,
-        coolantMassFlow           = state.filmMassFlow,
-        coolantSpecificHeat       = coolant.specificHeat,
-        coolantTemperature        = state.filmInletTemperature,
-        coolantThermalDiffusivity = coolant.thermalDiffusivity,
-        coolantVelocity           = coolant.velocity)
+    model = state.filmCoolingModel or 'hatchPapell'
 
-    state.regenSectionFilmEffectiveness      = film.effectiveness
-    state.regenSectionFilmDrivingTemperature = film.drivingTemperature
-    state.filmCoolantVelocity                = coolant.velocity
-    state.filmSurvivalLength                 = film.survivalLength
+    if model == 'hatchPapell':
+
+        # The correlation wants gas properties at the mean of the gas and coolant temperatures.
+        # These arrays carry them at the gas temperature, so the static temperature goes in
+        # alongside them and the closure applies the property ratio itself. What remains
+        # outstanding is that the conductivity here is the equilibrium value; the
+        # filmCoolingArrays docstring says what that costs and why it is left.
+        film = filmCoolingArrays(
+            axialPosition             = state.xRegenNozzle,
+            radius                    = state.rRegenNozzle,
+            gasVelocity               = state.regenSectionNearWallVelocity,
+            gasStaticTemperature      = state.regenSectionNearWallTemperature,
+            recoveryTemperature       = state.regenSectionNearWallRecoveryTemperature,
+            gasThermalConductivity    = state.thermalConductivityRegenSection,
+            gasDensity                = state.densityRegenSection,
+            gasViscosity              = state.viscosityRegenSection,
+            gasPrandtlNumber          = state.prandtlNumberRegenSection,
+            injectionPosition         = state.filmInjectionAxialPosition,
+            slotHeight                = state.filmSlotHeight,
+            coolantMassFlow           = state.filmMassFlow,
+            coolantSpecificHeat       = coolant.specificHeat,
+            coolantTemperature        = state.filmInletTemperature,
+            coolantThermalDiffusivity = coolant.thermalDiffusivity,
+            coolantVelocity           = coolant.velocity)
+
+    elif model == 'sp8124Entrainment':
+
+        # The local total temperature has to be built the way the recovery temperature was, from
+        # the same chamber gamma and the same Mach array, or the zero-effectiveness limit of the
+        # entrainment model stops reproducing the film-free answer exactly.
+        totalTemperature = state.regenSectionNearWallTemperature * (
+            1.0 + 0.5 * (state.chamberGamma - 1.0) * state.regenSectionNearWallMachNumber**2)
+
+        # SP-8124 writes the entrainment on the real near-wall mass flux rather than the nominal
+        # one-dimensional value, and on a nozzle those differ by tens of per cent.
+        massFluxRatio = (state.densityRegenSection * state.regenSectionNearWallVelocity) / (
+            state.engineMassFlow / (np.pi * state.rRegenNozzle**2))
+
+        film = entrainmentFilmArrays(
+            axialPosition           = state.xRegenNozzle,
+            radius                  = state.rRegenNozzle,
+            gasVelocity             = state.regenSectionNearWallVelocity,
+            gasDensity              = state.densityRegenSection,
+            totalTemperature        = totalTemperature,
+            recoveryTemperature     = state.regenSectionNearWallRecoveryTemperature,
+            coreSpecificHeat        = state.specificHeatRegenSection,
+            massFluxRatio           = massFluxRatio,
+            injectionPosition       = state.filmInjectionAxialPosition,
+            slotHeight              = state.filmSlotHeight,
+            coreMassFlow            = state.engineMassFlow,
+            coolantMassFlow         = state.filmMassFlow,
+            coolantDensity          = coolant.density,
+            coolantVelocity         = coolant.velocity,
+            coolantViscosity        = coolant.viscosity,
+            coolantSpecificHeat     = coolant.specificHeat,
+            coolantTotalTemperature = state.filmInletTemperature,
+            coreMixtureRatio        = state.OFRatio,
+            coolantMixtureRatio     = state.filmCoolantMixtureRatio or 0.0,
+            injectionMultiplier     = state.filmEntrainmentMultiplier or 3.5)
+
+    else:
+        raise InvalidInputError(
+            message = 'No film cooling closure by that name. Hatch and Papell is the correlation '
+                      'with a stated accuracy from its own source; the SP-8124 entrainment model '
+                      'is the one whose empirical multiplier accounts for acceleration and flow '
+                      'turning, at the cost of being calibrated rather than validated.',
+            parameterName = 'filmCoolingModel',
+            value = model,
+            validRange = "'hatchPapell' or 'sp8124Entrainment'")
+
+    state.regenSectionFilmEffectiveness         = film.effectiveness
+    state.regenSectionFilmPropertyCorrection    = film.propertyCorrection
+    state.regenSectionFilmDrivingTemperature    = film.drivingTemperature
+    state.regenSectionFilmEntrainmentFlowRatio  = film.entrainmentFlowRatio
+    state.regenSectionFilmWallMixtureRatio      = film.wallMixtureRatio
+    state.regenSectionFilmEntrainmentMultiplier = film.entrainmentMultiplier
+    state.filmCoolantVelocity                   = coolant.velocity
+    state.filmSurvivalLength                    = film.survivalLength
 
 def solveRegenStations(state):
 

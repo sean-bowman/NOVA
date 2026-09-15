@@ -75,8 +75,73 @@ import os
 import io
 import contextlib
 import numpy as np
-import matplotlib.pyplot as plt
+import matplotlib
 import pickle
+
+def headlessPlots() -> bool:
+
+    '''
+
+    Whether figures should be written and left alone rather than put in front of somebody.
+
+    A design run draws a lot of figures, and every one of them opens a window or a browser tab
+    that has to be closed by hand before the next run. That is fine once and intolerable in a
+    loop, which is what running tests or iterating on a feature is. Setting the environment
+    variable `NOVA_HEADLESS` suppresses the display of all of them without suppressing the
+    figures themselves: matplotlib windows never open, plotly writes its HTML and does not
+    launch a browser, and every file that would have been produced is still produced.
+
+    This is deliberately not a configuration field. It is a property of where NOVA is running
+    rather than of the engine being designed, so it belongs to the shell or the harness that
+    started the run, not to the JSON that describes the nozzle.
+
+    Returns:
+    --------
+    bool
+        True when figures should not be displayed.
+
+    '''
+
+    return os.environ.get('NOVA_HEADLESS', '').strip().lower() not in ('', '0', 'false', 'off')
+
+# Selected before pyplot is imported, so the choice sticks rather than having to be forced back
+# afterwards. This covers matplotlib only; a plotly figure ignores the matplotlib backend and
+# opens a browser tab of its own, which is what `showFigure` below is for.
+if headlessPlots():
+    matplotlib.use('Agg', force = True)
+
+import matplotlib.pyplot as plt
+
+def showFigure(figure) -> None:
+
+    '''
+
+    Put a figure in front of somebody, unless NOVA is running headless.
+
+    Every display of a figure goes through here rather than calling `.show()` directly, and
+    `tests/testPlotSuppression.py` fails the build if a new one does not. That is worth a test
+    because the failure is silent and cumulative: a call that opens a browser tab costs nothing
+    the first time and buries a developer on the twentieth, and there is no error to notice.
+
+    A plotly figure is the case that matters. It ignores the matplotlib backend entirely, and its
+    browser renderer starts a local web server and opens a tab against it, which is why
+    suppressing it is a separate problem from selecting a non-interactive backend.
+
+    Parameters:
+    -----------
+    figure : plotly.graph_objects.Figure | matplotlib.figure.Figure
+        Anything with a `show` method.
+
+    Returns:
+    --------
+    None
+
+    '''
+
+    if headlessPlots():
+        return
+
+    figure.show()
 from typing import Callable, Optional, Any
 
 from . import units
@@ -1603,7 +1668,7 @@ def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None 
     stays continuous; the throat radius of curvature the Bartz correlation wants is a
     configuration input rather than something measured off the wall.
 
-    'curvatureContinuous' restores the old behaviour for a caller that knows its input is smooth
+    'curvatureContinuous' restores the old behavior for a caller that knows its input is smooth
     and wants C2.
 
     ----------------------------------------------------------------------
@@ -1645,7 +1710,7 @@ def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None 
     if len(points) < 2:
         raise ValueError('arcSpline: fewer than two distinct points, so there is no curve.')
 
-    # Chordal parameterisation, normalised so the fit is scale independent.
+    # Chordal parameterisation, normalized so the fit is scale independent.
     segment = np.linalg.norm(np.diff(points, axis = 0), axis = 1)
     parameter = np.insert(np.cumsum(segment / segment.sum()), 0, 0.0)
 
@@ -2232,7 +2297,7 @@ def plotly3DGeometry(xData: np.ndarray | list, yData: np.ndarray | list, zData: 
                                    template = 'plotly_dark')
 
     # Render the plot
-    fig.show()
+    showFigure(fig)
 
 def plotlySurface(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.ndarray | list, colorMap: str = 'Plasma', alpha = 1, title: str = 'Surface Plot', xLabel: str = 'X', yLabel: str = 'Y', zLabel: str = 'Z') -> None:
 
@@ -2266,7 +2331,7 @@ def plotlySurface(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.
                                    template = 'plotly_dark')
 
     # Render the plot
-    fig.show()
+    showFigure(fig)
 
 def plotly3DLine(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.ndarray | list, title: str = '3D Line Plot', xLabel: str = 'X', yLabel: str = 'Y', zLabel: str = 'Z', color: str | list[float] = [0,1,1], lineWidth: float = 1, lineStyle: str = None, markerStyle: str = None, markerSize: float = 4, label: str = '3D Line') -> None:
 
@@ -2307,7 +2372,7 @@ def plotly3DLine(xData: np.ndarray | list, yData: np.ndarray | list, zData: np.n
                                    template = 'plotly_dark')
 
     # Render the plot
-    fig.show()
+    showFigure(fig)
 
 def plotly2DLine(xData: np.ndarray | list, yData: np.ndarray | list, title: str = '2D Line Plot', xLabel: str = 'X', yLabel: str = 'Y', color: str = 'cyan', lineWidth: float = 1, lineStyle: str = None, markerStyle: str = None, markerSize: float = 4, fontSize: int = 12, label: str = '2D Line') -> None:
 
@@ -2347,7 +2412,7 @@ def plotly2DLine(xData: np.ndarray | list, yData: np.ndarray | list, title: str 
                                    template = 'plotly_dark')
 
     # Render the plot
-    fig.show()
+    showFigure(fig)
 
 def plotLine(xData: np.ndarray | list, yData: np.ndarray | list,
              title: str = '2D Line Plot', xLabel: str = 'X', yLabel: str = 'Y',

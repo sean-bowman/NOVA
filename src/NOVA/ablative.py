@@ -65,7 +65,7 @@ gas-side coefficient and a transport-limited recession rate. Treat its numbers a
 between design options, not as a prediction of recession.
 
 **The diffusion-limited rate is an upper bound on recession, not a prediction of it.** It
-assumes two things that are both optimistic about how fast the char goes away. Surface kinetics are
+assumes two things that are both optimiztic about how fast the char goes away. Surface kinetics are
 taken to be infinitely fast, which holds above roughly 2000 K and fails below it. And every oxygen
 atom reaching the wall is taken to leave as carbon monoxide, which over-consumes carbon whenever
 the exhaust carries hydrogen, because in equilibrium the hydrogen competes for that oxygen and some
@@ -75,7 +75,7 @@ combination and the wall temperature, and `charRemovalEfficiency` exists so that
 from firing data. Calibrating it against a measured recession is calibration and not validation,
 and the value that comes out holds only over the conditions it was fitted to.
 
-**Surface chemical heat release is not modelled by default.** The diffusion-limited closure
+**Surface chemical heat release is not modeled by default.** The diffusion-limited closure
 returns a mass removal rate and leaves the reaction enthalpy to the caller through
 `surfaceHeatOfAblation`. Zero is not the physical value. In a rocket exhaust the char-consuming
 reactions are dominated by C + CO2 -> 2 CO and C + H2O -> CO + H2, which are endothermic at
@@ -212,7 +212,7 @@ def elementMassFractionsFromMoles(moleFractions: dict) -> dict:
     Parameters:
     -----------
     moleFractions : dict
-        Element symbol to mole fraction. Need not be normalised; symbols are case insensitive.
+        Element symbol to mole fraction. Need not be normalized; symbols are case insensitive.
 
     Returns:
     --------
@@ -1290,7 +1290,7 @@ class MaterialResponseResult:
         Output times [s].
     depth : numpy.ndarray
         Node depths below the instantaneous surface at the final time [m].
-    normalisedPosition : numpy.ndarray
+    normalizedPosition : numpy.ndarray
         Node positions on zero to one, which is the mesh the solve actually ran on. Multiplying
         by the instantaneous thickness gives the depths at any output time.
     initialThickness : float
@@ -1337,7 +1337,7 @@ class MaterialResponseResult:
 
     time:                 np.ndarray
     depth:                np.ndarray
-    normalisedPosition:   np.ndarray
+    normalizedPosition:   np.ndarray
     initialThickness:     float
     temperature:          np.ndarray
     density:              np.ndarray
@@ -1386,7 +1386,7 @@ class MaterialResponseResult:
             if belowSurface <= 0.0:
                 history[index] = self.surfaceTemperature[index]
                 continue
-            currentDepth = self.normalisedPosition * (
+            currentDepth = self.normalizedPosition * (
                 self.initialThickness - self.recession[index])
             history[index] = np.interp(belowSurface, currentDepth, self.temperature[index])
 
@@ -1396,10 +1396,10 @@ def _gradedNodes(numberOfNodes: int, growthRatio: float) -> np.ndarray:
 
     '''
 
-    Normalised node positions, clustered at the surface.
+    Normalized node positions, clustered at the surface.
 
-    The gradients that matter in an ablation problem are all within a millimetre or two of the
-    surface while the sample is centimetres deep, so a uniform mesh spends its nodes where nothing
+    The gradients that matter in an ablation problem are all within a millimeter or two of the
+    surface while the sample is centimeters deep, so a uniform mesh spends its nodes where nothing
     happens. Spacing grows geometrically from the surface by `growthRatio` per interval.
 
     Parameters:
@@ -1542,7 +1542,7 @@ def solveMaterialResponse(material, environment: AblationEnvironment, thickness:
     this a type 1 model: there is no momentum equation for the gas and no pressure field inside
     the material.
 
-    The mesh is normalised on the shrinking thickness, so nodes stay in proportion as the surface
+    The mesh is normalized on the shrinking thickness, so nodes stay in proportion as the surface
     recedes and none is ever dropped. Decomposition is integrated in closed form over each step,
     then the energy equation is solved implicitly by Newton iteration on the nodal temperatures.
     The surface node carries no heat capacity and is an algebraic statement of the surface energy
@@ -1600,7 +1600,7 @@ def solveMaterialResponse(material, environment: AblationEnvironment, thickness:
     if numberOfNodes < 5:
         raise InvalidInputError(
             message = 'A material response needs enough nodes to resolve the char layer, which '
-                      'is a fraction of a millimetre deep at first.',
+                      'is a fraction of a millimeter deep at first.',
             parameterName = 'numberOfNodes',
             value = numberOfNodes,
             validRange = 'five or more')
@@ -1633,7 +1633,7 @@ def solveMaterialResponse(material, environment: AblationEnvironment, thickness:
             validRange = 'elemental mass fractions, from propellantElementMassFractions')
 
     # ---- mesh and initial state ----
-    position = _gradedNodes(numberOfNodes, growthRatio)          # [-] normalised depth
+    position = _gradedNodes(numberOfNodes, growthRatio)          # [-] normalized depth
     spacing = np.diff(position)
     cellWidth = np.empty(numberOfNodes)
     cellWidth[0] = 0.0                                           # the surface node has no volume
@@ -1896,7 +1896,7 @@ def solveMaterialResponse(material, environment: AblationEnvironment, thickness:
         supplied = surfaceHeatFlux - gasLeaving - charLeaving
         accumulated = (heldAfter - heldBefore) / timeStep
 
-        # Normalised on the largest single term rather than on their sum. The sum passes through
+        # Normalized on the largest single term rather than on their sum. The sum passes through
         # zero whenever the energy arriving at the surface balances the energy walking out of it
         # with the char, and a ratio taken there says nothing about the discretisation.
         scale = max(abs(surfaceHeatFlux), abs(gasLeaving), abs(charLeaving), abs(accumulated))
@@ -1906,7 +1906,7 @@ def solveMaterialResponse(material, environment: AblationEnvironment, thickness:
     return MaterialResponseResult(
         time = np.array(record['time']),
         depth = position * currentThickness,
-        normalisedPosition = position,
+        normalizedPosition = position,
         initialThickness = float(thickness),
         temperature = np.array(temperatureHistory),
         density = np.array(densityHistory),
@@ -1999,7 +1999,7 @@ def ablativeNozzleLiner(material, axialPosition, radius, machNumber, staticTempe
     engineering treatment and it is right where the liner is thin against the local radius and the
     axial gradients are gentle, which holds everywhere in a nozzle except across the throat, where
     the flux changes by a factor of several over a few liner thicknesses. Axial conduction is not
-    modelled, so the throat runs slightly hot and slightly deep against a two-dimensional solve.
+    modeled, so the throat runs slightly hot and slightly deep against a two-dimensional solve.
 
     The gas-side coefficient is Bartz, taken from the regenerative cooling model so that an
     ablative and a regeneratively cooled version of the same contour are driven by the same
