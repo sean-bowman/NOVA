@@ -295,17 +295,23 @@ That is checked rather than asserted. `tests/testFacade.py` holds it structurall
 |---|---|
 | `gasDynamics.py` | Isentropic ratios, the Prandtl-Meyer function and its inverse, the area-Mach relation and both its branches, the conical length reference |
 | `characteristics.py` | The method-of-characteristics unit processes: the interior point and the wall point, taking a `CharacteristicGas` |
-| `contourKernel.py` | The Rao throat arcs, Sauer's transonic starting line, and the intersections that seed the net |
-| `contour.py` | The truncated ideal contour solve, the throat scaling into real units, and the conical and Rao parabolic reference contours |
+| `contourKernel.py` | The Rao throat arcs, the selectable transonic starting line, and the intersections that seed the net |
+| `wallGeometry.py` | Analytic wall primitives and the prescribed walls built from them: arcs, lines, quadratic and cubic Beziers, each with a closed-form tangent and ray intersection. Pure geometry, with no gas and no NOVA imports |
+| `directCharacteristics.py` | The forward march over a wall that is handed to the solver rather than solved for, and the internal shock it detects and captures |
+| `contour.py` | The three contoured family solves, the throat scaling into real units, and the conical reference contour |
+| `contourOptimization.py` | The direct search that produces a thrust-optimized contour: the design vector, its bounds and validity test, and the restarts and optimality evidence around the optimizer |
+| `boundaryLayer.py` | The compressible integral turbulent boundary layer on a finished wall: reference-temperature properties, the momentum-integral march, the displacement-thickness wall offset and the friction drag debit |
 | `plume.py` | Plume correlations, the TN D-2327 free-jet lattice, and the characteristics march past the lip |
 | `ceaInterface.py` | Thermochemistry through rocketcea |
 | `figures.py` | One figure description per view, rendered by both backends |
 | `keepOut.py` | The keep-out envelope behind the chamber that the jacket and volutes pack around |
 | `regenThermal.py` | The regenerative jacket thermal model: Bartz on the gas side, Gnielinski and the fluted blend on the coolant side, and the views that present them |
 | `ablative.py` | The charring ablator response: CMA in-depth conduction with a receding surface, Arrhenius pyrolysis, surface thermochemistry, and the station march that applies them along a contour |
-| `channelGeometry.py` | Cooling channel cross sections: the transport frame along the centreline, the circular and fluted profiles, and the printability blend |
+| `filmCooling.py` | Two film closures and the marches that lower the driving temperature along a contour: the Hatch and Papell correlation with its property correction to the film mean temperature, and the SP-8124 entrainment model that accounts for acceleration and turning |
+| `radiativeCooling.py` | Gas-to-wall radiation as an exact coefficient on its own potential, and the damped Newton solve for the wall temperature of an uncooled extension |
+| `channelGeometry.py` | Cooling channel cross sections: the transport frame along the centerline, the circular and fluted profiles, and the printability blend |
 | `channelSizing.py` | The dynamic channel radius solve: converging each station's radius so the hot wall runs at the temperature it is allowed to |
-| `regenChannels.py` | The jacket build: volute interfaces, channel centreline, printability audit, the swept channels and the wall meshes |
+| `regenChannels.py` | The jacket build: volute interfaces, channel centerline, printability audit, the swept channels and the wall meshes |
 | `nozzleVolutes.py` | The inlet and return scrolls, their walls sized against the coolant state, and their print supports |
 | `chamber.py` | The combustion chamber and the converging section, traditional and sunken |
 | `regenStations.py` | Where the jacket ends, and the exhaust state at every station of both sections |
@@ -329,6 +335,23 @@ strings `"on"` / `"off"`.
 python -m pytest tests/ -v
 ```
 
+The suite never opens a window. `tests/conftest.py` sets `NOVA_HEADLESS` before anything is
+imported, which selects a non-interactive matplotlib backend and stops plotly launching a browser
+tab per figure, and it closes any figures a test leaves behind. Nothing is suppressed except the
+display: every figure is still built and every file still written.
+
+The same switch is available to any run, which is what to reach for when iterating on a feature
+rather than clicking through a dozen windows each time:
+
+```bash
+NOVA_HEADLESS=1 python examples/codeInterface.py    # write the figures, open nothing
+NOVA_HEADLESS=0 python -m pytest tests/testRegenChannels.py   # put the windows back
+```
+
+It is an environment variable rather than a configuration field because it describes where NOVA
+is running, not the engine being designed. The regression harness and the GUI both set it for
+themselves.
+
 `tests/regressionHarness.py` is not part of the suite. It runs a configuration end
 to end, walks every public attribute of the resulting `Nozzle`, and compares
 against a recorded baseline at exact equality, which is what holds a refactor to
@@ -339,7 +362,8 @@ python tests/regressionHarness.py --record --verify   # record, and prove determ
 python tests/regressionHarness.py --compare           # after a change
 ```
 
-Baselines are written to `tests/baselines/` and are not carried in the repository.
+Baselines are written to `tests/baselines/` and are carried in the repository, so a change that
+moves a number shows up in the diff rather than only on the machine that ran it.
 
 `tests/testCeaInterface.py` covers the CEA interface in 50 tests that run in
 about two seconds: unit conversion constants, the LOX/LH2 reference case against
@@ -363,15 +387,18 @@ other way round.
 
 - [Nozzle Design Overview](src/NOVA/docs/NozzleDesignOverview.md) -- consolidated contour and cooling reference, end to end ([PDF](src/NOVA/docs/NozzleDesignOverview.pdf)).
 - [Nozzle Contour](src/NOVA/docs/NozzleContour.md) -- MOC contour generation: nomenclature, Sauer transonic analysis, characteristics, process flow.
-- [Nozzle Contour Methods](src/NOVA/docs/NozzleContourMethods.md) -- the contour families, what each optimises, how other axisymmetric MOC implementations differ, and where this one sits.
+- [Nozzle Contour Methods](src/NOVA/docs/NozzleContourMethods.md) -- the contour families, what each optimizes, how other axisymmetric MOC implementations differ, and where this one sits.
 - [Nozzle Contour Validation](src/NOVA/docs/NozzleContourValidation.md) -- what the contour generator is checked against, the defects that check found, and an explicit statement of what is and is not validated.
+- [Contour Families Report](src/NOVA/docs/reports/contourFamilies_2026-09-15.html) -- the three families, the throat and transonic models, the boundary layer and the internal shock, with the plots behind each number.
 - [arcSpline Overshoot at a Corner](src/NOVA/docs/reports/arcSplineOvershoot_2026-09-08.md) -- why the arc-length resampler used to invent geometry outside its own input, what replaced it, and how far the contour moved.
 - [Contour Verification and Assessment](src/NOVA/docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](src/NOVA/docs/reports/nozzleContourEffort_2026-09-06.html).
 - [Nozzle Cooling](src/NOVA/docs/NozzleCooling.md) -- regenerative cooling architecture and a worked example.
 - [CEA Interface](src/NOVA/docs/ceaInterface.md) -- combustion thermochemistry, result keys and units, propellant naming, thread safety.
 - [Plume Development State](experimental/plumeDevelopmentState.md) -- where the plume solver stands: what is validated, what is open, and the findings behind both.
+- [Internal Shock State](experimental/internalShockState.md) -- how the shock inside an optimized contour is detected and captured, where the weak-shock treatment stops being defensible, and what a rotational characteristics solve would cost.
 - [Plume Structure References](src/NOVA/docs/references_plumeStructure_2026-09-04.md) -- annotated sources behind the plume correlations in `Nozzle.py`, and an explicit statement of what the correlations do and do not support.
 - [Nozzle Contour References](src/NOVA/docs/references_nozzleContour_2026-09-06.md) -- annotated sources behind the contour generator, and what they do and do not establish about it.
+- [Thrust-Optimized Contour References](src/NOVA/docs/references_thrustOptimizedContours_2026-09-13.md) -- annotated sources behind the optimized families: the direct-optimization method, the perfect-bell data set it is checked against, and what neither of them publishes.
 
 ---
 

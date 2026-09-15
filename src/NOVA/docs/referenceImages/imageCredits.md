@@ -84,7 +84,7 @@ license; unmodified use inside a document does not trigger that condition.
 
 ## supercriticalPhaseDiagramCo2.png
 
-- **Subject:** Pressure-temperature phase diagram for carbon dioxide, log-P axis, with labelled regions: 1 solid, 2 liquid, 3 gas, 4 supercritical fluid; A triple point, B critical point. Generic labelled supercritical example used in place of an oxygen-specific diagram. Rendered to PNG from the source SVG.
+- **Subject:** Pressure-temperature phase diagram for carbon dioxide, log-P axis, with labeled regions: 1 solid, 2 liquid, 3 gas, 4 supercritical fluid; A triple point, B critical point. Generic labeled supercritical example used in place of an oxygen-specific diagram. Rendered to PNG from the source SVG.
 - **Source:** https://commons.wikimedia.org/wiki/File:Carbon_dioxide_pressure-temperature_phase_diagram_international.svg
 - **Author/Credit:** Ben Finney, Mark Jacobs
 - **License:** CC0 1.0 Universal Public Domain Dedication

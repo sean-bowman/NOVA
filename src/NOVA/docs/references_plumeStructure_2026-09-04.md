@@ -113,12 +113,12 @@ Sources gathered 2026-09-04 as a source of truth for implementing the method of 
   1. general points
   2. points on the jet boundary
   3. **intersection of characteristic lines of the SAME family, indicating the presence of an internal shock**
-  4. point adjacent to the axial centre line
-  5. points on the centre line
+  4. point adjacent to the axial center line
+  5. points on the center line
 
   **Line taxonomy.** Type A lines originate at the nozzle lip and form the corner expansion fan. Type B lines originate on the leading characteristic or the diametrically opposite lip. Type C lines are reflected rays: B lines strike the boundary and reflect as though from a physical surface. Coalescence of those reflected compression waves forms the internal shock.
 
-  **General-point equations** (working below the centre line, A the outer/first-family point, B the inner/second-family point, C the new point):
+  **General-point equations** (working below the center line, A the outer/first-family point, B the inner/second-family point, C the new point):
   - `dy/dx = (y_C - y_A)/(x_C - x_A) = tan(theta_A + mu_A)`  (C1)
   - `dy/dx = (y_C - y_B)/(x_C - x_B) = tan(theta_B - mu_B)`  (C2)
   - `x_C = [x_A tan(theta_A+mu_A) - y_A + y_B - x_B tan(theta_B-mu_B)] / [tan(theta_A+mu_A) - tan(theta_B-mu_B)]`  (C3)
@@ -134,11 +134,11 @@ Sources gathered 2026-09-04 as a source of truth for implementing the method of 
   **Initial turning angle at the lip:** `alpha_N = nu_1 - nu_N + theta_N`, where `nu_1` corresponds to the jet-boundary Mach number and `nu_N` to the nozzle-exit Mach number. This confirms the formula already used in `Nozzle.plumeStructure`.
 
   **Leading characteristic (Appendix A):**
-  - `nu_centreline = nu_N + 2 theta_N`  (A1)
+  - `nu_centerline = nu_N + 2 theta_N`  (A1)
   - `R = C [1 + (2/(gamma-1))(1/M^2)]^((gamma+1)/(4(gamma-1))) M^(1/(gamma-1))`  (A2)
   - `x = R cos(theta) - R_N cos(theta_N)`  (A3), `y = -R |sin(theta)|`  (A6)
 
-  **Worked numeric check:** for `Mj = 5.0`, `theta_N = 15 deg`, `gamma = 1.4`, the leading characteristic meets the centre line at `nu = 106.92 deg` and `M = 12.02`. An independent implementation must reproduce this.
+  **Worked numeric check:** for `Mj = 5.0`, `theta_N = 15 deg`, `gamma = 1.4`, the leading characteristic meets the center line at `nu = 106.92 deg` and `M = 12.02`. An independent implementation must reproduce this.
 
   **Validation targets — maximum jet boundary**, the numbers to check a plume MOC against:
 
@@ -164,7 +164,7 @@ Three concrete corrections fall straight out of this reference, recorded here so
 
 2. **The scheme is non-iterative and point-to-point on a lattice.** The prototype iterates 15 to 20 times per node with averaged properties. That is a different formulation and is not what the validated program does.
 
-3. **Points adjacent to the centre line need their own solution**, separate from both general points and centre-line points. The prototype has no such case, and the axisymmetric source term is singular as `y -> 0`, which is exactly the region it omits.
+3. **Points adjacent to the center line need their own solution**, separate from both general points and center-line points. The prototype has no such case, and the axisymmetric source term is singular as `y -> 0`, which is exactly the region it omits.
 
 ## Still to obtain
 
@@ -183,7 +183,7 @@ The question driving the search: a characteristics net that stays isentropic ove
 - **Relevance:** The only source found that states, in implementable terms, how to extract the Mach disk and the triple point from a solved inviscid characteristics field rather than from a correlation. It is the operative reference for the disk fitting step.
 - **Key findings:**
   - The MOC solve is the steady, irrotational, isentropic potential equation for axisymmetric flow, tracking flow inclination and the Prandtl-Meyer function along the two characteristic families. This is the same formulation TN D-2327 uses.
-  - **Disk location criterion:** the axial station on the jet centre line where the local axial Mach number first reaches sonic. This is computable directly from a centre-line march; it needs no correlation.
+  - **Disk location criterion:** the axial station on the jet center line where the local axial Mach number first reaches sonic. This is computable directly from a center-line march; it needs no correlation.
   - **Disk diameter criterion:** scan radially on a line just downstream of the disk. The triple point is the radial station where the axial Mach number becomes sonic, and the disk diameter is twice that radius.
   - **Triple point structure:** the embedded shock, also called the barrel or intercepting shock, forms where compression waves reflected from the jet boundary coalesce; the reflected shock leaves the triple point; the Mach disk is the near-normal segment on the axis that terminates the embedded shock; the slip line is the contact discontinuity from the triple point, appearing in a viscous jet as a thin annular shear layer.
   - **Regular versus Mach reflection:** the switch is the classical detachment condition. Where the turning the flow must accomplish exceeds the maximum turning available at the local Mach number, no attached oblique-shock solution exists and the reflection must be a Mach reflection carrying a disk. Rising pressure ratio promotes Mach reflection; coflow promotes regular reflection.
@@ -286,7 +286,7 @@ The exit plane of a truncated ideal contour is the reason the question arises at
 
 ## What these sources do and do not support
 
-**Supported, with a traceable procedure.** Locating the Mach disk from a solved characteristics field, as the first centre-line station where the axial Mach number reaches sonic. Sizing it from the triple point, found by a radial scan just downstream. Deciding between regular and Mach reflection on the axis by the classical shock detachment condition, which `obliqueShockDeflection` in `Nozzle.py` already implements. Treating the slip line as an internal boundary and stopping the march at the disk, with experimental support that no recirculation region is being omitted.
+**Supported, with a traceable procedure.** Locating the Mach disk from a solved characteristics field, as the first center-line station where the axial Mach number reaches sonic. Sizing it from the triple point, found by a radial scan just downstream. Deciding between regular and Mach reflection on the axis by the classical shock detachment condition, which `obliqueShockDeflection` in `Nozzle.py` already implements. Treating the slip line as an internal boundary and stopping the march at the disk, with experimental support that no recirculation region is being omitted.
 
 **Supported by provenance only, not by equations in hand.** The Abbett compatibility condition. Both the original paper and the AEDC report that expands it sit behind access controls that automated retrieval cannot pass. The extraction criteria above do not depend on them, but a claim that a NOVA disk follows Abbett's model would not be defensible without reading them first.
 

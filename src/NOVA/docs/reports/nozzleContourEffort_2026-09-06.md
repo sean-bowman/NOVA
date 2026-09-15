@@ -2,7 +2,7 @@
 
 An account of the effort that verified NOVA's axisymmetric method-of-characteristics contour generator: what was researched, what was rebuilt, what was found wrong, what the numbers now say, and what is still open.
 
-The reference material this draws on is organised by topic rather than by narrative, and stays where the code links to it: [NozzleContourMethods.md](../NozzleContourMethods.md) for the contour families and how other implementations differ, [NozzleContourValidation.md](../NozzleContourValidation.md) for the full validation detail, and [references_nozzleContour_2026-09-06.md](../references_nozzleContour_2026-09-06.md) for the annotated sources. This report is the through-line.
+The reference material this draws on is organized by topic rather than by narrative, and stays where the code links to it: [NozzleContourMethods.md](../NozzleContourMethods.md) for the contour families and how other implementations differ, [NozzleContourValidation.md](../NozzleContourValidation.md) for the full validation detail, and [references_nozzleContour_2026-09-06.md](../references_nozzleContour_2026-09-06.md) for the annotated sources. This report is the through-line.
 
 ---
 
@@ -40,7 +40,7 @@ One source settled most of it. **NASA SP-8120, the liquid rocket engine nozzle d
 
 $$u(0,1) = 1 + \frac{1}{4R} + \frac{14\gamma + 15}{288 R^2} + O(R^{-3})$$
 
-At $R = 1.5$ and $\gamma = 1.1475$ the retained first-order term contributes 0.1667 to the normalised throat wall velocity and the first neglected term contributes 0.0479. **The term Sauer drops is 29 per cent of the term he keeps.** That is not a proof of error in the contour, because the throat conditions themselves are identical across all orders and the solutions separate only away from the throat plane. It is a bound on how much confidence the starting line deserves, and it is the single largest unquantified approximation left in the tool.
+At $R = 1.5$ and $\gamma = 1.1475$ the retained first-order term contributes 0.1667 to the normalized throat wall velocity and the first neglected term contributes 0.0479. **The term Sauer drops is 29 per cent of the term he keeps.** That is not a proof of error in the contour, because the throat conditions themselves are identical across all orders and the solutions separate only away from the throat plane. It is a bound on how much confidence the starting line deserves, and it is the single largest unquantified approximation left in the tool.
 
 Two further findings from this phase are worth carrying.
 
@@ -110,7 +110,7 @@ That fix also removed a mesh dependence the thrust coefficient should never have
 
 **The reference cone was measured against the wrong area ratio**, as Phase 1 established, making it 12.0 per cent long.
 
-**The pressure term of the thrust coefficient was halved.** It normalised by `pi * rt * 2` rather than `pi * rt^2`. With the non-dimensional throat radius at one, that divided by twice the correct value. A sixth defect of the same family was found in the conical generator, which sized itself from a one-dimensional Mach number and delivered an area ratio of 48.5 when asked for 40.
+**The pressure term of the thrust coefficient was halved.** It normalized by `pi * rt * 2` rather than `pi * rt^2`. With the non-dimensional throat radius at one, that divided by twice the correct value. A sixth defect of the same family was found in the conical generator, which sized itself from a one-dimensional Mach number and delivered an area ratio of 48.5 when asked for 40.
 
 ### Delivering the design point
 
@@ -146,11 +146,11 @@ The comparison that checks the contour itself rather than its end points. Both w
 
 All angles in degrees. The area ratio 70 row is read from the extrapolated region of the chart.
 
-The pattern is consistent and is the one the difference in families predicts. NOVA turns the wall **less** hard at the inflection and leaves it **steeper** at the exit than a thrust-optimised parabola of the same design point. A truncated ideal contour inherits the gentle opening of the ideal nozzle it was cut from, and it is cut before the straightening section has finished. A thrust-optimised contour opens harder early precisely so it can straighten more by the exit, which is where its fraction of a per cent of extra thrust comes from.
+The pattern is consistent and is the one the difference in families predicts. NOVA turns the wall **less** hard at the inflection and leaves it **steeper** at the exit than a thrust-optimized parabola of the same design point. A truncated ideal contour inherits the gentle opening of the ideal nozzle it was cut from, and it is cut before the straightening section has finished. A thrust-optimized contour opens harder early precisely so it can straighten more by the exit, which is where its fraction of a per cent of extra thrust comes from.
 
 The disagreement grows as the bell shortens, from a quarter of a degree at 90 per cent to more than four degrees at 60 per cent. SP-8120 records that the optimum method fails below a minimum length and recommends the truncated ideal contour in exactly that regime, which is another way of saying the families separate there.
 
-This is a comparison, not a validation. The reference is a different contour family and the chart is a digitisation of a figure. Neither the sign nor the size of the difference is evidence that either contour is wrong.
+This is a comparison, not a validation. The reference is a different contour family and the chart is a digitization of a figure. Neither the sign nor the size of the difference is evidence that either contour is wrong.
 
 ![Contour validation sweeps](../../../featureShowcase/contourValidation.png)
 
@@ -160,7 +160,7 @@ This is a comparison, not a validation. The reference is a different contour fam
 
 ![Reference overlays](../../../featureShowcase/referenceOverlays.png)
 
-*NOVA contours drawn on top of their references. Only the RS-25 publishes enough dimensional data to overlay, and its three quoted numbers disagree with each other, so both readings of the envelope are drawn. The Rao bell in the centre follows exactly from its construction and is the only like-for-like shape comparison available. The right-hand panel is reconstructed: no wall coordinates are published for the F-1, Vulcain 2 or RL10, and the dashed curves there are Rao bells at each engine's published area ratio and an assumed length. Nothing in that panel is a dimensional claim about any of those engines.*
+*NOVA contours drawn on top of their references. Only the RS-25 publishes enough dimensional data to overlay, and its three quoted numbers disagree with each other, so both readings of the envelope are drawn. The Rao bell in the center follows exactly from its construction and is the only like-for-like shape comparison available. The right-hand panel is reconstructed: no wall coordinates are published for the F-1, Vulcain 2 or RL10, and the dashed curves there are Rao bells at each engine's published area ratio and an assumed length. Nothing in that panel is a dimensional claim about any of those engines.*
 
 ### Against flight engines
 
@@ -200,7 +200,7 @@ The published dimensions are not self-consistent. A throat of 10.3 in with an ex
 
 The throat sizing has a cleaner check that depends on no published dimension at all. NOVA's choked-flow relation is a perfect-gas expression at the throat ratio of specific heats; CEA computes the characteristic velocity from equilibrium thermochemistry. At this operating point they give **2320.2 m/s and 2320.7 m/s**, agreeing to **0.02 per cent**. Whatever disagreement remains against the engine is not in the throat sizing.
 
-For scale on the rest: CEA gives a vacuum specific impulse of 462.9 s here against the RS-25's published 452.3 s, so the engine delivers 97.7 per cent of theoretical. That is a normal figure for combustion efficiency, boundary layer and kinetic losses together, and none of the three is modelled.
+For scale on the rest: CEA gives a vacuum specific impulse of 462.9 s here against the RS-25's published 452.3 s, so the engine delivers 97.7 per cent of theoretical. That is a normal figure for combustion efficiency, boundary layer and kinetic losses together, and none of the three is modeled.
 
 One thing this case does establish independently is the length convention. The 15 degree cone to the RS-25's published exit radius is 3.81 m against its quoted nozzle length of 3.07 m, which is 80.6 per cent, and the engine is described as an 80 per cent bell.
 
@@ -285,7 +285,7 @@ Drawing that as a field makes it comparable with the solved half and makes the d
 
 ![Stitched field, Mach](../../../featureShowcase/stitchedFieldMach.png)
 
-*The same quantity from chamber to exit on one colour scale, with the seam marked. The contrast between the two halves is the content: flat contours upstream where the answer is one number per station, and radial structure downstream where there is a state at every node.*
+*The same quantity from chamber to exit on one color scale, with the seam marked. The contrast between the two halves is the content: flat contours upstream where the answer is one number per station, and radial structure downstream where there is a state at every node.*
 
 ![Stitched field, pressure](../../../featureShowcase/stitchedFieldPressure.png)
 

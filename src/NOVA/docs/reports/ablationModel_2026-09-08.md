@@ -22,7 +22,7 @@ tau = (1 - rho_c / rho) / (1 - rho_c / rho_v)
 
 Enthalpy is absolute and carries the heat of formation, so the heat of pyrolysis is the gap between the solid enthalpy leaving and the gas enthalpy replacing it rather than a separate constant. That is the whole reason the pyrolysis gas equilibrium enthalpy curve is a required part of a material's data: without it the reaction is silently thermally neutral, which is not a property of any resin.
 
-The mesh is normalised on the shrinking thickness, so nodes hold their proportion as the surface recedes and none is ever dropped. Decomposition integrates in closed form over each step, which removes its stiffness entirely, and the energy equation is then solved implicitly by Newton iteration on the nodal temperatures. The surface node carries no heat capacity and is an algebraic statement of the surface energy balance, which is CMA's convention and avoids having to define the mass of a cell that is being eaten.
+The mesh is normalized on the shrinking thickness, so nodes hold their proportion as the surface recedes and none is ever dropped. Decomposition integrates in closed form over each step, which removes its stiffness entirely, and the energy equation is then solved implicitly by Newton iteration on the nodal temperatures. The surface node carries no heat capacity and is an algebraic statement of the surface energy balance, which is CMA's convention and avoids having to define the mass of a cell that is being eaten.
 
 ### Three surface closures
 
@@ -116,9 +116,9 @@ Between the two branches the equilibrium result lies between them and neither cl
 
 ### Material response, against the FIAT baseline
 
-Ablation Workshop test case 1: five centimetres of TACOT, surface driven to 1644 K in 0.1 s and held for a minute, adiabatic back face, one atmosphere. The workshop designated FIAT results from the Thermal Performance Data Base as the baseline; fourteen codes ran the case in 2011 and the workshop reported agreement between type 1 codes as mostly below one per cent.
+Ablation Workshop test case 1: five centimeters of TACOT, surface driven to 1644 K in 0.1 s and held for a minute, adiabatic back face, one atmosphere. The workshop designated FIAT results from the Thermal Performance Data Base as the baseline; fourteen codes ran the case in 2011 and the workshop reported agreement between type 1 codes as mostly below one per cent.
 
-The reference values were digitised from the published figure at 400 dpi. The calibration is good to about 1.5 K: the axis tick marks, whose values are known exactly, come back as 199.5, 399.0, 600.0, 799.5, 999.0 and 1599.0, and the imposed surface line, known to be 1644 K, comes back as 1643.9. Marker centring adds a few kelvin on top.
+The reference values were digitized from the published figure at 400 dpi. The calibration is good to about 1.5 K: the axis tick marks, whose values are known exactly, come back as 199.5, 399.0, 600.0, 799.5, 999.0 and 1599.0, and the imposed surface line, known to be 1644 K, comes back as 1643.9. Marker centring adds a few kelvin on top.
 
 At 60 s, on a 241 node mesh:
 
@@ -135,7 +135,7 @@ At 60 s, on a 241 node mesh:
 
 Five of the six temperature probes sit inside one per cent, which is the band the workshop itself reported between codes of this type. The deepest probe is the one the mesh resolves least well, and it converges toward the reference as the mesh is refined: 2.60 per cent at 101 nodes, 1.97 at 161, 1.65 at 241.
 
-The two front locations are the weakest agreement. They are defined by where the density profile crosses a threshold, so they inherit the resolution of the profile rather than of the temperature, and a two per cent density threshold on a sixty kilogram per cubic metre density range is a fine thing to ask a mesh to locate.
+The two front locations are the weakest agreement. They are defined by where the density profile crosses a threshold, so they inherit the resolution of the profile rather than of the temperature, and a two per cent density threshold on a sixty kilogram per cubic meter density range is a fine thing to ask a mesh to locate.
 
 ### Test case 2.2, as a sanity check only
 
@@ -158,7 +158,7 @@ No open source gives measured throat recession against a firing condition specif
 
 ### The recession bound is loose for a rocket
 
-The diffusion-limited rate assumes two things, both optimistic about how fast the char disappears. Surface kinetics are taken to be infinitely fast, which holds above roughly 2000 K and fails below it. And every oxygen atom reaching the wall is taken to leave as carbon monoxide, which over-consumes carbon whenever the exhaust carries hydrogen, because in equilibrium the hydrogen competes for that oxygen and some of it leaves as water.
+The diffusion-limited rate assumes two things, both optimiztic about how fast the char disappears. Surface kinetics are taken to be infinitely fast, which holds above roughly 2000 K and fails below it. And every oxygen atom reaching the wall is taken to leave as carbon monoxide, which over-consumes carbon whenever the exhaust carries hydrogen, because in equilibrium the hydrogen competes for that oxygen and some of it leaves as water.
 
 Both errors run the same way, and for a hydrocarbon propellant the gap is large. LOX/RP-1 at a mixture ratio of 2.7 has an exhaust that is 73.0 per cent oxygen and 23.2 per cent carbon by element, which gives a transport-limited `B'c` of 0.316, nearly twice the value for air. Driven at that rate against a Bartz coefficient of 9.5 kW/m^2 K, the bound predicts a throat recession an order above what motors of that class actually show.
 
@@ -193,13 +193,13 @@ Two packaged assets carry what is too large to hold as source:
 | `assets/tacotBPrimeAir.npz` | `B'c` and wall enthalpy on 4 pressures x 25 gas blowing rates x 151 temperatures |
 | `assets/tacotPyrolysisGas.npz` | equilibrium pyrolysis gas enthalpy and molar mass on 4 pressures x 152 temperatures |
 
-Both were extracted from the TACOT v3.0 spreadsheet distributed with the Ablation Workshop test case series. Sources are in `docs/references_ablationModelling_2026-09-08.md`.
+Both were extracted from the TACOT v3.0 spreadsheet distributed with the Ablation Workshop test case series. Sources are in `docs/references_ablationModeling_2026-09-08.md`.
 
 ---
 
 ## What would close the remaining gaps
 
-**A real liner material.** The property set for tape-wrapped carbon phenolic exists, in DTIC reports that return 403 to automated access and in MIL-HDBK-17 and CINDAS behind licences. Obtaining one would change the nozzle path from a demonstration to a design tool without touching the solver.
+**A real liner material.** The property set for tape-wrapped carbon phenolic exists, in DTIC reports that return 403 to automated access and in MIL-HDBK-17 and CINDAS behind licenses. Obtaining one would change the nozzle path from a demonstration to a design tool without touching the solver.
 
 **One firing with measured recession.** A throat diameter before and after, with chamber pressure, mixture ratio and burn time recorded, sets `charRemovalEfficiency` for that propellant combination. Two firings at different mixture ratios would say whether a single value holds.
 

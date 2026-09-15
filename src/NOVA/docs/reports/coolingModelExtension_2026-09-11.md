@@ -1,6 +1,6 @@
 # Extending the cooling model past the regenerative jacket
 
-NOVA modelled one cooling method. The ablative liner arrived in `ablative.py`; radiative cooling and film cooling are the two that remain, and unlike the ablative they combine with the jacket rather than replacing it.
+NOVA modeled one cooling method. The ablative liner arrived in `ablative.py`; radiative cooling and film cooling are the two that remain, and unlike the ablative they combine with the jacket rather than replacing it.
 
 Adding them turned up a defect in the jacket itself that had to be fixed first, and this records that fix along with the groundwork that preceded it.
 
@@ -113,6 +113,159 @@ Halving emissivity is often quoted as raising the equilibrium wall temperature b
 | 5000 | 5.5 % |
 
 The bound is real and it is never reached. A test pins it as a strict inequality.
+
+---
+
+## The film closure, and the property temperature it needs
+
+`filmCooling.py` carries Hatch and Papell, NASA TN D-130, equation (12). It was chosen over the SP-8124 entrainment model for one reason: it arrives with a stated accuracy from its own source, five per cent on film-cooled wall temperature over an effectiveness range of 0.2 to 1.0, and it is the only film closure found that does. That accuracy was earned on a flat plate below 1100 K at 32 to 317 m/s in a constant-area duct.
+
+The film solves once from the station gas state, marching forward from its slot while the jacket marches back from the coolant inlet. It writes the `drivingTemperature` key the recovery fix created, so the jacket never learns a film produced it.
+
+### Assumption 6 asks for properties at a temperature NOVA does not carry
+
+The correlation evaluates every property at the arithmetic mean of the static gas and coolant temperatures. A station carries one temperature, the static gas one, because Bartz and the jacket both want that and nothing else ever wanted a second. Bartz sidesteps the same question with a closed-form property ratio, its `sigma`, rather than a second property evaluation, so the gap never surfaced until a second consumer appeared.
+
+Reading the conductivity alone suggests the correction is conservative. It is not. At fixed pressure the density goes as `1/T` and the viscosity falls, and together they raise `Re^0.8` by more than the conductivity loses. Fitting the transport power laws from CEA solves at frozen composition, which sweeps temperature by expansion while holding the mixture fixed:
+
+| Propellant | `k ~ T^a` | `mu ~ T^b` | `Pr ~ T^c` | net power on `h` |
+|---|---|---|---|---|
+| LH2 / LOX, O/F 5.5 | 1.000 | 0.816 | 0.071 | -0.431 |
+| LH2 / LOX, O/F 7.0 | 1.053 | 0.813 | 0.011 | -0.394 |
+| LH2 / LOX, 2 MPa | 0.997 | 0.808 | 0.065 | -0.430 |
+| RP-1 / LOX, O/F 2.4 | 0.979 | 0.739 | -0.058 | -0.429 |
+| CH4 / LOX, O/F 3.4 | 1.030 | 0.758 | -0.068 | -0.397 |
+
+The net power is what reaches the answer, and across hydrogen, kerosene and methane at two mixture ratios and two chamber pressures it stays inside 0.394 to 0.431. That is a two per cent spread in the correction, which is why fixed exponents are defensible and a per-run fit is not worth the CEA calls. `referenceTemperatureCorrection` applies `(T*/T)^(a - 0.8 - 0.8b + 0.3c)` to the transfer coefficient, and on the reference case it runs 1.262 to 1.300.
+
+Correcting it moved the reference film case and nothing else. Effectiveness fell at every station, the peak driving temperature rose 3137 to 3228 K, and the coolant exit temperature rose 171.8 to 176.6 K. The four non-film baselines did not move a value.
+
+### What is still outstanding, and why it is left
+
+The conductivity a station carries is the equilibrium value, whose reaction contribution is a factor of 2.67 at 3398 K, 2.42 at 3193 K and 1.37 by 2269 K. By the film mean temperature it has vanished. A Colburn form fitted on non-reacting air has no such term in it, so the molecular conductivity is the one it contemplates, and near a slot in the chamber that discrepancy is larger than the reference-temperature effect and runs the other way. Removing it needs a frozen-composition solve at every station, and it raises the same question for Bartz, which is partly immune because `cp / Pr^0.6` largely cancels the reaction term while a bare `k` does not. That is a decision about the jacket, not a bug in the film, and it is recorded rather than taken.
+
+### Acceleration and turning, measured rather than asserted
+
+SP-8124 states that acceleration and flow turning are very significant for film cooling and that accounting for them is the key to predicting coolant requirements. Two measurements say what that means here.
+
+Acceleration does reach the answer, through the local coefficient: over the 43 mm the film survives on the reference case, `h` rises by a factor of 1.74 on velocity alone. Relaminarisation is not the missing mechanism either. The acceleration parameter `K = (nu/U^2) dU/ds` peaks at 1.6e-6 against the 3e-6 threshold, and no station exceeds it on either the 60 or the 100 point grid.
+
+What is genuinely absent is a term for the extra entrainment a pressure gradient and a curved wall drive beyond what the local Reynolds number carries, and the one term that could have absorbed it cannot. The velocity-ratio correction is arctan-bounded at `1 + 0.4 pi/2 = 1.628`, and at the slot it already reads 1.539. It has spent 86 per cent of its range before the film has gone anywhere, so a doubling of core velocity moves it three per cent. Turning has no term at all: the throat radius of curvature is 41 mm and the film is turned through nine degrees of wall angle over the length it survives.
+
+The remedy is the SP-8124 entrainment model, whose position-dependent multiplier is exactly an empirical accounting for acceleration and turning. Adopting it trades a stated accuracy for a design chart with no stated scatter, which is the trade rather than an improvement, and anything built on it has to ship labeled calibrated.
+
+---
+
+## The radiation-cooled extension
+
+`regenStations.py` already populated five arrays describing the exhaust past the end of the jacket, and nothing read any of them. `radiativeNozzleExtension` does.
+
+### Why it needs a different solver
+
+The jacket converges by successive substitution, and it contracts because the only wall-temperature dependence is Bartz's `sigma`, which is weak. On an uncooled shell radiation is the balance, and its derivative gains `4 eps sigma T^3`, about 150 W/m^2 K at 1500 K and an emissivity of 0.8. That is comparable to the convective coefficient, the map stops contracting, and the problem becomes a nonlinear two-point boundary value problem. It is solved by damped Newton on a tridiagonal Jacobian, per unit area of a thin shell along arc length `s`:
+
+```
+(1/r) d/ds [ r k t dT/ds ] + h_g (T_aw - T_w)
+    + eps_i eps_g sigma (T_g^4 - T_w^4) - eps_o F_o sigma (T_w^4 - T_sink^4) = 0
+```
+
+The starting guess is the pointwise balance with conduction switched off, iterated to self-consistency in both the Bartz coefficient and the band term. That matters: without the iteration it is a guess rather than the zero-conduction answer, and the difference between it and the solution would not be conduction alone.
+
+### The band term can cool
+
+In a chamber, band radiation heats the wall. On an extension it usually does not. The wall is driven by the recovery temperature while the exchange is written in the static one, and at Mach 3 those differ by more than a thousand kelvin. A wall settling above the static gas radiates into it, so the exhaust becomes a second sink alongside space. On the reference extension the band term is about minus 4 per cent of the convective flux.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Conduction off, against a scalar root find at every station | 1.4e-12 relative, one Newton step |
+| Conduction operator, manufactured sine solution refined four times | observed order 2.000 |
+| Energy balance: power in against power out plus the joint | 7e-12 of the power in |
+| Emissivity halved, against the `2^0.25` bound | 5.9 per cent against 18.9 |
+| Through-thickness drop `q t / k`, reported not asserted | a few kelvin against a wall above 2000 K |
+
+Conduction along the shell barely matters and the solver says so: going from 45 to 400 W/m-K on a 0.5 mm shell narrows the temperature span by under three per cent, and the conduction length `sqrt(k t / h)` is about ten millimeters, so the joint with the jacket reaches only the first few stations. That is worth knowing before spending effort on a two-dimensional wall solve.
+
+### Plausibility, labeled as such
+
+No open dataset gives a measured wall temperature distribution along a fully specified firing, so there is nothing to validate against. Published coated-columbium extension temperatures near 1590 K exist as a band. Against it, a 0.5 mm coated shell at an emissivity of 0.7 comes out at 1544 K at the joint on a one megapascal storable apogee thruster running from area ratio 20, and 1372 K on a 0.7 megapascal reaction control thruster from area ratio 30. Those sit where the literature puts them, but the engines behind the band are not specified well enough for the agreement to be an error figure.
+
+### What the solver says about NOVA's own reference engine
+
+A coated C103 shell fails everywhere on the 6.9 MPa LOX/LH2 contour:
+
+| Joint area ratio | Peak wall [K] | Margin against the 1673 K vacuum limit [K] |
+|---|---|---|
+| 3.0 | 2763 | -1090 |
+| 9.9 | 2368 | -695 |
+| 20.1 | 2116 | -443 |
+| 29.9 | 1975 | -302 |
+| 34.8 | 1921 | -248 |
+
+That is the flux rather than the solver. Bartz scales as chamber pressure to the 0.8, so the same shell on a one megapascal engine sees a fifth of the coefficient and settles about thirty per cent cooler. Reporting the margin alongside the temperature is what makes that conclusion fall out of the solve instead of being left to the reader.
+
+---
+
+## The second film closure, and why it disagrees
+
+The acceleration and turning limitation above has one remedy, and it is the model SP-8124's own design criteria recommend. `filmCoolingModel` now chooses between two closures.
+
+### What Appendix A actually says
+
+The monograph is a scanned image with no text layer, so the appendix was read page by page. Its gas film model treats the film as a mixing layer that starts holding all the coolant and entrains core flow as it runs:
+
+```
+W_E/W_c = ((W - W_c)/W_c) [ 2 z - z^2 ],   z = psi_r xbar / (r_i - s_i)
+
+xbar    = integral of (r_i/r) ((rho_e u_e)_2D / (rho_e u_e)_1D) psi_m ds, from the slot
+psi_r   = 0.1 (u_c/u_e) / [ (rho_c/rho_e)^0.15 (rho_c u_c s_i / mu_c)^0.25 f ]
+```
+
+Every group is dimensionless, so it works in SI without conversion. Effectiveness follows from the entrainment ratio through Figure A-2, and the adiabatic wall temperature from an enthalpy balance across the mixing layer.
+
+Three details are worth recording because they are decisions rather than transcription.
+
+The bracket `2z - z^2` is the fraction of the core the mixing layer has swallowed and it reaches one at `z = 1`. Past that the parabola turns over, which would say a film entrains less the further it runs, so `z` is held at one. The source does not say to do this; it is what the expression means.
+
+Figure A-2 prints both of its limits, `eta = 1` below an entrainment ratio of 0.06 and `eta = 1.32/(1 + W_E/W_c)` above 1.4, and both are reproduced exactly. Between them the source gives a plotted curve and no equation, and what is used is a cubic Hermite in the logarithm of the abscissa, flat where it leaves one and matching the value and slope of the asymptotic form where it joins it. Clipping the asymptotic form at one would have been simpler and is wrong in the unsafe direction: that form reaches one only at a ratio of 0.32 while the source says effectiveness leaves one at 0.06, so the real curve drops earlier than the formula does.
+
+The reactive branch is not implemented. It reads a temperature off the wall mixture ratio and the wall enthalpy through an equilibrium solve, which is the half of Appendix A that would capture a fuel-rich wall burning cooler than dilution alone predicts. Leaving it out is conservative, because the non-reactive branch returns a hotter wall. The wall mixture ratio is computed and reported anyway.
+
+### Two limits that had to be exact
+
+The non-reactive expression carries an enthalpy defect term, `(1 - Pr^1/3)(H_o,e - H_e)`, which is `C_p,e (T_o,e - T_recovery)` by definition. Written that way the closure has two exact limits, and both are tested rather than asserted:
+
+| Limit | Result |
+|---|---|
+| Zero effectiveness against the station solve's own recovery array | identical, to the bit |
+| Full effectiveness against the coolant's recovery temperature at core velocity | exact to 1e-13 |
+
+The second limit is why the coolant temperature is read as a total rather than a static one. The source writes it against `H_o,e` in a difference of total enthalpies, and only that reading puts a wall bathed in pure coolant at the coolant's recovery temperature instead of below it.
+
+Getting the first limit required building the local total temperature the same way NOVA builds the recovery temperature, from one chamber gamma and the station Mach array. Using the chamber stagnation temperature instead was wrong by up to 130 K, because a reacting expansion does not follow a constant-gamma isentrope.
+
+### The two closures disagree by 680 K
+
+On the reference engine with 0.30 kg/s of hydrogen injected at the chamber end:
+
+| | no film | Hatch and Papell | SP-8124 entrainment |
+|---|---|---|---|
+| peak driving temperature [K] | 3397 | 3228 | 2548 |
+| film survival [mm] | n/a | 43.0 | 29.1 |
+| coolant exit temperature [K] | 200.1 | 179.6 | 147.6 |
+
+The correlation's effectiveness collapses within a hundred millimeters; the entrainment model holds about 0.08 the whole way down the nozzle. The larger cause is elsewhere though. Hatch and Papell blends temperatures linearly and has no term for specific heat at all, while the entrainment model mixes on enthalpy. Hydrogen carries roughly three times the specific heat of the exhaust, so a small entrained fraction of it pulls the wall down hard, and only one of the two closures can see that.
+
+Neither is validated at rocket conditions. The spread between them is a fair statement of how well film cooling is known here, and it is larger than any other disclosed uncertainty in the cooling model.
+
+### What the multiplier costs
+
+`psi_m` is where SP-8124 puts acceleration and turning, and it is a design-chart recommendation rather than a measured curve. Across the recommended injection band alone, 3 to 4, the peak driving temperature moves 96 K on the reference engine. That is the model's uncertainty before anything else is counted, and it is why the closure ships labeled calibrated rather than validated.
+
+### Appendix B is not implemented
+
+The liquid film model was in scope and is left out. Its film length runs through two curves on Figure B-1, a rotated scanned plot that cannot be digitized here to an accuracy worth carrying, and the chain from them is multiplicative: a Stanton number, a surface tension, a saturation loop on the coolant partial pressure, and a heat-transfer augmentation factor for liquid surface roughness. Unlike Appendix A it is an explicitly dimensional correlation in US customary units with the gravitational constant written into the entrainment parameter, and the appendix states that only the numerical values of those units may be used. Implementing it from a scan with no worked example to check against would produce a number nothing could verify, which is worse than not having it.
 
 ---
 

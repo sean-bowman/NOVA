@@ -107,7 +107,11 @@ There are other forms of active cooling, such as *film cooling*, where a thin sh
 
 The dark band before the bright orange of the plume is the unburnt gas film leaving the nozzle, which eventually reacts with the oxygen in the air and burns where the plume turns all orange!
 
-For our application the nozzle is quite small comparatively speaking, and film cooling is also impractical due to the lack of gaseous fuel on hand in a hybrid engine, therefore we will focus entirely on regenerative cooling.
+A hybrid engine has no gaseous fuel on hand, so a film on a hybrid nozzle means carrying a separate coolant for it, and most of what follows is about the regenerative jacket. NOVA does model a film where one exists: `filmCooling.py` lowers the temperature the wall is driven by over the length the film survives, rather than removing heat the way a jacket does. Switch it on with `filmCooling` and give it a coolant, a flow, a temperature, a slot position and a slot height. Two closures are available through `filmCoolingModel`. The Hatch and Papell correlation from NASA TN D-130 is the default and the only one that states its own accuracy, but it was fitted in a constant-area duct and cannot see acceleration or flow turning. The entrainment model of NASA SP-8124 Appendix A accounts for both, through an empirical multiplier read off a design chart, so it is calibrated rather than validated. On a hydrogen film the two disagree by hundreds of kelvin, which is a fair measure of how well film cooling is known at rocket conditions.
+
+The third method is to remove the coolant entirely and let the wall radiate. Past some area ratio the flux has fallen far enough that an uncooled shell settles below its own temperature limit, and carrying a jacket further costs mass and pressure drop for nothing. `radiativeCooling.py` solves that balance along the extension beyond the jacket and reports the margin against the material limit, which is the only question worth asking about an uncooled shell. Switch it on with `makeRadiativeExtension`, and note that it needs a `truncationMethod`, because with none the jacket runs the whole contour and there is no extension to solve.
+
+Both combine with a jacket rather than replacing it, which is why they are described here alongside it rather than as alternatives to it.
 
 ## Hybrid Supercritical Oxygen Expander Cycle
 

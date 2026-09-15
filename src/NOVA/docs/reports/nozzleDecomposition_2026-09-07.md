@@ -12,7 +12,7 @@ Each stage is held to bit-identity against a recorded baseline, the same discipl
 
 ### Why this had to come first
 
-Nothing exercised the regenerative path. Both shipped configurations set `makeCoolingChannels` false, no test in `tests/` reached it, and the feature showcase did not run it. That left 4,385 lines with no evidence they ran at all, let alone a record of what they produced. Without such a record there is no way to tell a refactor that preserved behaviour from one that changed it, and the contour work was safe precisely because that record existed.
+Nothing exercised the regenerative path. Both shipped configurations set `makeCoolingChannels` false, no test in `tests/` reached it, and the feature showcase did not run it. That left 4,385 lines with no evidence they ran at all, let alone a record of what they produced. Without such a record there is no way to tell a refactor that preserved behavior from one that changed it, and the contour work was safe precisely because that record existed.
 
 Building the case found nine defects. Seven of them are on paths a user would reach with a valid configuration, and one of those sizes a pressure vessel wall.
 
@@ -126,9 +126,9 @@ Corrected and enabled. It now accepts every one of the 615 dictionaries the two 
 **Checked in every way that does not need one.**
 
 - *The stagnation viscosity constant is a unit conversion, and is verified as one.* Huzel and Huang give the fit as $\mu_0 = 46.6	imes10^{-10}\,M^{0.5}T^{0.6}$ in lbm/(in s) with $T$ in Rankine. Converting to SI gives $1.18408	imes10^{-7}$ against the $1.184	imes10^{-7}$ in the source, agreeing to five figures. The constant had no reference beside it before.
-- *The dimensions reduce exactly.* Summing the metre exponents of every factor gives zero and the whole reduces to kg s⁻³ K⁻¹, which is W/(m² K). The implementation is held to that by rescaling every input as though the unit of length had changed, and confirming the coefficient moves by exactly the predicted factor. One term cannot be rescaled from outside, the embedded viscosity fit, so the residual is a clean $L^{0.2}$; freezing the specific heat as well makes it $L^{-1.8}$. Both land to machine precision, which constrains the exponents as a set rather than one at a time.
+- *The dimensions reduce exactly.* Summing the meter exponents of every factor gives zero and the whole reduces to kg s⁻³ K⁻¹, which is W/(m² K). The implementation is held to that by rescaling every input as though the unit of length had changed, and confirming the coefficient moves by exactly the predicted factor. One term cannot be rescaled from outside, the embedded viscosity fit, so the residual is a clean $L^{0.2}$; freezing the specific heat as well makes it $L^{-1.8}$. Both land to machine precision, which constrains the exponents as a set rather than one at a time.
 - *Each exponent is driven independently*, including the throat diameter, which enters twice and nets to $D_t^{-0.1}$.
-- *The limiting behaviour holds*: the coefficient falls monotonically with area ratio as $(A_t/A)^{0.9}$ over a factor of forty in area, and rises as the wall gets colder.
+- *The limiting behavior holds*: the coefficient falls monotonically with area ratio as $(A_t/A)^{0.9}$ over a factor of forty in area, and rises as the wall gets colder.
 
 Those establish that the implementation is the correlation it claims to be. They do not establish that the correlation predicts a real engine.
 
@@ -148,7 +148,7 @@ Geometry is the one part of this tool that can be held to closed form rather tha
 
 ### What is now verified
 
-**The largest channel that fits is exact.** It is a circle inscribed in a wedge of half-angle $\pi/n$ and tangent externally to the wall circle: its centre sits at distance $d$ with radius $r = d\sin	heta$, and tangency gives $d = R + r$, so
+**The largest channel that fits is exact.** It is a circle inscribed in a wedge of half-angle $\pi/n$ and tangent externally to the wall circle: its center sits at distance $d$ with radius $r = d\sin	heta$, and tangency gives $d = R + r$, so
 
 $$
 r = rac{R\sin	heta}{1 - \sin	heta}
@@ -156,19 +156,19 @@ $$
 
 The implementation matches that to machine precision across channel counts from 10 to 240 and wall radii from 30 to 300 mm. The independent check is packing: placing that many circles of the computed radius on their pitch circle leaves neighbours separated by exactly the infill thickness, and none crosses the wall.
 
-**The transport frame is what it claims to be.** Orthonormal, right-handed and twist-minimising. The last is the property that separates it from a Frenet frame and is what stops flutes winding up where the centreline happens to bend: on a planar curve the frame acquires no rotation about the tangent at all, held to $10^{-9}$. On a helical centreline every cross-section point stays perpendicular to the local tangent and at exactly the channel radius.
+**The transport frame is what it claims to be.** Orthonormal, right-handed and twist-minimizing. The last is the property that separates it from a Frenet frame and is what stops flutes winding up where the centerline happens to bend: on a planar curve the frame acquires no rotation about the tangent at all, held to $10^{-9}$. On a helical centerline every cross-section point stays perpendicular to the local tangent and at exactly the channel radius.
 
-**A circular section is a circle.** Every point sits at the channel radius from the centreline to $10^{-12}$, the section lies in the plane normal to the tangent, and a single-station call reproduces the full sweep exactly.
+**A circular section is a circle.** Every point sits at the channel radius from the centerline to $10^{-12}$, the section lies in the plane normal to the tangent, and a single-station call reproduces the full sweep exactly.
 
-**A bend reports its own radius.** A centreline bent into a circle of 50 mm reports 50 mm back through the turn-angle and curvature calculation that feeds the coolant pressure drop, to 0.1 per cent.
+**A bend reports its own radius.** A centerline bent into a circle of 50 mm reports 50 mm back through the turn-angle and curvature calculation that feeds the coolant pressure drop, to 0.1 per cent.
 
 ### Defects found
 
-**`useGPU` was read but never defined.** The cross-section builder guards its CuPy nearest-neighbour search with `if GPU_AVAILABLE and self.useGPU != 'off'`. `useGPU` is set nowhere in the class and appears in no configuration, so on a machine without CuPy the first condition short-circuits and it is never reached, and on a machine with CuPy it raises `AttributeError`. The GPU path would have failed on exactly the machines it was written for. Initialised to `'off'`, which is the behaviour every run has had.
+**`useGPU` was read but never defined.** The cross-section builder guards its CuPy nearest-neighbour search with `if GPU_AVAILABLE and self.useGPU != 'off'`. `useGPU` is set nowhere in the class and appears in no configuration, so on a machine without CuPy the first condition short-circuits and it is never reached, and on a machine with CuPy it raises `AttributeError`. The GPU path would have failed on exactly the machines it was written for. Initialised to `'off'`, which is the behavior every run has had.
 
 **`nonPrintableIndices` was read but only sometimes defined.** Set by the printability audit and read by the cross-section builder whether or not that audit ran. Nested, it was reached only inside the printability branch, so the gap was invisible. Initialised to an empty list.
 
-**A flute of zero amplitude produced NaN geometry in silence.** The profile is built by scaling a wave by its amplitude and normalising by the same amplitude, which is singular at zero. A configuration setting `fluteAmplitudeCoef` to zero got NaN cross sections with no error, and the failure would have surfaced far downstream. A non-positive amplitude, or fewer than three flutes, is now refused by name.
+**A flute of zero amplitude produced NaN geometry in silence.** The profile is built by scaling a wave by its amplitude and normalizing by the same amplitude, which is singular at zero. A configuration setting `fluteAmplitudeCoef` to zero got NaN cross sections with no error, and the failure would have surfaced far downstream. A non-positive amplitude, or fewer than three flutes, is now refused by name.
 
 ### A disclosed difference, not fixed here
 
@@ -218,7 +218,7 @@ Two things visible from the extraction that would change numbers, and so belong 
 
 ## Stage 4: the channel build
 
-Everything left in `generateRegenChannels` moved to [regenChannels.py](../regenChannels.py), 1,205 lines: the volute interfaces, the channel centreline and its wrapping, the printability audit, the three-dimensional sweep and the jacket. The method went from 2,185 lines to 32.
+Everything left in `generateRegenChannels` moved to [regenChannels.py](../regenChannels.py), 1,205 lines: the volute interfaces, the channel centerline and its wrapping, the printability audit, the three-dimensional sweep and the jacket. The method went from 2,185 lines to 32.
 
 This stage was a different shape from the three before it. The remaining block read 70 attributes and wrote 48, across five nested functions that all work on the same arrays. Splitting that across three modules would have produced three modules sharing one mutable state, which is worse than one, so the whole build moved as a unit behind a single `RegenChannelState`. Its fields are grouped by how the build uses them: what it reads and does not change, what it works on in place, and what it produces outright.
 

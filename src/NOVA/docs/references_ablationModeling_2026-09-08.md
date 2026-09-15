@@ -1,4 +1,4 @@
-# References: charring ablator modelling and material response data
+# References: charring ablator modeling and material response data
 
 Sources consulted while building `src/NOVA/ablative.py` and the ablative response store in `src/NOVA/materials.py`, and the record of which ones could not supply what was wanted.
 
@@ -18,7 +18,7 @@ Accessed 2026-09-08 unless noted otherwise.
   - Pyrolysis and char fronts are defined by density thresholds: `rho_v(98%) = rho_c + 0.98 (rho_v - rho_c)` and `rho_c(2%) = rho_c + 0.02 (rho_v - rho_c)`.
   - Codes are classified into three types. Type 1 is CMA-equivalent: heat transfer, pyrolysis, simplified mass transport. NOVA is type 1.
   - Fourteen participants ran it, estimated at half the community. The workshop reported temperature differences between type 1 and type 2 codes as **mostly below 1 per cent**, which sets the standard any new implementation should be held to.
-  - Figure 1 carries the FIAT baseline as marker series against PATO/PAM_1 as lines. Digitising it at 400 dpi gives the reference values NOVA is tested against; the axis tick marks, whose values are known, come back to within 1.5 K, and the 1644 K surface line comes back as 1643.9 K.
+  - Figure 1 carries the FIAT baseline as marker series against PATO/PAM_1 as lines. Digitizing it at 400 dpi gives the reference values NOVA is tested against; the axis tick marks, whose values are known, come back to within 1.5 K, and the 1644 K surface line comes back as 1643.9 K.
 
 ## Ablation Test-Case Series #2, version 2.8
 
@@ -51,9 +51,9 @@ Accessed 2026-09-08 unless noted otherwise.
 - **URL:** <https://jeanlachaud.com/research/TACOT_3.0.xls>
 - **Authors:** J. Lachaud, T. van Eekelen, D. Bianchi, A. Martin
 - **Accessed:** 2026-09-08
-- **Relevance:** The complete property set NOVA's ablative response store is built from. It is the only charring ablator whose full response data is in the open literature; every real nozzle liner material has its property set behind an access control or a licence.
+- **Relevance:** The complete property set NOVA's ablative response store is built from. It is the only charring ablator whose full response data is in the open literature; every real nozzle liner material has its property set behind an access control or a license.
 - **Key findings:**
-  - TACOT is a **theoretical** material: ex-cellulose carbon fibres at 0.1 volume fraction and a novolac/formaldehyde matrix at 0.1, with 0.8 porosity, giving 280 kg/m^3 virgin and 220 kg/m^3 char. It is a low-density entry heatshield, not a nozzle liner, and roughly a fifth the density of tape-wrapped carbon phenolic.
+  - TACOT is a **theoretical** material: ex-cellulose carbon fibers at 0.1 volume fraction and a novolac/formaldehyde matrix at 0.1, with 0.8 porosity, giving 280 kg/m^3 virgin and 220 kg/m^3 char. It is a low-density entry heatshield, not a nozzle liner, and roughly a fifth the density of tape-wrapped carbon phenolic.
   - Thermal Properties sheet gives virgin and char specific heat, conductivity and absolute enthalpy on a 13-point grid from 460 to 6000 degR, in both British and SI columns. Emissivity is 0.8 virgin and 0.9 char.
   - **Enthalpy is absolute and self-consistent.** The datum is char at 298 K equal to zero; the phenolic heat of formation is -2.0 MJ/kg and the virgin value of -857142.857 J/kg is exactly the 0.42857 matrix mass fraction times it. This is what lets the heat of pyrolysis fall out of the enthalpy difference instead of being supplied separately.
   - Property blending is stated for CMA users: `tau = (1 - rho_c/rho)/(1 - rho_c/rho_v)`, with `cp = tau cp_v + (1 - tau) cp_c` and the same for conductivity.
@@ -69,7 +69,7 @@ Accessed 2026-09-08 unless noted otherwise.
 
 - **URL:** <https://uknowledge.uky.edu/ablation_code/>
 - **Accessed:** 2026-09-08
-- **Relevance:** Checked for tabulated inter-code results that would give a stronger reference than a digitised figure.
+- **Relevance:** Checked for tabulated inter-code results that would give a stronger reference than a digitized figure.
 - **Key findings:**
   - Hosts TACOT v3.0, test case series 1 and 3, and an overview of the test case 1 intercalibration results.
   - **The numerical result files are not there.** Everything except the spreadsheet is a PDF, so the code-to-code comparison is available only as plots.
@@ -133,6 +133,6 @@ Accessed 2026-09-08 unless noted otherwise.
 - **Relevance:** The material an ablative rocket nozzle liner is actually made of, and the one gap that separates NOVA's nozzle path from a design tool.
 - **Key findings:**
   - The virgin and char conductivity curves to 5000 degF for the MX-4926 class live in DTIC reports that return **HTTP 403** to automated access.
-  - MIL-HDBK-17 and the CINDAS databases carry equivalent data behind licences.
+  - MIL-HDBK-17 and the CINDAS databases carry equivalent data behind licenses.
   - No open substitute was found. TACOT is a benchmark material rather than a replacement: at 280 kg/m^3 virgin against roughly 1450 for tape-wrapped carbon phenolic, its areal mass and its char density differ by a factor of five, and recession scales inversely with char density.
   - Outcome: the solver takes material properties as data and ships one open benchmark material. The store's notes say what it is not for.

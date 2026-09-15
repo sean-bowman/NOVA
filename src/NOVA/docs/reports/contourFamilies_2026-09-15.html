@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='UTF-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+<title>NOVA Contour Families</title>
+<script>
+    window.MathJax = {
+        tex: {
+            inlineMath:  [['$', '$'], ['\\(', '\\)']],
+            displayMath: [['$$', '$$'], ['\\[', '\\]']],
+            tags: 'ams'
+        },
+        svg: { fontCache: 'global' }
+    };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+<style>
+:root {
+    --bg:         #1a1e2a;
+    --surface:    #22273a;
+    --surface-2:  #292f42;
+    --border:     #3a4055;
+    --text:       #d8e0ec;
+    --text-muted: #8a95a8;
+    --text-dim:   #5c6575;
+    --green:      #86C06C;
+    --accent:     #E0975A;
+    --red:        #e08080;
+    --yellow:     #d4b86a;
+    --blue:       #7baee8;
+    --orange:     #d48c5a;
+    --purple:     #aa84d8;
+    --cyan:       #6ad4c8;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+}
+
+.container { max-width: 1400px; margin: 0 auto; padding: 0 2rem; }
+section { padding: 3.5rem 0; border-bottom: 1px solid var(--border); }
+.section-header { margin-bottom: 2rem; }
+.section-title { font-size: 1.4rem; font-weight: 600; margin-bottom: 0.4rem; }
+.section-subtitle { color: var(--text-muted); font-size: 0.9rem; }
+
+nav {
+    position: sticky; top: 0;
+    background: rgba(26, 30, 42, 0.96);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    z-index: 100; padding: 0 2rem;
+}
+nav ul { display: flex; list-style: none; overflow-x: auto; scrollbar-width: none; }
+nav ul::-webkit-scrollbar { display: none; }
+nav a {
+    display: block; padding: 0.9rem 1.1rem;
+    color: var(--text-muted); text-decoration: none;
+    font-size: 0.82rem; white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s; cursor: pointer;
+}
+nav a:hover, nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.hero { padding: 5rem 0 4rem; border-bottom: 1px solid var(--border); }
+.hero-eyebrow {
+    font-size: 0.75rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--text-dim); margin-bottom: 1rem;
+}
+.hero-title { font-size: 2.8rem; font-weight: 700; line-height: 1.15; margin-bottom: 1rem; }
+.hero-desc {
+    font-size: 1.05rem; color: var(--text-muted);
+    max-width: 750px; margin-bottom: 2rem; line-height: 1.65;
+}
+.hero-meta { display: flex; gap: 2rem; font-size: 0.82rem; color: var(--text-dim); flex-wrap: wrap; }
+.hero-meta span::before { content: '\2014 '; }
+.hero-meta span:first-child::before { content: ''; }
+
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.summary-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1.4rem; border-top: 3px solid;
+}
+.summary-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 0.4rem; }
+.summary-value { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.2rem; }
+.summary-detail { font-size: 0.82rem; color: var(--text-muted); line-height: 1.55; }
+
+.data-table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; min-width: 700px; }
+.data-table th {
+    padding: 0.7rem 1rem; text-align: left;
+    background: var(--surface-2); border-bottom: 2px solid var(--border);
+    font-weight: 500; color: var(--text-muted); font-size: 0.78rem;
+    white-space: nowrap;
+}
+.data-table td { padding: 0.65rem 1rem; border-bottom: 1px solid rgba(58,64,85,0.45); vertical-align: middle; }
+.data-table tr:hover td { background: rgba(34,39,58,0.8); }
+.data-table td.num { font-family: 'Consolas', 'Fira Code', monospace; }
+
+.status-badge { display: inline-block; padding: 1px 7px; border-radius: 3px; font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.status-pass     { background: rgba(134,192,108,0.12); color: var(--green);  border: 1px solid rgba(134,192,108,0.3); }
+.status-fail     { background: rgba(224,128,128,0.12); color: var(--red);   border: 1px solid rgba(224,128,128,0.3); }
+.status-progress { background: rgba(123,174,232,0.12); color: var(--blue);  border: 1px solid rgba(123,174,232,0.3); }
+.status-warn     { background: rgba(212,184,106,0.12); color: var(--yellow);border: 1px solid rgba(212,184,106,0.3); }
+.status-info     { background: rgba(224,151,90,0.10); color: var(--accent); border: 1px solid rgba(224,151,90,0.25); }
+.status-none     { background: rgba(92,101,117,0.1);  color: var(--text-dim);border: 1px solid rgba(92,101,117,0.2); }
+
+.callout-box {
+    background: rgba(224,151,90,0.06); border: 1px solid rgba(224,151,90,0.2);
+    border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1rem 0;
+}
+.callout-title { font-size: 0.78rem; font-weight: 600; color: var(--accent); margin-bottom: 0.4rem; }
+.callout-text  { font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; }
+
+.warning-box {
+    background: rgba(212,184,106,0.06); border: 1px solid rgba(212,184,106,0.2);
+    border-radius: 8px; padding: 1.1rem 1.4rem; margin: 1rem 0;
+}
+.warning-title { font-size: 0.78rem; font-weight: 600; color: var(--yellow); margin-bottom: 0.4rem; }
+.warning-text  { font-size: 0.8rem; color: var(--text-muted); line-height: 1.6; }
+
+.key-box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.4rem; margin-bottom: 1.5rem; }
+.key-box h4 { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.8rem; color: var(--text); }
+.key-box p  { font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 0.6rem; }
+.key-box ul { padding-left: 1.2rem; margin: 0.5rem 0; }
+.key-box li { font-size: 0.82rem; color: var(--text-muted); line-height: 1.6; margin-bottom: 0.3rem; }
+
+code {
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 0.78rem; color: var(--cyan);
+    background: var(--surface-2); padding: 1px 5px; border-radius: 3px;
+}
+
+p.body { font-size: 0.88rem; color: var(--text-muted); line-height: 1.7; margin-bottom: 1rem; max-width: 1000px; }
+p.body strong { color: var(--text); font-weight: 600; }
+
+figure.plot { margin: 1.6rem 0 1.2rem; }
+figure.plot img {
+    width: 100%; height: auto; display: block;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+}
+figure.plot figcaption {
+    font-size: 0.76rem; color: var(--text-dim);
+    margin-top: 0.6rem; line-height: 1.55; max-width: 1000px;
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class='container' style='padding:0'>
+    <ul>
+      <li><a href='#overview'>Overview</a></li>
+      <li><a href='#families'>Contour families</a></li>
+      <li><a href='#subfamily'>Family or chart</a></li>
+      <li><a href='#shock'>Internal shock</a></li>
+      <li><a href='#throat'>Throat and transonic</a></li>
+      <li><a href='#boundary'>Boundary layer</a></li>
+      <li><a href='#convergence'>Grid convergence</a></li>
+      <li><a href='#validation'>Validation status</a></li>
+      <li><a href='#reproducing'>Reproducing</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class='hero'>
+  <div class='container'>
+    <div class='hero-eyebrow'>NOVA &middot; Nozzle Contour</div>
+    <h1 class='hero-title'>Three contour families,<br>and what each one is entitled to claim</h1>
+    <p class='hero-desc'>
+      NOVA generates a truncated ideal contour, a thrust-optimized parabola and a thrust-optimized
+      contour, each returning a fully populated solution so the cooling model, plume march and
+      export chain read any of them unchanged. This report carries the measurements behind those
+      three families, the throat and transonic models they share, the boundary layer that debits
+      them, and the internal shock two of them can carry.
+    </p>
+    <div class='hero-meta'>
+      <span>Worked case LOX/LH2, $P_c$ 6.895 MPa, $O/F$ 5.5, $\varepsilon$ 40</span>
+      <span>1210 tests</span>
+      <span>9 regression cases at bit identity</span>
+      <span>2026-09-15</span>
+    </div>
+  </div>
+</div>
+
+<section id='overview'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>Overview</h2>
+      <p class='section-subtitle'>What is measured, and what each measurement rests on</p>
+    </div>
+
+    <div class='summary-grid'>
+      <div class='summary-card' style='border-top-color: var(--accent);'>
+        <div class='summary-label'>Parabola over truncated ideal</div>
+        <div class='summary-value' style='color: var(--accent);'>+0.229 %</div>
+        <div class='summary-detail'>At the worked design point, normalized by exit mass closure.
+          SP-8120 puts a truncated ideal contour of order a quarter of a per cent behind the
+          optimum a parabola approximates.</div>
+      </div>
+      <div class='summary-card' style='border-top-color: var(--green);'>
+        <div class='summary-label'>Cubic freedom over an optimized parabola</div>
+        <div class='summary-value' style='color: var(--green);'>+0.143 %</div>
+        <div class='summary-detail'>A demonstrated local optimum, clearing its own noise floor by
+          a factor of 270. Measured against a searched quadratic, not a chart reading.</div>
+      </div>
+      <div class='summary-card' style='border-top-color: var(--blue);'>
+        <div class='summary-label'>Boundary layer friction drag</div>
+        <div class='summary-value' style='color: var(--blue);'>2.03 %</div>
+        <div class='summary-detail'>Of inviscid thrust. At the reference friction factor the same
+          integral gives 1.52 %, so the friction level accounts for about a third of the
+          difference from published budgets.</div>
+      </div>
+      <div class='summary-card' style='border-top-color: var(--yellow);'>
+        <div class='summary-label'>Transonic starting line</div>
+        <div class='summary-value' style='color: var(--yellow);'>Open</div>
+        <div class='summary-detail'>Three models are selectable, but all three carry a throat
+          condition on Sauer's spatial form. The sonic line's shape is Sauer's under every
+          option.</div>
+      </div>
+    </div>
+
+    <div class='callout-box'>
+      <div class='callout-title'>Every coefficient is quoted with its exit mass closure</div>
+      <div class='callout-text'>
+        The exit plane samples less mass than the throat passes, and the momentum term scales with
+        what it samples. Two walls need not sample equally, so a raw thrust coefficient is not
+        comparable across contours. A wall closing 72 per cent of the throat mass flow reports a
+        <em>higher</em> raw coefficient than a good one. Every cross-family number in this report
+        is $C_F$ divided by that closure, and the closure is printed beside it.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id='families'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>The three contour families</h2>
+      <p class='section-subtitle'>How each wall is arrived at, and what the difference is worth</p>
+    </div>
+
+    <p class='body'>
+      A family is defined by how its wall is found. The <strong>truncated ideal contour</strong>
+      traces the wall as a streamline through a solved mesh and cuts it at the requested area
+      ratio. The <strong>thrust-optimized parabola</strong> draws the wall first, from two chart
+      angles, and marches the flow over it. The <strong>thrust-optimized contour</strong> draws,
+      evaluates and redraws a cubic Bezier wall under an optimizer. The last two share a forward
+      characteristics march over a wall handed to the solver, which the truncated ideal contour
+      never needed.
+    </p>
+
+    <p class='body'>
+      All three deliver the same exit point, so the walls differ by about two per cent of radius in
+      between. That is where the performance difference lives.
+    </p>
+
+    <figure class='plot'>
+      <img src='contourFamilies_2026-09-15/families.png' alt='Family walls and thrust comparison'>
+      <figcaption>
+        Left, the three diverging walls at area ratio 40 and 80 per cent bell. Centre, each
+        optimized wall as a percentage of radius below the truncated ideal, which is the only
+        scale on which the families separate visibly. Right, thrust coefficient over exit mass
+        closure against the truncated ideal baseline, across all seven design points. At area
+        ratio 40 and 0.80 bell the searched contour returned its own incumbent, so its wall and
+        the parabola's coincide.
+      </figcaption>
+    </figure>
+
+    <div class='data-table-wrap'>
+      <table class='data-table'>
+        <thead>
+          <tr>
+            <th>Area ratio</th><th>Bell</th>
+            <th>Truncated ideal</th><th>Parabola</th><th>Searched contour</th>
+            <th>Search converged</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td class='num'>10</td><td class='num'>0.80</td><td class='num'>baseline</td><td class='num' style='color:var(--green)'>+0.048 %</td><td class='num'>+0.001 %</td><td><span class='status-badge status-pass'>yes</span></td></tr>
+          <tr><td class='num'>20</td><td class='num'>0.80</td><td class='num'>baseline</td><td class='num' style='color:var(--green)'>+0.171 %</td><td class='num'>+0.100 %</td><td><span class='status-badge status-warn'>no</span></td></tr>
+          <tr><td class='num'>40</td><td class='num'>0.80</td><td class='num'>baseline</td><td class='num' style='color:var(--green)'>+0.229 %</td><td class='num'>+0.229 %</td><td><span class='status-badge status-warn'>no</span></td></tr>
+          <tr><td class='num'>70</td><td class='num'>0.80</td><td class='num'>baseline</td><td class='num'>+0.477 %</td><td class='num' style='color:var(--green)'>+0.605 %</td><td><span class='status-badge status-pass'>yes</span></td></tr>
+          <tr><td class='num'>40</td><td class='num'>0.60</td><td class='num'>baseline</td><td class='num' style='color:var(--green)'>+0.130 %</td><td class='num' style='color:var(--red)'>-0.256 %</td><td><span class='status-badge status-warn'>no</span></td></tr>
+          <tr><td class='num'>40</td><td class='num'>0.70</td><td class='num'>baseline</td><td class='num' style='color:var(--green)'>+0.213 %</td><td class='num'>+0.066 %</td><td><span class='status-badge status-warn'>no</span></td></tr>
+          <tr><td class='num'>40</td><td class='num'>0.90</td><td class='num'>baseline</td><td class='num' style='color:var(--green)'>+0.828 %</td><td class='num'>+0.828 %</td><td><span class='status-badge status-warn'>no</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class='body' style='margin-top:1.2rem'>
+      <strong>The parabola beats the truncated ideal contour at every design point</strong>, by
+      0.048 to 0.828 per cent. That is the one cross-family result here with an external
+      expectation behind it, and it lands on SP-8120's quarter of a per cent.
+    </p>
+
+    <div class='warning-box'>
+      <div class='warning-title'>The searched column is a statement about a search budget, not about a family</div>
+      <div class='warning-text'>
+        These seven searches run at 60 objective evaluations and one restart, against the driver's
+        defaults of 160 and six, so that seven design points fit in one sweep. Two of the seven
+        converged. Where a row did not converge the parabola column is the number to read. Two
+        rows tie the parabola exactly because the incumbent-fallback guard correctly returned the
+        parabola rather than a penalized wall. The next section runs the same question at full
+        budget.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id='subfamily'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>Beating the family, or beating the chart</h2>
+      <p class='section-subtitle'>Separating two differences the cross-family sweep can only report as a sum</p>
+    </div>
+
+    <p class='body'>
+      A searched cubic beating the chart parabola answers two questions at once. The cubic family
+      may genuinely be better, or the chart reading may simply be poor: it is a digitization of a
+      figure, it carries a recorded transcription error, and SP-8120 marks it extrapolated above
+      area ratio 50.
+    </p>
+
+    <p class='body'>
+      The cubic family contains the quadratic one exactly. Every quadratic Bezier is the cubic
+      whose control points sit two thirds of the way along the same tangents, so the optimizer can
+      be confined to the surface on which every wall is still a parabola: the two wall angles
+      become the design variables and the tensions follow from them. Three walls then separate the
+      two effects.
+    </p>
+
+    <figure class='plot'>
+      <img src='contourFamilies_2026-09-15/subfamily.png' alt='Chart parabola against searched quadratic and searched cubic'>
+      <figcaption>
+        Thrust coefficient over exit mass closure for the chart parabola, a searched quadratic and
+        a searched cubic, at two design points. Every search ran at the driver's full settings:
+        605 objective evaluations over four restarts for the cubic at area ratio 40, 276 over two
+        at area ratio 70.
+      </figcaption>
+    </figure>
+
+    <div class='data-table-wrap'>
+      <table class='data-table'>
+        <thead>
+          <tr><th>Wall</th><th>Area ratio 40, 0.80 bell</th><th>Closure</th><th>Area ratio 70, 0.80 bell</th><th>Closure</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Chart parabola</td><td class='num'>1.84785</td><td class='num'>96.22 %</td><td class='num'>1.91882</td><td class='num'>92.61 %</td></tr>
+          <tr><td>Optimized quadratic</td><td class='num'>1.84785</td><td class='num'>96.22 %</td><td class='num'>1.92122</td><td class='num'>95.68 %</td></tr>
+          <tr><td>Optimized cubic</td><td class='num' style='color:var(--green)'>1.85048</td><td class='num'>96.47 %</td><td class='num' style='color:var(--green)'>1.92174</td><td class='num'>95.62 %</td></tr>
+          <tr><td><strong>What the chart reading costs</strong></td><td class='num'>+0.000 %</td><td></td><td class='num' style='color:var(--accent)'>+0.125 %</td><td></td></tr>
+          <tr><td><strong>What the cubic freedom buys</strong></td><td class='num' style='color:var(--green)'>+0.143 %</td><td></td><td class='num'>+0.027 % <span class='status-badge status-none'>below noise</span></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class='body' style='margin-top:1.2rem'>
+      <strong>Both effects are real and they change places.</strong> At area ratio 40, where the
+      chart is measured data, the quadratic search returned the chart vector unchanged: the chart
+      reading is already the best wall in the parabola family there, so the whole gain is the
+      cubic's extra freedom. At area ratio 70, inside the extrapolated region, the picture
+      inverts. Most of the difference is the chart, and the cubic's further 0.027 per cent sits
+      below the noise floor and is reported as unresolved rather than as a result.
+    </p>
+
+    <div class='callout-box'>
+      <div class='callout-title'>This does not contradict Allman and Hoffman</div>
+      <div class='callout-text'>
+        They optimized a second-degree wall against Rao contours at thirteen matched lengths and
+        landed 0.05 to 0.21 per cent <em>below</em> Rao at every one, because a parametrized family
+        cannot beat an unconstrained variational optimum. Their baseline was a true Rao
+        <em>variational</em> contour; NOVA's is the Rao <em>parabola</em>, the 1960 approximation
+        to it. A cubic beating the approximation by 0.143 per cent is consistent with both walls
+        sitting below a variational optimum that neither of them is. Nothing here compares any
+        NOVA wall against a true variational contour, because no source in the reference set
+        publishes one as coordinates.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id='shock'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>The internal shock</h2>
+      <p class='section-subtitle'>Detection from the wall characteristic envelope, and weak-shock capture</p>
+    </div>
+
+    <p class='body'>
+      A truncated ideal contour cannot carry an internal shock: its wall is a streamline of a
+      shock-free field, so its characteristics never converge by construction. Both optimized
+      families can. This matters to the optimizer rather than only to the reporting, because
+      <strong>an isentropic march charges a wall nothing for turning</strong>, so a search given
+      one runs to whatever inflection bound it is handed and calls the result an optimum.
+    </p>
+
+    <p class='body'>
+      Detection asks about directions at the wall rather than positions in the mesh. Every wall
+      point launches a right-running characteristic at $\theta - \mu$. Past the inflection the
+      wall angle falls and $\theta - \mu$ falls faster, so each characteristic leaves aimed
+      further inboard than the one before it and the family closes on itself. The earliest meeting
+      inside the nozzle is the onset.
+    </p>
+
+    <figure class='plot'>
+      <img src='contourFamilies_2026-09-15/shockCapture.png' alt='Shock response against wall turning'>
+      <figcaption>
+        Response of the detector and the capture as one wall is turned progressively harder than
+        the chart parabola at area ratio 40. Left, onset moves upstream while the total wall
+        turning the front absorbs grows. Right, the stagnation pressure surviving the front
+        against the weak-shock threshold, with the thrust debit actually charged.
+      </figcaption>
+    </figure>
+
+    <div class='data-table-wrap'>
+      <table class='data-table'>
+        <thead>
+          <tr><th>Wall</th><th>Shock</th><th>Onset $x/R_t$</th><th>Deflection</th><th>$p_0$ ratio</th><th>Weak</th><th>Front resolved</th><th>Debit</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Chart parabola</td><td><span class='status-badge status-none'>none</span></td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td></tr>
+          <tr><td>Cubic at the parabola vector</td><td><span class='status-badge status-none'>none</span></td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td><td class='num'>&mdash;</td></tr>
+          <tr><td>Inflection +4&deg;</td><td><span class='status-badge status-info'>found</span></td><td class='num'>12.801</td><td class='num'>0.799&deg;</td><td class='num'>0.999992</td><td><span class='status-badge status-pass'>yes</span></td><td><span class='status-badge status-fail'>no</span></td><td class='num'>0.0000 %</td></tr>
+          <tr><td>Inflection +8&deg;</td><td><span class='status-badge status-info'>found</span></td><td class='num'>6.037</td><td class='num'>16.968&deg;</td><td class='num'>0.86912</td><td><span class='status-badge status-fail'>no</span></td><td><span class='status-badge status-pass'>yes</span></td><td class='num'>-0.7856 %</td></tr>
+          <tr><td>Inflection +14&deg;</td><td><span class='status-badge status-info'>found</span></td><td class='num'>3.440</td><td class='num'>29.470&deg;</td><td class='num'>0.55546</td><td><span class='status-badge status-fail'>no</span></td><td><span class='status-badge status-pass'>yes</span></td><td class='num'>-4.2924 %</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class='warning-box' style='margin-top:1.2rem'>
+      <div class='warning-title'>The capture charges nothing in exactly the regime where it is valid</div>
+      <div class='warning-text'>
+        Holding each region isentropic and carrying a stagnation pressure debit across a fitted
+        front is defensible only while the entropy rise is third order in shock strength. The
+        downstream stagnation field interpolates <em>along</em> the front, so it needs at least two
+        crossings to have a front to interpolate along. Four to six degrees past the chart parabola
+        gives one crossing, a deflection under a degree and a debit of exactly zero; by seven
+        degrees the front resolves but already carries thirteen degrees of deflection and is no
+        longer weak. The two conditions do not overlap at this design point.
+        <code>frontResolved</code> reports which case a zero debit is, so a loss that was never
+        applied is not read as a loss that was negligible.
+      </div>
+    </div>
+
+    <p class='body'>
+      Across all seven design points in the cross-family sweep, at bell fractions from 0.60 to
+      0.90, no family produced a shock inside the nozzle. A chart parabola at 80 per cent bell
+      turns gently enough that its wall characteristics meet beyond the exit plane. Detection is a
+      property of the design point rather than of the family, which is why the response curve
+      above exists: a sweep that finds nothing says nothing about the detector.
+    </p>
+  </div>
+</section>
+
+<section id='throat'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>Throat geometry and the transonic starting line</h2>
+      <p class='section-subtitle'>Four settings that were hardcoded, and one row that stays open</p>
+    </div>
+
+    <p class='body'>
+      The throat entrant arc, the throat exit arc, the initial wall angle and the transonic model
+      are all selectable, and every default reproduces the previous behavior exactly. The entrant
+      and exit arcs are <code>throatInletCurvature</code> and <code>throatOutletCurvature</code>,
+      defaulting to Rao's 1.5 and 0.382 throat radii. The initial wall angle is
+      <code>initialWallAngleFraction</code>, the fraction of the design-exit Prandtl-Meyer angle at
+      which the diverging arc ends, defaulting to Rao's one quarter and read only by the truncated
+      ideal contour.
+    </p>
+
+    <p class='body'>
+      SP-8120 requires the entrant ratio to stay above 0.6 and prefers about 1.0 for efficiency,
+      against the 1.5 that is merely conventional. Opening it is what makes the transonic model
+      matter, because the series the starting line is drawn from degrades as the throat sharpens.
+    </p>
+
+    <figure class='plot'>
+      <img src='contourFamilies_2026-09-15/throatTransonic.png' alt='Throat arcs and transonic model comparison'>
+      <figcaption>
+        Left, the Rao throat with the entrant arc at the conventional 1.5, the 1.0 SP-8120 prefers
+        and the 0.6 floor it requires, against the fixed 0.382 exit arc. Right, throat wall
+        velocity against entrant curvature for the three selectable transonic models at
+        $\gamma = 1.1475$. The models agree above about 2 and separate exactly where the arc would
+        be opened.
+      </figcaption>
+    </figure>
+
+    <p class='body'>
+      The three models are the same series truncated in different places, plus one rearrangement
+      of it. The axisymmetric throat wall velocity is
+    </p>
+
+    <p class='body'>
+      $$\frac{u(0,1)}{a^*} = 1 + \frac{1}{4R} + \frac{14\gamma + 15}{288 R^2} + O(R^{-3}) \tag{1}$$
+    </p>
+
+    <p class='body'>
+      with $R$ the throat wall radius of curvature normalized by the throat radius.
+      <code>'sauer'</code> keeps the first term, <code>'secondOrder'</code> adds the term Hall and
+      Kliegel-Quan agree on, and <code>'smallRadius'</code> is the same two terms rearranged into
+      inverse powers of $R + 1$, which stays finite and supersonic where the series in $R$ returns
+      a subsonic throat wall below about $R = 0.5$.
+    </p>
+
+    <div class='warning-box'>
+      <div class='warning-title'>The transonic row stays open, and cannot be closed by adding terms</div>
+      <div class='warning-text'>
+        SP-8120's recommended practice names a 29-term series at a radius ratio of 1.5, but
+        <strong>that term count belongs to a different method family</strong>. Its reference 4 is a
+        proprietary Pratt and Whitney program manual implementing the Oswatitsch and Rothstein
+        method: a velocity distribution along a reference streamline is assumed, the power-series
+        form of the compressible-flow equation is integrated numerically, and the wall is located
+        by summing streamline mass flow. That is an inverse method in which the wall falls out, and
+        the monograph ties the term count to obtaining a close fit to the desired wall geometry
+        rather than to order of accuracy.
+        <br><br>
+        The monograph's second permitted route is Kliegel and Levine (1969), which is the family
+        NOVA is in, and whose series its own authors concluded does not converge for higher
+        approximations. So neither route closes by carrying more terms. What all three models here
+        move is the throat <em>condition</em>, imposed on Sauer's spatial <em>form</em>; the shape
+        of the sonic line away from the throat plane is Sauer's under every option, and the shape
+        is what a starting line is drawn from. Closing the row means implementing a sonic-line
+        field.
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id='boundary'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>The boundary layer</h2>
+      <p class='section-subtitle'>A compressible integral turbulent layer on the finished wall</p>
+    </div>
+
+    <p class='body'>
+      The layer is marched along the wall from the near-wall state the characteristics solve
+      already produces. Properties are taken at Eckert's reference temperature, the momentum
+      integral is closed with a compressibility-transformed power law, and the displacement
+      thickness follows from the compressible shape factor. It is used twice: the displacement
+      thickness offsets the wall outward point by point so the physical wall delivers the area
+      ratio the inviscid solve was asked for, and the skin friction integrates to a drag debit on
+      the thrust coefficient.
+    </p>
+
+    <p class='body'>
+      $$\frac{d\theta}{dx} = \frac{c_f}{2} - \theta\,(2 + H - M_e^2)\,\frac{1}{u_e}\frac{du_e}{dx}
+        - \frac{\theta}{r}\frac{dr}{dx} \tag{2}$$
+    </p>
+
+    <figure class='plot'>
+      <img src='contourFamilies_2026-09-15/boundaryLayer.png' alt='Boundary layer thicknesses, friction and drag decomposition'>
+      <figcaption>
+        Worked LOX/LH2 truncated ideal contour at a wall temperature of 800 K. Left, momentum and
+        displacement thickness along the wall. Centre, the Fanning skin friction coefficient
+        against the representative 0.003 that NASA RP-1104 charges over a perfect bell. Right, the
+        friction drag NOVA computes beside the same integral evaluated at RP-1104's factor, over
+        the same wetted area and the same dynamic pressure.
+      </figcaption>
+    </figure>
+
+    <div class='data-table-wrap'>
+      <table class='data-table'>
+        <thead>
+          <tr><th>Quantity</th><th>Value</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Exit displacement thickness</td><td class='num'>3.705 mm</td><td>1.16 % of the local radius, so the thin-layer assumption holds</td></tr>
+          <tr><td>Wall offset at exit</td><td class='num'>318.250 &rarr; 321.932 mm</td><td>Area ratio 40.000 inviscid becomes 40.916 physical</td></tr>
+          <tr><td>NOVA effective Fanning factor</td><td class='num'>0.003994</td><td>Drag divided by the same integral RP-1104 multiplies by 0.003</td></tr>
+          <tr><td>RP-1104 representative factor</td><td class='num'>0.003000</td><td>Ratio 1.33</td></tr>
+          <tr><td>NOVA friction drag</td><td class='num'>1998 N, 2.03 %</td><td>Of inviscid thrust</td></tr>
+          <tr><td>Same integral at $c_f = 0.003$</td><td class='num'>1501 N, 1.52 %</td><td>Top of the published 0.5 to 1.5 % band</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class='callout-box' style='margin-top:1.2rem'>
+      <div class='callout-title'>Where the difference from published budgets lives</div>
+      <div class='callout-text'>
+        Both drags run over the same wetted area and the same dynamic pressure, so their ratio is
+        the ratio of friction levels and nothing else. At RP-1104's own factor this contour still
+        returns 1.52 per cent, so <strong>roughly a third of the difference is the friction level
+        and the rest is the design point</strong>: a 40 to 1 bell of 1.13 square meters wetted area
+        on a 98 kN engine belongs at the high end of a general budget. RP-1104 states the same
+        thing from the other side, that large high-pressure nozzles run a little below 0.003 and
+        small low-pressure ones a little above. No coefficient has been tuned to close any of this.
+      </div>
+    </div>
+
+    <p class='body'>
+      Two further things bound the result. A cooled wall genuinely carries more friction than an
+      adiabatic one, and at 800 K against gas at 3081 K that alone raises the coefficient by about
+      half again, so a budget quoted for a hotter wall sits lower for that reason. And what is
+      computed here is friction drag alone, where a performance budget is usually net of the
+      displacement effect, which gives back some of what friction takes.
+    </p>
+  </div>
+</section>
+
+<section id='convergence'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>Grid convergence</h2>
+      <p class='section-subtitle'>What the mesh error in the thrust coefficient actually is</p>
+    </div>
+
+    <p class='body'>
+      Fifty characteristics are launched from the throat arc by default. Sweeping that resolution
+      with the geometry held fixed separates the flow solve from the contour, and dividing out the
+      exit mass closure separates the solve from the plane that samples it.
+    </p>
+
+    <figure class='plot'>
+      <img src='contourFamilies_2026-09-15/gridConvergence.png' alt='Grid convergence, raw and normalized'>
+      <figcaption>
+        Area ratio 40 at 80 per cent bell, each family swept over its own wall held fixed. Left,
+        the raw thrust coefficient against the finest mesh. Right, the same divided by exit mass
+        closure. The searched contour returned its incumbent at this design point, so its curve is
+        the parabola's.
+      </figcaption>
+    </figure>
+
+    <p class='body'>
+      <strong>Most of what looked like mesh error in the coefficient is the exit plane's mass
+      deficit.</strong> For the truncated ideal contour the raw coefficient carries 0.81 per cent
+      at the coarsest mesh and the ratio carries 0.19. The closure climbs monotonically with mesh
+      in both families, and the raw coefficient is non-monotone in both, but the normalized
+      coefficient is non-monotone only in the truncated ideal contour, whose wall ends by
+      truncation rather than by construction. That is consistent with the truncation landing
+      between mesh lines, and it does not establish it. Quote the coefficient at this mesh to
+      about two tenths of a per cent, not better.
+    </p>
+  </div>
+</section>
+
+<section id='validation'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>Validation status</h2>
+      <p class='section-subtitle'>Stated in three categories, because they are not the same thing</p>
+    </div>
+
+    <div class='key-box'>
+      <h4 style='color: var(--green)'>Checked against an independent reference</h4>
+      <ul>
+        <li>The parabola beats the truncated ideal contour at all seven design points by 0.048 to
+            0.828 per cent, against SP-8120's statement that a truncated ideal contour costs of
+            order a quarter of a per cent.</li>
+        <li>The MOC unit process is second order, verified against the exact planar Riemann
+            invariants at measured orders 1.88, 1.94, 1.97, 1.99 and 1.99.</li>
+        <li>Throat sizing agrees with CEA's equilibrium characteristic velocity to 0.02 per cent.</li>
+        <li>The thrust-optimized parabola reproduces the chart angles it is drawn from to within
+            0.52 degrees at the inflection and 0.19 degrees at the exit, at every design point,
+            which bounds the whole drawing-to-measurement path.</li>
+        <li>Boundary layer closures reduce to the incompressible flat-plate correlations exactly in
+            their limits, and the friction level is compared against RP-1104's published factor.</li>
+      </ul>
+    </div>
+
+    <div class='key-box'>
+      <h4 style='color: var(--blue)'>Checked internally, with no external reference</h4>
+      <ul>
+        <li>Exit-plane mass closure against the choked throat, reported beside every coefficient.</li>
+        <li>The thrust coefficient against an independent momentum integral over the same plane, to
+            0.03 per cent.</li>
+        <li>Containment: a cubic built from the parabola design vector traces the quadratic to
+            under $10^{-9}$ over 400 sampled points, which is what makes any comparison between the
+            two families a comparison of walls rather than of code paths.</li>
+        <li>The boundary layer march is insensitive to the starting thickness it cannot know: a
+            five-hundredfold change moves the drag four per cent.</li>
+        <li>Nine regression cases held at bit identity, including the prescribed-wall march and a
+            pinned searched contour carrying a weak shock.</li>
+      </ul>
+    </div>
+
+    <div class='key-box'>
+      <h4 style='color: var(--yellow)'>Not validated</h4>
+      <ul>
+        <li><strong>The flowfield itself, point by point.</strong> No source in the reference set
+            publishes a tabulated axisymmetric solution for a rocket bell, and that holds for the
+            optimized families too: neither Allman and Hoffman nor RP-1104 publishes wall
+            coordinates.</li>
+        <li><strong>Any wall against a true variational contour.</strong> The optimum both families
+            approximate is not available as coordinates from any source here.</li>
+        <li><strong>The transonic starting line.</strong> Three models are selectable and all three
+            carry a throat condition on Sauer's spatial form.</li>
+        <li><strong>The boundary layer against a measured profile.</strong> Nothing here establishes
+            the velocity profile, the shape factor or the transition point, and the result is
+            friction drag alone rather than net of the displacement effect.</li>
+        <li><strong>The internal shock capture beyond a weak front.</strong> The treatment is only
+            defensible while <code>isWeak</code> holds, and at this design point a front that is
+            weak is also unresolved.</li>
+        <li><strong>The gas model.</strong> Nothing here establishes what a perfect-gas mesh at a
+            single ratio of specific heats costs against an equilibrium one. Kinetics is not
+            modeled, so the thrust coefficient cannot be compared with a delivered engine specific
+            impulse.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id='reproducing' style='border-bottom:none'>
+  <div class='container'>
+    <div class='section-header'>
+      <h2 class='section-title'>Reproducing</h2>
+      <p class='section-subtitle'>Every number in this report is printed by one of these</p>
+    </div>
+
+    <div class='key-box'>
+      <h4>From the NOVA root</h4>
+      <ul>
+        <li><code>python -m pytest</code> &mdash; the suite, 1210 tests</li>
+        <li><code>python tests/regressionHarness.py --compare</code> &mdash; nine cases at bit
+            identity. Write it to a file and read the summary line: a filtered gate is not a gate.</li>
+        <li><code>python featureShowcase/buildContourFamilies.py</code> &mdash; the cross-family
+            sweep, grid convergence and shock response, about 65 minutes</li>
+        <li><code>python featureShowcase/buildSubfamilyStudy.py</code> &mdash; the quadratic
+            subfamily at full search settings, about 134 minutes</li>
+        <li><code>python featureShowcase/buildFamiliesReportFigures.py</code> &mdash; the figures on
+            this page, from those two caches plus a fresh boundary layer solve</li>
+      </ul>
+    </div>
+
+    <p class='body' style='margin-top:1.5rem; color: var(--text-dim); font-size:0.8rem'>
+      Sean Bowman &middot; NOVA &middot; 2026-09-15
+    </p>
+  </div>
+</section>
+
+<script>
+    // Highlight the section currently in view.
+    const links = Array.from(document.querySelectorAll('nav a'));
+    const sections = links.map(link => document.querySelector(link.getAttribute('href')));
+    function markActive() {
+        const middle = window.scrollY + window.innerHeight * 0.3;
+        let current = 0;
+        sections.forEach((section, index) => {
+            if (section && section.offsetTop <= middle) { current = index; }
+        });
+        links.forEach((link, index) => link.classList.toggle('active', index === current));
+    }
+    window.addEventListener('scroll', markActive, { passive: true });
+    markActive();
+</script>
+
+</body>
+</html>

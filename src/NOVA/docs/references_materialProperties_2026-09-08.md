@@ -23,7 +23,7 @@ Accessed 2026-09-08 unless noted otherwise.
 
 - **URL:** <https://trc.nist.gov/cryogenics/materials/OFHC%20Copper/OFHC_Copper_rev1.htm>
 - **Accessed:** 2026-09-08
-- **Relevance:** Copper is the chamber wall material family, so its cryogenic behaviour matters most. It also turned out to be the one alloy whose conductivity moves in the opposite direction to the rest.
+- **Relevance:** Copper is the chamber wall material family, so its cryogenic behavior matters most. It also turned out to be the one alloy whose conductivity moves in the opposite direction to the rest.
 - **Key findings:**
   - Conductivity uses a rational form, `k = 10^[(a + cT^0.5 + eT + gT^1.5 + iT^2)/(1 + bT^0.5 + dT + fT^1.5 + hT^2)]`, with separate coefficient sets for residual resistivity ratio 50, 100, 150, 300 and 500.
   - **Conductivity is strongly purity dependent at low temperature and not at all at room temperature.** At 20 K the fits give 1368 W/m-K at RRR 50 and 3245 W/m-K at RRR 150, a factor of 2.4; at 293 K they span 392.8 to 398.3 W/m-K, a factor of 1.014. A room-temperature measurement cannot tell you which curve applies.
@@ -38,7 +38,7 @@ Accessed 2026-09-08 unless noted otherwise.
 - **Relevance:** The four structural alloys in NOVA's table that NIST covers. Supplies both the cryogenic conductivity and the cryogenic expansion that were missing.
 - **Key findings:**
   - Conductivity at 20 K as a fraction of the room-temperature value: 316L 0.142, Ti-6Al-4V 0.114, 6061-T6 0.183, Inconel 718 0.303. Every one of them conducts *worse* cold, by a factor of three to nine.
-  - Disagreement with the room-temperature value NOVA already carried, at the join: 316L +4.5 %, 6061-T6 -7.1 %, Ti-6Al-4V +9.9 %, Inconel 718 -12.8 %. The cryogenic segment is normalised onto NOVA's value so the validated high-temperature curve is preserved; the factor is recorded per alloy.
+  - Disagreement with the room-temperature value NOVA already carried, at the join: 316L +4.5 %, 6061-T6 -7.1 %, Ti-6Al-4V +9.9 %, Inconel 718 -12.8 %. The cryogenic segment is normalized onto NOVA's value so the validated high-temperature curve is preserved; the factor is recorded per alloy.
   - The NIST fit is for type 316 rather than 316L. The two differ mainly in carbon content, which has little effect on conductivity.
   - Ti-6Al-4V conductivity data covers 23-300 K, narrower than the others.
 
@@ -63,7 +63,7 @@ Accessed 2026-09-08 unless noted otherwise.
 - **Key findings:**
   - Temperature-dependent tensile properties appear only as Figures 3, 4, 5 and 10, as plotted curves without an accompanying table.
   - Table 6 gives properties after 2000 hr exposure at 1200, 1400 and 1600 F, which is an ageing study rather than a yield-versus-temperature curve, and is not the same quantity.
-  - **Nothing was taken from this source for yield strength.** Digitising a plot is not a citation, and Inconel 625's yield stays a held-flat room-temperature value with its provenance saying why.
+  - **Nothing was taken from this source for yield strength.** Digitizing a plot is not a citation, and Inconel 625's yield stays a held-flat room-temperature value with its provenance saying why.
 
 ## de Groh, Ellis and Loewenthal, *Comparison of GRCop-84 to Other Cu Alloys With High Thermal Conductivities*
 
@@ -96,7 +96,7 @@ Accessed 2026-09-08 unless noted otherwise.
   - **Nothing was taken from this source.** 6061-T6 and Ti-6Al-4V yield remain held-flat room-temperature values, and their provenance says MMPDS carries the temperature dependence but is not openly available.
   - Worth noting for the 6061-T6 entry specifically: the T6 temper over-ages above roughly 200 degC, so a flat room-temperature yield is unconservative there, and the stored provenance says so.
 
-## NARloy-Z (Cu-3Ag-0.5Zr) elevated-temperature behaviour
+## NARloy-Z (Cu-3Ag-0.5Zr) elevated-temperature behavior
 
 - **URL:** <https://link.springer.com/article/10.1007/s11665-019-04499-w>, <https://ntrs.nasa.gov/api/citations/20160001827/downloads/20160001827.pdf>
 - **Accessed:** 2026-09-08
@@ -112,7 +112,7 @@ Accessed 2026-09-08 unless noted otherwise.
 
 Yield strength against temperature is still a held-flat room-temperature value for eight of the ten alloys. The tabulated sources that would close it, ASME Section II Part D and MMPDS, are both paywalled; the producer datasheets either plot it without tabulating it (Inconel 625) or do not cover it (CuCrZr, AlSi10Mg). Filling those from journal papers on assorted product forms would produce a curve that looks authoritative and is not traceable to one condition, which is worse than a flag saying the data is absent.
 
-Cryogenic data is absent for GRCop-42, CuCrZr, NARloy-Z, AlSi10Mg and Inconel 625. For the copper alloys this matters less than it might: the low-temperature conductivity peak that makes pure copper so conductive at 20 K is a purity effect, and alloying additions suppress it, so extrapolating OFHC behaviour onto GRCop-42 or NARloy-Z would be wrong in a way that flatters the design.
+Cryogenic data is absent for GRCop-42, CuCrZr, NARloy-Z, AlSi10Mg and Inconel 625. For the copper alloys this matters less than it might: the low-temperature conductivity peak that makes pure copper so conductive at 20 K is a purity effect, and alloying additions suppress it, so extrapolating OFHC behavior onto GRCop-42 or NARloy-Z would be wrong in a way that flatters the design.
 
 ---
 
@@ -128,7 +128,7 @@ Sources consulted while building the non-metallic store, added 2026-09-08.
 - **Key findings:**
   - Room-temperature with-grain values: density 1.76 g/cm3, thermal conductivity 116 W/m-K, CTE 3.0e-6/K to 100 degC, tensile 26 MPa, flexural 31 MPa, compressive 66 MPa, Young's modulus 9.7 GPa, resistivity 11.7 microhm-m, particle size 0.03 mm, ash 0.11 %.
   - The datasheet lists with-grain only. Isomolded ATJ is near isotropic but not isotropic; across-grain strength runs roughly 10 to 20 per cent lower.
-  - No temperature dependence is given. Graphite conductivity falls roughly as 1/T above 500 K, and its strength *rises* with temperature to about 2500 degC, which is opposite to every metal in the wall store. Neither behaviour is captured by the stored room-temperature value.
+  - No temperature dependence is given. Graphite conductivity falls roughly as 1/T above 500 K, and its strength *rises* with temperature to about 2500 degC, which is opposite to every metal in the wall store. Neither behavior is captured by the stored room-temperature value.
   - The datasheet's own disclaimer says the values are not to be used to establish specification limits or alone as a basis of design, which is the definition of selection-grade data.
 
 ## Multimatrix Composite Materials for Rocket Nozzle Manufacturing: A Comparative Review

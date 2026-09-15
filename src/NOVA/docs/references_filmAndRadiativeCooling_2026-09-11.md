@@ -20,6 +20,8 @@ Accessed 2026-09-10 and 2026-09-11 unless noted otherwise.
   - **Injection guidance that constrains a design:** liquid film coolant orifices spaced no more than 0.3 in apart, impinging on the wall at 25 to 35 degrees; gaseous coolant injected parallel through slots at a coolant-to-core velocity ratio of 0.9 to 1.15.
   - The monograph is explicit that `psi_m` is the key to predicting coolant flow requirements and that the acceleration and turning effects it absorbs are very significant. Implementing this model makes a result calibrated to SP-8124's recommendation rather than validated.
   - **Format:** scanned, CCITT fax encoded. There is no text layer, so it reads page by page as images. Document page `p` is PDF page `p + 12`.
+  - **Appendix A, read in full from document pages 89 to 93.** Entrainment flow ratio, the reference entrainment fraction `psi_r`, the effective contour distance, Figure A-1 for the velocity-ratio correlation function, Figure A-2 for effectiveness against entrainment flow ratio, and both the reactive and non-reactive adiabatic wall expressions. Every group in it is dimensionless, so it implements in SI with no conversion. Figure A-1 states its lower branch, `f = (u_c/u_e)^1.5` for velocity ratios at or below one; Figure A-2 states both of its limits, `eta = 1` below an entrainment ratio of 0.06 and `eta = 1.32/(1 + W_E/W_c)` above 1.4.
+  - **Appendix B, read in full from document pages 95 to 99, and not implemented.** The liquid film length runs on two curves plotted on Figure B-1, a rotated scan whose values cannot be read to a useful accuracy, and the chain to the answer is multiplicative through a Stanton number, a surface tension, a saturation loop on the coolant partial pressure, and a roughness augmentation factor. The appendix states outright that it is a dimensional correlation in which only the numerical values of the specified units may be used, with the gravitational constant written into the entrainment parameter. Nothing in the monograph gives a worked example to check an implementation against.
 
 ## Hatch and Papell, NASA TN D-130
 
@@ -38,7 +40,7 @@ Accessed 2026-09-10 and 2026-09-11 unless noted otherwise.
 - **Accessed:** 2026-09-10
 - **Relevance:** Film cooling measured at rocket conditions rather than on a flat plate, which is the gap most of the film cooling literature has. Intended as the validation case for the gaseous closure.
 - **Key findings:**
-  - Retrieved as a 1.7 MB scanned PDF with no text layer. Its contents have not yet been extracted; the reference values will be digitised from its figures the way the FIAT baseline was for the ablation work.
+  - Retrieved as a 1.7 MB scanned PDF with no text layer. Its contents have not yet been extracted; the reference values will be digitized from its figures the way the FIAT baseline was for the ablation work.
 
 ## Levine and Merutka, Performance of Coated Columbium and Tantalum Alloys in Plasma Arc Reentry Simulation Tests
 
@@ -87,6 +89,14 @@ Accessed 2026-09-10 and 2026-09-11 unless noted otherwise.
 ## Blocked and paywalled
 
 - **Shine and Nidhi, Review on Film Cooling of Liquid Rocket Engines**, Propulsion and Power Research, 2018. <https://www.sciencedirect.com/science/article/pii/S2212540X1830004X> returns **HTTP 403** to automated access. It reviews the Grisson, Shembharkar-Pai and Stechman liquid film models together, which would have saved reading them separately.
-- **EUCASS 2022 and 2023 papers on low-order film cooling modelling and validation.** <https://www.eucass.eu/> timed out. These carry validation against open-literature experimental data, which is exactly what the liquid film closure needs and currently lacks.
+- **EUCASS 2022 and 2023 papers on low-order film cooling modeling and validation.** <https://www.eucass.eu/> timed out. These carry validation against open-literature experimental data, which is exactly what the liquid film closure needs and currently lacks.
 - **Taylor and Groot, Thermal Conductivity and Electrical Resistivity of Two Types of ATJ-S Graphite to 3500 K**, Carbon, 1973. Paywalled, abstract only. Would have supplied the conductivity curve for a graphite radiation-cooled component.
-- **Emissivity of the copper wall alloys.** No source was found giving emissivity for GRCop-42, GRCop-84, CuCrZr or NARloy-Z at any surface condition, let alone the oxidised as-built finish a laser powder bed fusion chamber actually has. Searching the GRCop development and hot-fire literature returns oxidation behaviour and blanching resistance but no radiative properties. NOVA therefore stores none, and a radiation term that needs one takes it from the configuration.
+- **Emissivity of the copper wall alloys.** No source was found giving emissivity for GRCop-42, GRCop-84, CuCrZr or NARloy-Z at any surface condition, let alone the oxidised as-built finish a laser powder bed fusion chamber actually has. Searching the GRCop development and hot-fire literature returns oxidation behavior and blanching resistance but no radiative properties. NOVA therefore stores none, and a radiation term that needs one takes it from the configuration.
+- **Thermal conductivity of C103 across its service range.** The store carries conductivity curves for the ten jacket alloys only, and `wallMaterialCurves` substitutes GRCop-42 for anything else, which conducts about eight times better. Unlike the emissivity this is a routine measurement rather than a hard one, but no open curve was located in the sources reached here. The extension solver takes conductivity as an explicit input in consequence, and `docs/materialsDatabaseRoadmap.md` records it as step 10.
+
+## Sources generated rather than retrieved
+
+Two quantities the models needed were not available as published numbers and were computed instead. Both are recorded here so that a reader can tell them apart from literature values.
+
+- **Transport power laws for a rocket exhaust**, `k ~ T^a`, `mu ~ T^b`, `Pr ~ T^c`, fitted over 900 to 3600 K from CEA solves at frozen composition across five propellant cases. They set the film correlation's property correction to the film mean temperature. The fitted values and the propellants behind them are in the `filmCooling` module header and in `docs/reports/coolingModelExtension_2026-09-11.md`; the net power reaching the answer stays inside 0.394 to 0.431 across hydrogen, kerosene and methane.
+- **The equilibrium contribution to CEA's thermal conductivity**, a factor of 2.67 at 3398 K falling to 1.37 by 2269 K for a LOX/LH2 exhaust at 6.9 MPa, from the same solves run frozen and equilibrium. It is why a Colburn-form correlation fitted on non-reacting air should be given the molecular conductivity rather than the equilibrium one, which is recorded as outstanding rather than done.

@@ -101,7 +101,7 @@ Resampling: a straight line is reproduced exactly; a quarter circle sampled non-
 
 The guarantee: on a stitch reproducing the sunken pattern, the shape-preserving fit stays inside the range of its input at 10, 60 and 250 output points, and no point falls below the throat. The converse is recorded too, so the reason for the default is not lost: the curvature-continuous fit on the same input puts four of sixty points below the throat.
 
-Degenerate input: exact and near-duplicate points are dropped, wholly coincident input is refused by name rather than returning NaN, and an unrecognised method is refused.
+Degenerate input: exact and near-duplicate points are dropped, wholly coincident input is refused by name rather than returning NaN, and an unrecognized method is refused.
 
 Full suite 646 passed. Harness baselines re-recorded against the changes tabulated above.
 

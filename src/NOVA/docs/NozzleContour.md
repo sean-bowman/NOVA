@@ -992,7 +992,7 @@ The ```generateNozzle()``` method is a wrapper around the methods that read the 
 
 # Related Documents
 
-- [Nozzle Contour Methods](./NozzleContourMethods.md) -- the families of nozzle contour, what each optimises, and where the truncated ideal contour implemented here sits among them.
+- [Nozzle Contour Methods](./NozzleContourMethods.md) -- the families of nozzle contour, what each optimizes, and where the truncated ideal contour implemented here sits among them.
 - [Nozzle Contour Validation](./NozzleContourValidation.md) -- this implementation measured against published references, with the error on each quantity.
 - [Nozzle Contour References](./references_nozzleContour_2026-09-06.md) -- annotated sources behind both.
 
