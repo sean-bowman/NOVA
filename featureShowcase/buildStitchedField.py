@@ -1,12 +1,12 @@
 '''
-Chamber to exit in one frame: the converging section and the diverging section on one colour scale.
+Chamber to exit in one frame: the converging section and the diverging section on one color scale.
 
 The two halves are not the same kind of result and the figure says so. Upstream of the throat there
 is no characteristics mesh and nothing solves the flow; what is drawn is the quasi one-dimensional
 answer, one Mach number per station held across the cross section. Downstream of the throat the
 field is the solved characteristics mesh, with a state at every node.
 
-Putting them on one colour scale is what makes the figure useful and also what makes it easy to
+Putting them on one color scale is what makes the figure useful and also what makes it easy to
 misread, so the seam is marked and captioned rather than blended away.
 
 Run after runBaseCase.py:
@@ -46,7 +46,7 @@ plt.rcParams.update({
     'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
 
-# Field name on the Nozzle object, label, unit, scale factor, colour map, and whether the scale is
+# Field name on the Nozzle object, label, unit, scale factor, color map, and whether the scale is
 # logarithmic. Pressure falls by three orders of magnitude between the chamber and the exit, so a
 # linear scale renders the entire diverging section as one flat black and says nothing about it.
 quantities = {
@@ -86,8 +86,8 @@ def solvedPoints(nozzle, attribute, scale):
     return np.concatenate(xs), np.concatenate(rs), np.concatenate(vs)
 
 def drawStitched(nozzle, quantity):
-    '''One quantity from the chamber to the exit, on a single colour scale.'''
-    attribute, label, unit, scale, colourMap, logarithmic = quantities[quantity]
+    '''One quantity from the chamber to the exit, on a single color scale.'''
+    attribute, label, unit, scale, colorMap, logarithmic = quantities[quantity]
 
     gas = CharacteristicGas(nozzle.chamberGamma, nozzle.chamberRGasConstant,
                             nozzle.chamberStagnationTemperature)
@@ -112,22 +112,22 @@ def drawStitched(nozzle, quantity):
     highest = max(float(np.nanmax(upstreamValues)), float(np.nanmax(meshValues)))
     if logarithmic:
         levels = np.geomspace(max(lowest, highest * 1e-4), highest, 80)
-        normalisation = LogNorm(vmin = levels[0], vmax = levels[-1])
+        normalization = LogNorm(vmin = levels[0], vmax = levels[-1])
     else:
         levels = np.linspace(lowest, highest, 80)
-        normalisation = None
+        normalization = None
 
     figure = plt.figure(figsize = (13.5, 5.4))
     grid = GridSpec(2, 1, height_ratios = [1.0, 0.045], hspace = 0.42, figure = figure)
     axes = figure.add_subplot(grid[0])
 
     axes.contourf(upstreamX * 1e3, upstreamR * 1e3, upstreamValues,
-                  levels = levels, cmap = colourMap, extend = 'both', norm = normalisation)
+                  levels = levels, cmap = colorMap, extend = 'both', norm = normalization)
     mesh = axes.tricontourf(np.concatenate([meshX, meshX]) * 1e3,
                             np.concatenate([meshR, -meshR]) * 1e3,
                             np.concatenate([meshValues, meshValues]),
-                            levels = levels, cmap = colourMap, extend = 'both',
-                            norm = normalisation)
+                            levels = levels, cmap = colorMap, extend = 'both',
+                            norm = normalization)
 
     axes.plot(wallX * 1e3, wallR * 1e3, color = copper, lw = 1.7)
     axes.plot(wallX * 1e3, -wallR * 1e3, color = copper, lw = 1.7)
@@ -158,7 +158,7 @@ def drawStitched(nozzle, quantity):
         bar.set_ticks(decades)
         bar.set_ticklabels([f'{value:g}' for value in decades])
     figure.text(0.012, 0.005,
-                'One colour scale spans both halves, and they are not the same kind of result. '
+                'One color scale spans both halves, and they are not the same kind of result. '
                 'Upstream of the throat nothing is solved: the local area ratio fixes one Mach '
                 'number per station and it is held across the section. Downstream the field is the '
                 'characteristics solution, with a state at every node.',

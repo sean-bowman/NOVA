@@ -164,7 +164,7 @@ def verify(nozzle):
                 f'out at {np.degrees(solution.inflectionWallAngle):.2f} deg at the inflection and '
                 f'{np.degrees(solution.exitWallAngle):.2f} deg at the exit, against '
                 f'{np.degrees(chartInflection):.1f} and {np.degrees(chartExit):.1f} deg from the '
-                f'Rao chart\nfor a thrust-optimised parabola of the same design point'
+                f'Rao chart\nfor a thrust-optimized parabola of the same design point'
                 f'{" (read from the extrapolated region of that chart)" if extrapolated else ""}. '
                 f'The exit pressure is a result, not a target: the plane runs from '
                 f'{exitPressure[0]*1e-3:.1f} kPa at the wall to {exitPressure[-1]*1e-3:.1f} kPa on '

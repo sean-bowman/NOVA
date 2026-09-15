@@ -63,7 +63,7 @@ def savePanel(figure, name):
 
 def drawChamberField(nozzle, quantity):
     '''One quantity over the chamber and converging section, up to the throat plane.'''
-    label, unit, scale, colourMap = quantities[quantity]
+    label, unit, scale, colorMap = quantities[quantity]
 
     gas = CharacteristicGas(nozzle.chamberGamma, nozzle.chamberRGasConstant,
                             nozzle.chamberStagnationTemperature)
@@ -88,7 +88,7 @@ def drawChamberField(nozzle, quantity):
     r = np.concatenate([-field['r'][:, ::-1], field['r']], axis = 1) * 1e3
     values = np.concatenate([field[quantity][:, ::-1], field[quantity]], axis = 1) * scale
 
-    mesh = axes.contourf(x, r, values, levels = 60, cmap = colourMap)
+    mesh = axes.contourf(x, r, values, levels = 60, cmap = colorMap)
     axes.plot(field['wallX'] * 1e3, field['wallR'] * 1e3, color = copper, lw = 1.6)
     axes.plot(field['wallX'] * 1e3, -field['wallR'] * 1e3, color = copper, lw = 1.6)
     axes.axvline(field['wallX'][-1] * 1e3, color = green, lw = 1.2, ls = '--')

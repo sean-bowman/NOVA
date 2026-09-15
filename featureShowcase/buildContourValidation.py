@@ -4,7 +4,7 @@ Validation of the NOVA contour generator against references that do not come fro
 Four studies, in decreasing order of how much they settle.
 
   Rao wall angles     The only reference that checks the CONTOUR rather than its end points.
-                      A truncated ideal contour and a thrust-optimised parabola of the same area
+                      A truncated ideal contour and a thrust-optimized parabola of the same area
                       ratio and length are different families, so a difference is expected; what is
                       reported is its size and its sign.
 
@@ -257,12 +257,12 @@ def draw():
     panelFour = axes[1][0]
     mesh = data['mesh_mesh']
     finest = -1
-    for label, key, colour in [('area ratio', 'mesh_deliveredAreaRatio', copper),
+    for label, key, color in [('area ratio', 'mesh_deliveredAreaRatio', copper),
                                ('length fraction', 'mesh_deliveredLengthFraction', green),
                                ('thrust coefficient', 'mesh_thrustCoef', blue),
                                ('exit wall angle', 'mesh_exitWallAngle', warn)]:
         values = data[key]
-        panelFour.plot(mesh, 100.0 * (values / values[finest] - 1.0), 'o-', color = colour,
+        panelFour.plot(mesh, 100.0 * (values / values[finest] - 1.0), 'o-', color = color,
                        ms = 7, label = label)
     panelFour.axhline(0.0, color = muted, lw = 1.0, ls = '--')
     panelFour.set_xlabel('Characteristics launched from the throat arc')
@@ -279,8 +279,8 @@ def draw():
     reference = data['rao_targetExitPressure']
     index = int(np.nanargmin(np.abs(requestedRatio - 40.0) + np.abs(requestedLength - 0.80)))
     values = [data[key][index] * 1e-3 for key in keys]
-    colours = [warn, copper, copper, green]
-    panelFive.bar(labels, values, color = colours, alpha = 0.85)
+    colors = [warn, copper, copper, green]
+    panelFive.bar(labels, values, color = colors, alpha = 0.85)
     panelFive.axhline(reference[index] * 1e-3, color = blue, lw = 1.8, ls = '--',
                       label = f'target exit pressure {reference[index]*1e-3:.1f} kPa')
     oneDimensional = data['rao_chamberPressure'][index] * staticPressureRatio(
@@ -343,7 +343,7 @@ def draw():
                 f'Against the Rao chart at 80 percent bell the inflection angle runs '
                 f'{inflectionError.min():+.1f} to {inflectionError.max():+.1f} degrees and the exit '
                 f'angle {exitError.min():+.1f} to {exitError.max():+.1f} degrees. These are '
-                f'different contour families, a truncated ideal against a thrust-optimised '
+                f'different contour families, a truncated ideal against a thrust-optimized '
                 f'parabola, so a difference is expected;\nthe sign is the informative part. Above '
                 f'an area ratio of 50 the chart itself is extrapolated and is not a measurement.',
                 fontsize = 8.5, color = ink, va = 'top')

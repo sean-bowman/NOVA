@@ -8,7 +8,7 @@ Three panels, and they establish different things.
                    per cent, so both readings of the envelope are drawn and neither is picked
                    silently.
 
-  Rao bell family  NOVA against the thrust-optimised parabola at matched area ratio and length.
+  Rao bell family  NOVA against the thrust-optimized parabola at matched area ratio and length.
                    The Rao bell follows exactly from its construction, so it is the only reference
                    contour that needs no reconstruction and the only overlay that is a like-for-like
                    comparison of shape.
@@ -221,9 +221,9 @@ def drawRs25(axes, data):
 
 def drawRaoFamily(axes, validation):
     '''
-    NOVA against the thrust-optimised parabola at matched design points.
+    NOVA against the thrust-optimized parabola at matched design points.
 
-    Both contours are normalised to the throat radius so shape is comparable across area ratios
+    Both contours are normalized to the throat radius so shape is comparable across area ratios
     that differ by a factor of seven.
     '''
     requestedRatio = validation['rao_requestedAreaRatio']
@@ -231,14 +231,14 @@ def drawRaoFamily(axes, validation):
     atEightyPercent = np.isclose(requestedLength, 0.80)
     indices = [index for index in np.argsort(requestedRatio) if atEightyPercent[index]]
 
-    colours = [blue, green, copper, purple]
-    for colour, index in zip(colours, indices):
+    colors = [blue, green, copper, purple]
+    for color, index in zip(colors, indices):
         ratio = float(requestedRatio[index])
         wallX = validation[f'rao_wallX_{index}']
         wallR = validation[f'rao_wallR_{index}']
         throatRadius = float(np.min(wallR))
 
-        axes.plot(wallX / throatRadius, wallR / throatRadius, color = colour, lw = 2.2,
+        axes.plot(wallX / throatRadius, wallR / throatRadius, color = color, lw = 2.2,
                   label = f'NOVA, area ratio {ratio:.0f}')
 
         throat = ThroatGeometry(float(validation['rao_chamberGamma'][index]))
@@ -250,7 +250,7 @@ def drawRaoFamily(axes, validation):
     axes.set_xlabel('Distance from the throat, throat radii')
     axes.set_ylabel('Radius, throat radii')
     axes.set_title('Against the Rao bell at 80 percent length\n'
-                   'solid NOVA, dashed the thrust-optimised parabola')
+                   'solid NOVA, dashed the thrust-optimized parabola')
     axes.grid(True, alpha = 0.22)
     axes.legend(loc = 'upper left', fontsize = 7.5, labelcolor = ink)
 
@@ -258,14 +258,14 @@ def drawReconstructed(axes, data):
     '''
     NOVA against Rao bells reconstructed from published area ratios.
 
-    None of these engines publishes a wall. The dashed curves are what a thrust-optimised parabola
+    None of these engines publishes a wall. The dashed curves are what a thrust-optimized parabola
     at the published area ratio and an assumed 80 per cent bell would look like, which is a shape
     family comparison and nothing more.
     '''
     names = ['F-1', 'Vulcain 2', 'RL10A-4-2']
-    colours = [green, copper, blue]
+    colors = [green, copper, blue]
 
-    for name, colour in zip(names, colours):
+    for name, color in zip(names, colors):
         key = engineKey(name)
         if f'{key}_wallX' not in data:
             continue
@@ -273,7 +273,7 @@ def drawReconstructed(axes, data):
         throatRadius = float(np.min(wallR))
         ratio = engines[name]['areaRatio']
 
-        axes.plot(wallX / throatRadius, wallR / throatRadius, color = colour, lw = 2.2,
+        axes.plot(wallX / throatRadius, wallR / throatRadius, color = color, lw = 2.2,
                   label = f'NOVA at the {name} point, area ratio {ratio:.0f}')
 
         throat = ThroatGeometry(float(data[f'{key}_chamberGamma']))

@@ -36,7 +36,7 @@ def workshopTestCase():
 
     '''
 
-    Ablation Workshop test case 1: five centimetres of TACOT held at 1644 K for a minute.
+    Ablation Workshop test case 1: five centimeters of TACOT held at 1644 K for a minute.
 
     Returns:
     --------
@@ -65,7 +65,7 @@ def nozzleLiner():
 
     '''
 
-    A thirty millimetre liner on a LOX/RP-1 nozzle through an eight second firing.
+    A thirty millimeter liner on a LOX/RP-1 nozzle through an eight second firing.
 
     The contour is a simple converging-diverging wall rather than a NOVA-generated one, so that
     the example runs without thermochemistry. Replace the three station arrays with a real

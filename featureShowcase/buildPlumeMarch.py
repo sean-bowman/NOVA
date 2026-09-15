@@ -335,7 +335,7 @@ def drawOperatingRange():
     The range the march now covers, from overexpanded through to underexpanded.
 
     Overexpanded jets used to be refused outright, which excluded sea-level operation of any
-    vacuum-optimised nozzle. The lip turns inward there through what is really an oblique shock,
+    vacuum-optimized nozzle. The lip turns inward there through what is really an oblique shock,
     taken here as an isentropic compression, and the size of that approximation is drawn beside
     the plumes rather than described.
     '''
@@ -414,7 +414,7 @@ def drawOperatingRange():
     figure.subplots_adjust(hspace = 0.55)
     figure.text(0.012, 0.045,
                 'Overexpanded jets were refused outright until now, which excluded sea-level '
-                'operation of any vacuum-optimised nozzle. They are solved here, but not far: an '
+                'operation of any vacuum-optimized nozzle. They are solved here, but not far: an '
                 'inward-turning lip\ncarries only a fraction of a cell before the march stalls, and '
                 'too few lines span the jet for it to report its own conservation, which is what '
                 'the missing drift figures mean.\nNo Mach disk is found in any of these, and that '

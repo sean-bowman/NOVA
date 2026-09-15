@@ -7,6 +7,9 @@ and features taken out of the package that are worth keeping the source of.
 |--------|-----------|
 | `tnd2327.py`, `convergeMarch.py`, `convergeRun.py`, `jetNetPrototype.py` | The MOC free-jet plume interior study, described below |
 | `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
+| `plumeDevelopmentState.md` | Where the plume solver stands, written to be picked up cold |
+| `coolingModelState.md` | Where the film, radiative and extension cooling work stands, and what is open |
+| `internalShockState.md` | How the shock inside an optimized contour is detected and captured, and what a correct rotational solve would take |
 
 ## Sunken throat converging section
 
@@ -53,8 +56,8 @@ prose or the typeset equations:
 | P-5433  | Corner expansion ray generator | 23 |
 | P-5430  | Free jet characteristic network, main program | 38-42 |
 | `GENL`  | General point subroutine | 43 |
-| `CENTL` | Centre-line point subroutine | 44 |
-| `OFCNT` | One-point-off-centre-line subroutine | 44 |
+| `CENTL` | Center-line point subroutine | 44 |
+| `OFCNT` | One-point-off-center-line subroutine | 44 |
 | `BNDRY` | Boundary point subroutine | 44 |
 | `SAMFM` | Same-family (internal shock) point subroutine | 44-45 |
 | `TEST`  | Characteristic crossing detection | 45-46 |
@@ -133,17 +136,17 @@ Eight defects have been corrected against the listings and three numerical mecha
 |-----|----------------|--------|
 | A array is the whole previous line | Mach grew without bound, linearly with ray count (26, 124, 578, 1750, 5382) | `MOVE C ARRAY`, `DO 125 I=1,LINE` |
 | `NA` incremented before the first `GENL` | Off-by-one in the A index every line | statements 102, 110 |
-| `OFCNT` denominator is `GWA*D1 + GWB*D2` | A spurious factor of two halved the centre-line weight | `OFCNT` |
-| `OFCNT` applies when B is on the centre line | The march ended the line instead of calling it | `OFCNT` signature |
+| `OFCNT` denominator is `GWA*D1 + GWB*D2` | A spurious factor of two halved the center-line weight | `OFCNT` |
+| `OFCNT` applies when B is on the center line | The march ended the line instead of calling it | `OFCNT` signature |
 | `pr` is jet static to ambient | Boundary Mach 7.78 instead of 19.70, plume scale wrong by 50x | report tables |
-| Centre-line approach sub-stepped in thirds | One centre-line point per run; the march stalled after a single shock cell | statements 700, 740, 760 |
+| Center-line approach sub-stepped in thirds | One center-line point per run; the march stalled after a single shock cell | statements 700, 740, 760 |
 | `TEST` and `CROSS` written and driven | The internal shock was unreachable; `SAMFM` had no caller | statements 500-785, `CROSS` |
 | Refinement floored away from the axis | Lines packed thousands of points inside 1e-4 of the axis and never reached the boundary | numerical, not from the report |
 | Adaptive line refinement | Line length decayed from 40 points to 4, invalidating eq (C11) over a step | numerical, not from the report |
 | Line budget | Lines grew without bound, so the march cost the square of the line count | numerical, not from the report |
 | Boundary lookup by bisection | `np.interp` rebuilt an array from the boundary list once per point, an O(n^2) march | numerical, not from the report |
 
-### The centre-line march
+### The center-line march
 
 `CENTL` projects a point's first-family characteristic onto the axis. Taken in one step from a
 source point a rounding error off the axis it advances almost nothing, and the net stalls. The
@@ -151,13 +154,13 @@ report divides the approach into three, holding the source point for two sub-ste
 true `CENTL` point on the third, where the source point is released forward by one. Interpolated
 sub-step states carry x, mu and W independently.
 
-With it the march runs. For M_j 3.0 at p_j/p_a 1.5 the number of centre-line points goes from 1 to
+With it the march runs. For M_j 3.0 at p_j/p_a 1.5 the number of center-line points goes from 1 to
 843 and the boundary carries to x/r_j 8.62.
 
 The branch is no longer chaotic. Perturbing the ambient pressure by one and two ulp leaves the run
-identical: 1041 lines, 843 centre-line points, boundary end 8.618720 in every case. The earlier
+identical: 1041 lines, 843 center-line points, boundary end 8.618720 in every case. The earlier
 `axisOffset` workaround is gone, and with it the sensitivity that moved the answer from three
-centre-line points to one on a 4e-16 relative change.
+center-line points to one on a 4e-16 relative change.
 
 ### Grid convergence, and the limits of the earlier claim
 
@@ -178,14 +181,14 @@ points together gives:
 | 3, `M` max | 307.15 | 330.91 | 112.94 | 50.05 |
 
 Case 2 repeats to three figures at 30, 60 and 90 rays and collapses at 45, where the march ends
-after 108 lines without reaching the centre line. Case 3 does not run at all below 60 rays: the
+after 108 lines without reaching the center line. Case 3 does not run at all below 60 rays: the
 first line fails and the core Mach number reaches several hundred against a boundary Mach of 16.38.
 Above that threshold it settles toward the low eighties, still short of the report by more than
 half.
 
 The net is therefore not grid independent in general. It is repeatable at settings that let the
 march get started, and it fails outright at settings that do not. Running the same sweep against the
-solver as it stood before the centre-line and refinement work returns the same numbers to two
+solver as it stood before the center-line and refinement work returns the same numbers to two
 decimal places, so this fragility belongs to the formulation as transcribed rather than to the
 sub-stepping or the refinement floor.
 
@@ -256,8 +259,8 @@ than the march advances along it. The remaining defect is in the march, not in w
 ### To return to: the advancing front
 
 The march computes one characteristic at a time, from a start point out to the boundary, which
-leaves the centre line trailing the boundary and the solved region shaped like a wedge. Advancing a
-whole data line downstream together would remove that, and would remove the centre-line restart and
+leaves the center line trailing the boundary and the solved region shaped like a wedge. Advancing a
+whole data line downstream together would remove that, and would remove the center-line restart and
 its sub-stepping with it.
 
 The obvious way of building one does not work, and the reason is worth keeping. Seeding a front
@@ -282,7 +285,7 @@ which is the first diamond node.
 
 The march now carries to x/r_j 8.62 rather than stopping at 6.77, and it does so repeatably. It
 still resolves one cell. The boundary reaches its maximum radius of 1.24 r_j and does not swell
-again, which is the same behaviour that limits the validation cases: without recompression upstream
+again, which is the same behavior that limits the validation cases: without recompression upstream
 of the maximum there is no second cell for the boundary to describe.
 
 Run `convergeRun.py` for the current grid sweep. `featureShowcase/buildMocPlume.py` renders the

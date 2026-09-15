@@ -15,7 +15,7 @@ Redesign notes, and why the earlier line-march failed:
   list positions.
 
   First-class boundary streamline.  The free boundary is its own polyline, started at the lip at
-  the FULLY EXPANDED state. A centred corner expansion turns the boundary streamline through the
+  the FULLY EXPANDED state. A centerd corner expansion turns the boundary streamline through the
   whole fan at the corner itself; only the fan characteristics are spread downstream. Pinning the
   boundary to the lip for the duration of the fan, as the line-march did, strands it.
 
@@ -319,7 +319,7 @@ def solveJet(gas, exitMach, exitRadius, exitX, ambientPressure,
     net.characteristics.append(initialLine)
     line = initialLine
 
-    # The boundary streamline leaves the lip at the FULL turning angle: a centred corner
+    # The boundary streamline leaves the lip at the FULL turning angle: a centerd corner
     # expansion turns the streamline through the whole fan at the corner itself.
     boundaryOrigin = Node(exitX, exitRadius, net.lipTurn, jetMach, 'boundary')
     net.boundary.append(boundaryOrigin)

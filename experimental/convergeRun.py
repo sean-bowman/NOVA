@@ -28,7 +28,7 @@ for name, machJet, thetaN, staticRatio, radiusTarget, axialTarget in cases:
         errR = 100.0 * (radiusMax - radiusTarget) / radiusTarget
         errX = 100.0 * (axialAt - axialTarget) / axialTarget
         print(f'   rays={numRays:4d} lead={numLeading:6d} lines={len(net["lines"]):6d} '
-              f'{net["stop"]:20s} Mmax={machMax:8.2f} centre={len(net["centreLine"]):5d} '
+              f'{net["stop"]:20s} Mmax={machMax:8.2f} center={len(net["centerLine"]):5d} '
               f'shock={len(net["shock"]):4d} '
               f'(r/rj)max={radiusMax:9.2f} ({errR:+7.1f}%) x={axialAt:10.2f} ({errX:+7.1f}%)',
               flush=True)

@@ -38,6 +38,9 @@ plotly.min.js
 featureShowcase/*.html
 featureShowcase/*.pkl
 featureShowcase/*.npz
+# Written fresh on every run of the study that owns them, so they are output.
+featureShowcase/familiesConfig.json
+featureShowcase/subfamilyConfig.json
 src/*.egg-info/
 *.egg-info/
 build/

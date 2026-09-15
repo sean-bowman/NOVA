@@ -18,6 +18,8 @@ python featureShowcase/buildMocPlume.py    # experimental MOC plume interior
 python featureShowcase/buildPlumeMarch.py # the plume march, continued from the nozzle solution
 python featureShowcase/verifyContour.py   # contour against its independent references
 python featureShowcase/buildContourValidation.py  # sweeps against the Rao chart, about 16 minutes
+python featureShowcase/buildContourFamilies.py    # the three families compared, about 40 minutes
+python featureShowcase/buildSubfamilyStudy.py     # searched quadratic against cubic, about 2 hours
 python featureShowcase/buildReferenceOverlays.py  # contours on their references, about 5 minutes
 python featureShowcase/buildStitchedField.py      # chamber to exit in one frame
 python featureShowcase/buildChamberField.py       # chamber and converging section, one dimensional
@@ -98,7 +100,7 @@ panel is the only like-for-like shape comparison, because that construction foll
 two angles. The reconstructed panel is not a dimensional claim about any engine: no wall
 coordinates are published for the F-1, Vulcain 2 or RL10.
 
-**Stitched fields.** Chamber to exit on one colour scale, with the seam at the throat marked. The
+**Stitched fields.** Chamber to exit on one color scale, with the seam at the throat marked. The
 two halves are different kinds of result and the figure says so: upstream nothing is solved.
 Pressure is drawn logarithmically because it falls three orders of magnitude, and on that scale the
 radial gradient in the diverging section is visible, which is the exit-plane non-uniformity behind
@@ -125,7 +127,7 @@ unaffected. `PlumeStructure.boundaryAmplitudeLimited` carries the same flag in c
 
 **Plume interior.** There is no interior field in the shipped model. `plumeStructure` returns a
 boundary, cell node positions and a Mach disk, and deliberately solves no interior, because no
-correlation in the literature yields one. Colouring the inside of a correlated boundary would be
+correlation in the literature yields one. Coloring the inside of a correlated boundary would be
 drawing a picture rather than solving a flow.
 
 The route to a real interior is the free-jet method of characteristics in `experimental/`, and
@@ -144,7 +146,7 @@ it with no shock capturing. The bright focus on the axis at x/r_j 3.2 is the fir
 At Pe/Pa exactly 1 there is nothing to draw. A perfectly expanded jet is uniform and has no wave
 structure; the diamonds exist only off design.
 
-One cell is what the net currently sustains, because the centre-line march stalls. See
+One cell is what the net currently sustains, because the center-line march stalls. See
 `experimental/README.md` for why, and for why forcing it further is chaotic rather than merely
 approximate.
 
@@ -205,7 +207,7 @@ applies. The lip turns inward through what is really an oblique shock, taken her
 compression; at exit Mach 3 the two turning angles agree to 0.2 per cent at Pe/Pa 0.6 and 0.8 per
 cent at 0.4, and the stagnation pressure the shock would cost is reported so the size of the
 approximation is visible. `plumeMachDisk` locates a disk from the solved field rather than from a
-scaling law, as the first centre-line station falling to near sonic with the diameter taken out to
+scaling law, as the first center-line station falling to near sonic with the diameter taken out to
 the triple point. A net with no shock in it reports no disk, which is the right answer for a mildly
 off-design jet.
 

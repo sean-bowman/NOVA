@@ -19,8 +19,8 @@ from NOVA.Nozzle import (                                  # noqa: E402
     freeJetBoundaryPoint as boundaryPoint,
     freeJetSameFamilyPoint as sameFamilyPoint,
     freeJetNearAxisPoint as nearAxisPoint,
-    freeJetCentreLinePoint as centreLinePoint,
-    freeJetCentreLineTarget as centreLineTarget,
+    freeJetCenterLinePoint as centerLinePoint,
+    freeJetCenterLineTarget as centerLineTarget,
     freeJetCrossing as sameFamilyCrossing,
     freeJetLeadingCharacteristic as leadingCharacteristic,
     freeJetCornerRays as cornerRays,
@@ -36,5 +36,5 @@ from NOVA.Nozzle import (                                  # noqa: E402
 )
 
 __all__ = ['Gas', 'Point', 'generalPoint', 'boundaryPoint', 'sameFamilyPoint', 'nearAxisPoint',
-           'centreLinePoint', 'centreLineTarget', 'sameFamilyCrossing', 'leadingCharacteristic',
+           'centerLinePoint', 'centerLineTarget', 'sameFamilyCrossing', 'leadingCharacteristic',
            'cornerRays', 'refineLine', 'solveNet']

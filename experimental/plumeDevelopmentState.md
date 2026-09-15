@@ -38,7 +38,7 @@ Roughly in the order worth attacking.
 
 **The divergent exit.** The march stops after about one shock cell whenever the exit diverges, which is every bell contour. Conservation degrades with the angle, from 0.03 per cent at a parallel exit to about one per cent at fourteen degrees. Fan resolution accounts for part of it on a uniform exit line and saturates; the residual is unexplained. This is the single thing standing between the solver and the nozzles NOVA actually designs.
 
-**The advancing front.** The march computes one characteristic at a time from a fixed start, which leaves the centre line trailing the boundary and the solved region shaped like a wedge. Advancing a whole data line downstream together would remove that, and would remove the centre-line restart and its sub-stepping in thirds with it. `solvePlumeFront` exists and is marked NOT YET USABLE: it advances stably but stalls after about thirty steps. See the finding below before restarting it.
+**The advancing front.** The march computes one characteristic at a time from a fixed start, which leaves the center line trailing the boundary and the solved region shaped like a wedge. Advancing a whole data line downstream together would remove that, and would remove the center-line restart and its sub-stepping in thirds with it. `solvePlumeFront` exists and is marked NOT YET USABLE: it advances stably but stalls after about thirty steps. See the finding below before restarting it.
 
 **Shock coalescence.** `plumeSameFamilyPoint` and `plumeShockCrossing` are written and driven, and default off. The crossing test underneath them is resolution dependent, so they fire on characteristics that would not meet for many jet radii, and each false merge deletes a wave. On the one case that validates they cost more than they buy. Even working, they would give a coalescence inside an isentropic net, with no entropy jump, which is sound only while a shock is weak.
 
@@ -58,7 +58,7 @@ Roughly in the order worth attacking.
 
 **Use the mesh's gamma, not the exit gamma.** `plumeStructure` reports CEA's exit gamma because that is the better number for a correlation evaluated at the exit. The characteristic mesh is built on the chamber gamma. Reading mesh Mach numbers under a different ratio of specific heats makes the state discontinuous at the exit plane and destroys conservation: on the worked case it put the exit flux 150 per cent above the choked throat flow, which was for a while mistaken for a defect in the march. With the mesh gamma the same flux lands within 0.2 per cent.
 
-**Two bookkeeping defects, both of which looked like physics.** Lines grew by one point per line until the march drowned in its own mesh and the centre line stopped advancing; TN D-2327 counts the line length down rather than up. And `outsideBoundary` once extrapolated the unknown boundary from the anchor's own flow angle, which in recompression rejected valid points. Neither was an entropy problem, and both were found by asking what a case with no shock in it was doing.
+**Two bookkeeping defects, both of which looked like physics.** Lines grew by one point per line until the march drowned in its own mesh and the center line stopped advancing; TN D-2327 counts the line length down rather than up. And `outsideBoundary` once extrapolated the unknown boundary from the anchor's own flow angle, which in recompression rejected valid points. Neither was an entropy problem, and both were found by asking what a case with no shock in it was doing.
 
 ## Reproducing
 

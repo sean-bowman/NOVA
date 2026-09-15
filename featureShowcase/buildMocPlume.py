@@ -200,8 +200,8 @@ def drawCells(machJet, staticRatio, slug, numRays = 40, numLeading = 200):
                 'the boundary have not yet coalesced into shocks, so no shock capturing is needed '
                 'to see the cell. The bright focus on the axis is the first diamond node.' +
                 chr(10) +
-                f'The net sustains {cells} cell before the centre-line march stalls. A diamond '
-                'train needs the sub-stepped approach to the centre line from the report '
+                f'The net sustains {cells} cell before the center-line march stalls. A diamond '
+                'train needs the sub-stepped approach to the center line from the report '
                 '(statements 700, 740, 760)' + chr(10) +
                 'and, once the waves coalesce, the SAMFM internal shock point. Forcing the march '
                 'further with an axis offset is chaotic: one ulp of ambient pressure changes the '

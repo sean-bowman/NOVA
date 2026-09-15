@@ -4,7 +4,7 @@ Grid convergence of the plume march.
 Three discretisations set the solution and they are varied one at a time, because a sweep that
 moves them together cannot say which one the answer depends on:
 
-    numRays      how finely the centred fan at the lip is cut
+    numRays      how finely the centerd fan at the lip is cut
     exitPoints   how finely the exit plane data line is sampled
     lineLimit    how many points a characteristic line is held to
 

@@ -35,7 +35,7 @@ blue       = '#6BA3D6'
 # One hue per wall alloy. A sampled colormap put the four copper alloys within a few
 # degrees of each other, which is unreadable on a ten-series axis, so the assignment is
 # explicit: warm for the coppers, cool for everything else.
-materialColours = {
+materialColors = {
     'GRCop-42':    '#E0975A',
     'CuCrZr':      '#F4C95D',
     'OFHC Copper': '#FF7043',
@@ -111,8 +111,8 @@ def drawNearWall(nozzle):
     panels = ((axesList[0], data.temperature, 'Static temperature [K]', copper, 1.0),
               (axesList[1], data.pressure, 'Static pressure [MPa]', green, 1e-6),
               (axesList[2], data.mach, 'Mach number [-]', blue, 1.0))
-    for axes, values, label, colour, scale in panels:
-        axes.plot(axis, np.asarray(values) * scale, color = colour, lw = 1.6)
+    for axes, values, label, color, scale in panels:
+        axes.plot(axis, np.asarray(values) * scale, color = color, lw = 1.6)
         axes.set_ylabel(label)
 
     axesList[0].set_title('Near-wall exhaust state')
@@ -125,7 +125,7 @@ def drawNearWall(nozzle):
 
 def drawField(nozzle, quantity, name):
     '''
-    Method-of-characteristics field over the curvilinear mesh. The colour bar sits below the
+    Method-of-characteristics field over the curvilinear mesh. The color bar sits below the
     axes so the plot itself takes the full width of the panel.
     '''
     data = figureModule.fieldFigure(nozzle, quantity)
@@ -191,7 +191,7 @@ def drawMaterialCurves():
     names = materialModule.availableWallMaterials()
     figure, axesGrid = plt.subplots(2, 2, figsize = (13, 8.4))
     axesFlat = axesGrid.ravel()
-    colours = [materialColours[name] for name in names]
+    colors = [materialColors[name] for name in names]
 
     panels = (('thermalConductivity', 'Thermal conductivity [W/m-K]', 1.0,   True),
               ('yieldStrength',       '0.2 % offset yield [MPa]',     1e-6,  False),
@@ -202,7 +202,7 @@ def drawMaterialCurves():
 
     for index, (axes, (key, label, scale, logY)) in enumerate(zip(axesFlat, panels)):
 
-        for name, colour in zip(names, colours):
+        for name, color in zip(names, colors):
 
             curves = materialModule.wallMaterialCurves(name)
             kelvin = np.asarray(curves['temperatureK'], dtype = float)
@@ -215,13 +215,13 @@ def drawMaterialCurves():
             measured = (kelvin >= lowK - 1.0) & (kelvin <= highK + 1.0)
 
             # Dotted for the held part, drawn first so the measured line sits on top.
-            axes.plot(kelvin, values, color = colour, lw = 1.0, ls = ':', alpha = 0.5)
+            axes.plot(kelvin, values, color = color, lw = 1.0, ls = ':', alpha = 0.5)
 
             if measured.sum() > 1:
-                line, = axes.plot(kelvin[measured], values[measured], color = colour,
+                line, = axes.plot(kelvin[measured], values[measured], color = color,
                                   lw = 1.8, ls = '-', label = name)
             else:
-                line, = axes.plot(kelvin, values, color = colour, lw = 1.0, ls = ':',
+                line, = axes.plot(kelvin, values, color = color, lw = 1.0, ls = ':',
                                   alpha = 0.5, label = name)
 
             if index == 0:
@@ -284,10 +284,10 @@ def drawCryogenicRatio():
 
     positions = np.arange(len(ratios))
     values = [ratio for _, ratio in ratios]
-    barColours = [materialColours[name] for name, _ in ratios]
+    barColors = [materialColors[name] for name, _ in ratios]
 
     axes.set_axisbelow(True)
-    axes.barh(positions, values, color = barColours, height = 0.6)
+    axes.barh(positions, values, color = barColors, height = 0.6)
     axes.axvline(1.0, color = ink, lw = 1.2)
     axes.annotate('clamped: what every curve returned\nbefore the grids reached 20 K',
                   xy = (1.0, 1.55), xytext = (1.5, 2.35),
