@@ -7,6 +7,7 @@ and features taken out of the package that are worth keeping the source of.
 |--------|-----------|
 | `tnd2327.py`, `convergeMarch.py`, `convergeRun.py`, `jetNetPrototype.py` | The MOC free-jet plume interior study, described below |
 | `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
+| `stepExport.py` | STEP export of every nozzle component as exact surfaces, described below |
 | `plumeDevelopmentState.md` | Where the plume solver stands, written to be picked up cold |
 | `coolingModelState.md` | Where the film, radiative and extension cooling work stands, and what is open |
 | `internalShockState.md` | How the shock inside an optimized contour is detected and captured, and what a correct rotational solve would take |
@@ -26,6 +27,38 @@ contour with no point below the throat and a near-wall Mach number running 0.117
 That does not make it a validated design. Nothing here has been checked against a reference
 sunken nozzle, and the cooling correlations carry no correction for a recessed throat. The module
 docstring says what wiring it back into the package would take.
+
+## STEP export
+
+`stepExport.py` writes every component of a finished nozzle to STEP as the exact surfaces it is
+made of, rather than as the triangles `py2cad` produces. The walls and the keep-out become
+surfaces of revolution, 151 entities for a wall that takes 9,702 facets as STL; the channels and
+volutes become tensor-product B-spline surfaces interpolating the point grids NOVA already holds.
+
+It writes ISO 10303-21 text directly and imports no CAD kernel. Every component is a tube, so
+each file is one face with a seam walked twice and a closed curve at each end.
+
+Run it standalone to reproduce its own verification:
+
+```bash
+python experimental/stepExport.py
+```
+
+That writes the revolved wall beside the module and the full component set into
+`stepComponents/`, which is gitignored as regenerable output.
+
+**One body per file, and no booleans.** Nothing is trimmed, unioned or intersected against
+anything else, so assembling the jacket stays the CAD user's operation. That line is deliberate:
+writing a surface is transcription, while trimming two surfaces against each other needs a
+surface-surface intersection, which is the algorithm a B-rep kernel exists to provide. Adding
+booleans later does not invalidate any of these surfaces, since a boolean wants bounded faces
+and these are already bounded, valid and exact.
+
+Every written component was read back with OpenCASCADE, which accepted all of them and returned
+`True` from `BRepCheck_Analyzer` on each. The revolved wall has been opened in SolidWorks. Areas
+match a closed-form reference to 5e-10 for the revolved case and 1e-7 for the swept case.
+[docs/reports/stepExport_2026-09-20.md](../docs/reports/stepExport_2026-09-20.md) carries the
+measurements, the seam study behind the fit, and what booleans would take.
 
 ## MOC free-jet plume interior
 

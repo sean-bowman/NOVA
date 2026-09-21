@@ -30,7 +30,7 @@ import re
 
 import pytest
 
-from NOVA.utils import headlessPlots, showFigure
+from NOVA.figures import headlessPlots, showFigure
 
 repositoryRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
@@ -119,7 +119,7 @@ class TestNoModuleOpensAFigureBehindTheSwitch:
         # `showFigure` is the exception, being the thing every other call routes through.
         offenders = []
         for name, source in packageModules():
-            if name == 'utils.py':
+            if name == 'figures.py':
                 continue
             for number, line in enumerate(source.split('\n'), start = 1):
                 if re.search(r'\bfig\w*\.show\(', line):
@@ -129,11 +129,11 @@ class TestNoModuleOpensAFigureBehindTheSwitch:
             'these display a figure without going through utils.showFigure, so NOVA_HEADLESS '
             'cannot suppress them: ' + ', '.join(offenders))
 
-    def testUtilsRoutesItsOwnFiguresThroughTheHelper(self):
+    def testFiguresRoutesItsOwnFiguresThroughTheHelper(self):
 
-        # utils is excluded above because it defines the helper, so it is checked here with the
-        # helper's own body cut out by line range. That one call is the whole point of it.
-        source = io.open(os.path.join(packageDirectory, 'utils.py'), encoding = 'utf-8').read()
+        # figures.py is excluded above because it defines the helper, so it is checked here with
+        # the helper's own body cut out by line range. That one call is the whole point of it.
+        source = io.open(os.path.join(packageDirectory, 'figures.py'), encoding = 'utf-8').read()
 
         helper = next(node for node in ast.parse(source).body
                       if isinstance(node, ast.FunctionDef) and node.name == 'showFigure')

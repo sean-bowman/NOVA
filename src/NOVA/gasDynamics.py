@@ -5,16 +5,16 @@
 
 Perfect-gas relations for steady isentropic flow of a calorically perfect gas.
 
-These are the closed-form relations every other NOVA module builds on: the isentropic ratios, the
-Prandtl-Meyer function and its inverse, and the area-Mach relation and its two branches. They are
-gathered here so that one expression serves the contour solver, the plume march, the converging
-section and the validation scripts, rather than each carrying its own copy to drift out of step
-with the others.
+These are the closed-form relations every other NOVA module builds on: the isentropic ratios and
+the station state they resolve to, the Prandtl-Meyer function and its inverse, and the area-Mach
+relation and its two branches. They are gathered here so that one expression serves the contour
+solver, the plume march, the converging section and the validation scripts, rather than each
+carrying its own copy to drift out of step with the others.
 
-Every function takes gamma explicitly. Nothing here reads state off a Nozzle object, and nothing
-here knows which gamma is the right one for a given station; that choice belongs to the caller and
-is a real one, because a characteristics mesh built on the chamber gamma cannot be read back under
-the exit gamma without breaking continuity at the plane where the two meet.
+Every function takes gamma explicitly. Nothing here reads state off a Nozzle object. Nothing
+here knows which gamma is the right one for a given station; that choice belongs to the caller
+and is a real one, because a characteristics mesh built on the chamber gamma cannot be read
+back under the exit gamma without breaking continuity at the plane where the two meet.
 
 All angles are in radians. Mach numbers, pressure ratios and area ratios are dimensionless.
 
@@ -68,6 +68,39 @@ def staticPressureRatio(mach: float, gamma: float) -> float:
     '''
 
     return stagnationRatio(mach, gamma) ** (-gamma / (gamma - 1.0))
+
+def isentropicValues(mach: float, stagnationTemperature: float, stagnationPressure: float,
+                     gamma: float, gasConstant: float) -> tuple:
+
+    '''
+
+    Static temperature, static pressure and velocity at a station from its Mach number and the
+    stagnation state feeding it.
+
+    Parameters:
+    -----------
+    mach : float
+        Local Mach number [-]
+    stagnationTemperature : float
+        Stagnation temperature [K]
+    stagnationPressure : float
+        Stagnation pressure [Pa]
+    gamma : float
+        Ratio of specific heats [-]
+    gasConstant : float
+        Specific gas constant [J/(kg*K)]
+
+    Returns:
+    --------
+    tuple : (temperature [K], pressure [Pa], velocity [m/s])
+
+    '''
+
+    temperature = stagnationTemperature / (1.0 + ((gamma - 1.0) / 2.0) * mach**2)
+    pressure = stagnationPressure / (1.0 + ((gamma - 1.0) / 2.0) * mach**2)**(gamma / (gamma - 1.0))
+    velocity = np.sqrt(gamma * gasConstant * temperature) * mach
+
+    return temperature, pressure, velocity
 
 def machFromPressureRatio(stagnationOverStatic: float, gamma: float) -> float:
 

@@ -1,21 +1,19 @@
+
 # -- NOVA: Charring Ablator Material Response -- #
 
 '''
 
-The thermal response of an ablative nozzle liner, and the surface thermochemistry that sets how
-fast it recedes.
+The thermal response and surface thermochemistry of an ablative nozzle liner.
 
 An ablative liner is not a wall with a temperature. Heat drives a decomposition front into the
 resin, the gas that front releases percolates out through the char and cools it on the way, and
-the char face itself is consumed by the exhaust. Three coupled problems, and the answer a designer
-wants -- how much throat did I lose, and how hot did the back of the liner get -- depends on all
-three.
+the char face itself is consumed by the exhaust. Three coupled problems to answer the design
+questions: how much throat did I lose, and how hot did the back of the liner get?
 
 The model here is the CMA formulation (Moyer and Rindal, NASA CR-1061, 1968): one-dimensional
 transient conduction in a coordinate system attached to the receding surface, Arrhenius
-decomposition of the resin, pyrolysis gas in instantaneous thermal equilibrium with the solid it
-passes through, and a surface energy balance closed by a transfer-coefficient boundary condition.
-In the taxonomy the Ablation Workshop uses, that is a type 1 code.
+decomposition of the resin, pyrolysis gas in instantaneous thermal equilibrium with the solid,
+and a surface energy balance closed by a transfer-coefficient boundary condition.
 
 Three surface closures are available and they answer different questions:
 
@@ -36,9 +34,9 @@ Three surface closures are available and they answer different questions:
                             Validation status
 ----------------------------------------------------------------------
 
-**The solver is verified, not validated.** Verification here means the discretisation is shown to
-reproduce solutions that are known exactly. tests/testAblative.py carries the comparisons and
-quantifies every error:
+**The solver is verified, not validated.** Verification here means the discretization is shown
+to reproduce solutions that are known exactly. tests/testAblative.py carries the comparisons
+and quantifies every error:
 
     - Semi-infinite solid, step surface temperature, against the erf solution.
     - Semi-infinite solid, constant surface flux, against the closed-form surface temperature.
@@ -51,29 +49,29 @@ quantifies every error:
     - Discrete energy conservation over a full transient.
 
 **The surface thermochemistry is validated in its two asymptotic limits.** The closed-form
-diffusion-limited carbon B' reproduces the packaged TACOT equilibrium table to 0.002 per cent in
-the carbon dioxide limit and 0.003 per cent in the carbon monoxide limit. Those tables were
+diffusion-limited carbon B' reproduces the packaged TACOT equilibrium table to 0.002 percent in
+the carbon dioxide limit and 0.003 percent in the carbon monoxide limit. Those tables were
 generated independently, with CEA thermodynamic data and a 25 species mixture, by the Ablation
-Workshop. Between those limits the closed form is not a model of the equilibrium result and does
-not claim to be; that region is what the table is for.
+Workshop. Between those limits the closed form is not a model of the equilibrium result and
+does not claim to be; that region is what the table is for.
 
 **The nozzle application is not validated.** No open source gives measured throat recession
-against a defined firing condition in enough detail to set a model against, and the material whose
-response data is public -- TACOT -- is a low-density entry heatshield, not a nozzle liner. The
-station march is therefore a verified solver driven by an unvalidated combination of a correlated
-gas-side coefficient and a transport-limited recession rate. Treat its numbers as a comparison
-between design options, not as a prediction of recession.
+against a defined firing condition in enough detail to set a model against, and the material
+whose response data is public -- TACOT -- is a low-density entry heatshield, not a nozzle
+liner. The station march is therefore a verified solver driven by an unvalidated combination of
+a correlated gas-side coefficient and a transport-limited recession rate. Treat its numbers as
+a comparison between design options, not as a prediction of recession.
 
-**The diffusion-limited rate is an upper bound on recession, not a prediction of it.** It
-assumes two things that are both optimiztic about how fast the char goes away. Surface kinetics are
-taken to be infinitely fast, which holds above roughly 2000 K and fails below it. And every oxygen
-atom reaching the wall is taken to leave as carbon monoxide, which over-consumes carbon whenever
-the exhaust carries hydrogen, because in equilibrium the hydrogen competes for that oxygen and some
-of it leaves as water instead. Both errors run the same way. For a hydrocarbon or hydrogen
-propellant the bound sits well above measured motor recession, by a factor that depends on the
-combination and the wall temperature, and `charRemovalEfficiency` exists so that factor can be set
-from firing data. Calibrating it against a measured recession is calibration and not validation,
-and the value that comes out holds only over the conditions it was fitted to.
+**The diffusion-limited rate is an upper bound on recession.** It assumes two things that are
+both optimistic about how fast the char goes away. Surface kinetics are taken to be infinitely
+fast, which holds above roughly 2000 K and fails below it. And every oxygen atom reaching the
+wall is taken to leave as carbon monoxide, which over-consumes carbon whenever the exhaust
+carries hydrogen, because in equilibrium the hydrogen competes for that oxygen and some of it
+leaves as water instead. Both errors run the same way. For a hydrocarbon or hydrogen propellant
+the bound sits well above measured motor recession, by a factor that depends on the combination
+and the wall temperature, and `charRemovalEfficiency` exists so that factor can be set from
+firing data. Calibrating it against a measured recession is calibration and not validation, and
+the value that comes out holds only over the conditions it was fitted to.
 
 **Surface chemical heat release is not modeled by default.** The diffusion-limited closure
 returns a mass removal rate and leaves the reaction enthalpy to the caller through
@@ -101,7 +99,7 @@ import numpy as np
 from scipy.linalg import solve_banded
 
 from . import materials
-from .utils import ConvergenceFailureError, InvalidInputError
+from .errors import ConvergenceFailureError, InvalidInputError
 
 __all__ = [
     'AblationEnvironment', 'AblativeLinerResult', 'BPrimeTable', 'CharringMaterial',
@@ -159,7 +157,7 @@ def blowingCorrection(totalBPrime: float, blowingFactor: float = 0.5) -> float:
     Ablation Workshop test cases fix lambda at 0.5, which is why that is the default.
 
     This is the single largest self-limiting effect in an ablation problem. At B' = 1 the
-    coefficient is already down to 55 per cent of its unblown value, so a liner that starts to run
+    coefficient is already down to 55 percent of its unblown value, so a liner that starts to run
     away partly protects itself.
 
     Parameters:
@@ -334,7 +332,7 @@ def diffusionLimitedCharBPrime(edgeElements: dict, gasBPrime: float = 0.0,
     of one half on the mass ratio because each carbon then takes two oxygens.
 
     Both branches are validated against the packaged TACOT equilibrium table in
-    tests/testAblative.py, where they agree with it to better than 0.003 per cent in the
+    tests/testAblative.py, where they agree with it to better than 0.003 percent in the
     asymptotic regions the branch is the limit of. Between those regions the equilibrium result
     lies between the two branches and neither closed form describes it; use `BPrimeTable` there.
 
@@ -424,7 +422,7 @@ class BPrimeTable:
     inside the data.
 
     The packaged table is for air. Its pressure axis stops at one atmosphere, which is two to
-    three orders of magnitude below a rocket chamber, and its edge gas is oxidising rather than
+    three orders of magnitude below a rocket chamber, and its edge gas is oxidizing rather than
     the reducing mixture a rocket exhaust actually is. It closes an arc-jet or an entry problem.
     It does not close a nozzle, and `clampedRequests` will say so loudly if it is asked to.
 
@@ -1314,10 +1312,10 @@ class MaterialResponseResult:
     blowingReduction : numpy.ndarray
         Blowing correction factor actually applied [-].
     charDepth : numpy.ndarray
-        Depth below the original surface at which the material has charred to within two per cent
+        Depth below the original surface at which the material has charred to within two percent
         of char density [m].
     pyrolysisDepth : numpy.ndarray
-        Depth below the original surface at which the material has lost two per cent of the
+        Depth below the original surface at which the material has lost two percent of the
         virgin-to-char density difference [m].
     surfaceHeatFlux : numpy.ndarray
         Net heat conducted into the solid at the surface [W/m^2].
@@ -1898,7 +1896,7 @@ def solveMaterialResponse(material, environment: AblationEnvironment, thickness:
 
         # Normalized on the largest single term rather than on their sum. The sum passes through
         # zero whenever the energy arriving at the surface balances the energy walking out of it
-        # with the char, and a ratio taken there says nothing about the discretisation.
+        # with the char, and a ratio taken there says nothing about the discretization.
         scale = max(abs(surfaceHeatFlux), abs(gasLeaving), abs(charLeaving), abs(accumulated))
         if scale > 1.0:
             worstImbalance = max(worstImbalance, abs(accumulated - supplied) / scale)

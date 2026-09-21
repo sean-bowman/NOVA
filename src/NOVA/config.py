@@ -1,10 +1,11 @@
+
 # -- NOVA: Configuration Reader -- #
 
 '''
 
 Turning a configuration into the state a run works from.
 
-A configuration reaches NOVA two ways, and they are the same path:
+A configuration reaches NOVA two ways, which are the same path:
 
     a JSON file      a path ending in .json, loaded and then read as a dictionary
     a dictionary     the same fields already loaded, which is how the GUI supplies them
@@ -12,8 +13,8 @@ A configuration reaches NOVA two ways, and they are the same path:
 The conventions the fields follow are worth stating rather than discovering.
 
 **Unset is NaN, not None.** A null in JSON becomes NaN on the
-object. That is the convention every downstream module reads, which is why `validation.specified`
-treats NaN and None and absent as the same thing.
+object. That is the convention every downstream module reads, which is why
+`validation.specified` treats NaN and None and absent as the same thing.
 
 **Program flags are strings, not booleans.** Every flag is compared against 'on' and 'off'
 throughout the tool, but JSON stores them as booleans, and `False == 'on'` is quietly False
@@ -23,20 +24,20 @@ silently disabled by a configuration that looks correct.
 **A literal zero is not the same as unset.** An axial offset of zero is a specified offset. The
 readers preserve that distinction and so does everything downstream.
 
-Once the fields are on the object, the thermochemistry is run for the design point, since almost
-everything after this needs the chamber state it returns.
+Once the fields are on the object, the thermochemistry is run for the design point, since
+almost everything after this needs the chamber state it returns.
 
 ----------------------------------------------------------------------
                             Validation status
 ----------------------------------------------------------------------
 
-**Nothing here is a model.** Reading a configuration is bookkeeping, and what it can get wrong is
-losing a field, changing its type, or letting the three readers disagree with each other. Those
-are what the tests check.
+**Nothing here is a model.** Reading a configuration is bookkeeping, and what it can get wrong
+is losing a field, changing its type, or letting the three readers disagree with each other.
+Those are what the tests check.
 
-The one place it computes rather than reads is the design point: mass flow from thrust, or thrust
-from mass flow, and the CEA call that follows. Those come from `ceaInterface`, which is validated
-against CEARun in `tests/testCeaInterface.py`.
+The one place it computes rather than reads is the design point: mass flow from thrust, or
+thrust from mass flow, and the CEA call that follows. Those come from `ceaInterface`, which is
+validated against CEARun in `tests/testCeaInterface.py`.
 
 All units are mass base SI, as read:
     - Length      [m]
@@ -55,14 +56,14 @@ import warnings
 
 import numpy as np
 
-from .utils import InvalidInputError
+from .errors import InvalidInputError
 from .ceaInterface import CEA
 from .contour import divergingSectionFamily
 from .contourKernel import transonicModels
 from .contourOptimization import designVariableBounds, isMonotoneWall
 from .gasDynamics import effectiveGamma
 
-def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
+def setInputs(nozzle, inputsPath: str | dict) -> None:
 
     '''
 
@@ -77,9 +78,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         Configuration source - can be:
         - str: path to a .json configuration
         - dict: the same keys already loaded, which is what the GUI hands over
-    debugMode : bool, optional
-        True makes a station that fails to converge dump its local state rather than
-        raising. It is a solver flag, not an input format. Default is False.
 
     Returns:
     --------
@@ -91,9 +89,10 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         - Propellant properties (Fuel, Oxidizer, OFRatio, initial temperatures)
         - Chamber conditions (chamberPressure)
         - Performance constraints (thrust, engineMassFlow, targetExitPressure, expansionRatio)
-        - Geometry parameters (lengthFraction, conicalHalfAngle, numContourPoints)
-        - Contour type selection (contourType: 'trad')
-        - Chamber sizing (Lstar, contractionAreaRatio)
+        - Geometry parameters (lengthFraction, numContourPoints)
+        - Diverging section family (divergingSectionType: 'tic', 'top', 'toc' or 'cone')
+        - Chamber sizing (Lstar, chamberLength)
+        - Regen truncation (regenTruncationType, regenTruncationValue)
 
     Regenerative Cooling Jacket:
         - Wall dimensions (hotWallThickness, shellThickness)
@@ -102,17 +101,15 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         - Optimization bounds (nChannelUpperBound, nChannelLowerBound, etc.)
         - Coolant properties (coolant, coolantChoice, coolantInitialTemperature, etc.)
         - Advanced features (numFlutes, fluteAmplitudeCoef, fluteHelixAngle, swirlPercent)
-        - Manufacturing constraints (printabilityCheck, printDirection, maxOverhangAngle)
 
     Regen Volutes:
         - Inlet volute (makeInletVolute, inletVoluteCrossSection, inletVoluteAlignment, etc.)
         - Return volute (makeReturnVolute, returnVoluteCrossSection, returnVoluteAlignment, etc.)
-        - Keep-out envelope (plotKeepOut, keepOutAxialOffset, keepOutRadius,
-          keepOutDepth, keepOutHubRadius)
+        - Keep-out envelope (keepOutAxialOffset, keepOutRadius, keepOutDepth, keepOutHubRadius)
         - Grayloc fittings (inletGraylocDiameter, returnGraylocDiameter)
 
     Program Options:
-        - Plotting controls (plotsBasic, plotsAdv, plotJacket, plotsDebug)
+        - One plotting switch (plotsEnabled)
         - Export settings (export, filename)
 
     Notes:
@@ -129,40 +126,15 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
     # -- Determine input type -- #
 
-    # debugMode is a solver flag rather than an input format: it makes a station that fails
-    # to converge dump its local state instead of raising. channelSizing reads it.
-    nozzle.debugMode = debugMode
-
-    # Inputs from a JSON config file. generateNozzle() defaults to
-    # assets/nozzleConfig.json, so this must be handled before the
-    # spreadsheet branch below, which would otherwise hand a .json path to
-    # the Excel reader. The keys are identical to the GUI dict form, so the
-    # file is simply loaded and allowed to fall through to that branch.
+    # A JSON path is loaded and falls through to the dict branch below. The keys are identical
+    # to the GUI dict form, so the two readers share every line after this point.
     if isinstance(inputsPath, str) and inputsPath.lower().endswith('.json'):
         import json
         with open(inputsPath, 'r') as configFile:
             inputsPath = json.load(configFile)
 
-    # Inputs from the GUI
+    # Inputs from a JSON file or the GUI
     if isinstance(inputsPath, dict):
-
-        # Converging-section keys were renamed away from solid-motor language. Catch a
-        # pre-rename config here rather than letting it surface as a bare KeyError three
-        # hundred lines further down.
-        renamedKeys = {
-            'grainMaxOD':          'chamberDiameter',
-            'grainInterfaceAngle': 'chamberInterfaceAngle',
-        }
-        stale = {old: new for old, new in renamedKeys.items() if old in inputsPath}
-        if stale:
-            raise InvalidInputError(
-                message=('Config uses renamed keys: '
-                         + ', '.join(f'{old!r} is now {new!r}' for old, new in stale.items())
-                         + '. Rename them and re-run.'),
-                parameterName=', '.join(stale),
-                value=list(stale),
-                validRange=', '.join(stale.values()),
-            )
 
         # Convert None values to np.nan for compatibility with np.isnan() logic
         # (CSV reader converts None to np.nan, so we do the same for direct dict input)
@@ -174,10 +146,9 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         # throughout this class, but JSON stores them as booleans, and
         # `False == 'on'` is silently False rather than an error. Without
         # this normalization every plot and export is quietly disabled.
-        for key in ('visualizeContour', 'plotsBasic', 'plotsAdv', 'plotJacket',
-                    'plotsDebug', 'export', 'printabilityCheck',
+        for key in ('plotsEnabled', 'export',
                     'makeCoolingChannels', 'makeInletVolute', 'makeReturnVolute',
-                    'plotKeepOut', 'inletVolutePrintability', 'returnVolutePrintability',
+                    'inletVolutePrintability', 'returnVolutePrintability',
                     'filmCooling', 'makeRadiativeExtension'):
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
@@ -186,14 +157,12 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
 
         # -- Contour Definition Inputs -- #
 
-        nozzle.visualizeContour           = inputsPath['visualizeContour']
         nozzle.numContourPoints           = inputsPath['numContourPoints']
 
-        # Converging Section
-        nozzle.contourType                = inputsPath['contourType']
+        # Converging Section. There is one shape, so there is nothing to name; the wall always
+        # meets the chamber barrel tangentially, so there is no interface angle to give either.
         nozzle.chamberDiameter                 = inputsPath['chamberDiameter']
-        nozzle.raoThroatAngle             = inputsPath['raoThroatAngle']
-        nozzle.chamberInterfaceAngle        = inputsPath['chamberInterfaceAngle']
+        nozzle.convergingSectionAngle     = inputsPath['convergingSectionAngle']
         nozzle.Lstar                      = inputsPath['Lstar']
         nozzle.chamberLength              = inputsPath['chamberLength']
         # Diverging Section
@@ -209,11 +178,15 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.targetExitPressure         = inputsPath['targetExitPressure']
         nozzle.plumeAmbientPressure       = inputsPath['plumeAmbientPressure']
         nozzle.lengthFraction             = inputsPath['lengthFraction']
-        nozzle.conicalHalfAngle           = inputsPath['conicalHalfAngle']
-        nozzle.truncationMethod           = inputsPath['truncationMethod']
         nozzle.expansionRatio             = inputsPath['expansionRatio']
-        nozzle.truncateOn                 = inputsPath.get('truncateOn', 'areaRatio')
         nozzle.numCharacteristicsRequested = inputsPath.get('numCharacteristics', 50)
+
+        # Where the regen section ends, as a type and a value rather than one string carrying
+        # both. 'none' ignores the value; 'temp' reads it as a near-wall recovery temperature
+        # [K]; 'er' reads it as an area ratio [-]. Validated below, once the design point has
+        # somewhere to report a bad value against.
+        nozzle.regenTruncationType         = inputsPath.get('regenTruncationType', 'none')
+        nozzle.regenTruncationValue        = inputsPath.get('regenTruncationValue')
 
         # -- Regenerative Cooling Jacket Inputs -- #
         nozzle.makeCoolingChannels            = inputsPath['makeCoolingChannels']
@@ -232,11 +205,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.nChannelUpperBound             = inputsPath['nChannelUpperBound']
         nozzle.nChannelLowerBound             = inputsPath['nChannelLowerBound']
         nozzle.maxWallTemperature             = inputsPath['maxWallTemperature']
-        # Optional, and defaulted to the physically right answer. 'static' reproduces
-        # results recorded before the recovery temperature was carried through to the
-        # solve, and understates the flux by the whole recovery rise.
-        nozzle.drivingTemperatureModel        = inputsPath.get('drivingTemperatureModel',
-                                                              'recovery')
 
         # Which gamma the constant-gamma contour solve runs in. 'chamber' is the default and is
         # the value the solve has always used. 'effective' is chosen so the pressure ratio and
@@ -298,9 +266,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.coolantInitialTemperature      = inputsPath['coolantInitialTemperature']
         nozzle.coolantInitialPressure         = inputsPath['coolantInitialPressure']
         nozzle.coolantMassFlow                = inputsPath['coolantMassFlow']
-        nozzle.printabilityCheck              = inputsPath['printabilityCheck']
-        nozzle.printDirection                 = inputsPath['printDirection']
-        nozzle.maxOverhangAngle               = inputsPath['maxOverhangAngle']
 
         # -- Regen Volute Inputs -- #
         nozzle.makeInletVolute                = inputsPath['makeInletVolute']
@@ -308,7 +273,6 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.numCSVolute                    = inputsPath['numCSVolute']
         nozzle.numCSPointsVolute              = inputsPath['numCSPointsVolute']
         nozzle.voluteRelativeRoll             = inputsPath['voluteRelativeRoll']
-        nozzle.plotKeepOut                    = inputsPath['plotKeepOut']
         nozzle.keepOutAxialOffset             = inputsPath['keepOutAxialOffset']
         nozzle.keepOutRadius                  = inputsPath['keepOutRadius']
         nozzle.keepOutDepth                   = inputsPath['keepOutDepth']
@@ -333,10 +297,12 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         nozzle.returnVoluteFlareLen           = inputsPath['returnVoluteFlareLen']
 
         # -- Program Options -- #
-        nozzle.plotsBasic                     = inputsPath['plotsBasic']
-        nozzle.plotsAdv                       = inputsPath['plotsAdv']
-        nozzle.plotJacket                     = inputsPath['plotJacket']
-        nozzle.plotsDebug                     = inputsPath['plotsDebug']
+        #
+        # One switch for every plot: the contour PNGs, the interactive HTML companions, the
+        # advanced 3D channel and jacket views, and the keep-out envelope trace. A run either
+        # wants to look at what it built or does not; there was never a real reason to want the
+        # jacket view without the contour PNG.
+        nozzle.plotsEnabled                   = inputsPath['plotsEnabled']
         nozzle.export                         = inputsPath['export']
         nozzle.filename                       = inputsPath['filename']
 
@@ -393,16 +359,27 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
     elif np.isnan(nozzle.expansionRatio):
         nozzle.expansionRatio           = nozzle.ceaOutput.ceaResults['expansionRatio']
 
-    # Which requested quantity binds the geometry. 'areaRatio' cuts the wall at the requested
-    # expansion ratio and reports the length that follows, which is the method NASA SP-8120
-    # attributes to Ahlberg et al. 'length' cuts at the requested fraction of the conical
-    # reference instead and reports whatever area ratio it lands on. A design cannot deliver
-    # both, so which one binds has to be said rather than inferred.
-    if not isinstance(getattr(nozzle, 'truncateOn', None), str):
-        nozzle.truncateOn = 'areaRatio'
-    if nozzle.truncateOn not in ('areaRatio', 'wallPressure', 'length'):
-        raise ValueError(f"truncateOn must be 'areaRatio', 'wallPressure' or 'length', not "
-                         f"'{nozzle.truncateOn}'")
+    # Where the regen section ends. 'none' needs no value, so an unset one is left alone rather
+    # than rejected; 'temp' and 'er' both cut somewhere specific and cannot run without a number
+    # to cut at.
+    if nozzle.regenTruncationType not in ('none', 'temp', 'er'):
+        raise InvalidInputError(
+            message = "regenTruncationType must be 'none', 'temp' or 'er'.",
+            parameterName = 'regenTruncationType',
+            value = nozzle.regenTruncationType,
+            validRange = "'none', 'temp' or 'er'")
+    if nozzle.regenTruncationType != 'none':
+        value = nozzle.regenTruncationValue
+        unset = value is None or (isinstance(value, float) and np.isnan(value))
+        if unset:
+            raise InvalidInputError(
+                message = f"regenTruncationType '{nozzle.regenTruncationType}' needs a "
+                          f"regenTruncationValue: a near-wall recovery temperature [K] for "
+                          f"'temp', an area ratio [-] for 'er'.",
+                parameterName = 'regenTruncationValue',
+                value = value,
+                validRange = 'a finite number')
+        nozzle.regenTruncationValue = float(value)
 
     # Which diverging section family was asked for. Resolved here, once, so a spelling that names
     # nothing is rejected while the configuration is still being read rather than reaching the
@@ -446,8 +423,8 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
     if nozzle.transonicModel not in transonicModels:
         raise InvalidInputError(
             message = 'No transonic model by that name. Sauer is the first term of the series '
-                      'the others carry further; the second-order term is 29 per cent as large '
-                      'as the first at the conventional throat curvature of 1.5 and 43 per cent '
+                      'the others carry further; the second-order term is 29 percent as large '
+                      'as the first at the conventional throat curvature of 1.5 and 43 percent '
                       'at the 1.0 SP-8120 prefers, so this choice is worth making deliberately.',
             parameterName = 'transonicModel', value = nozzle.transonicModel,
             validRange = ' or '.join(repr(name) for name in transonicModels))
@@ -459,7 +436,7 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
         # Printed rather than warned, because NOVA reports its run-time notices by printing them
         # and a notice about a model choice belongs with the rest of the run's output.
         print(f'Note: a throat curvature of {nozzle.throatInletCurvatureNonDimensional} with the '
-              f"'secondOrder' transonic model. Kliegel and Quan report that form as favourable "
+              f"'secondOrder' transonic model. Kliegel and Quan report that form as favorable "
               f"only above about 1.5; 'smallRadius' is the one that behaves below it.")
 
     # A pinned wall for the thrust-optimized contour, which otherwise searches for one.
@@ -470,8 +447,19 @@ def setInputs(nozzle, inputsPath: str | dict, debugMode: bool = False) -> None:
     # makes a searched contour reachable from a regression case: a gate that re-ran a twenty
     # minute optimization on every invocation would not be run, and a gate that is not run is
     # not a gate.
+    # A JSON null reaches here as NaN, because the dict branch above rewrites every None that
+    # way. Unset has to mean the same thing whether the key is absent, null, or an empty list,
+    # so the scalar NaN is caught alongside them rather than being handed to the loop below.
     designVariables = inputsPath.get('divergingSectionDesignVariables', None)
-    if designVariables in (None, [], ''):
+
+    if designVariables is None or isinstance(designVariables, str):
+        unset = not designVariables
+    elif isinstance(designVariables, float) and np.isnan(designVariables):
+        unset = True
+    else:
+        unset = len(designVariables) == 0
+
+    if unset:
         nozzle.divergingSectionDesignVariables = None
     else:
         values = [float(value) for value in designVariables]

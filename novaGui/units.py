@@ -1,3 +1,4 @@
+
 # -- NOVA GUI Unit Conversions -- #
 
 '''
@@ -20,7 +21,8 @@ Author: Sean Bowman
 
 '''
 
-from NOVA.units import DIMENSIONS, UNIT_TO_DIMENSION, dimensionForUnit, fromSI, siUnit, toSI, unitsFor
+from NOVA.units import (DIMENSIONS, UNIT_TO_DIMENSION, convert, dimensionForUnit, fromSI,
+                        siUnit, toSI, unitsFor)
 
 __all__ = ['DIMENSIONS', 'UNIT_TO_DIMENSION',
-           'dimensionForUnit', 'unitsFor', 'siUnit', 'toSI', 'fromSI']
+           'dimensionForUnit', 'unitsFor', 'siUnit', 'convert', 'toSI', 'fromSI']

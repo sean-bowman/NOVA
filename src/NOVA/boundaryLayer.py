@@ -3,77 +3,70 @@
 
 '''
 
-What the wall costs the flow, and what the flow costs the wall.
-
-Every contour NOVA builds is inviscid. The characteristics solve carries no viscosity, so its wall
-is a streamline of a flow that slides along it without friction, and two things follow that a
-delivered nozzle does not get away with. The gas near the wall is slowed, so the wall has to sit
+Every contour NOVA builds is inviscid. The characteristics solve carries no viscosity, so its
+wall is a streamline of a flow without friction, which results in two physical effects not
+captured by the inviscid solution. The gas near the wall is slowed, so the wall has to sit
 further out than the inviscid solution says to pass the same flow. And the wall is dragged, so
 some of the thrust the exit plane reports is spent on the wall instead.
 
-NASA SP-8120 states the reference practice for the first in six words: displacement thickness
-computed and the wall offset point by point. This module computes it, and the friction that comes
-with it, for the second.
+NASA SP-8120 states the reference practice for the first effect: displacement thickness
+computed and the wall offset point by point.
 
 What is modeled
-----------------
+---------------
 
-A compressible turbulent boundary layer, integrated along the wall from the throat, driven by the
-near-wall state the characteristics solve already produced. The momentum integral is marched in
-momentum thickness; the skin friction closure is a reference-temperature method, which evaluates
-incompressible relations at a temperature chosen so that they carry the compressible answer; the
-displacement thickness follows from the compressible shape factor.
+A compressible turbulent boundary layer, integrated along the wall from the throat, driven by
+the near-wall state the characteristics solve produces. The momentum integral is marched in
+momentum thickness; the skin friction closure is a reference-temperature method, which
+evaluates incompressible relations at a temperature chosen so that they enclose the
+compressible answer; the displacement thickness follows from the compressible shape factor.
 
-This is the standard engineering treatment and it is deliberately not more than that. The nozzle
-is short, the flow accelerates hard the whole way, and the boundary layer is thin against the
-radius over almost all of it, which is the regime integral methods are for.
-
-What is not modeled, and why each is left out
-----------------------------------------------
+What is not modeled
+-------------------
 
 **Laminar and transitional running.** The flow is taken as turbulent from the throat. A rocket
 throat sits at a Reynolds number where that is nearly always true, and the laminar run is short
-enough that its contribution to either thickness or drag is small against the turbulent one. What
-it does affect is the starting thickness, which is why that is an input rather than a constant.
+enough that its contribution to either thickness or drag is small against the turbulent one.
+What it does affect is the starting thickness, which is why that is an input rather than a
+constant.
 
-**The effect of wall cooling on transition and on the profile shape.** The reference temperature
-carries the first-order effect of a cold wall on the properties, and nothing here carries the
-second-order effect on the shape of the profile.
+**The effect of wall cooling on transition and on the profile shape.** The reference
+temperature carries the first-order effect of a cold wall on the properties. Nothing here
+carries the second-order effect on the shape of the profile.
 
 **Any coupling back into the jacket.** `regenThermal` has its own gas-side treatment through
-Bartz, with its own boundary-layer correction factor built into that correlation. The two are not
-made consistent here and should not be read as one model: this one exists to offset a contour and
-debit a thrust, and that one exists to size a cooling channel.
+Bartz, with its own boundary-layer correction factor built into that correlation. The two are
+not made consistent here and should not be read as one model: this one exists to offset a
+contour and debit a thrust, and that one exists to size a cooling channel.
 
-**The displacement effect on the inviscid solution itself.** Offsetting the wall changes the area
-the flow sees, which changes the flow, which changes the offset. The outer iteration that closes
-that loop lives in the contour solve rather than here.
+**The displacement effect on the inviscid solution itself.** Offsetting the wall changes the
+area the flow sees, which changes the flow, which changes the offset. The outer iteration that
+closes that loop lives in the contour solve rather than here.
 
-Sign conventions, because they are the easiest thing to get backwards. Displacement thickness is
-positive and the physical wall is offset OUTWARD from the inviscid contour by it, so that the
-inviscid flow passing through the reduced area matches the real flow through the real area. Skin
-friction is a drag, so the thrust it produces is negative.
+Sign conventions, because they are the easiest thing to get backwards. Displacement thickness
+is positive and the physical wall is offset OUTWARD from the inviscid contour by it, so that
+the inviscid flow passing through the reduced area matches the real flow through the real area.
+Skin friction is a drag, so the thrust it produces is negative.
 
-Lengths are in meters here, not throat radii: this is marched along a real wall against a real
-Reynolds number, and non-dimensionalising it would only hide the one quantity that sets the
-answer.
+Lengths are in meters, not throat radii: this is marched along a real wall against a real
+Reynolds number.
 
 Validation status
 -----------------
 
-**The incompressible limit is checked against the flat-plate correlations the closure reduces to,
-and that is the strongest check available.** Taking the Mach number to zero and the wall to
-adiabatic, the reference temperature becomes the free-stream temperature and the skin friction
-has to return the incompressible law it was built from. That is arithmetic and it is in
+**The incompressible limit reproduces the flat-plate correlations.** This is the strongest
+check available. Taking the Mach number to zero and the wall to adiabatic, the reference
+temperature becomes the free-stream temperature and the skin friction has to return the
+incompressible law it was built from. That is arithmetic and it is in
 `tests/testBoundaryLayer.py`.
 
-**The momentum integral is checked against itself.** Momentum thickness growth along the wall has
-to equal what the friction and pressure-gradient terms say it does, which is exact and independent
-of any closure.
+**The momentum integral is checked against itself.** Momentum thickness growth along the wall
+has to equal what the friction and pressure-gradient terms say it does, which is exact and
+independent of any closure.
 
-**The magnitude is checked against a published friction model, and the difference is 1.33 times
-rather than the factor of two it first appeared to be.** NASA RP-1104 charges wall friction over a
-perfect-bell contour at a Fanning factor of 0.003, which is the same convention used here, since
+**Against a published friction model the drag runs 33% high.**
+NASA RP-1104 charges wall friction over a perfect-bell contour at a Fanning factor of 0.003,
+which is the same convention used here, since
 `wallShear = cf * 0.5 rho u^2`. The two are therefore directly comparable.
 
 On the worked LOX/LH2 truncated ideal contour, at a wall of 800 K:
@@ -82,33 +75,33 @@ On the worked LOX/LH2 truncated ideal contour, at a wall of 800 K:
     RP-1104 representative factor       0.003000      that RP-1104 multiplies by 0.003
     ratio                               1.33 x
 
-    NOVA drag                           1998 N        2.03 per cent of inviscid thrust
-    the same integral at cf = 0.003     1501 N        1.52 per cent of inviscid thrust
+    NOVA drag                           1998 N        2.03 percent of inviscid thrust
+    the same integral at cf = 0.003     1501 N        1.52 percent of inviscid thrust
 
 **The second pair is what settles where the difference lives.** Both drags run over the same
 wetted area and the same dynamic pressure, so their ratio IS the ratio of friction levels and
-nothing else. At RP-1104's own friction factor this contour still returns 1.52 per cent, which is
-the top of the half to one and a half per cent range that general loss budgets quote. So roughly a
-third of the apparent discrepancy is the friction level, and the rest is that this contour belongs
-at the high end of that range: a 40 to 1 bell of 1.13 square meters wetted area on a 98 kN engine.
-RP-1104 states the same thing from the other side, that large high-pressure nozzles run a little
-below 0.003 and small low-pressure ones a little above.
+nothing else. At RP-1104's own friction factor this contour still returns 1.52 percent, which
+is the top of the half to one and a half percent range that general loss budgets quote. So
+roughly a third of the apparent discrepancy is the friction level, and the rest is that this
+contour belongs at the high end of that range: a 40 to 1 bell of 1.13 square meters wetted area
+on a 98 kN engine. RP-1104 states the same thing from the other side, that large high-pressure
+nozzles run a little below 0.003 and small low-pressure ones a little above.
 
 Three further things are known about the residual. It is NOT the assumed starting thickness:
-changing it by a factor of five hundred moves the drag by four per cent, because the momentum
+changing it by a factor of five hundred moves the drag by four percent, because the momentum
 integral forgets its initial condition. A cooled wall genuinely carries more friction than an
-adiabatic one, and at 800 K against gas at 3081 K that alone raises the coefficient by about half
-again, so a budget quoted for a hotter wall sits lower for that reason. And what is computed here
-is friction drag alone, where a performance budget is usually net of the displacement effect,
-which gives back some of what friction takes; settling that needs the outer iteration that is not
-built yet.
+adiabatic one, and at 800 K against gas at 3081 K that alone raises the coefficient by about
+half again, so a budget quoted for a hotter wall sits lower for that reason. And what is
+computed here is friction drag alone, where a performance budget is usually net of the
+displacement effect, which gives back some of what friction takes; settling that needs the
+outer iteration that is not built yet.
 
 **No coefficient has been tuned to close any of this.** The 1.33 is reported, not removed.
 
 **Not validated against a measured profile.** No source in this reference set publishes a
 boundary-layer survey in a rocket nozzle, so nothing here establishes the velocity profile, the
-shape factor, or the transition point. What is established is that the closure reduces correctly,
-that the march conserves momentum, and that the answer is the right size.
+shape factor, or the transition point. What is established is that the closure reduces
+correctly, that the march conserves momentum, and that the answer is the right size.
 
 Author: Sean Bowman
 
@@ -236,7 +229,7 @@ def solveBoundaryLayer(x, radius, mach, temperature, pressure, velocity, gamma: 
         d(theta)/dx = cf/2 - theta (2 + H - M^2) (1/ue) due/dx - theta (1/r) dr/dx
 
     The three terms are the three things that change momentum thickness: friction adds to it, a
-    favourable pressure gradient thins it, and a diverging wall stretches it. A rocket nozzle has
+    favorable pressure gradient thins it, and a diverging wall stretches it. A rocket nozzle has
     all three working hard and the second is why the layer stays thin despite the length.
 
     Parameters:
@@ -338,7 +331,7 @@ def offsetWall(x, radius, displacementThickness) -> tuple:
     The inviscid contour is where the flow behaves as though the wall were, and the physical wall
     has to sit outside it by the thickness the slowed gas displaces. Offsetting along the normal
     rather than radially matters where the wall is steep: near the throat the two differ by the
-    cosine of the wall angle, which at thirty degrees is thirteen per cent of the offset.
+    cosine of the wall angle, which at thirty degrees is thirteen percent of the offset.
 
     Parameters:
     -----------

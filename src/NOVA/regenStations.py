@@ -1,19 +1,20 @@
+
 # -- NOVA: Regen Section Split and Station Properties -- #
 
 '''
 
-Deciding how far down the nozzle the cooling jacket runs, and what the exhaust is doing there.
+Deciding how far down the nozzle the cooling jacket runs.
 
-A regeneratively cooled nozzle is not cooled all the way to the exit. Past some station the wall
-is cool enough to survive uncooled, and carrying the jacket further costs mass and pressure drop
-for nothing. This module makes that cut and hands back two sections: the regen section the jacket
-is built on, and the extension beyond it.
+A regeneratively cooled nozzle is not cooled all the way to the exit. Past some station the
+wall is cool enough to survive uncooled, and carrying the jacket further costs mass and
+pressure drop for nothing. This module makes that cut and hands back two sections: the regen
+section the jacket is built on, and the extension beyond it.
 
-Where to cut is set by `truncationMethod`:
+Where to cut is set by `regenTruncationType` and `regenTruncationValue`:
 
-    none        No cut. The jacket runs the whole contour.
-    temp<K>     Cut where the near-wall recovery temperature falls to the given value.
-    er<ratio>   Cut at a given area ratio.
+    'none'      No cut. The jacket runs the whole contour. The value is ignored.
+    'temp'      Cut where the near-wall recovery temperature falls to the value, in kelvin.
+    'er'        Cut at the value, an area ratio.
 
 Both sections then get a full set of exhaust properties at every station. Those come from the
 thermochemistry rather than from the flowfield: CEA is called at each station's area ratio, and
@@ -23,22 +24,22 @@ returns the gas composition, transport properties and near-wall state there.
                             Validation status
 ----------------------------------------------------------------------
 
-**The station properties are CEA's, and are as good as CEA.** The thermochemistry is validated in
+**The station properties are CEA's.** The thermochemistry is validated in
 `tests/testCeaInterface.py` against CEARun for the worked LOX/LH2 case. What is not validated is
 the assumption that a one-dimensional station property describes the gas at the wall.
 
 **That assumption is the largest disclosed approximation in the cooling model.** The near-wall
 Mach number the method of characteristics returns departs from the one-dimensional value at the
-same area ratio by up to 42 per cent near the throat. Every gas-side transport property the
-thermal model reads comes from here, one-dimensionally, while the geometry it is applied to came
-from the characteristics solve. The two are inconsistent with each other, and the throat is where
-the heat flux is highest.
+same area ratio by up to 42 percent near the throat. Every gas-side transport property the
+thermal model reads comes from here, one-dimensionally, while the geometry it is applied to
+came from the characteristics solve. The two are inconsistent with each other, and the throat
+is where the heat flux is highest.
 
 Closing that gap means sampling the flowfield rather than a one-dimensional station, which is a
 change to what is modeled rather than to how it is computed.
 
-**The split itself is arithmetic**: an interpolation onto a temperature or an area ratio, and the
-tests hold it to the station it names.
+**The split itself is arithmetic**: an interpolation onto a temperature or an area ratio, and
+the tests hold it to the station it names.
 
 All units are mass base SI:
     - Length      [m]
@@ -55,13 +56,14 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 
-from .utils import (arcSpline, chunkInterpolate, plotLine, ThermalConstraintError,
-                    createErrorContext, InvalidInputError)
+from .geometryTools import arcSpline, chunkInterpolate
+from .errors import ThermalConstraintError, createErrorContext, InvalidInputError
+from .figures import showFigure, drawContourFigure, drawNearWallFigure, drawFieldFigure
 from .filmCooling import filmCoolantState, filmCoolingArrays, entrainmentFilmArrays
 from .ceaInterface import CEA
+from .contour import divergingSectionFamily
 
 @dataclass
 class RegenStationState:
@@ -111,8 +113,9 @@ class RegenStationState:
     oxidizerInitialTemperature:                  Any = None
     rNozzleWall:                                 Any = None
     targetExitPressure:                          Any = None
-    truncationMethod:                            Any = None
-    visualizeContour:                            Any = None
+    regenTruncationType:                         Any = None
+    regenTruncationValue:                        Any = None
+    plotsEnabled:                                Any = None
     xNozzleWall:                                 Any = None
 
     # -- The two sections and their station properties -- #
@@ -273,7 +276,7 @@ def solveRegenSectionFilm(state):
             1.0 + 0.5 * (state.chamberGamma - 1.0) * state.regenSectionNearWallMachNumber**2)
 
         # SP-8124 writes the entrainment on the real near-wall mass flux rather than the nominal
-        # one-dimensional value, and on a nozzle those differ by tens of per cent.
+        # one-dimensional value, and on a nozzle those differ by tens of percent.
         massFluxRatio = (state.densityRegenSection * state.regenSectionNearWallVelocity) / (
             state.engineMassFlow / (np.pi * state.rRegenNozzle**2))
 
@@ -330,16 +333,11 @@ def solveRegenStations(state):
 
     '''
 
-    # Type is either 'temp' , 'er' , or 'none' so we can check the first letter
-    firstLetter = state.truncationMethod[0]
-    if firstLetter.lower() == 't':
-        truncationMethod = 'temp'
-        truncationTemperature = float(state.truncationMethod[5:])
-    elif firstLetter.lower() == 'e':
-        truncationMethod = 'er'
-        truncationExpansionRatio = float(state.truncationMethod[3:])
-    elif firstLetter.lower() == 'n':
-        truncationMethod = 'none'
+    regenTruncationType = state.regenTruncationType
+    if regenTruncationType == 'temp':
+        truncationTemperature = float(state.regenTruncationValue)
+    elif regenTruncationType == 'er':
+        truncationExpansionRatio = float(state.regenTruncationValue)
 
     xNozzle = state.xNozzleWall.copy()
     rNozzle = state.rNozzleWall.copy()
@@ -352,7 +350,7 @@ def solveRegenStations(state):
     print(f'Truncating Nozzle Regen Section.')
 
     # Find truncation location
-    match truncationMethod:
+    match regenTruncationType:
 
         case 'temp':
 
@@ -369,7 +367,7 @@ def solveRegenStations(state):
             truncationRadius   = interp1d(areaRatios[throatIndex:],rNozzle[throatIndex:])(truncationExpansionRatio)
 
     # Separate the regen section and extension
-    if truncationMethod != 'none':
+    if regenTruncationType != 'none':
 
         xRegenNozzle = np.concatenate([state.xNozzleWall[:truncationIndex-1],[truncationLocation]])
         rRegenNozzle = np.concatenate([state.rNozzleWall[:truncationIndex-1],[truncationRadius]])
@@ -509,7 +507,7 @@ def solveRegenStations(state):
         reynoldsExtension                    = interp1d(xExtensionRough, reynoldsExtension,fill_value='extrapolate')(xExtension)
         molecularWeightExtension             = interp1d(xExtensionRough, molecularWeightExtension,fill_value='extrapolate')(xExtension)
 
-    elif truncationMethod == 'none' and state.divergingSectionType != 'Conical':
+    elif regenTruncationType == 'none' and divergingSectionFamily(state.divergingSectionType) != 'conical':
 
         xRegenNozzle = state.xNozzleWall.copy()
         rRegenNozzle = state.rNozzleWall.copy()
@@ -701,7 +699,7 @@ def solveRegenStations(state):
         # inlet. Everything it needs is in the station properties just assigned.
         solveRegenSectionFilm(state)
 
-    if state.truncationMethod != 'none':
+    if state.regenTruncationType != 'none':
 
         state.xExtension                              = xExtension
         state.rExtension                              = rExtension
@@ -722,197 +720,23 @@ def solveRegenStations(state):
         state.reynoldsExtension                       = reynoldsExtension
         state.molecularWeightExtension                = molecularWeightExtension
 
-    if state.visualizeContour == 'on':
+    if state.plotsEnabled == 'on':
 
-        plotLine(xRegenNozzle, rRegenNozzle, markerStyle = '*', lineStyle = '',
-                 xLabel = 'Nozzle Axis [m]', yLabel = 'Nozzle Radius [m]',
-                 title = 'Truncated Ideal Nozzle Contour',
-                 label = 'Regen Nozzle Portion')
-        plt.plot(xExtension, rExtension, '*r', label = 'Nozzle Extension')
-        plt.legend()
-        plt.gca().set_aspect('equal')
+        # The same styled renderer the feature showcase draws its documentation figures with,
+        # so the PNGs written here and the ones in featureShowcase/ cannot drift apart.
+        def showAndExport(figure, filename: str) -> None:
 
-        if state.export == 'on':
+            if figure is None:
+                return
+            showFigure(figure)
+            if state.export == 'on':
+                figure.savefig(state.dataFolder + '\\' + filename, dpi = 160,
+                               bbox_inches = 'tight')
 
-            # Enlarge for the save at the aspect the figure was drawn at; resizing to a
-            # portrait canvas is what used to leave the content floating in white space.
-            figure = plt.gcf()
-            figure.set_size_inches(16, 10)
-            figure.tight_layout()
-
-            # Save the final heat transfer figure to the data folder
-            plt.savefig(state.dataFolder + '\\contourSegmentsVizualization.png', bbox_inches = 'tight')
-
-        # Mach Contours
-        fig = plt.figure(figsize=(12, 8))
-
-        plt.plot(state.xNozzleWall, state.rNozzleWall, 'w', label = 'Nozzle Contour')
-        plt.plot(state.xNozzleWall, -state.rNozzleWall, 'w')
-
-        maskedX, maskedR, maskedMach = [], [], []
-        for i in range(3):
-            maskedX.append(np.ma.masked_where(np.isnan(state.allXPoints[i]), state.allXPoints[i]))
-            maskedR.append(np.ma.masked_where(np.isnan(state.allRPoints[i]), state.allRPoints[i]))
-            maskedMach.append(np.ma.masked_where(np.isnan(state.allMachNumbers[i]), state.allMachNumbers[i]))
-        levels = np.arange(0.5, 1 + state.idealMachNumber, 0.1)
-        for i in range(3):
-            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor,
-                         maskedR[i]*state.nozzleScalingFactor,
-                         maskedMach[i],
-                         levels = levels)
-            plt.contourf(maskedX[i]*state.nozzleScalingFactor,
-                         -maskedR[i]*state.nozzleScalingFactor,
-                         maskedMach[i],
-                         levels = levels)
-        plt.colorbar(contour, label = 'Mach Number', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-        plt.gca().set_aspect('equal')
-        plt.gca().set_title('Mach Contours')
-        plt.gca().set_xlabel('Nozzle Axis [m]')
-        plt.gca().set_ylabel('Nozzle Radius [m]')
-        plt.show(block = False)
-
-        if state.export == 'on':
-
-            # Enlarge for the save at the aspect the figure was drawn at; resizing to a
-            # portrait canvas is what used to leave the content floating in white space.
-            figure = plt.gcf()
-            figure.set_size_inches(16, 10)
-            figure.tight_layout()
-
-            # Save the final heat transfer figure to the data folder
-            plt.savefig(state.dataFolder + '\\machContours.png', bbox_inches = 'tight')
-
-        # Pressure Field
-        fig = plt.figure(figsize=(12, 8))
-
-        plt.plot(state.xNozzleWall, state.rNozzleWall, 'w', label = 'Nozzle Contour')
-        plt.plot(state.xNozzleWall, -state.rNozzleWall, 'w')
-
-        maskedPressure = []
-        for i in range(3):
-            maskedPressure.append(np.ma.masked_where(np.isnan(state.allPressures[i]), state.allPressures[i]))
-        levels = np.arange(state.targetExitPressure, maskedPressure[0].max(), 1e4)
-        cmap = plt.colormaps['coolwarm'].with_extremes(under = 'cyan', over = 'magenta')
-        for i in range(3):
-            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor,
-                         maskedR[i]*state.nozzleScalingFactor,
-                         maskedPressure[i],
-                         levels = levels,
-                         cmap = cmap,
-                         extend = 'min')
-            plt.contourf(maskedX[i]*state.nozzleScalingFactor,
-                         -maskedR[i]*state.nozzleScalingFactor,
-                         maskedPressure[i],
-                         levels = levels,
-                         cmap = cmap,
-                         extend = 'min')
-        plt.colorbar(contour, label = 'Pressure Field [Pa]', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-        plt.gca().set_aspect('equal')
-        plt.gca().set_title('Pressure Contours')
-        plt.gca().set_xlabel('Nozzle Axis [m]')
-        plt.gca().set_ylabel('Nozzle Radius [m]')
-        plt.show(block = False)
-
-        if state.export == 'on':
-
-            # Enlarge for the save at the aspect the figure was drawn at; resizing to a
-            # portrait canvas is what used to leave the content floating in white space.
-            figure = plt.gcf()
-            figure.set_size_inches(16, 10)
-            figure.tight_layout()
-
-            # Save the final heat transfer figure to the data folder
-            plt.savefig(state.dataFolder + '\\pressureContours.png', bbox_inches = 'tight')
-
-        # Temperature Field
-        fig = plt.figure(figsize=(12, 8))
-
-        plt.plot(state.xNozzleWall, state.rNozzleWall, 'w', label = 'Nozzle Contour')
-        plt.plot(state.xNozzleWall, -state.rNozzleWall, 'w')
-
-        maskedTemperature = []
-        for i in range(3):
-            maskedTemperature.append(np.ma.masked_where(np.isnan(state.allTemperatures[i]), state.allTemperatures[i]))
-        levels = np.arange(1000, maskedTemperature[0].max(), 100)
-        cmap = plt.colormaps['plasma']
-        for i in range(3):
-            contour = plt.contourf(maskedX[i]*state.nozzleScalingFactor,
-                         maskedR[i]*state.nozzleScalingFactor,
-                         maskedTemperature[i],
-                         levels = levels,
-                         cmap = cmap)
-            plt.contourf(maskedX[i]*state.nozzleScalingFactor,
-                         -maskedR[i]*state.nozzleScalingFactor,
-                         maskedTemperature[i],
-                         levels = levels,
-                         cmap = cmap)
-        plt.colorbar(contour, label = 'Temperature Field [K]', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-        plt.gca().set_aspect('equal')
-        plt.gca().set_title('Temperature Contours')
-        plt.gca().set_xlabel('Nozzle Axis [m]')
-        plt.gca().set_ylabel('Nozzle Radius [m]')
-        plt.show(block = False)
-
-        if state.export == 'on':
-
-            # Enlarge for the save at the aspect the figure was drawn at; resizing to a
-            # portrait canvas is what used to leave the content floating in white space.
-            figure = plt.gcf()
-            figure.set_size_inches(16, 10)
-            figure.tight_layout()
-
-            # Save the final heat transfer figure to the data folder
-            plt.savefig(state.dataFolder + '\\temperatureContours.png', bbox_inches = 'tight')
-
-        # Nozzle Full Output Plot
-        fig = plt.figure(figsize=(12, 8))
-
-        gs = fig.add_gridspec(2, 2)
-
-        ax1 = fig.add_subplot(gs[0, 0])
-        ax1.plot(state.xNozzleWall, state.rNozzleWall, 'w', label = 'Nozzle Contour')
-        ax1.plot(     xNozzle    , state.nozzleNearWallVelocity, label = 'Velocity')
-        ax1.set_title('Near-Wall Exhaust Velocity')
-        ax1.set_xlabel('Nozzle Axis [m]')
-        ax1.set_ylabel('Velocity [m/s]')
-        ax1.grid(which = 'both')
-
-        ax2 = fig.add_subplot(gs[0, 1])
-        ax2.plot(     xNozzle    , state.nozzleNearWallMachNumber, label = 'Mach Number')
-        ax2.set_title('Near-Wall Exhaust Mach Number')
-        ax2.set_xlabel('Nozzle Axis [m]')
-        ax2.set_ylabel('Mach Number [-]')
-        ax2.grid(which = 'both')
-
-        ax3 = fig.add_subplot(gs[1, 0])
-        ax3.plot(     xNozzle    , state.nozzleNearWallTemperature, label = 'Static Temperature')
-        ax3.set_title('Near-Wall Exhaust Static Temperature')
-        ax3.set_xlabel('Nozzle Axis [m]')
-        ax3.set_ylabel('Temperature [K]')
-        ax3.grid(which = 'both')
-
-        ax4 = fig.add_subplot(gs[1, 1])
-        ax4.plot(     xNozzle    , state.nozzleNearWallPressure, label = 'Static Pressure')
-        ax4.set_title('Near-Wall Exhaust Static Pressure')
-        ax4.set_xlabel('Nozzle Axis [m]')
-        ax4.set_ylabel('Pressure [Pa]')
-        ax4.grid(which = 'both')
-
-        plt.tight_layout()
-        plt.show(block = False)
-
-        if state.export == 'on':
-
-            # Enlarge for the save at the aspect the figure was drawn at; resizing to a
-            # portrait canvas is what used to leave the content floating in white space.
-            figure = plt.gcf()
-            figure.set_size_inches(16, 10)
-            figure.tight_layout()
-
-            # Save the final heat transfer figure to the data folder
-            plt.savefig(state.dataFolder + '\\nearWallProperties.png', bbox_inches = 'tight')
+        showAndExport(drawContourFigure(state), 'contourSegmentsVisualization.png')
+        showAndExport(drawFieldFigure(state, 'mach'), 'machContours.png')
+        showAndExport(drawFieldFigure(state, 'pressure'), 'pressureContours.png')
+        showAndExport(drawFieldFigure(state, 'temperature'), 'temperatureContours.png')
+        showAndExport(drawNearWallFigure(state), 'nearWallProperties.png')
 
     return state

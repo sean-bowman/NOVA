@@ -3,28 +3,28 @@
 
 '''
 
-Contour generators: the wall itself, and the performance that follows from it.
+Generating the diverging wall and measuring what it delivers.
 
-Three families are produced here, and they are not interchangeable.
+Three families are produced here. They are not interchangeable.
 
 `truncatedIdealContour` solves the characteristics net from a transonic starting line, traces the
-wall as the streamline that turns the flow back to axial, and truncates. This is the method NASA
-SP-8120 attributes to Ahlberg et al.: design an ideal nozzle to a higher area ratio than required,
-then truncate to the area ratio wanted, and the length follows. The interior is shock free by
-construction, because it is a piece of an ideal nozzle.
+wall as the streamline that turns the flow back to axial, and truncates. This is the method
+NASA SP-8120 attributes to Ahlberg et al.: design an ideal nozzle to a higher area ratio than
+required, then truncate to the area ratio wanted, and the length follows. The interior is shock
+free by construction, because it is a piece of an ideal nozzle.
 
 `conicalContour` is a straight wall at a chosen half angle. It has no interior solution and no
 free parameters beyond the angle.
 
 `raoParabolicContour` draws a skewed parabola between two prescribed wall angles. It solves
 nothing; it exists so that a generated contour can be compared against the construction most
-published bells actually use, and it is not a design path.
+published bells actually use. It is not a design path.
 
 The solve reads a `ContourSolution` as its own workspace and returns it filled in. That is
 deliberate: the algorithm is one long march whose intermediate arrays are also its outputs, and
 pretending otherwise would mean copying the whole characteristic mesh twice. What matters for
-testing is that nothing here reads or writes a Nozzle: every input arrives through the workspace,
-so the solve can be driven from a test with a gas, a throat and four numbers.
+testing is that nothing here reads or writes a Nozzle: every input arrives through the
+workspace, so the solve can be driven from a test with a gas, a throat and four numbers.
 
 Lengths inside the solve are non-dimensional against the throat radius and are scaled to meters
 only at the end. Angles are in radians.
@@ -37,7 +37,6 @@ Date:   09/06/2026
 import copy
 
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import fsolve, minimize_scalar
 
@@ -48,9 +47,10 @@ from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
 from .directCharacteristics import (marchPrescribedWall, shockFromWallEnvelope,
                                     stagnationPressureField)
 from .gasDynamics import (prandtlMeyerAngle, radiusMachRelation, conicalLength,
-                          machFromAreaRatio, staticPressureRatio, staticTemperatureRatio)
+                          machFromAreaRatio, staticPressureRatio, staticTemperatureRatio,
+                          isentropicValues)
 from .wallGeometry import bezierBellWall, thrustOptimizedParabolaWall
-from .utils import arcSpline, plotLine, isentropicValues, lineIntersection
+from .geometryTools import arcSpline, lineIntersection
 
 def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGamma: float,
                         gasConstant: float, stagnationTemperature: float) -> float:
@@ -132,17 +132,15 @@ class ContourSolution:
         the prescribed-wall families end their arc at the inflection angle their wall was drawn to.
     ambientSpecificImpulse : float
         Ambient specific impulse from the thermochemistry, used for the delivered c-star [s]
-    plotsDocs : str
-        'on' draws the step-by-step construction figures the documentation uses
 
     '''
 
     def __init__(self, gas: CharacteristicGas, throat: ThroatGeometry, chamberPressure: float,
                  engineMassFlow: float, throatGamma: float, idealMachNumber: float,
                  targetExitPressure: float, numContourPoints: int,
-                 requestedAreaRatio: float = float('nan'), truncateOn: str = 'areaRatio',
+                 requestedAreaRatio: float = float('nan'),
                  numCharacteristicsRequested: int = 50, initialWallAngleFraction: float = 0.25,
-                 ambientSpecificImpulse: float = float('nan'), plotsDocs: str = 'off'):
+                 ambientSpecificImpulse: float = float('nan')):
 
         # -- What the solve reads -- #
         self.gas                                 = gas
@@ -157,11 +155,9 @@ class ContourSolution:
         self.targetExitPressure                  = targetExitPressure
         self.numContourPoints                    = numContourPoints
         self.requestedAreaRatio                  = requestedAreaRatio
-        self.truncateOn                          = truncateOn
         self.numCharacteristicsRequested         = numCharacteristicsRequested
         self.initialWallAngleFraction            = initialWallAngleFraction
         self.ambientSpecificImpulse              = ambientSpecificImpulse
-        self.plotsDocs                           = plotsDocs
         self.throatRadiusNonDimensional          = throat.throatRadius
         self.throatInletCurvatureNonDimensional  = throat.inletCurvature
         self.throatOutletCurvatureNonDimensional = throat.outletCurvature
@@ -379,8 +375,7 @@ def fillIsentropicField(state: ContourSolution) -> None:
                                    state.chamberPressure, state.chamberGamma, state.chamberRGasConstant)
 
 def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristics: int,
-                inflectionAngle: float, chamberPressure: float,
-                plotsDocs: str = 'off') -> dict:
+                inflectionAngle: float, chamberPressure: float) -> dict:
 
     '''
 
@@ -415,8 +410,6 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
         [rad].
     chamberPressure : float
         Chamber stagnation pressure, for the throat wall state [Pa].
-    plotsDocs : str
-        'on' draws the step-by-step construction figures the documentation uses.
 
     Returns:
     --------
@@ -438,7 +431,6 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
     throatWallX       = throat.throatRadius * throat.outletCurvature * np.sin(throatWallAngles)
     throatWallR       = throat.throatRadius * (1 + throat.outletCurvature) - \
                         throat.throatRadius * throat.outletCurvature * np.cos(throatWallAngles)
-
 
     # Generate initial node in mach net
     rLimitingCharacteristicIntersection, xLimitingCharacteristicIntersection, machLimitingCharacteristicIntersection \
@@ -463,36 +455,6 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
     for i in range(numCharacteristics):
         limitingCharacteristicX[i] = sauerLimitingCharacteristic(gas, throat, limitingCharacteristicR[i], returnAxialLocation = True)
 
-    if plotsDocs.lower() == 'on':
-        # Plot initial conditions
-        plotLine(throatWallX, throatWallR, \
-                    title = 'Characteristic Mesh Generation: Initial Conditions', \
-                    xLabel = 'Non-Dimensional X', yLabel = 'Non-Dimensional R', \
-                    lineStyle = '-', lineWidth = 2, markerStyle = '', color = 'w', fontSize = 22, \
-                    label = 'Mesh Kernel')
-        plt.gca().set_aspect('equal')
-        plt.plot(limitingCharacteristicX, limitingCharacteristicR, \
-                'y', linewidth = 2, label = 'Limiting Characteristic')
-        plt.axhline(y = 0, color = 'w', linestyle = '--', linewidth = 2)
-        plt.axvline(x = 0, color = 'w', linestyle = '--', linewidth = 2)
-
-    if plotsDocs.lower() == 'on':
-        # Plot to visualize throat wall and limiting characteristic intersection
-        plotLine(throatWallX, throatWallR, \
-                    title = 'Characteristic Mesh Generation: Throat Region', \
-                    xLabel = 'Non-Dimensional X', yLabel = 'Non-Dimensional R', \
-                    lineStyle = '-', lineWidth = 2, markerStyle = '', color = 'w', fontSize = 22, \
-                    label = 'Throat Wall')
-        plt.gca().set_aspect('equal')
-        plt.gca().set_xlim([-0.01, 0.03])
-        plt.gca().set_ylim([0.98, 1.01])
-        plt.plot(xLimitingCharacteristicIntersection, rLimitingCharacteristicIntersection, \
-                '*g', markersize = 12, label = 'Limiting Characteristic Intersection Location')
-        plt.plot(xThroatIntersection, rThroatIntersection, \
-                '*m', markersize = 6, label = 'Throat Wall Intersection Location')
-        plt.plot(limitingCharacteristicX, limitingCharacteristicR, \
-                'y', linewidth = 2, label = 'Limiting Characteristic')
-
     #-----------------------------------------------------------------------------------------------------------------------------------------#
     # -- Generate Near-Throat Kernel -- #
     #-----------------------------------------------------------------------------------------------------------------------------------------#
@@ -509,12 +471,6 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
     throatKernelX[1,1], throatKernelR[1,1] \
     = machThroatIntersection, wallAngleThroatIntersection, xThroatIntersection, rThroatIntersection
 
-    if plotsDocs.lower() == 'on':
-        # Plot the throat kernel generation section
-        plt.plot(throatKernelX[1,:2], throatKernelR[1,:2], \
-                '*w', markersize = 22, label = 'Characteristic Mesh Start')
-        arrowSize = 0.0001
-
     # Main throat kernel loop
     for i in np.arange(2, numCharacteristics):
 
@@ -528,36 +484,14 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
         throatKernelMach[i,i], throatKernelMach[i, i-1], throatKernelFlowAngle[i, i-1], throatKernelX[i, i-1], throatKernelR[i, i-1] \
         = wallCharacteristicProjection(gas, throatKernelMach[i-1,i-1], characteristicProjectionGeometry)
 
-        if plotsDocs.lower() == 'on':
-            # Update throat kernel plot (Wall Characteristic Projection Point)
-            plt.plot(throatKernelX[i,i-1], throatKernelR[i,i-1], '*r', markersize = 12)
-            stop = 1
-
         for j in reversed(np.arange(2,i)):
             axMOCKernel = [throatKernelMach[i,j],     throatKernelFlowAngle[i,j],     throatKernelX[i,j],     throatKernelR[i,j], \
                            throatKernelMach[i-1,j-1], throatKernelFlowAngle[i-1,j-1], throatKernelX[i-1,j-1], throatKernelR[i-1,j-1]]
             throatKernelMach[i,j-1], throatKernelFlowAngle[i, j-1], throatKernelX[i, j-1], throatKernelR[i, j-1] \
             = axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
-            if plotsDocs.lower() == 'on':
-                # Update throat kernel plot (Axisymmetrix Method of Characteristics for interior points PREDICTOR STEP)
-                plt.plot(throatKernelX[i-1,j-1], throatKernelR[i-1,j-1], '*c', markersize = 12)
-                plt.plot(throatKernelX[i,j], throatKernelR[i,j], '*m', markersize = 12)
-                plt.plot(throatKernelX[i,j-1], throatKernelR[i,j-1], '*y', markersize = 12)
-                plt.arrow(throatKernelX[i-1,j-1], throatKernelR[i-1,j-1],\
-                        throatKernelX[i,j-1]-throatKernelX[i-1,j-1], throatKernelR[i,j-1]-throatKernelR[i-1,j-1], \
-                        edgecolor = 'w', facecolor = 'c', width = arrowSize, length_includes_head = True)
-                plt.arrow(throatKernelX[i,j], throatKernelR[i,j], \
-                        throatKernelX[i,j-1]-throatKernelX[i,j], throatKernelR[i,j-1]-throatKernelR[i,j], \
-                        edgecolor = 'w', facecolor = 'm', width = arrowSize, length_includes_head = True)
-                stop = 1
 
         throatKernelR[i,0], throatKernelX[i,0], throatKernelMach[i,0] \
         = limitingCharacteristicIntersection(gas, throat, throatKernelMach[i,1], throatKernelFlowAngle[i,1], throatKernelX[i,1], throatKernelR[i,1])
-
-        if plotsDocs.lower() == 'on':
-            # Update throat kernel plot (Mesh intersection with Limiting characteristic)
-            plt.plot(throatKernelX[i,0], throatKernelR[i,0], '*g', markersize = 12)
-            stop = 1
 
         # Corrector Step
         for k in range(i-1):
@@ -566,29 +500,8 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
             throatKernelMach[i,k+1], throatKernelFlowAngle[i,k+1], throatKernelX[i,k+1], throatKernelR[i,k+1] \
             = axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
 
-            if plotsDocs.lower() == 'on':
-                # Update throat kernel plot (Axisymmetrix Method of Characteristics for interior points CORRECTOR STEP)
-                plt.plot(throatKernelX[i-1,k+1], throatKernelR[i-1,k+1], '*', color = 'tab:orange', markersize = 12)
-                plt.plot(throatKernelX[i,k], throatKernelR[i,k], '*', color = 'tab:purple', markersize = 12)
-                plt.plot(throatKernelX[i,k+1], throatKernelR[i,k+1], '*b', markersize = 12)
-                plt.arrow(throatKernelX[i-1,k+1], throatKernelR[i-1,k+1],\
-                        throatKernelX[i,k+1]-throatKernelX[i-1,k+1], throatKernelR[i,k+1]-throatKernelR[i-1,k+1], \
-                        edgecolor = 'w', facecolor = 'tab:orange', width = arrowSize, length_includes_head = True)
-                plt.arrow(throatKernelX[i,k], throatKernelR[i,k], \
-                        throatKernelX[i,k+1]-throatKernelX[i,k], throatKernelR[i,k+1]-throatKernelR[i,k], \
-                        edgecolor = 'w', facecolor = 'tab:purple', width = arrowSize, length_includes_head = True)
-                stop = 1
-
         throatKernelMach[i,i], throatKernelFlowAngle[i,i], throatKernelX[i,i], throatKernelR[i,i] \
         = throatIntersection(gas, throat, throatKernelMach[i,i-1], throatKernelFlowAngle[i,i-1], throatKernelX[i,i-1], throatKernelR[i,i-1])
-
-        if plotsDocs.lower() == 'on':
-            # Update throat kernel plot (Mesh intersection with nozzle throat)
-            plt.plot(throatKernelX[i,i], throatKernelR[i,i], '*g', markersize = 12)
-            # Update the view window of the final plot to show entire throat kernel
-            plt.gca().set_xlim([-0.01, 0.08])
-            plt.gca().set_ylim([0.94, 1.01])
-            stop = 1
 
     # Calculate wall properties in the throat region with isentropic relations
     throatWallMach, throatWallTemperature, \
@@ -640,23 +553,6 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
     initialRightRunningMach, initialRightRunningFlowAngle, initialRightRunningX, initialRightRunningR, *_ = \
     axisymmetricMethodOfCharacteristics(gas, axMOCKernel, numPoints = idealMeshSpacing)
 
-    if plotsDocs.lower() == 'on':
-        # Create a new plot to show the generation of the inner expansion mesh
-        plotLine(expansionKernelX, expansionKernelR, \
-                    title = 'Characteristic Mesh Generation: Inner Expansion Mesh', \
-                    xLabel = 'Non-Dimensional X', yLabel = 'Non-Dimensional R', \
-                    lineStyle = '', lineWidth = 2, markerStyle = '*', color = 'w', fontSize = 22, \
-                    label = 'Mesh Kernel')
-        plt.gca().set_aspect('equal')
-        plt.plot(limitingCharacteristicX, limitingCharacteristicR, \
-                'y', linewidth = 2, label = 'Limiting Characteristic')
-        plt.axhline(y = 0, color = 'w', linestyle = '--', linewidth = 2)
-        plt.plot(initialRightRunningX, initialRightRunningR, '*g', markersize = 12)
-        # Update the view window of the plot to show zoomed region of interest
-        plt.gca().set_xlim([-0.01, 0.10])
-        plt.gca().set_ylim([0.88, 1.01])
-        arrowSize = 0.0005
-
     # Insert stuff from initial right running characteristic
     expansionKernelMach[numCharacteristics:numCharacteristics+idealMeshSpacing, 1], expansionKernelFlowAngle[numCharacteristics:numCharacteristics+idealMeshSpacing, 1], \
     expansionKernelX[numCharacteristics:numCharacteristics+idealMeshSpacing, 1], expansionKernelR[numCharacteristics:numCharacteristics+idealMeshSpacing, 1] \
@@ -670,19 +566,6 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
             expansionKernelMach[i, j+1], expansionKernelFlowAngle[i, j+1], expansionKernelX[i, j+1], expansionKernelR[i, j+1] = \
             axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
 
-            if plotsDocs.lower() == 'on':
-                # Update throat kernel plot (Axisymmetrix Method of Characteristics for Expansion Mesh down to axis)
-                plt.plot(expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1], '*c', markersize = 12)
-                plt.plot(expansionKernelX[i,j], expansionKernelR[i,j], '*m', markersize = 12)
-                plt.plot(expansionKernelX[i,j+1], expansionKernelR[i,j+1], '*y', markersize = 12)
-                plt.arrow(expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1],\
-                        expansionKernelX[i,j+1]-expansionKernelX[i-1,j+1], expansionKernelR[i,j+1]-expansionKernelR[i-1,j+1], \
-                        edgecolor = 'w', facecolor = 'c', width = arrowSize, length_includes_head = True)
-                plt.arrow(expansionKernelX[i,j], expansionKernelR[i,j], \
-                        expansionKernelX[i,j+1]-expansionKernelX[i,j], expansionKernelR[i,j+1]-expansionKernelR[i,j], \
-                        edgecolor = 'w', facecolor = 'm', width = arrowSize, length_includes_head = True)
-                stop = 1
-
     # Second loop: complete the rest of the points from the end of the C- characteristic down to the nozzle axis
     for i in np.arange(numCharacteristics+idealMeshSpacing, numRows):
         j = 2 - (numCharacteristics + idealMeshSpacing) + i
@@ -691,37 +574,11 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
         expansionKernelMach[i, j], expansionKernelFlowAngle[i, j], expansionKernelX[i, j], expansionKernelR[i, j] = \
         axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
 
-        if plotsDocs.lower() == 'on':
-            # Update throat kernel plot (Axisymmetrix Method of Characteristics for Expansion Mesh across axis)
-            plt.plot(expansionKernelX[i-1,j], expansionKernelR[i-1,j],  '*', color = 'tab:orange', markersize = 12)
-            plt.plot(expansionKernelX[i-1,j], -expansionKernelR[i-1,j],  '*', color = 'tab:purple', markersize = 12)
-            plt.plot(expansionKernelX[i,j], expansionKernelR[i,j], '*b', markersize = 12)
-            plt.arrow(expansionKernelX[i-1,j], expansionKernelR[i-1,j],\
-                        expansionKernelX[i,j]-expansionKernelX[i-1,j], expansionKernelR[i,j]-expansionKernelR[i-1,j], \
-                        edgecolor = 'w', facecolor = 'tab:orange', width = arrowSize, length_includes_head = True)
-            plt.arrow(expansionKernelX[i-1,j], -expansionKernelR[i-1,j], \
-                        expansionKernelX[i,j]-expansionKernelX[i-1,j], expansionKernelR[i,j]+expansionKernelR[i-1,j], \
-                        edgecolor = 'w', facecolor = 'tab:purple', width = arrowSize, length_includes_head = True)
-            stop = 1
-
         for j in np.arange(2 - (numCharacteristics + idealMeshSpacing) + i, numCharacteristics-1):
             axMOCKernel = [expansionKernelMach[i,j],     expansionKernelFlowAngle[i,j],     expansionKernelX[i,j],     expansionKernelR[i,j], \
                             expansionKernelMach[i-1,j+1], expansionKernelFlowAngle[i-1,j+1], expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1]]
             expansionKernelMach[i, j+1], expansionKernelFlowAngle[i, j+1], expansionKernelX[i, j+1], expansionKernelR[i, j+1] = \
             axisymmetricMethodOfCharacteristics(gas, axMOCKernel)
-
-            if plotsDocs.lower() == 'on':
-                # Update throat kernel plot (Axisymmetrix Method of Characteristics for expansion mesh inside axis)
-                plt.plot(expansionKernelX[i,j], expansionKernelR[i,j],  '*', color = 'tab:orange', markersize = 12)
-                plt.plot(expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1],  '*', color = 'tab:purple', markersize = 12)
-                plt.plot(expansionKernelX[i,j+1], expansionKernelR[i,j+1], '*b', markersize = 12)
-                plt.arrow(expansionKernelX[i,j], expansionKernelR[i,j],\
-                            expansionKernelX[i,j+1]-expansionKernelX[i,j], expansionKernelR[i,j+1]-expansionKernelR[i,j], \
-                            edgecolor = 'w', facecolor = 'tab:orange', width = arrowSize, length_includes_head = True)
-                plt.arrow(expansionKernelX[i-1,j+1], expansionKernelR[i-1,j+1], \
-                            expansionKernelX[i,j+1]-expansionKernelX[i-1,j+1], expansionKernelR[i,j+1]-expansionKernelR[i-1,j+1], \
-                            edgecolor = 'w', facecolor = 'tab:purple', width = arrowSize, length_includes_head = True)
-                stop = 1
 
     return {
         'throatKernelMach':          throatKernelMach,
@@ -759,7 +616,7 @@ def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius:
     through the flow-straightening block and then through the expansion kernel behind it.
 
     The walk runs out of columns before it reaches the axis, typically around a quarter of the
-    exit radius. That leaves a core carrying roughly eight per cent of the exit AREA unsampled,
+    exit radius. That leaves a core carrying roughly eight percent of the exit AREA unsampled,
     and because the thrust integral weights by area over the FULL exit area, an unsampled core
     subtracts directly from the thrust coefficient rather than showing up as a gap. The plane is
     closed on the axis instead, where the flow angle is zero by symmetry and the Mach number is
@@ -869,7 +726,7 @@ def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius:
 
     # The walk descends through the mesh from the wall and runs out of columns before it
     # reaches the axis, typically around a quarter of the exit radius. That leaves a core
-    # carrying roughly eight per cent of the exit AREA unsampled, and because the thrust
+    # carrying roughly eight percent of the exit AREA unsampled, and because the thrust
     # integral below weights by area over the FULL exit area, an unsampled core subtracts
     # directly from the thrust coefficient rather than showing up as a gap.
     #
@@ -1078,7 +935,7 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
 
     # Mass through the exit plane against mass through the choked throat. The two must agree:
     # the same flow passes both, and nothing is added or removed between them. Any departure is
-    # discretisation, in the mesh or in this integration, and it is the only measure of the
+    # discretization, in the mesh or in this integration, and it is the only measure of the
     # solution's quality that needs nothing outside it.
     chokedFlow = (state.chamberPressure * np.pi * state.throatRadiusNonDimensional ** 2
                   * np.sqrt(state.throatGamma
@@ -1187,7 +1044,7 @@ def finishContourSolution(state: ContourSolution, xNozzleWall: np.ndarray,
         xNozzleWall[throatIndex:], rNozzleWall[throatIndex:])
 
 def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthFraction: float,
-                          isPressureMatching: bool = False,
+                          truncate: bool = False,
                           assignOutputsToObject: bool = False) -> ContourSolution:
 
     '''
@@ -1203,7 +1060,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     - Build the throat kernel out to the wall, then the inner expansion kernel down to the axis.
     - Build the flow-straightening kernel against a uniform, axial exit line.
     - Trace the wall as the streamline that carries the flow from the kernel to that exit, and
-      truncate it.
+      truncate it at the requested area ratio.
     - Integrate the exit plane for the thrust coefficient, accounting for the flow angle and the
       pressure at every station rather than assuming a uniform exit.
 
@@ -1215,11 +1072,13 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
         Exit Mach number the ideal nozzle is designed to before truncation [-].
     lengthFraction : float
         Truncation length as a fraction of the 15 degree conical reference [-].
-    isPressureMatching : bool
-        True truncates at the target length. False runs the wall out to the end of the mesh.
+    truncate : bool
+        True cuts the wall at the requested area ratio. False runs the wall out to the end of
+        the mesh, which is the untruncated ideal contour.
     assignOutputsToObject : bool
         True computes the mesh blocks, the near-wall arrays and the derived performance. False
-        computes only what the figures of merit need, which is what the pressure match iterates on.
+        computes only what the figures of merit need, which is what the design Mach number
+        search iterates on.
 
     Returns:
     --------
@@ -1293,20 +1152,6 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
         rQueryRightRunning1 = downstreamR + (rightRunningR - downstreamR) * (xQueryRightRunning1 - downstreamX) / (rightRunningX - downstreamX)
         rQueryRightRunning2 = downstreamR + (rightRunningR - downstreamR) * (xQueryRightRunning2 - downstreamX) / (rightRunningX - downstreamX)
 
-        if state.plotsDocs == 'on':
-            # Display the query points for calculating wall points
-            plt.plot(upstreamX, upstreamR, '*y', markersize = 16)
-            plt.plot(downstreamX, downstreamR, '*y', markersize = 16)
-            plt.plot(leftRunningX, leftRunningR, '*y', markersize = 16)
-            plt.plot(rightRunningX, rightRunningR, '*y', markersize = 16)
-
-            plt.plot(xQueryLeftRunning1, rQueryLeftRunning1, 'og', markersize = 16)
-            plt.plot(xQueryLeftRunning2, rQueryLeftRunning2, 'or', markersize = 16)
-            plt.plot(xQueryRightRunning1, rQueryRightRunning1, 'or', markersize = 16)
-            plt.plot(xQueryRightRunning2, rQueryRightRunning2, 'or', markersize = 16)
-
-            stop = 1
-
         # Check if any query points fall within the bounding boxes
         # Point 1:
         if (xQueryLeftRunning1 >= min(downstreamX, leftRunningX)) and (xQueryLeftRunning1 <= max(downstreamX, leftRunningX)) and \
@@ -1354,22 +1199,19 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     state.numCharacteristics   = state.numCharacteristicsRequested + 1
 
     # Isentropic relation for ideally expanded mach number
-    # Where the wall is cut, and therefore which requested number is delivered and which is a
-    # result. Radius gives the requested area ratio, which is the method NASA SP-8120 describes.
-    # Wall pressure gives a nozzle expanded exactly to its operating ambient, which is the
-    # maximum-thrust condition. Length gives the requested length.
-    truncateOn = state.truncateOn
+    # Where the wall is cut: at the requested area ratio, which is the method NASA SP-8120
+    # attributes to Ahlberg. A requested exit pressure reaches this the same way, having already
+    # become an equivalent area ratio through the one-dimensional CEA relation before the contour
+    # is drawn.
     targetWallRadius = np.sqrt(state.requestedAreaRatio) * state.throatRadiusNonDimensional
-    targetWallPressure = state.targetExitPressure
 
     # The length reference: a 15 degree half-angle cone of the SAME AREA RATIO, which is how NASA
     # SP-8120 defines percent bell. Taking it from the requested area ratio rather than from a
-    # one-dimensional Mach number matters: at this operating point the two differ by 12 per cent in
+    # one-dimensional Mach number matters: at this operating point the two differ by 12 percent in
     # length, because the ideal Mach number is a perfect-gas inverse of a pressure that CEA
     # computed with equilibrium chemistry, and the area ratio it corresponds to is 48.5 rather than
     # the 40 that was asked for.
     referenceConeLength    = conicalLength(state.requestedAreaRatio, state.throatRadiusNonDimensional)
-    targetNozzleLength     = referenceConeLength * lengthFraction
     state.referenceConeLength = referenceConeLength
 
     # Calculate scaling factor (to revert back to real units after the non-dimensional design process)
@@ -1391,7 +1233,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                                                                            state.chamberGamma)
 
     kernel = solveKernel(gas, throat, state.numCharacteristics, angleOfInflection,
-                         state.chamberPressure, plotsDocs = state.plotsDocs)
+                         state.chamberPressure)
 
     throatKernelMach, throatKernelFlowAngle    = kernel['throatKernelMach'], kernel['throatKernelFlowAngle']
     throatKernelX, throatKernelR               = kernel['throatKernelX'], kernel['throatKernelR']
@@ -1451,18 +1293,6 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     # Fill in initial points for wall arrays
     xNozzleWall[0], rNozzleWall[0] = flowStraighteningX[0,0], flowStraighteningR[0,0]
 
-    if state.plotsDocs.lower() == 'on':
-        # Create a new plot to show the generation of the inner expansion mesh
-        plotLine(expansionKernelX, expansionKernelR, \
-                       title = 'Characteristic Mesh Generation: Flow Straightening Section', \
-                       xLabel = 'Non-Dimensional X', yLabel = 'Non-Dimensional R', \
-                       lineStyle = '', lineWidth = 2, markerStyle = '*', color = 'w', fontSize = 22, \
-                       label = 'Mesh Kernel')
-        plt.gca().set_aspect('equal')
-        plt.plot(exitAxisArray, exitRadiusArray, \
-                '-*y', linewidth = 2, label = 'Exit Line')
-        arrowSize = 0.0005
-
     # -- Calculate wall points -- #
 
     # Store initial values
@@ -1486,25 +1316,7 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                 flowStraighteningMachNumber[i, jMesh+1], flowStraighteningFlowAngle[i, jMesh+1], flowStraighteningX[i, jMesh+1], flowStraighteningR[i, jMesh+1] \
                 = axisymmetricMethodOfCharacteristics(gas, axMOCKernel, numPoints = 1)
 
-                if state.plotsDocs.lower() == 'on':
-                    # Update throat kernel plot (Axisymmetrix Method of Characteristics for Flow Straightening Section)
-                    plt.plot(flowStraighteningX[i,jMesh], flowStraighteningR[i,jMesh], '*c', markersize = 12)
-                    plt.plot(flowStraighteningX[i+1,jMesh+1], flowStraighteningR[i+1,jMesh+1], '*m', markersize = 12)
-                    plt.plot(flowStraighteningX[i,jMesh+1], flowStraighteningR[i,jMesh+1], '*y', markersize = 12)
-                    plt.arrow(flowStraighteningX[i,jMesh], flowStraighteningR[i,jMesh],\
-                            flowStraighteningX[i,jMesh+1]-flowStraighteningX[i,jMesh], flowStraighteningR[i,jMesh+1]-flowStraighteningR[i,jMesh], \
-                            edgecolor = 'w', facecolor = 'c', width = arrowSize, length_includes_head = True)
-                    plt.arrow(flowStraighteningX[i+1,jMesh+1], flowStraighteningR[i+1,jMesh+1], \
-                            flowStraighteningX[i,jMesh+1]-flowStraighteningX[i+1,jMesh+1], flowStraighteningR[i,jMesh+1]-flowStraighteningR[i+1,jMesh+1], \
-                            edgecolor = 'w', facecolor = 'm', width = arrowSize, length_includes_head = True)
-                    stop = 1
-
             jMesh += 1
-
-        if state.plotsDocs.lower() == 'on':
-            # Change view for plot to view wall point calculations
-            plt.gca().set_xlim([0, 0.125])
-            plt.gca().set_ylim([0.975, 1.02])
 
         upstreamPoints = [upstreamX, upstreamR, upstreamFlowAngle]
         newWallPointX, newWallPointR, downstreamPoint, newUpstreamPoint, iContour, jContour, reachedEndOfMachNet, terminated \
@@ -1530,46 +1342,18 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
             = isentropicValues(machNumberNozzleWall[index], state.chamberStagnationTemperature, state.chamberPressure, \
                                 state.chamberGamma, state.chamberRGasConstant)
 
-            # Only truncate when a truncation criterion has been given. Otherwise the wall runs out
-            # to the end of the mach net, which is the full-length ideal contour.
-            if isPressureMatching:
+            # Only truncate when asked to. Otherwise the wall runs out to the end of the mach net,
+            # which is the full-length ideal contour.
+            if truncate:
 
-                # Which quantity binds decides which of the requested design numbers is delivered
-                # and which is a result. Truncating on radius delivers the requested area ratio and
-                # reports the length; truncating on length delivers the requested length and
-                # reports whatever area ratio it lands on.
-                if truncateOn == 'areaRatio':
-                    reached = rNozzleWall[index] >= targetWallRadius
-                    if reached:
-                        fraction = ((targetWallRadius - rNozzleWall[index-1])
-                                    / (rNozzleWall[index] - rNozzleWall[index-1]))
-                        rTruncate = targetWallRadius
-                        xTruncate = xNozzleWall[index-1] + fraction * (xNozzleWall[index] - xNozzleWall[index-1])
-                elif truncateOn == 'wallPressure':
-                    # Cut where the wall static pressure falls to the ambient the engine runs at.
-                    #
-                    # This is the maximum-thrust criterion, and the wall is the right station for
-                    # it rather than any average over the exit plane. Extending the wall by a ring
-                    # adds an axial force of (P_wall - ambient) times the ring's projected area, so
-                    # the nozzle gains thrust exactly while the wall pressure exceeds ambient and
-                    # loses it after. Nothing about the plane average enters that statement; the
-                    # average describes the flow leaving, the wall pressure describes the surface
-                    # the force acts on.
-                    reached = pressureNozzleWall[index] <= targetWallPressure
-                    if reached:
-                        fraction = ((pressureNozzleWall[index-1] - targetWallPressure)
-                                    / (pressureNozzleWall[index-1] - pressureNozzleWall[index]))
-                        xTruncate = xNozzleWall[index-1] + fraction * (xNozzleWall[index] - xNozzleWall[index-1])
-                        rTruncate = rNozzleWall[index-1] + fraction * (rNozzleWall[index] - rNozzleWall[index-1])
-                else:
-                    reached = xNozzleWall[index] >= targetNozzleLength
-                    if reached:
-                        fraction = ((targetNozzleLength - xNozzleWall[index-1])
-                                    / (xNozzleWall[index] - xNozzleWall[index-1]))
-                        xTruncate = targetNozzleLength
-                        wallSlope = (rNozzleWall[index] - rNozzleWall[index-1]) / (xNozzleWall[index] - xNozzleWall[index-1])
-                        wallIntercept = rNozzleWall[index] - xNozzleWall[index] * wallSlope
-                        rTruncate = wallSlope * targetNozzleLength + wallIntercept
+                # Cut at the requested area ratio, which delivers it exactly and leaves the length
+                # as the result the design Mach number search below is driving to a target.
+                reached = rNozzleWall[index] >= targetWallRadius
+                if reached:
+                    fraction = ((targetWallRadius - rNozzleWall[index-1])
+                                / (rNozzleWall[index] - rNozzleWall[index-1]))
+                    rTruncate = targetWallRadius
+                    xTruncate = xNozzleWall[index-1] + fraction * (xNozzleWall[index] - xNozzleWall[index-1])
 
                 if reached:
 
@@ -1607,19 +1391,6 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     pressureNozzleWall = np.append(throatWallPressure, pressureNozzleWall)
     velocityNozzleWall = np.append(throatWallVelocity, velocityNozzleWall)
     machNumberNozzleWall = np.append(throatWallMach, machNumberNozzleWall)
-
-    if state.plotsDocs.lower() == 'on':
-        # Create a new plot to show the generation of the inner expansion mesh
-        plotLine(expansionKernelX, expansionKernelR, \
-                       title = 'Characteristic Mesh Generation: Wall Contour Definition', \
-                       xLabel = 'Non-Dimensional X', yLabel = 'Non-Dimensional R', \
-                       lineStyle = '', lineWidth = 2, markerStyle = '*', color = 'w', fontSize = 22, \
-                       label = 'Mesh Kernel')
-        plt.gca().set_aspect('equal')
-        plt.plot(exitAxisArray, exitRadiusArray, \
-                '-*y', linewidth = 2, label = 'Exit Line')
-        plt.plot(flowStraighteningX, flowStraighteningR, '*c')
-        plt.plot(xNozzleWall, rNozzleWall, 'g', linewidth = 4)
 
     xNozzleWallScaled = state.nozzleScalingFactor * xNozzleWall
     rNozzleWallScaled = state.nozzleScalingFactor * rNozzleWall
@@ -1699,27 +1470,6 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
 
         fillIsentropicField(state)
 
-    if state.plotsDocs.lower() == 'on':
-        # Plot the exit plane properties
-        plotLine(xNozzleWall, rNozzleWall, \
-                        title = 'Exit Plane Integration: Calculating Thrust Coefficient', \
-                        xLabel = 'Non-Dimensional X', yLabel = 'Non-Dimensional R', \
-                        lineStyle = '-', lineWidth = 2, markerStyle = '', color = 'w', fontSize = 22, \
-                        label = 'Nozzle Contour')
-        plt.axvline(xExitPlane, ymin = rExitPlane[-1], ymax = rExitPlane[0], color = 'w', linestyle = '--', linewidth = 2)
-        plt.axhline(0, color = 'w', linestyle = '--', linewidth = 2)
-        plt.plot(limitingCharacteristicX, limitingCharacteristicR, \
-            'y', linewidth = 2, label = 'Limiting Characteristic')
-        for i in range(3):
-            plt.contourf(state.allXPoints[i], state.allRPoints[i], state.allMachNumbers[i], levels = np.arange(0.5, 1 + state.idealMachNumber, 0.1).tolist())
-            # plt.quiver(state.allXPoints[i], state.allRPoints[i], np.cos(state.allFlowAngles[i]), np.sin(state.allFlowAngles[i]), color = 'r')
-        for i, _ in enumerate(rExitPlane):
-            plt.arrow(xExitPlane, rExitPlane[i], \
-                        0.1 * (machNumberExitPlane[i]/calculatedExitMach)*np.cos(flowAngleExitPlane[i]), \
-                        0.1 * (machNumberExitPlane[i]/calculatedExitMach)*np.sin(flowAngleExitPlane[i]), \
-                        edgecolor = 'w', facecolor = 'r', width = 0.005, length_includes_head = True)
-        plt.gca().set_aspect('equal')
-
     # A truncated ideal contour is the one wall NOVA builds that is smooth by construction: it
     # comes off the characteristic mesh as a single streamline with no join in it, so the
     # curvature-continuous fit is both safe and the more accurate of the two. Every family whose
@@ -1787,7 +1537,7 @@ def solvePrescribedWallContour(state: ContourSolution, wall, inflectionAngle: fl
 
     # -- The kernel, turned to this family's inflection angle -- #
     kernel = solveKernel(gas, throat, state.numCharacteristics, inflectionAngle,
-                         state.chamberPressure, plotsDocs = state.plotsDocs)
+                         state.chamberPressure)
 
     state.throatWallX, state.throatWallR = kernel['throatWallX'], kernel['throatWallR']
     state.throatWallAngles = kernel['throatWallAngles']
@@ -1915,7 +1665,6 @@ def solvePrescribedWallContour(state: ContourSolution, wall, inflectionAngle: fl
                           splineMethod = 'shapePreserving')
 
     return state
-
 
 def thrustOptimizedParabolicContour(state: ContourSolution, lengthFraction: float,
                                     wallAngles: tuple = None,
@@ -2081,7 +1830,7 @@ def conicalContour(throat: ThroatGeometry, areaRatio: float, scalingFactor: floa
 # Initial and final wall angles for the Rao canted-parabola contour, in degrees, against area ratio
 # and percent bell. This is a DIGITIZATION of figure 5(b) of NASA SP-8120, which itself reproduces
 # Rao (1960); it is not the primary source and carries at least one transcription error, the
-# non-monotone theta_n between area ratios 40 and 50 at 60 per cent bell. SP-8120 further states
+# non-monotone theta_n between area ratios 40 and 50 at 60 percent bell. SP-8120 further states
 # that the chart is EXTRAPOLATED above an area ratio of about 50, so values read there inherit that
 # extrapolation and are not measurements.
 raoChartAreaRatios   = np.array([4.0, 5.0, 10.0, 20.0, 30.0, 40.0, 50.0, 100.0])
@@ -2338,20 +2087,17 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
     Mach number opens the wall faster near the throat, so it reaches a given area ratio in less
     length and leaves a steeper exit. That is the trade this method solves.
 
-    Which quantity binds is set by `truncateOn`.
+    The wall is cut at the requested area ratio, and the design Mach number is varied until the
+    length that falls out is the requested fraction of the 15 degree conical reference. Both
+    requested numbers are then delivered exactly, and the exit pressure is a result rather than a
+    target: a truncated contour's exit plane is strongly non-uniform, so no single station on it
+    can be driven to a value and called a match.
 
-    With `areaRatio`, the wall is cut at the requested expansion ratio and the design Mach
-    number is varied until the length that falls out is the requested fraction of the 15 degree
-    conical reference. Both requested numbers are then delivered, and the exit pressure is a
-    result.
-
-    With `length`, the wall is cut at the requested length instead, and the design Mach number
-    is varied until the wall static pressure at that cut equals the target exit pressure. Note
-    what that residual is: a single station, at the wall, compared against a one-dimensional
-    value. The exit plane of a truncated contour is not uniform, and the wall is its extreme
-    point rather than its average, so this mode delivers neither the requested area ratio nor
-    an exit plane at the target pressure. It is kept because it is what earlier designs were
-    built with.
+    A requested exit pressure reaches the wall the same way a requested area ratio does. The two
+    are mutually exclusive combustion inputs and config.py resolves whichever was not given from
+    the other through the one-dimensional CEA relation before this solve ever runs, so by the
+    time the area ratio reaches here it already reflects the exit pressure if that is what was
+    asked for.
 
     Parameters:
     -----------
@@ -2383,7 +2129,7 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
                                      xtol = 1e-8)[0]
 
         # Run optimized value of target exit mach
-        thrustCoefficient = nozzle.truncatedIdealContour(optimizedTargetMach, lengthFraction, isPressureMatching = True, assignOutputsToObject = True)
+        thrustCoefficient = nozzle.truncatedIdealContour(optimizedTargetMach, lengthFraction, truncate = True, assignOutputsToObject = True)
 
         if isOptimizing:
             print(f'Current Length Fraction: {lengthFraction:.5f} | Current Thrust Coefficient: {thrustCoefficient:.5f}')
@@ -2401,76 +2147,6 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
         convergeToExitPressure(lengthFraction)
 
         # Hide the plots underneath this if statement to collapse them in the editor
-        if nozzle.plotsDebug == 'on':
-            plt.style.use('dark_background')
-
-            # Mach Contours
-            fig = plt.figure(figsize=(12, 8))
-
-            plt.plot(nozzle.xNozzleWall, nozzle.rNozzleWall, 'w', label = 'Nozzle Contour')
-            plt.plot(nozzle.xNozzleWall, -nozzle.rNozzleWall, 'w')
-
-            maskedX, maskedR, maskedMach = [], [], []
-            for i in range(3):
-                maskedX.append(np.ma.masked_where(np.isnan(nozzle.allXPoints[i]), nozzle.allXPoints[i]))
-                maskedR.append(np.ma.masked_where(np.isnan(nozzle.allRPoints[i]), nozzle.allRPoints[i]))
-                maskedMach.append(np.ma.masked_where(np.isnan(nozzle.allMachNumbers[i]), nozzle.allMachNumbers[i]))
-            levels = np.arange(0.5, nozzle.idealMachNumber, 0.1)
-            cmap = plt.colormaps['plasma'].with_extremes(under = 'magenta', over = 'cyan')
-            for i in range(3):
-                contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                            maskedR[i]*nozzle.nozzleScalingFactor,
-                            maskedMach[i],
-                            levels = levels,
-                            cmap = cmap,
-                            extend = 'max')
-                plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                            -maskedR[i]*nozzle.nozzleScalingFactor,
-                            maskedMach[i],
-                            levels = levels,
-                            cmap = cmap,
-                            extend = 'max')
-            plt.colorbar(contour, label = 'Mach Number', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-            plt.gca().set_aspect('equal')
-            plt.gca().set_title('Mach Contours')
-            plt.gca().set_xlabel('Nozzle Axis [m]')
-            plt.gca().set_ylabel('Nozzle Radius [m]')
-            plt.show(block = False)
-
-            # Pressure Field
-            fig = plt.figure(figsize=(12, 8))
-
-            plt.plot(nozzle.xNozzleWall, nozzle.rNozzleWall, 'w', label = 'Nozzle Contour')
-            plt.plot(nozzle.xNozzleWall, -nozzle.rNozzleWall, 'w')
-
-            maskedPressure = []
-            for i in range(3):
-                maskedPressure.append(np.ma.masked_where(np.isnan(nozzle.allPressures[i]), nozzle.allPressures[i]))
-            levels = np.arange(nozzle.targetExitPressure, maskedPressure[0].max(), 1e4)
-            cmap = plt.colormaps['coolwarm'].with_extremes(under = 'cyan', over = 'magenta')
-            for i in range(3):
-                contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                            maskedR[i]*nozzle.nozzleScalingFactor,
-                            maskedPressure[i],
-                            levels = levels,
-                            cmap = cmap,
-                            extend = 'min')
-                plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                            -maskedR[i]*nozzle.nozzleScalingFactor,
-                            maskedPressure[i],
-                            levels = levels,
-                            cmap = cmap,
-                            extend = 'min')
-            plt.colorbar(contour, label = 'Pressure Field [Pa]', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-            plt.gca().set_aspect('equal')
-            plt.gca().set_title('Pressure Contours')
-            plt.gca().set_xlabel('Nozzle Axis [m]')
-            plt.gca().set_ylabel('Nozzle Radius [m]')
-            plt.show(block = False)
-
-            debug = 1
 
     # User has requested to find the ideal length fraction that maximizes thrust coefficient
     elif isinstance(lengthFraction, str):
@@ -2485,74 +2161,3 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
             convergeToExitPressure(optimizedLengthFraction)
 
             # Hide the plots
-            if nozzle.plotsDebug == 'on':
-
-                plt.style.use('dark_background')
-
-                # Mach Contours
-                fig = plt.figure(figsize=(12, 8))
-
-                plt.plot(nozzle.xNozzleWall, nozzle.rNozzleWall, 'w', label = 'Nozzle Contour')
-                plt.plot(nozzle.xNozzleWall, -nozzle.rNozzleWall, 'w')
-
-                maskedX, maskedR, maskedMach = [], [], []
-                for i in range(3):
-                    maskedX.append(np.ma.masked_where(np.isnan(nozzle.allXPoints[i]), nozzle.allXPoints[i]))
-                    maskedR.append(np.ma.masked_where(np.isnan(nozzle.allRPoints[i]), nozzle.allRPoints[i]))
-                    maskedMach.append(np.ma.masked_where(np.isnan(nozzle.allMachNumbers[i]), nozzle.allMachNumbers[i]))
-                levels = np.arange(0.5, nozzle.idealMachNumber, 0.1)
-                cmap = plt.colormaps['plasma'].with_extremes(under = 'magenta', over = 'cyan')
-                for i in range(3):
-                    contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                                maskedR[i]*nozzle.nozzleScalingFactor,
-                                maskedMach[i],
-                                levels = levels,
-                                cmap = cmap,
-                                extend = 'max')
-                    plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                                -maskedR[i]*nozzle.nozzleScalingFactor,
-                                maskedMach[i],
-                                levels = levels,
-                                cmap = cmap,
-                                extend = 'max')
-                plt.colorbar(contour, label = 'Mach Number', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-                plt.gca().set_aspect('equal')
-                plt.gca().set_title('Mach Contours')
-                plt.gca().set_xlabel('Nozzle Axis [m]')
-                plt.gca().set_ylabel('Nozzle Radius [m]')
-                plt.show(block = False)
-
-                # Pressure Field
-                fig = plt.figure(figsize=(12, 8))
-
-                plt.plot(nozzle.xNozzleWall, nozzle.rNozzleWall, 'w', label = 'Nozzle Contour')
-                plt.plot(nozzle.xNozzleWall, -nozzle.rNozzleWall, 'w')
-
-                maskedPressure = []
-                for i in range(3):
-                    maskedPressure.append(np.ma.masked_where(np.isnan(nozzle.allPressures[i]), nozzle.allPressures[i]))
-                levels = np.arange(nozzle.targetExitPressure, maskedPressure[0].max(), 1e4)
-                cmap = plt.colormaps['coolwarm'].with_extremes(under = 'cyan', over = 'magenta')
-                for i in range(3):
-                    contour = plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                                maskedR[i]*nozzle.nozzleScalingFactor,
-                                maskedPressure[i],
-                                levels = levels,
-                                cmap = cmap,
-                                extend = 'min')
-                    plt.contourf(maskedX[i]*nozzle.nozzleScalingFactor,
-                                -maskedR[i]*nozzle.nozzleScalingFactor,
-                                maskedPressure[i],
-                                levels = levels,
-                                cmap = cmap,
-                                extend = 'min')
-                plt.colorbar(contour, label = 'Pressure Field [Pa]', orientation = 'horizontal', pad = 0.10, fraction = 0.05, aspect = 60)
-
-                plt.gca().set_aspect('equal')
-                plt.gca().set_title('Pressure Contours')
-                plt.gca().set_xlabel('Nozzle Axis [m]')
-                plt.gca().set_ylabel('Nozzle Radius [m]')
-                plt.show(block = False)
-
-                debug = 1

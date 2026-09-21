@@ -36,7 +36,7 @@ solve refused at an area ratio of 0.684.
 What that does not establish: that the resulting nozzle is a good one. The contour closes and the
 quasi-1D flow solve runs on it. Nothing here has been checked against a reference sunken design,
 and the correction terms the cooling correlations would need for a recessed throat, noted in
-`src/NOVA/docs/NozzleCooling.md`, do not exist.
+`docs/NozzleCooling.md`, do not exist.
 
 ----------------------------------------------------------------------
                         Wiring it back in
@@ -48,7 +48,9 @@ assigns. A caller reinstating the feature needs to:
 
   - restore the six configuration keys listed in `sunkenConfigurationKeys` on the Nozzle and in
     the GUI schema, and add `sunkenRules` to `chamber.convergingSectionRules`,
-  - re-admit `'sunk'` to the `contourType` choice rule, which now accepts `'trad'` alone,
+  - give the converging section a shape selector again: `chamber.solveConvergingSection` builds
+    one traditional shape unconditionally now, with no `contourType` field or choice rule left to
+    branch on,
   - carry `xSunkTurnaround2D` and `rSunkTurnaround2D` on `ConvergingSectionState` and
     `RegenChannelState` again, since the return volute interface reads them.
 
@@ -58,8 +60,10 @@ import numpy as np
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import brentq
 
+from NOVA.errors import GeometricConstraintError
+from NOVA.gasDynamics import isentropicValues
+from NOVA.geometryTools import arcSpline, parallelOffset
 from NOVA.keepOut import keepOutEnvelope
-from NOVA.utils import GeometricConstraintError, arcSpline, isentropicValues, parallelOffset
 from NOVA.validation import integerRule, numericRule
 
 # The configuration keys that exist only for this contour. They were removed from Nozzle and from

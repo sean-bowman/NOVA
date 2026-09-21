@@ -171,13 +171,12 @@ def solveWall(designVariables):
 
     here = os.path.dirname(os.path.abspath(__file__))
     root = os.path.dirname(here)
-    assetPath = os.path.join(root, 'src', 'NOVA', 'assets', 'loxLh2Example.json')
+    assetPath = os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json')
     with open(assetPath, encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update({'targetExitPressure': None, 'expansionRatio': AREA_RATIO, 'Lstar': None,
                    'lengthFraction': LENGTH_FRACTION, 'plumeAmbientPressure': None,
-                   'plotsBasic': False, 'plotsAdv': False, 'export': False,
-                   'visualizeContour': False, 'makeCoolingChannels': 'off'})
+                   'plotsEnabled': False, 'export': False, 'makeCoolingChannels': 'off'})
 
     scratch = os.path.join(root, 'runs', 'testContourFamilies')
     os.makedirs(scratch, exist_ok = True)

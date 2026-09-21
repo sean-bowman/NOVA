@@ -1,17 +1,17 @@
+
 # -- Config Tab -- #
 
 '''
 
 The configuration form. Renders every field in configSchema as a labeled
 editor inside collapsible sections, round-trips the values to and from JSON in
-the nozzleConfig schema, and runs light cross-field checks before a solve.
+the NOVANozzle schema, and runs light cross-field checks before a solve.
 
 Author: Sean Bowman
 Date:   08/28/2026
 
 '''
 
-import re
 import json
 from tkinter import ttk, filedialog, messagebox
 
@@ -166,8 +166,8 @@ class ConfigTab(ttk.Frame):
         '''
 
         raw = {key: row.get() for key, row in self._rows.items()}
-        raw = self._composeTruncation(raw)
-        # Drop any synthetic helper the compose step did not already consume.
+        # Drop any synthetic helper; none are currently defined, but a future
+        # one is folded into its real key the same way truncation used to be.
         for fieldSpec in configSchema.allFields():
             if fieldSpec.synthetic:
                 raw.pop(fieldSpec.key, None)
@@ -178,17 +178,11 @@ class ConfigTab(ttk.Frame):
         '''
 
         Populate the form from a config dictionary in the backend schema. Unknown
-        keys are ignored; missing keys fall back to the schema default. The
-        backend 'truncationMethod' string is unpacked into the mode selector and
-        its value field.
+        keys are ignored; missing keys fall back to the schema default.
 
         '''
 
         config = dict(config)
-        mode, temperature, areaRatio = self._decomposeTruncation(config.get('truncationMethod'))
-        config['truncationMethod'] = mode
-        config['truncationTemperature'] = temperature
-        config['truncationAreaRatio'] = areaRatio
 
         defaults = configSchema.defaultConfig()
         self._suspendDynamics = True
@@ -205,50 +199,6 @@ class ConfigTab(ttk.Frame):
         self._expandFired.clear()
         self._applyDynamics()
         self._refreshWarnings()
-
-    def _composeTruncation(self, raw: dict) -> dict:
-
-        '''
-
-        Replace the mode selector and its value field with the single string the
-        backend parses: 'none', 'temp <K>' or 'er <ratio>'. The space after the
-        prefix is required -- Nozzle.truncateForRegen reads the number from a
-        fixed offset (index 5 for temp, 3 for er).
-
-        '''
-
-        mode = raw.pop('truncationMethod', 'none')
-        temperature = raw.pop('truncationTemperature', None)
-        areaRatio = raw.pop('truncationAreaRatio', None)
-
-        if mode == 'temp' and temperature is not None:
-            raw['truncationMethod'] = f'temp {float(temperature):g}'
-        elif mode == 'er' and areaRatio is not None:
-            raw['truncationMethod'] = f'er {float(areaRatio):g}'
-        else:
-            raw['truncationMethod'] = 'none'
-        return raw
-
-    def _decomposeTruncation(self, value) -> tuple:
-
-        '''
-
-        Split a backend 'truncationMethod' string into (mode, temperature,
-        areaRatio). Anything unrecognized reads as no truncation.
-
-        '''
-
-        if not isinstance(value, str) or not value.strip():
-            return 'none', None, None
-        text = value.strip()
-        head = text[0].lower()
-        match = re.search(r'[-+]?\d*\.?\d+', text)
-        number = float(match.group()) if match else None
-        if head == 't':
-            return 'temp', number, None
-        if head == 'e':
-            return 'er', None, number
-        return 'none', None, None
 
     def validate(self) -> list:
 
@@ -278,18 +228,9 @@ class ConfigTab(ttk.Frame):
         if isSet('Lstar') and float(config['Lstar']) <= 0:
             problems.append("'Characteristic length L*' must be positive.")
 
-        if isSet('raoThroatAngle') and isSet('chamberInterfaceAngle'):
-            if abs(float(config['raoThroatAngle']) - float(config['chamberInterfaceAngle'])) < 1e-6:
-                problems.append('Converging wall angles at the throat and chamber must differ.')
-
-        if config.get('divergingSectionType') == 'Conical' and not isSet('conicalHalfAngle'):
-            problems.append("Conical diverging section needs a 'Conical half angle'.")
-
-        truncationMode = self._rows['truncationMethod'].get()
-        if truncationMode == 'temp' and self._rows['truncationTemperature'].get() is None:
-            problems.append("Wall-temperature truncation needs a 'Truncation wall temperature'.")
-        if truncationMode == 'er' and self._rows['truncationAreaRatio'].get() is None:
-            problems.append("Area-ratio truncation needs a 'Truncation area ratio'.")
+        regenTruncationType = self._rows['regenTruncationType'].get()
+        if regenTruncationType in ('temp', 'er') and self._rows['regenTruncationValue'].get() is None:
+            problems.append("Truncation method needs a 'Truncation value'.")
 
         if config.get('makeCoolingChannels') in (True, 'on'):
             needed = ['hotWallThickness', 'shellThickness', 'coolantInitialTemperature', 'coolantInitialPressure']

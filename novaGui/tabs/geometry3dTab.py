@@ -1,3 +1,4 @@
+
 # -- 3D Geometry Tab -- #
 
 '''
@@ -19,7 +20,7 @@ from tkinter import ttk
 
 from .. import theme
 from .. import runner
-from ..plotting import MplPane, drawRevolvedContour, interactiveAvailable, openInteractive
+from ..plotting import MplPane, drawRevolvedContour, openInteractive
 
 try:
     from tkinterweb import HtmlFrame
@@ -106,7 +107,7 @@ class Geometry3DTab(ttk.Frame):
             # with plotly, which handles a rotatable surface far better than Tk can.
             self._htmlPath = None
             self._browserButton.configure(
-                state = 'normal' if (nozzle is not None and interactiveAvailable()) else 'disabled')
+                state = 'normal' if nozzle is not None else 'disabled')
             self._showWidget(self._pane)
             if nozzle is None:
                 self._pane.message('Generate a nozzle to populate this view.')

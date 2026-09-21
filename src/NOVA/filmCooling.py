@@ -1,14 +1,16 @@
+
 # -- NOVA: Film Cooling -- #
 
 '''
 
-A sheet of coolant injected along the wall, and what it does to the temperature the wall sees.
+A sheet of coolant injected along the wall, and the temperature the wall then sees.
 
-Film cooling does not remove heat from the wall the way a jacket does. It changes the temperature
-the wall is driven by. A tangential sheet of cool gas leaving a slot sits between the exhaust and
-the wall, mixes with the core as it goes, and warms until it is indistinguishable from the gas
-around it. Over the length where it survives, the adiabatic wall temperature is somewhere between
-the coolant and the exhaust, and the whole of the model is a statement of where.
+Film cooling does not remove heat from the wall the way a jacket does. It changes the
+temperature the wall is driven by. A tangential sheet of cool gas leaving a slot sits between
+the exhaust and the wall, mixes with the core as it goes, and warms until it is
+indistinguishable from the gas around it. Over the length where it survives, the adiabatic wall
+temperature is somewhere between the coolant and the exhaust, and the whole of the model is a
+statement of where.
 
 That is expressed as a film cooling effectiveness,
 
@@ -25,23 +27,23 @@ before.
 Two closures are here and `filmCoolingModel` chooses between them.
 
 `hatchPapell`, the default, is the correlation of Hatch and Papell, NASA TN D-130. It is the
-default for one reason: it arrives with a stated accuracy from its own source, five per cent on
+default for one reason: it arrives with a stated accuracy from its own source, five percent on
 wall temperature over an effectiveness range of 0.2 to 1.0, and it is the only film cooling
 closure found that does. It was fitted on a flat plate in a constant-area duct and can see
 neither acceleration nor flow turning.
 
 `sp8124Entrainment` is the gas film model of NASA SP-8124 Appendix A. It treats the film as a
-mixing layer that starts holding all the coolant and entrains core flow as it runs, and it puts
-acceleration and turning into an empirical multiplier that varies with position. That multiplier
-is a design-chart recommendation with no stated scatter, so this closure is calibrated to
-SP-8124 rather than validated. It knows two things the correlation cannot: the specific heat of
-the coolant, which matters enormously for hydrogen, and the mixture ratio of the gas left at the
-wall.
+mixing layer that starts holding all the coolant and entrains core flow as it runs. It puts
+acceleration and turning into an empirical multiplier that varies with position. That
+multiplier is a design-chart recommendation with no stated scatter, so this closure is
+calibrated to SP-8124 rather than validated. It knows two things the correlation cannot: the
+specific heat of the coolant, which matters enormously for hydrogen, and the mixture ratio of
+the gas left at the wall.
 
-**They disagree, and by a lot.** On the LOX/LH2 reference engine with 0.30 kg/s of hydrogen, the
-correlation gives a peak driving temperature of 3228 K and the entrainment model 2548 K. Neither
-is validated at rocket conditions and the spread between them is a fair statement of how well
-film cooling is known here.
+**The two closures disagree by a wide margin.** On the LOX/LH2 reference engine with 0.30 kg/s
+of hydrogen, the correlation gives a peak driving temperature of 3228 K and the entrainment
+model 2548 K. Neither is validated at rocket conditions and the spread between them is a fair
+statement of how well film cooling is known here.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -53,46 +55,47 @@ empirical groups to measurements from the NASA film-cooling facility. tests/test
 reproduces the equation, its limits and its shape, and checks the velocity-ratio correction is
 continuous where its two branches meet.
 
-**The property correction is derived rather than cited, and it is not conservative.** Assumption 6
-of the source evaluates every property at the mean of the gas and coolant temperatures. A station
-carries them at the gas temperature, so `referenceTemperatureCorrection` moves them with a
-property ratio rather than a second gas solve, which is the device Bartz uses. Its exponents are
-fitted from CEA solves at frozen composition rather than taken from a source, and the net power
-reaching the answer stays inside 0.394 to 0.431 across hydrogen, kerosene and methane at two
-mixture ratios and two chamber pressures. On a LOX/LH2 case the correction runs 1.26 to 1.30, so
-it lowers effectiveness. Reading the conductivity alone suggests the opposite and is wrong: the
-density and viscosity move Re^0.8 further than the conductivity moves.
+**The property correction is derived rather than cited.** It is not conservative. Assumption 6
+of the source evaluates every property at the mean of the gas and coolant temperatures. A
+station carries them at the gas temperature, so `referenceTemperatureCorrection` moves them
+with a property ratio rather than a second gas solve, which is the device Bartz uses. Its
+exponents are fitted from CEA solves at frozen composition rather than taken from a source, and
+the net power reaching the answer stays inside 0.394 to 0.431 across hydrogen, kerosene and
+methane at two mixture ratios and two chamber pressures. On a LOX/LH2 case the correction runs
+1.26 to 1.30, so it lowers effectiveness. Reading the conductivity alone suggests the opposite
+and is wrong: the density and viscosity move Re^0.8 further than the conductivity moves.
 
 **One part of assumption 6 is still outstanding.** The conductivity a station supplies is the
-equilibrium value, whose reaction contribution is a factor of 2.7 at 3398 K and 1.4 by 2269 K and
-has vanished by the film mean temperature. A Colburn form fitted on non-reacting air contemplates
-the molecular conductivity instead. Near a slot in the chamber that difference is larger than the
-reference-temperature effect and runs the other way, so effectiveness there is understated.
-Removing it needs a frozen-composition solve at every station, which no other consumer of those
-arrays wants, and it raises the same question for Bartz.
+equilibrium value, whose reaction contribution is a factor of 2.7 at 3398 K and 1.4 by 2269 K
+and has vanished by the film mean temperature. A Colburn form fitted on non-reacting air
+contemplates the molecular conductivity instead. Near a slot in the chamber that difference is
+larger than the reference-temperature effect and runs the other way, so effectiveness there is
+understated. Removing it needs a frozen-composition solve at every station, which no other
+consumer of those arrays wants. It raises the same question for Bartz.
 
-**NOVA uses it far outside the conditions it was fitted to, and that is the dominant uncertainty
-here.** The data cover a flat plate with a main gas stream from 502 to 1965 degR, which is 279 to
-1092 K, at 104 to 1040 ft/s, which is 32 to 317 m/s, with slot heights from 1/16 to 1/2 inch, and
-air or helium as the coolant. A rocket nozzle runs at three thousand kelvin and several times the
-speed of sound, through a throat where the flow accelerates hard. Every one of those is an
-extrapolation. SP-8124 says plainly that acceleration and flow turning are very significant for
-film cooling and that accounting for them is the key to predicting coolant requirements; this
-correlation accounts for neither.
+**NOVA uses it far outside the conditions it was fitted to.** That is the dominant uncertainty
+here. The data cover a flat plate with a main gas stream from 502 to 1965 degR, which is 279 to
+1092 K, at 104 to 1040 ft/s, which is 32 to 317 m/s, with slot heights from 1/16 to 1/2 inch,
+and air or helium as the coolant. A rocket nozzle runs at three thousand kelvin and several
+times the speed of sound, through a throat where the flow accelerates hard. Every one of those
+is an extrapolation. SP-8124 says plainly that acceleration and flow turning are very
+significant for film cooling and that accounting for them is the key to predicting coolant
+requirements; this correlation accounts for neither.
 
 **What "accounts for neither" does and does not mean.** Acceleration does reach the transfer
 group, because the local coefficient carries the local velocity: on the LOX/LH2 reference case
-the coefficient rises by a factor of 1.74 over the length the film survives. What has no term at
-all is the extra entrainment that a pressure gradient and a curved wall drive beyond what the
-local Reynolds number already carries, which is the effect SP-8124 absorbs into its
+the coefficient rises by a factor of 1.74 over the length the film survives. What has no term
+at all is the extra entrainment that a pressure gradient and a curved wall drive beyond what
+the local Reynolds number already carries, which is the effect SP-8124 absorbs into its
 position-dependent entrainment multiplier. The one term here that could have responded, the
-velocity-ratio correction, is arctan-bounded at 1 + 0.4 pi/2 and has already spent 86 per cent of
-its range at a slot in the chamber, so a doubling of core velocity moves it 3 per cent.
+velocity-ratio correction, is arctan-bounded at 1 + 0.4 pi/2 and has already spent 86 percent
+of its range at a slot in the chamber, so a doubling of core velocity moves it 3 percent.
 
-Relaminarisation is not the mechanism. The acceleration parameter K = (nu/U^2) dU/ds peaks at
+Relaminarization is not the mechanism. The acceleration parameter K = (nu/U^2) dU/ds peaks at
 1.6e-6 on the reference case against the 3e-6 threshold, on both the 60 and 100 station grids,
-and no station exceeds it. Wall curvature is the sharper concern: the throat radius of curvature
-is 41 mm, and the film is turned through nine degrees of wall angle over the 43 mm it survives.
+and no station exceeds it. Wall curvature is the sharper concern: the throat radius of
+curvature is 41 mm, and the film is turned through nine degrees of wall angle over the 43 mm it
+survives.
 
 **Below an effectiveness of about 0.3 the correlation is pessimistic**, which its own authors
 state: measured effectiveness runs above the equation there. That is the safe direction, and a
@@ -100,30 +103,31 @@ design that depends on the difference is a design that has run out of film.
 
 **The two-dimensional effects are absent.** The correlation describes a continuous slot. Real
 injection is through a ring of discrete orifices, and SP-8124 recommends spacing no wider than
-0.3 inch precisely because a coarser ring leaves the wall between the jets uncooled. Nothing here
-knows how many holes there are.
+0.3 inch precisely because a coarser ring leaves the wall between the jets uncooled. Nothing
+here knows how many holes there are.
 
-**The entrainment model is calibrated, not validated, and its own source says which term does
-it.** SP-8124 states that acceleration and flow turning are very significant and that accounting
-for them is the key to predicting coolant requirements. It does not model them. It absorbs them
-into psi_m, an empirical multiplier of 3 to 4 at injection falling to 1.75 at the throat and
-along Figure 17 beyond, read from design charts with no scatter attached. Across the recommended
-band alone, 3 to 4, the peak driving temperature on the reference engine moves 96 K. That is the
-uncertainty the model carries before anything else is considered.
+**The entrainment model is calibrated rather than validated.** Its own source names the term
+that does it. SP-8124 states that acceleration and flow turning are very significant and that
+accounting for them is the key to predicting coolant requirements. It does not model them. It
+absorbs them into psi_m, an empirical multiplier of 3 to 4 at injection falling to 1.75 at the
+throat and along Figure 17 beyond, read from design charts with no scatter attached. Across the
+recommended band alone, 3 to 4, the peak driving temperature on the reference engine moves 96
+K. That is the uncertainty the model carries before anything else is considered.
 
-**Its non-reactive branch is exact at both ends, and that is what is checked.** With no film it
+**Its non-reactive branch is exact at both ends.** With no film it
 reproduces the station solve's own recovery temperature to the bit; with a wall bathed in pure
 coolant it returns the coolant's recovery temperature at the core velocity. Two figures are
-digitized rather than transcribed: Figure 17 above, and the branch of Figure A-1 above a velocity
-ratio of one, which matters only outside SP-8124's own recommended injection band of 0.9 to 1.15.
-Figure A-2 prints both of its limits and those are exact; the band between them is interpolated
-here and the source gives only a plotted curve to check it against.
+digitized rather than transcribed: Figure 17 above, and the branch of Figure A-1 above a
+velocity ratio of one, which matters only outside SP-8124's own recommended injection band of
+0.9 to 1.15. Figure A-2 prints both of its limits and those are exact; the band between them is
+interpolated here and the source gives only a plotted curve to check it against.
 
 **The reactive branch of Appendix A is not implemented.** It reads a temperature off the wall
 mixture ratio and the wall enthalpy through an equilibrium solve, which is what would capture a
 fuel-rich wall burning cooler than dilution alone predicts. Leaving it out is conservative: the
 non-reactive branch returns a hotter wall. The wall mixture ratio is computed and reported
-anyway, because a wall running oxidiser-rich is a wall that burns whatever its temperature says.
+anyway, because a wall running oxidiser-rich is a wall that burns whatever its temperature
+says.
 
 **Appendix B, the liquid film model, is not implemented.** Two of its inputs are curves on a
 rotated scanned figure, B-1, that cannot be digitized here to an accuracy worth carrying, and
@@ -134,11 +138,11 @@ dimensional correlation in US customary units with the gravitational constant wr
 and it states that only the numerical values of those units may be used. Implementing it from a
 scan without a worked example to check against would produce a number nothing could verify.
 
-**The blowing correction is off by default, to avoid counting the film twice.** Hatch and Papell
-measured the adiabatic wall temperature with a film present, so the film's effect on the wall is
-already inside the effectiveness. Applying a transpiration blowing correction to the gas-side
-coefficient on top of it would reduce the flux twice for the same physical cause. The jacket
-model can take a film mass flux, and that path exists for distributed injection and for an
+**The blowing correction is off by default, to avoid counting the film twice.** Hatch and
+Papell measured the adiabatic wall temperature with a film present, so the film's effect on the
+wall is already inside the effectiveness. Applying a transpiration blowing correction to the
+gas-side coefficient on top of it would reduce the flux twice for the same physical cause. The
+jacket model can take a film mass flux. That path exists for distributed injection and for an
 ablative's pyrolysis gas, which are genuinely different.
 
 All units are mass base SI:
@@ -156,7 +160,8 @@ from typing import Any
 
 import numpy as np
 
-from .utils import InvalidInputError, fluidProps
+from .errors import InvalidInputError
+from .fluidProperties import fluidProps
 
 __all__ = [
     'FILMCONDUCTIVITYEXPONENT', 'FILMPRANDTLEXPONENT', 'FILMVISCOSITYEXPONENT',
@@ -193,7 +198,7 @@ HATCHPAPELLONSET = 0.04
 #
 # The defaults are the mean of those five. The spread matters less than it looks: the net power
 # is what reaches the answer, and across hydrogen, kerosene and methane at two mixture ratios and
-# two chamber pressures it stays within 0.394 to 0.431, which is a two per cent spread in the
+# two chamber pressures it stays within 0.394 to 0.431, which is a two percent spread in the
 # correction itself. A propellant far outside that set can override the three exponents.
 FILMCONDUCTIVITYEXPONENT = 1.01
 FILMVISCOSITYEXPONENT    = 0.79
@@ -367,7 +372,7 @@ def velocityRatioCorrection(gasVelocity: float, coolantVelocity: float) -> float
 
     SP-8124's design guidance is consistent with this: it recommends a coolant-to-core velocity
     ratio between 0.9 and 1.15 for gaseous injection, which is the band where this correction is
-    within a few per cent of one.
+    within a few percent of one.
 
     Parameters:
     -----------
@@ -425,7 +430,7 @@ def hatchPapellEffectiveness(transferGroup: float, slotHeight: float, gasVelocit
     velocity is used inside it, with the velocity-ratio correction carrying the departure from
     matched velocities separately.
 
-    Accuracy, from the source: within five per cent on film-cooled wall temperature over an
+    Accuracy, from the source: within five percent on film-cooled wall temperature over an
     effectiveness range of roughly 0.2 to 1.0. Below about 0.3 the equation is pessimistic, which
     is the safe direction to be wrong in.
 
@@ -598,7 +603,7 @@ def filmCoolingArrays(axialPosition, radius, gasVelocity, gasStaticTemperature,
 
     with dA the wall area of each station, 2 pi r ds. On a flat plate of constant h this reduces
     to the published h L x / (m_dot c_p) exactly, which is the sense in which it is the same
-    correlation. On a nozzle it is a generalisation, and one the source does not authorise.
+    correlation. On a nozzle it is a generalization, and one the source does not authorize.
 
     The film marches forward from the slot with the gas. Upstream of it there is no film, and
     those stations come back with the recovery temperature untouched.
@@ -607,7 +612,7 @@ def filmCoolingArrays(axialPosition, radius, gasVelocity, gasStaticTemperature,
     here**, because assumption 6 of the source evaluates every property at the mean of the gas
     static and coolant temperatures. `referenceTemperatureCorrection` does the move as a property
     ratio rather than a second gas solve, the same device as Bartz's sigma. On the LOX/LH2
-    reference case it raises the coefficient by 27 to 32 per cent, which lowers effectiveness.
+    reference case it raises the coefficient by 27 to 32 percent, which lowers effectiveness.
 
     **One part of assumption 6 is still outstanding.** The conductivity a station carries is the
     equilibrium value, whose reaction contribution is a factor of 2.7 at 3398 K and 1.4 by
@@ -1283,7 +1288,7 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
     massFluxRatio : array_like
         Two-dimensional over one-dimensional core mass flux at each station [-]. SP-8124 carries
         this because entrainment follows the real near-wall mass flux rather than the nominal
-        one, and on a nozzle the two differ by tens of per cent.
+        one, and on a nozzle the two differ by tens of percent.
     injectionPosition : float
         Axial position of the slot [m].
     slotHeight : float

@@ -1,9 +1,10 @@
+
 # -- NOVA Configuration Schema -- #
 
 '''
 
 Field metadata for the config tab, ordered and grouped to mirror
-src/NOVA/assets/nozzleConfig.json. Every key in that template appears
+src/NOVA/assets/NOVANozzle.json. Every key that configuration carries appears
 here exactly once so the dictionary the GUI hands to Nozzle.setInputs() is
 always complete.
 
@@ -128,17 +129,11 @@ class Group:
 # -- Program option flags forced on for every GUI run -- #
 
 # The geometry and analysis tabs read the PNG and HTML files NOVA only writes
-# when export is enabled, so the runner overrides these regardless of the form.
-forcedFlags = ('export', 'visualizeContour', 'plotsBasic')
-
-# Flags additionally forced on when cooling channels are enabled, so the 3D tab
-# has jacket geometry to show.
-forcedCoolingFlags = ('plotsAdv', 'plotJacket')
+# when plots and export are enabled, so the runner overrides these regardless
+# of the form.
+forcedFlags = ('export', 'plotsEnabled')
 
 # -- Dependency predicates -- #
-
-def _divergingIsConical(config: dict) -> bool:
-    return config.get('divergingSectionType') == 'Conical'
 
 def _coolingOn(config: dict) -> bool:
     return config.get('makeCoolingChannels') in (True, 'on')
@@ -157,14 +152,8 @@ def _entrainmentModelOn(config: dict) -> bool:
     return _filmCoolingOn(config) \
            and config.get('filmCoolingModel') == 'sp8124Entrainment'
 
-def _printabilityOn(config: dict) -> bool:
-    return _coolingOn(config) and config.get('printabilityCheck') in (True, 'on')
-
-def _truncateByTemp(config: dict) -> bool:
-    return config.get('truncationMethod') == 'temp'
-
-def _truncateByAreaRatio(config: dict) -> bool:
-    return config.get('truncationMethod') == 'er'
+def _truncationNeedsValue(config: dict) -> bool:
+    return config.get('regenTruncationType') in ('temp', 'er')
 
 # -- Propellant choices -- #
 
@@ -205,18 +194,18 @@ groups = [
     Group('Contour Definition', [
         Field('numContourPoints', 'Contour points', 'int', default = 100,
               help = 'Number of points in the resampled wall contour.'),
-        Field('contourType', 'Converging section type', 'choice',
-              choices = [('Traditional', 'trad')], default = 'trad',
-              help = 'Conical converging section into a throat arc.'),
         Field('divergingSectionType', 'Diverging section type', 'choice',
-              choices = [('Method of characteristics', 'rao'), ('Conical', 'Conical')], default = 'rao',
-              help = 'Method of characteristics: truncated ideal contour. Conical: straight cone at a fixed half angle.'),
+              choices = [('Truncated ideal contour (tic)', 'tic'),
+                         ('Thrust-optimized parabola (top)', 'top'),
+                         ('Thrust-optimized contour (toc)', 'toc'),
+                         ('Conical (cone)', 'cone')], default = 'tic',
+              help = 'tic and top are method-of-characteristics contours evaluated directly; toc '
+                     'searches over them for the shortest length at the requested performance. '
+                     'cone is a straight 15 degree half-angle cone.'),
         Field('chamberDiameter', 'Chamber outer diameter', 'float', default = 0.18, unit = 'm',
               help = 'Outer diameter of the chamber wall at the converging inlet. Sets the contraction ratio.'),
-        Field('raoThroatAngle', 'Converging wall angle at throat', 'float', default = 30.0, unit = 'deg',
+        Field('convergingSectionAngle', 'Converging wall angle at throat', 'float', default = 30.0, unit = 'deg',
               help = 'Wall angle of the converging section where it meets the throat.'),
-        Field('chamberInterfaceAngle', 'Converging wall angle at chamber', 'float', default = 15.0, unit = 'deg',
-              help = 'Wall angle where the converging section meets the chamber. Must differ from the throat angle.'),
         Field('Lstar', 'Characteristic length L*', 'float', default = 1.0, unit = 'm',
               help = 'Chamber volume over throat area, injector face to throat. Sets the cylindrical '
                      'barrel length after the converging section volume is subtracted. Mutually '
@@ -229,36 +218,33 @@ groups = [
         Field('lengthFraction', 'Length fraction', 'float', default = 0.8,
               help = 'Truncated ideal contour length as a fraction of a 15 deg conical nozzle of '
                      'the same area ratio, which is how NASA SP-8120 defines percent bell.'),
-        Field('truncateOn', 'Binding constraint', 'choice',
-              choices = [('Area ratio', 'areaRatio'), ('Exit wall pressure', 'wallPressure'),
-                         ('Length', 'length')], default = 'areaRatio',
-              help = 'Which requested number the geometry is held to. A truncated ideal contour '
-                     'has one free parameter, so two of the three can be delivered and not all '
-                     'three. Area ratio cuts at the requested expansion ratio. Exit wall pressure '
-                     'cuts where the wall static pressure reaches the target exit pressure, which '
-                     'is the maximum-thrust nozzle for that ambient and is what a pressure-matched '
-                     'design means; set the target to the operating ambient. Both then solve the '
-                     'design Mach number for the requested length fraction. Length cuts at the '
-                     'requested length and delivers neither; it is kept for earlier designs.'),
         Field('numCharacteristics', 'Characteristics', 'int', default = 50,
               help = 'Characteristics launched from the throat arc, which sets the mesh resolution '
                      'of the whole solve. At the default the exit wall angle carries about 2 '
                      'percent of mesh error and the thrust coefficient about 1 percent.'),
-        Field('conicalHalfAngle', 'Conical half angle', 'float', default = None, unit = 'deg',
-              showWhen = _divergingIsConical,
-              help = 'Half angle of the diverging cone.'),
-        Field('truncationMethod', 'Regen truncation method', 'choice',
+        Field('transonicModel', 'Transonic model', 'choice',
+              choices = [('Sauer', 'sauer'), ('Second order', 'secondOrder'),
+                         ('Small radius', 'smallRadius')], default = 'sauer',
+              help = 'Which starting line the characteristics net is launched from. Sauer is the '
+                     'first-order transonic solution and is the default. The second-order and '
+                     'small-radius lines are the ones to reach for at a sharp throat, where the '
+                     'Sauer expansion is weakest.'),
+        Field('throatInletCurvature', 'Throat inlet curvature', 'float', default = 1.5,
+              help = 'Radius of curvature of the throat inlet arc, as a multiple of the throat '
+                     'radius. NASA SP-8120 takes this above 0.6.'),
+        Field('throatOutletCurvature', 'Throat outlet curvature', 'float', default = 0.382,
+              help = 'Radius of curvature of the throat outlet arc, as a multiple of the throat '
+                     'radius. The default is the Rao value.'),
+        Field('regenTruncationType', 'Regen truncation method', 'choice',
               choices = [('None (full contour)', 'none'), ('Wall temperature', 'temp'), ('Area ratio', 'er')],
               default = 'none',
               help = 'Split the regen-cooled section from a radiation-cooled extension by near-wall '
-                     'gas temperature or by area ratio. The cut point is entered below.'),
-        Field('truncationTemperature', 'Truncation wall temperature', 'float', default = None, unit = 'K',
-              synthetic = True, showWhen = _truncateByTemp,
-              help = 'Near-wall gas temperature at which the regen section ends. Folded into '
-                     "the backend as 'temp <K>'."),
-        Field('truncationAreaRatio', 'Truncation area ratio', 'float', default = None,
-              synthetic = True, showWhen = _truncateByAreaRatio,
-              help = "Local area ratio at which the regen section ends. Folded into the backend as 'er <ratio>'."),
+                     'gas temperature or by area ratio. The cut point is entered below; ignored when '
+                     'the method is none.'),
+        Field('regenTruncationValue', 'Truncation value', 'float', default = None,
+              showWhen = _truncationNeedsValue,
+              help = 'Near-wall gas temperature [K] where the regen section ends if the method is '
+                     'wall temperature, or the local area ratio if the method is area ratio.'),
     ]),
 
     Group('Combustion', [
@@ -298,13 +284,6 @@ groups = [
         Field('channelType', 'Channel type', 'choice',
               choices = [('Fluted', 'fluted'), ('Circular', 'circle')],
               default = 'fluted', showWhen = _coolingOn, help = 'Cooling channel cross-section family.'),
-        Field('drivingTemperatureModel', 'Driving gas temperature', 'choice',
-              choices = [('Recovery', 'recovery'), ('Static', 'static')],
-              default = 'recovery', showWhen = _coolingOn,
-              help = 'Which gas temperature drives the heat flux. Recovery is the adiabatic '
-                     'wall temperature and is the physical choice. Static reproduces results '
-                     'recorded before the recovery temperature was carried through, and '
-                     'understates the flux by the whole recovery rise.'),
         Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
         Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',
@@ -350,13 +329,6 @@ groups = [
               help = 'Lower limit on coolant pressure at the jacket exit.'),
         Field('minCoolantExitTemperature', 'Min coolant exit temperature', 'float', default = None, unit = 'K', showWhen = _coolingOn,
               help = 'Lower limit on coolant temperature at the jacket exit.'),
-        Field('printabilityCheck', 'Check printability', 'bool', default = False, showWhen = _coolingOn,
-              help = 'Flag channel walls that exceed the maximum overhang angle for the print direction.'),
-        Field('printDirection', 'Print direction', 'choice',
-              choices = [('Positive Z', '+z'), ('Negative Z', '-z')], default = '+z', showWhen = _printabilityOn,
-              help = 'Build direction for the printability check.'),
-        Field('maxOverhangAngle', 'Max overhang angle', 'float', default = None, unit = 'deg', showWhen = _printabilityOn,
-              help = 'Maximum self-supporting overhang from vertical.'),
     ], collapsed = True, expandWhen = _coolingOn),
 
     Group('Radiative Extension', [
@@ -372,7 +344,7 @@ groups = [
               choices = [('Inert or vacuum', 'inert'), ('Oxidising', 'oxidising'),
                          ('Oxidising, coated', 'oxidisingCoated')],
               default = 'inert', showWhen = _radiativeExtensionOn,
-              help = 'Which of the material\'s limits applies. For C103 the inert and oxidising '
+              help = 'Which of the material\'s limits applies. For C103 the inert and oxidizing '
                      'limits differ by a factor of three, so this is a design choice rather '
                      'than a label.'),
         Field('extensionThickness', 'Shell thickness', 'float', default = 0.0005, unit = 'm',
@@ -391,7 +363,7 @@ groups = [
         Field('extensionOuterEmissivity', 'Outer emissivity', 'float', default = 0.7,
               showWhen = _radiativeExtensionOn,
               help = 'The one that governs. Wall temperature goes as the inverse fourth root of '
-                     'it, so halving it costs about nineteen per cent. Only the degraded R512E '
+                     'it, so halving it costs about nineteen percent. Only the degraded R512E '
                      'coated value has a source in the store.'),
         Field('extensionOuterViewFactor', 'Outer view factor', 'float', default = 1.0,
               showWhen = _radiativeExtensionOn,
@@ -485,8 +457,6 @@ groups = [
               help = 'Number of points defining each volute cross section.'),
         Field('voluteRelativeRoll', 'Volute relative roll', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
               help = 'Roll offset between the inlet and return volutes.'),
-        Field('plotKeepOut', 'Plot keep-out', 'bool', default = False, showWhen = _anyVolute,
-              help = 'Include the chamber closure keep-out envelope in the volute views.'),
         Field('keepOutAxialOffset', 'Keep-out axial offset', 'float', default = None, unit = 'm', showWhen = _anyVolute,
               help = 'Axial station of the keep-out shoulder, relative to the chamber end.'),
         Field('keepOutRadius', 'Keep-out radius', 'float', default = None, unit = 'm', showWhen = _anyVolute,
@@ -544,16 +514,10 @@ groups = [
     Group('Program Options', [
         Field('filename', 'Output name', 'text', default = 'novaRun',
               help = 'Base name for the output folder: <name>Outputs/ beside the export location.'),
-        Field('plotsAdv', 'Advanced plots', 'bool', default = False,
-              help = 'Write the interactive channel-mesh HTML views.'),
-        Field('plotJacket', 'Full jacket plot', 'bool', default = False,
-              help = 'Write the full regen jacket HTML view.'),
-        Field('plotsDebug', 'Debug plots', 'bool', default = False,
-              help = 'Write additional diagnostic figures.'),
-        Field('visualizeContour', 'Contour plots', 'bool', default = True,
-              help = 'Write the contour, Mach, pressure, temperature and near-wall figures. Forced on by the GUI.'),
-        Field('plotsBasic', 'Basic plots', 'bool', default = True,
-              help = 'Write the basic result figures. Forced on by the GUI.'),
+        Field('plotsEnabled', 'Plots', 'bool', default = True,
+              help = 'Write every figure the run generates: contour, Mach, pressure, temperature '
+                     'and near-wall views, the channel-mesh and jacket HTML views, and the volute '
+                     'keep-out view. Forced on by the GUI.'),
         Field('export', 'Export data files', 'bool', default = True,
               help = 'Write contour text files, STL geometry and the pickled nozzle. Forced on by the GUI.'),
     ]),

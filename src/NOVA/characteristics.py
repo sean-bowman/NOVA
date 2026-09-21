@@ -5,22 +5,23 @@
 
 The unit processes of the axisymmetric method of characteristics.
 
-A characteristics solution is built from a small number of point calculations, repeated. Given the
-state at two upstream points, find the state where their characteristics cross. Given one upstream
-point and a wall, find where the characteristic meets the wall. Everything larger, a kernel, a
-contour, a plume, is those calculations driven in a particular order over a particular boundary.
+A characteristics solution is built from a small number of point calculations, repeated. Given
+the state at two upstream points, find the state where their characteristics cross. Given one
+upstream point and a wall, find where the characteristic meets the wall. Everything larger, a
+kernel, a contour, a plume, is those calculations driven in a particular order over a
+particular boundary.
 
-This module holds the calculations. It holds no meshes, no geometry and no design intent, and it
-reads nothing off a Nozzle object: the gas is passed in explicitly as a `CharacteristicGas`, so the
-same function serves the nozzle interior and the plume beyond the lip. That matters more than it
-sounds. A plume march that continues a nozzle solution has to reproduce the nozzle's own arithmetic
-exactly, or it stops being one solution and becomes a second approximation of the first, and the
-only way to guarantee that is for both to call the same function.
+This module holds the calculations. It holds no meshes, no geometry and no design intent. It
+reads nothing off a Nozzle object: the gas is passed in explicitly as a `CharacteristicGas`, so
+the same function serves the nozzle interior and the plume beyond the lip. That matters more
+than it sounds. A plume march that continues a nozzle solution has to reproduce the nozzle's
+own arithmetic exactly, or it stops being one solution and becomes a second approximation of
+the first, and the only way to guarantee that is for both to call the same function.
 
 The axisymmetric compatibility relations do not reduce to algebra the way the planar ones do,
 because of the term in the radial coordinate. They are solved here in the velocity formulation,
-iterated with characteristic properties averaged along each characteristic rather than taken at the
-upstream point, which is what makes the scheme second order.
+iterated with characteristic properties averaged along each characteristic rather than taken at
+the upstream point, which is what makes the scheme second order.
 
 Angles are in radians, lengths are non-dimensional against the throat radius, velocities are in
 meters per second, and Mach numbers are dimensionless.
@@ -480,7 +481,7 @@ def wallCharacteristicProjection(gas: CharacteristicGas, machNumber1: float,
     # while already sitting on the answer, because the NaN excursion above costs the trust region a
     # step and poisons one Jacobian, so the flag reports a failure the residual does not. What has
     # to hold is the residual itself and the physics: the compatibility residual is an angle, and a
-    # tenth of a microradian is orders below any discretisation error this scheme carries, while a
+    # tenth of a microradian is orders below any discretization error this scheme carries, while a
     # subsonic wall point is not a characteristics solution at all.
     if not np.isfinite(solution.cost) or solution.cost > 1.0e-6:
         raise RuntimeError(f'A wall characteristic projection did not converge: residual cost '

@@ -26,6 +26,12 @@ from NOVA.Nozzle import (                                  # noqa: E402
     freeJetCornerRays as cornerRays,
     freeJetRefineLine as refineLine,
     solveFreeJetNet as solveNet,
+)
+
+# The scheme's private helpers, taken from the module that defines them. `Nozzle` re-exports the
+# free-jet surface with a star import, which skips underscore names, so these are not reachable
+# through it.
+from NOVA.plume import (                                     # noqa: E402
     _finish,
     _interpolate,
     _lA,

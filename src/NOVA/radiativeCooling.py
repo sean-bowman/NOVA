@@ -1,95 +1,102 @@
+
 # -- NOVA: Radiative Heat Transfer -- #
 
 '''
 
 Radiation between combustion gas, a wall, and whatever the wall sees beyond it.
 
-Two jobs live here, and they share a Stefan-Boltzmann law and nothing else.
+Two jobs live here. They share a Stefan-Boltzmann law and nothing else.
 
-The first is a term inside the regeneratively cooled jacket. Combustion products radiate through
-the water and carbon dioxide bands, and a wall absorbs some of that and emits back. In a chamber
-the wall mostly sees the opposite wall, so the net comes down to the gas-to-wall exchange, and it
-runs a few per cent of the convective flux rather than dominating it.
+The first is a term inside the regeneratively cooled jacket. Combustion products radiate
+through the water and carbon dioxide bands, and a wall absorbs some of that and emits back. In
+a chamber the wall mostly sees the opposite wall, so the net comes down to the gas-to-wall
+exchange, which runs a few percent of the convective flux rather than dominating it.
 
-The second is a wall with no coolant behind it at all, which is what a nozzle extension is. There
-radiation is the entire heat balance: the wall climbs until what it radiates away matches what the
-exhaust puts in. That is a different problem with a different solver, and it lives here too.
+The second is a wall with no coolant behind it at all, which is what a nozzle extension is.
+There radiation is the entire heat balance: the wall climbs until what it radiates away matches
+what the exhaust puts in. That is a different problem with a different solver. It lives here
+too.
 
 The distinction that matters for the first job is that radiation and convection do not share a
-driving potential. Convection is driven by the difference between the adiabatic wall temperature
-and the wall; radiation by the difference between the fourth powers of the gas and wall
-temperatures. Forcing the second onto the first is what makes a radiation term awkward to add to a
-resistance network. The way out is exact rather than approximate:
+driving potential. Convection is driven by the difference between the adiabatic wall
+temperature and the wall; radiation by the difference between the fourth powers of the gas and
+wall temperatures. Forcing the second onto the first is what makes a radiation term awkward to
+add to a resistance network. The way out is exact rather than approximate:
 
     sigma (T_g^4 - T_w^4) = sigma (T_g + T_w) (T_g^2 + T_w^2) (T_g - T_w)
 
-so the bracket is a coefficient on (T_g - T_w), with no linearisation and no singularity. A network
-carrying both then needs one effective coefficient and one effective driving temperature, which is
-what `effectiveGasSideDriving` returns.
+so the bracket is a coefficient on (T_g - T_w), with no linearization and no singularity. A
+network carrying both then needs one effective coefficient and one effective driving
+temperature, which is what `effectiveGasSideDriving` returns.
 
 ----------------------------------------------------------------------
                             Validation status
 ----------------------------------------------------------------------
 
-**The algebra is exact and is tested as an identity, not as an approximation.** The factorisation
-above is a difference of two squares applied twice, so `wallRadiationCoefficient` multiplied by
-its own temperature difference reproduces the fourth-power law to rounding. The same holds for the
-effective coefficient and driving temperature: they reproduce the sum of the convective and
-radiative fluxes exactly. tests/testRadiativeCooling.py asserts both and quantifies the residual.
+**The algebra is exact and is tested as an identity, not as an approximation.** The
+factorization above is a difference of two squares applied twice, so `wallRadiationCoefficient`
+multiplied by its own temperature difference reproduces the fourth-power law to rounding. The
+same holds for the effective coefficient and driving temperature: they reproduce the sum of the
+convective and radiative fluxes exactly. tests/testRadiativeCooling.py asserts both and
+quantifies the residual.
 
-**The grey-gas, grey-wall model is a model.** A real combustion gas radiates in bands rather than
-greyly, and a real wall reflects. What is implemented is the one-dimensional grey exchange, which
-neglects multiple reflection between the wall and the gas. Hottel's enclosure correction, an
-effective wall emissivity of (eps_w + 1)/2, would raise the flux by about twelve per cent at an
-emissivity of 0.8; it is not applied, and a result that turns on the difference should not be
-taken from here.
+**The grey-gas, grey-wall model is a model.** A real combustion gas radiates in bands rather
+than greyly, and a real wall reflects. What is implemented is the one-dimensional grey
+exchange, which neglects multiple reflection between the wall and the gas. Hottel's enclosure
+correction, an effective wall emissivity of (eps_w + 1)/2, would raise the flux by about twelve
+percent at an emissivity of 0.8; it is not applied, and a result that turns on the difference
+should not be taken from here.
 
-**Gas emissivity is supplied, not computed.** NOVA does not yet carry a correlation for the total
-emissivity of water vapour and carbon dioxide, so the gas emissivity is an input. Leckner's 1972
-correlations are the usual closed form and would slot in as a function returning that input, but
-they were not available when this was written and are worth one caution when they are: their
-stated accuracy is about ten per cent against the spectral data they were fitted to, and up to
-forty per cent against HITEMP-2010. A radiative flux computed through them inherits that.
+**Gas emissivity is supplied, not computed.** NOVA does not yet carry a correlation for the
+total emissivity of water vapour and carbon dioxide, so the gas emissivity is an input.
+Leckner's 1972 correlations are the usual closed form and would slot in as a function returning
+that input, but they were not available when this was written and are worth one caution when
+they
+are: their stated accuracy is about ten percent against the spectral data they were fitted to,
+and up to forty percent against HITEMP-2010. A radiative flux computed through them inherits
+that.
 
 **Wall emissivity is almost never available.** It is a property of a surface rather than of an
-alloy, and `materials.surfaceEmissivity` carries one only for R512E coated columbium. Everything
-else supplies it through the configuration. With no emissivity supplied the radiation terms here
-return exactly zero and the jacket solve reproduces a run that never had them, to the bit.
+alloy, and `materials.surfaceEmissivity` carries one only for R512E coated columbium.
+Everything else supplies it through the configuration. With no emissivity supplied the
+radiation terms here return exactly zero and the jacket solve reproduces a run that never had
+them, to the bit.
 
 **The extension solver is verified, not validated.** Four checks, each against an answer it did
 not produce: with conduction switched off it reproduces a scalar root find at every station to
 1.4e-12 relative, converging in a single Newton step because the starting guess is then exact;
 the conduction operator converges at observed order 2.000 against a manufactured sine solution,
-refined four times; the energy balance closes to 7e-12 of the power in, which is what catches an
-arc-length or an area error; and halving the emissivity moves the peak wall temperature by 5.9
-per cent against the 18.9 per cent bound it must stay under, because convection holds it there.
-The through-thickness drop is reported at every station rather than asserted, and on a 0.5 mm
-shell of 45 W/m-K it runs a few kelvin against a wall above 2000 K.
+refined four times; the energy balance closes to 7e-12 of the power in, which is what catches
+an arc-length or an area error; and halving the emissivity moves the peak wall temperature by
+5.9 percent against the 18.9 percent bound it must stay under, because convection holds it
+there. The through-thickness drop is reported at every station rather than asserted, and on a
+0.5 mm shell of 45 W/m-K it runs a few kelvin against a wall above 2000 K.
 
-**No validation is possible against open data, and the plausibility check is labeled as one.**
-A validation would need a measured wall temperature distribution along a fully specified firing:
-contour, propellants, chamber pressure, material, coating and its emissivity at temperature.
-Published coated-columbium extension temperatures near 1590 K exist as a band rather than a
-distribution. Against that band, a 0.5 mm coated shell at an emissivity of 0.7 on a one megapascal
-storable apogee thruster running from area ratio 20 comes out at 1544 K at the joint and 1259 K at
-the lip, and a 0.7 megapascal reaction control thruster from area ratio 30 comes out at 1372 K.
-Those sit where the literature puts them, but the engines behind the band are not specified well
-enough for the agreement to be an error figure. Closing the gap needs a test article with
-thermocouples, or a released firing dataset with the emissivity recorded.
+**No validation is possible against open data.** The plausibility check below is labeled as
+one. A validation would need a measured wall temperature distribution along a fully specified
+firing: contour, propellants, chamber pressure, material, coating and its emissivity at
+temperature. Published coated-columbium extension temperatures near 1590 K exist as a band
+rather than a distribution. Against that band, a 0.5 mm coated shell at an emissivity of 0.7 on
+a one megapascal storable apogee thruster running from area ratio 20 comes out at 1544 K at the
+joint and 1259 K at the lip, and a 0.7 megapascal reaction control thruster from area ratio 30
+comes out at 1372 K. Those sit where the literature puts them, but the engines behind the band
+are not specified well enough for the agreement to be an error figure. Closing the gap needs a
+test article with thermocouples, or a released firing dataset with the emissivity recorded.
 
-**A high-pressure hydrogen engine is a different problem, and the solver says so plainly.** On
-NOVA's own 6.9 megapascal LOX/LH2 reference case, a coated C103 shell runs 2763 K starting at area
-ratio 3 and still 1921 K starting at area ratio 35, against a vacuum limit of 1673 K. It fails
-everywhere on that contour. That is the flux, not the solver: Bartz scales as chamber pressure to
-the 0.8, so the same shell on a one megapascal engine sees a fifth of the coefficient and settles
-about thirty per cent cooler. Reporting the margin rather than the temperature alone is what makes
-that conclusion fall out of the solve instead of being left to the reader.
+**A high-pressure hydrogen engine is a different problem.** On
+NOVA's own 6.9 megapascal LOX/LH2 reference case, a coated C103 shell runs 2763 K starting at
+area ratio 3 and still 1921 K starting at area ratio 35, against a vacuum limit of 1673 K. It
+fails everywhere on that contour. That is the flux, not the solver: Bartz scales as chamber
+pressure to the 0.8, so the same shell on a one megapascal engine sees a fifth of the
+coefficient and settles about thirty percent cooler. Reporting the margin rather than the
+temperature alone is what makes that conclusion fall out of the solve instead of being left to
+the reader.
 
-**Conduction along the shell barely matters, and the solver says so.** On a 0.5 mm shell over a
+**Conduction along the shell barely matters.** On a 0.5 mm shell over a
 600 mm extension, going from 45 to 400 W/m-K narrows the temperature span by under three per
-cent. The conduction length sqrt(k t / h) is about ten millimeters, so the joint with the jacket
-influences only the first few stations. That is worth knowing before spending effort on a
-two-dimensional wall solve.
+cent. The conduction length sqrt(k t / h) is about ten millimeters, so the joint with the
+jacket influences only the first few stations. That is worth knowing before spending effort on
+a two-dimensional wall solve.
 
 All units are mass base SI:
     - Temperature [K]
@@ -108,7 +115,8 @@ from scipy.linalg import solve_banded
 from scipy.optimize import brentq
 
 from .ablative import STEFANBOLTZMANN
-from .utils import ConvergenceFailureError, InvalidInputError
+from .errors import ConvergenceFailureError, InvalidInputError
+from .validation import specified
 
 __all__ = [
     'RadiativeExtensionResult', 'RadiativeShell', 'STEFANBOLTZMANN',
@@ -203,7 +211,7 @@ def wallRadiationCoefficient(wallEmissivity: float, gasEmissivity: float,
 
     Gas-to-wall radiation, written as a coefficient on the gas-to-wall temperature difference.
 
-    This is an exact rewriting, not a linearisation. The fourth-power difference factors as
+    This is an exact rewriting, not a linearization. The fourth-power difference factors as
 
         T_g^4 - T_w^4 = (T_g + T_w) (T_g^2 + T_w^2) (T_g - T_w)
 
@@ -375,7 +383,7 @@ def radiationEquilibriumTemperature(convectiveCoefficient: float, drivingTempera
 
     It also shows why the emissivity matters as much as it does. Ignoring the sink and the
     absorbed flux, the balance gives T_w to the inverse fourth root of emissivity, so halving the
-    emissivity raises the wall by about nineteen per cent.
+    emissivity raises the wall by about nineteen percent.
 
     Parameters:
     -----------
@@ -532,7 +540,7 @@ class RadiativeExtensionResult:
         Limit minus peak [K]. Negative means the extension does not survive.
     extensionEnergyBalanceResidual : float
         Total power in minus total power out, as a fraction of the power in [-]. A closure
-        check on the discretisation rather than on the physics.
+        check on the discretization rather than on the physics.
     iterations : int
         Newton iterations taken.
     residual : float
@@ -614,7 +622,7 @@ def radiativeNozzleExtension(shell: RadiativeShell, axialPosition, radius, machN
     into the same gas use the same algebra. The inner surface is treated as seeing itself across
     the flow, which is what a closed annulus does.
 
-    **The band term can go either way, and on an extension it usually cools.** In a chamber the
+    **The band term can go either way.** On an extension it usually cools. In a chamber the
     wall is far below the gas and band radiation is a heat source. Here the wall is driven by the
     recovery temperature while the band exchange is written in the static one, and at Mach 3 those
     differ by more than a thousand kelvin. A wall settling above the static gas radiates into it,
@@ -776,7 +784,11 @@ def radiativeNozzleExtension(shell: RadiativeShell, axialPosition, radius, machN
             break
 
     wallTemperature = equilibrium.copy()
-    dirichlet = shell.upstreamTemperature is not None
+
+    # A joint temperature reaches here from a configuration, where an unspecified field is NaN
+    # rather than None. Both mean the joint was not given, so both take the adiabatic branch; a
+    # NaN pinned as a Dirichlet value would poison the whole solve.
+    dirichlet = specified(shell, 'upstreamTemperature')
     if dirichlet:
         wallTemperature[0] = float(shell.upstreamTemperature)
 

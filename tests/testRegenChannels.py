@@ -256,21 +256,19 @@ class TestDrivingTemperatureChoice:
 
     '''
 
-    Which gas temperature the jacket is driven by, and the default being the physical one.
+    Which gas temperature the jacket is driven by.
 
     Convection into a wall is driven by the adiabatic wall temperature, not by the static
     temperature. NOVA computes the recovery temperature in `chamber` and used to drop it before
     the solve, which understated the flux by the whole recovery rise: negligible in the chamber,
-    a factor of 1.83 at the supersonic end of the shipped example's jacket.
-
-    The static model is kept so the earlier answer stays reachable and recorded rather than only
-    described. It is not a default anybody should choose.
+    a factor of 1.83 at the supersonic end of the shipped example's jacket. The static path was
+    removed once the recovery temperature was carried through: it was never the physical answer.
 
     '''
 
     def state(self, **overrides):
 
-        '''A sizing state carrying both arrays and whichever model the caller wants.'''
+        '''A sizing state carrying the recovery array.'''
 
         from NOVA.channelSizing import ChannelSizingState
 
@@ -281,53 +279,18 @@ class TestDrivingTemperatureChoice:
 
         return ChannelSizingState(**arguments)
 
-    def testTheDefaultIsTheRecoveryTemperature(self):
+    def testTheDrivingTemperatureIsTheRecoveryTemperature(self):
 
         from NOVA.channelSizing import drivingTemperatureArray
 
-        # Unset means the physical choice, not the historical one.
         chosen = drivingTemperatureArray(self.state())
 
         assert np.array_equal(chosen, np.array([1100.0, 1900.0, 3200.0]))
 
-    def testTheRecoveryModelIsSelectableByName(self):
-
-        from NOVA.channelSizing import drivingTemperatureArray
-
-        chosen = drivingTemperatureArray(self.state(drivingTemperatureModel = 'recovery'))
-
-        assert np.array_equal(chosen, np.array([1100.0, 1900.0, 3200.0]))
-
-    def testTheStaticModelIsStillReachable(self):
-
-        from NOVA.channelSizing import drivingTemperatureArray
-
-        chosen = drivingTemperatureArray(self.state(drivingTemperatureModel = 'static'))
-
-        assert np.array_equal(chosen, np.array([1000.0, 1500.0, 2000.0]))
-
-    def testTheRecoveryTemperatureIsNeverBelowTheStaticOne(self):
-
-        from NOVA.channelSizing import drivingTemperatureArray
-
-        state = self.state()
-        recovery = drivingTemperatureArray(state)
-        static = drivingTemperatureArray(self.state(drivingTemperatureModel = 'static'))
-
-        assert np.all(recovery >= static)
-
-    def testAnUnknownModelIsRefused(self):
-
-        from NOVA.channelSizing import drivingTemperatureArray
-        from NOVA.utils import InvalidInputError
-
-        with pytest.raises(InvalidInputError):
-            drivingTemperatureArray(self.state(drivingTemperatureModel = 'stagnation'))
-
     def testAMissingRecoveryArraySaysSoRatherThanFallingBack(self):
 
         from NOVA.channelSizing import drivingTemperatureArray
-        from NOVA.utils import InvalidInputError
+        from NOVA.errors import InvalidInputError
 
         # Quietly falling back to the static array would reintroduce the whole defect without
         # anything in the output saying it had happened.
@@ -353,8 +316,7 @@ class TestFilmSupersedesTheDrivingTemperature:
     A film between the wall and the exhaust replaces the potential, it does not correct it.
 
     Effectiveness is defined against the adiabatic wall temperature, so the film array is built
-    from the recovery temperature and then supersedes both of the alternatives. Combining it with
-    the static model describes nothing, and is refused rather than silently resolved one way.
+    from the recovery temperature and then supersedes it.
 
     '''
 
@@ -377,22 +339,6 @@ class TestFilmSupersedesTheDrivingTemperature:
         chosen = drivingTemperatureArray(self.state())
 
         assert np.array_equal(chosen, np.array([400.0, 900.0, 2600.0]))
-
-    def testItStillWinsWhenTheRecoveryModelIsNamed(self):
-
-        from NOVA.channelSizing import drivingTemperatureArray
-
-        chosen = drivingTemperatureArray(self.state(drivingTemperatureModel = 'recovery'))
-
-        assert np.array_equal(chosen, np.array([400.0, 900.0, 2600.0]))
-
-    def testCombiningItWithTheStaticModelIsRefused(self):
-
-        from NOVA.channelSizing import drivingTemperatureArray
-        from NOVA.utils import InvalidInputError
-
-        with pytest.raises(InvalidInputError):
-            drivingTemperatureArray(self.state(drivingTemperatureModel = 'static'))
 
     def testWithoutAFilmTheRecoveryTemperatureIsBack(self):
 
@@ -434,7 +380,7 @@ class TestIncompleteFilmDefinition:
     def testEachMissingPieceIsNamed(self, missing):
 
         from NOVA.regenStations import solveRegenSectionFilm
-        from NOVA.utils import InvalidInputError
+        from NOVA.errors import InvalidInputError
 
         with pytest.raises(InvalidInputError) as raised:
             solveRegenSectionFilm(self.state(**{missing: None}))
@@ -446,7 +392,7 @@ class TestIncompleteFilmDefinition:
         # config.setInputs rewrites every null to NaN, so a film key left null in a JSON file
         # arrives as NaN rather than None and has to be caught the same way.
         from NOVA.regenStations import solveRegenSectionFilm
-        from NOVA.utils import InvalidInputError
+        from NOVA.errors import InvalidInputError
 
         with pytest.raises(InvalidInputError):
             solveRegenSectionFilm(self.state(filmMassFlow = float('nan')))

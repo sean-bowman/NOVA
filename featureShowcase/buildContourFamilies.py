@@ -108,11 +108,11 @@ def runCase(family: str, areaRatio: float, lengthFraction: float, mesh: int = 50
     One contour of one family, returned as a flat dictionary of what it delivered. Returns None if
     the solve fails, so a sweep reports a hole rather than stopping at one.
     '''
-    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'loxLh2Example.json')))
+    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json')))
     config.update({'targetExitPressure': None, 'expansionRatio': areaRatio,
                    'lengthFraction': lengthFraction, 'Lstar': None,
-                   'plumeAmbientPressure': None, 'plotsBasic': False, 'plotsAdv': False,
-                   'export': False, 'visualizeContour': False, 'makeCoolingChannels': 'off',
+                   'plumeAmbientPressure': None, 'plotsEnabled': False,
+                   'export': False, 'makeCoolingChannels': 'off',
                    'filename': 'contourFamilies'})
     configPath = os.path.join(here, 'familiesConfig.json')
     json.dump(config, open(configPath, 'w'), indent = 2)
@@ -123,7 +123,7 @@ def runCase(family: str, areaRatio: float, lengthFraction: float, mesh: int = 50
         nozzle.setInputs(inputsPath = configPath)
         nozzle.numCharacteristicsRequested = mesh
         if family == 'truncatedIdeal':
-            nozzle.pressureMatchTruncatedIdealContour(float(lengthFraction))
+            nozzle.solveTruncatedIdealDesignPoint(float(lengthFraction))
         elif family == 'thrustOptimizedParabola':
             nozzle.thrustOptimizedParabolicContour(float(lengthFraction))
         elif family == 'thrustOptimizedContour':

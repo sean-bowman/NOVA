@@ -63,11 +63,11 @@ def buildNozzle(areaRatio: float, lengthFraction: float):
 
     '''A nozzle at one design point, set up but with no diverging section solved yet.'''
 
-    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'loxLh2Example.json')))
+    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json')))
     config.update({'targetExitPressure': None, 'expansionRatio': areaRatio,
                    'lengthFraction': lengthFraction, 'Lstar': None,
-                   'plumeAmbientPressure': None, 'plotsBasic': False, 'plotsAdv': False,
-                   'export': False, 'visualizeContour': False, 'makeCoolingChannels': 'off',
+                   'plumeAmbientPressure': None, 'plotsEnabled': False,
+                   'export': False, 'makeCoolingChannels': 'off',
                    'filename': 'subfamilyStudy'})
     configPath = os.path.join(here, 'subfamilyConfig.json')
     json.dump(config, open(configPath, 'w'), indent = 2)

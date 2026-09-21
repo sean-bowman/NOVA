@@ -1,26 +1,28 @@
+
 # -- NOVA: Input Validation -- #
 
 '''
 
 Checking a configuration before a run spends time on it.
 
-A validator answers a different question from a test. A test asks whether the code is right, and
-it asks it against fixtures the author chose. A validator asks whether *this* configuration is
-usable, and it asks it about numbers the author never saw. Neither substitutes for the other, and
-the case for a validator is what happens without one: an unset flute helix angle used to surface
-as `ValueError: data must be finite` inside a spatial index, a hundred lines from the field that
+A validator answers a different question from a test. A test asks whether the code is right,
+against fixtures the author chose. A validator asks whether *this* configuration is usable,
+about numbers the author never saw. Neither substitutes for the other, and the case for a
+validator is what happens without one: an unset flute helix angle used to surface as
+`ValueError: data must be finite` inside a spatial index, a hundred lines from the field that
 caused it.
 
 What a validator should not be is a thousand lines of hand-written branches. Every rule in this
-tool is some combination of a small vocabulary -- is it present, is it a number in a range, is it
-one of these strings, is it a non-empty finite array, does it match another array's length -- and
-written out longhand that came to roughly ten lines per rule, four copies of the same shapes, and
-four opportunities to drift out of step with the code being guarded. They did drift: one
-validator required a key the dictionary it checked has never carried, another guarded on
+tool is some combination of a small vocabulary -- is it present, is it a number in a range, is
+it one of these strings, is it a non-empty finite array, does it match another array's length
+-- and written out longhand that came to roughly ten lines per rule, four copies of the same
+shapes, and four opportunities to drift out of step with the code being guarded. They did
+drift: one validator required a key the dictionary it checked has never carried, another
+guarded on
 `hasattr` against an object whose attributes are always set, and a third was commented out.
 
-So a rule is data here, and there is one checker. A rule table can be read at a glance, compared
-against the fields it guards, and tested as data rather than as branches.
+So a rule is data here, and there is one checker. A rule table can be read at a glance,
+compared against the fields it guards, and tested as data rather than as branches.
 
 ----------------------------------------------------------------------
                               Writing rules
@@ -32,8 +34,8 @@ against the fields it guards, and tested as data rather than as branches.
     arrayRule('rNozzleWall', 'Nozzle wall radius', units = 'm', positive = True)
 
 Each returns a Rule. `applyRules(source, rules)` walks them in order and raises on the first
-failure, so rules are ordered from the most basic to the most specific and a message always names
-the earliest thing that is wrong.
+failure, so rules are ordered from the most basic to the most specific and a message always
+names the earliest thing that is wrong.
 
 A rule that only applies sometimes carries a `when` predicate:
 
@@ -47,12 +49,12 @@ guard a `Nozzle`, a state dataclass and the heat transfer input dictionary.
                             What counts as unset
 ----------------------------------------------------------------------
 
-A configuration leaves a field unset in three different ways depending on which reader loaded it:
-the attribute is absent, it is None, or it is the NaN that `setInputs` produces from a null. All
-three mean the same thing, and `specified` treats them the same.
+A configuration leaves a field unset in three different ways depending on which reader loaded
+it: the attribute is absent, it is None, or it is the NaN that `setInputs` produces from a
+null. All three mean the same thing, and `specified` treats them the same.
 
-That distinction matters more than it looks. A rule guarded on `hasattr` alone is always true on
-a dataclass and nearly always true on a `Nozzle`, so it checks nothing.
+That distinction matters more than it looks. A rule guarded on `hasattr` alone is always true
+on a dataclass and nearly always true on a `Nozzle`, so it checks nothing.
 
 Author: Sean Bowman
 
@@ -63,7 +65,7 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 
-from .utils import InvalidInputError
+from .errors import InvalidInputError
 
 # The sentinel a few configuration entries use to mean 'work it out for me' rather than
 # 'not specified'. A rule that admits it skips its value checks when it sees it.

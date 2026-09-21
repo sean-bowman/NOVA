@@ -29,7 +29,7 @@ from NOVA.radiativeCooling import (RadiativeShell, STEFANBOLTZMANN, cylinderMean
                                    effectiveGasSideDriving, meanBeamLength,
                                    netWallRadiativeFlux, radiationEquilibriumTemperature,
                                    radiativeNozzleExtension, wallRadiationCoefficient)
-from NOVA.utils import ConvergenceFailureError, InvalidInputError
+from NOVA.errors import ConvergenceFailureError, InvalidInputError
 
 # A hot wall in a chamber, and a station out in the diverging section. The pair spans the range
 # the coefficient has to hold over, from a large temperature difference to a small one.

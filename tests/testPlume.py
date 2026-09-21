@@ -10,7 +10,7 @@ diameter at matched Mach number, the Prandtl-Meyer function must reproduce its p
 at Mach 2, and the oblique shock deflection must agree with the theta-beta-M relation solved
 the other way round.
 
-Sources are listed in src/NOVA/docs/references_plumeStructure_2026-09-04.md.
+Sources are listed in docs/references_plumeStructure_2026-09-04.md.
 
 Author: Sean Bowman
 Date:   09/04/2026

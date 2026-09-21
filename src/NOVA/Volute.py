@@ -50,18 +50,8 @@ from scipy.interpolate import interp1d
 from math import dist
 from tqdm import tqdm
 
-from .utils import showFigure
-
-try:
-    from utils import *
-    # Explicit re-imports so static analysis can resolve names the wildcard
-    # hides; runtime behavior is unchanged.
-    from utils import (intersection, parallelOffset, py2cad, arcSpline, plotLine,
-                       VoluteGenerationError)
-except:
-    from .utils import *
-    from .utils import (intersection, parallelOffset, py2cad, arcSpline, plotLine,
-                        VoluteGenerationError)
+from .exports import py2cad
+from .geometryTools import intersection, parallelOffset
 
 def bezier(p1: float, p4: float, theta_1: float, theta_2: float, magnitude, res, TwoD=1):
 
@@ -235,6 +225,42 @@ def dynamicEggShell(yInnerCS, zInnerCS,
 
     return yShellCS, zShellCS, y1Prime, z1Prime, wallThickness
 
+def hoopStressCalculator(pressureDifferential: float, diameter: float, thickness: float = None, hoopStress: float = None) -> float:
+
+    '''
+
+    This function is a simple wrapper around the calculation of cylindrical hoop stress for convenience of use.
+
+    The form of the equation is:
+
+    sigma_h = dP * D / 2*t
+
+    '''
+
+    # Which version of the problem are we solving
+    if thickness is not None and hoopStress is None:
+        calculateHoopStress = True
+        calculateThickness  = False
+    if thickness is None and hoopStress is not None:
+        calculateThickness  = True
+        calculateHoopStress = False
+
+    # -- Depending on which thing we are calculating, calculate it yo -- #
+
+    # Hoop Stress
+    if calculateHoopStress:
+        hoopStress = (pressureDifferential * diameter) / (2 * thickness)
+
+    # Wall thickness
+    if calculateThickness:
+        thickness = (pressureDifferential * diameter) / (2 * hoopStress)
+
+    # Return the relevant calculated component
+    if calculateThickness:
+        return thickness
+    elif calculateHoopStress:
+        return hoopStress
+
 class Volute:
 
     '''
@@ -270,7 +296,6 @@ class Volute:
                  wallHoopStress:                float = None,
                  pressureDifferential:          float = None,
                  alignWallBy:                   str   = 'inner',
-                 plots:                         str   = 'on',
                  progressbar:                   str   = 'on',
                  export:                        str   = 'off',
                  filename:                      str   = 'volute',
@@ -312,7 +337,6 @@ class Volute:
 
         # -- Program options -- #
 
-        self.plots       = plots       # 'on' , 'off'
         self.progressbar = progressbar # 'on' , 'off'
         self.export      = export      # 'on' , 'off'
         self.filename    = filename    # [str]
@@ -378,101 +402,7 @@ class Volute:
             case 'squarc':
                 self.generateSquarcVolute()
 
-        # Step 3: Plot generated geometry (if user specified)
-        if self.plots == 'on':
-
-            import plotly.graph_objects as go
-            import plotly.colors
-            from plotly.express.colors import sample_colorscale
-            colori = sample_colorscale(plotly.colors.cyclical.HSV,
-                                    list(np.linspace(0,1,int(np.ceil(self.numCrossSections/5)))))
-            colorii = colori.copy()
-            for i in range(5):
-                colorii = np.append(colorii,colori)
-
-            fig = go.Figure()
-
-            fig.add_trace(go.Surface(x = self.xVolute, y = self.yVolute, z = self.zVolute,
-                                    colorscale = [[0, 'Cyan'], [1,'Cyan']],
-                                    opacity = 0.8,
-                                    showscale = False))
-            for i in range(self.numCrossSections):
-                fig.add_trace(go.Scatter3d(x = self.xVolute[i,:], y = self.yVolute[i,:], z = self.zVolute[i,:],
-                                    mode = 'lines',
-                                    line = dict(color = colorii[i],
-                                                width = 5)))
-            if self.wallThickness is not None:
-                fig.add_trace(go.Surface(x = self.xShell, y = self.yShell, z = self.zShell,
-                                        colorscale = [[0, 'Yellow'], [1,'Yellow']],
-                                        opacity = .35,
-                                        showscale = False))
-                for i in range(self.numCrossSections):
-                    fig.add_trace(go.Scatter3d(x = self.xShell[i,:], y = self.yShell[i,:], z = self.zShell[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-            if self.circlePrintability == 'thick':
-                    fig.add_trace(go.Surface(x = self.xInternalSupportWall, y = self.yInternalSupportWall, z = self.zInternalSupportWall,
-                                            colorscale = [[0,'magenta'],[1,'magenta']],
-                                            opacity = 0.35,
-                                            showscale = False))
-                    for i in range(self.numCrossSections):
-                        fig.add_trace(go.Scatter3d(x = self.xInternalSupportWall[i,:], y = self.yInternalSupportWall[i,:], z = self.zInternalSupportWall[i,:],
-                                            mode = 'lines',
-                                            line = dict(color = colorii[i],
-                                                        width = 5)))
-                    fig.add_trace(go.Surface(x = self.xInternalSupportFilletUpper, y = self.yInternalSupportFilletUpper, z = self.zInternalSupportFilletUpper,
-                                            colorscale = [[0,'magenta'],[1,'magenta']],
-                                            opacity = 0.35,
-                                            showscale = False))
-                    for i in range(self.numCrossSections):
-                        fig.add_trace(go.Scatter3d(x = self.xInternalSupportFilletUpper[i,:], y = self.yInternalSupportFilletUpper[i,:], z = self.zInternalSupportFilletUpper[i,:],
-                                            mode = 'lines',
-                                            line = dict(color = colorii[i],
-                                                        width = 5)))
-                    fig.add_trace(go.Surface(x = self.xInternalSupportFilletLower, y = self.yInternalSupportFilletLower, z = self.zInternalSupportFilletLower,
-                                            colorscale = [[0,'magenta'],[1,'magenta']],
-                                            opacity = 0.35,
-                                            showscale = False))
-                    for i in range(self.numCrossSections):
-                        fig.add_trace(go.Scatter3d(x = self.xInternalSupportFilletLower[i,:], y = self.yInternalSupportFilletLower[i,:], z = self.zInternalSupportFilletLower[i,:],
-                                            mode = 'lines',
-                                            line = dict(color = colorii[i],
-                                                        width = 5)))
-            if self.circlePrintability == 'thin':
-                    fig.add_trace(go.Surface(x = self.xInternalSupportWall, y = self.yInternalSupportWall, z = self.zInternalSupportWall,
-                                            colorscale = [[0,'magenta'],[1,'magenta']],
-                                            opacity = 0.35,
-                                            showscale = False))
-                    for i in range(self.numCrossSections):
-                        fig.add_trace(go.Scatter3d(x = self.xInternalSupportWall[i,:], y = self.yInternalSupportWall[i,:], z = self.zInternalSupportWall[i,:],
-                                            mode = 'lines',
-                                            line = dict(color = colorii[i],
-                                                        width = 5)))
-                    fig.add_trace(go.Surface(x = self.xInternalSupportFilletUpper, y = self.yInternalSupportFilletUpper, z = self.zInternalSupportFilletUpper,
-                                            colorscale = [[0,'magenta'],[1,'magenta']],
-                                            opacity = 0.35,
-                                            showscale = False))
-                    for i in range(self.numCrossSections):
-                        fig.add_trace(go.Scatter3d(x = self.xInternalSupportFilletUpper[i,:], y = self.yInternalSupportFilletUpper[i,:], z = self.zInternalSupportFilletUpper[i,:],
-                                            mode = 'lines',
-                                            line = dict(color = colorii[i],
-                                                        width = 5)))
-
-            fig.update_layout(scene = dict(xaxis_title = 'Radius [m]',
-                                        yaxis_title = 'Radius [m]',
-                                        zaxis_title = 'Axis [m]'),
-                                        title = {'text': 'Da Volute',
-                                                    'x': 0.5,
-                                                    'xanchor': 'center',
-                                                    'y': 0.9,
-                                                    'yanchor': 'top'},
-                                        scene_aspectmode = 'data',
-                                        template = 'plotly_dark',
-                                        showlegend = False)
-            showFigure(fig)
-
-        # Step 4: Export geometry (if user specified)
+        # Step 3: Export geometry (if user specified)
         if self.export == 'on':
 
             py2cad(os.path.join(outputDirectory, self.filename + '.stl'), self.xVolute[1:], self.yVolute[1:], self.zVolute[1:])

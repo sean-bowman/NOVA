@@ -327,27 +327,27 @@ class TestDefaultSentinel:
 
     def testTheSentinelPasses(self):
 
-        rules = [numericRule('raoThroatAngle', 'Rao throat angle', units = 'deg',
+        rules = [numericRule('convergingSectionAngle', 'Converging section angle', units = 'deg',
                              minimum = 0, maximum = 90, allowDefault = True)]
 
-        applyRules(Configuration(raoThroatAngle = 'default'), rules)
+        applyRules(Configuration(convergingSectionAngle = 'default'), rules)
 
     def testAValueIsStillChecked(self):
 
-        rules = [numericRule('raoThroatAngle', 'Rao throat angle', units = 'deg',
+        rules = [numericRule('convergingSectionAngle', 'Converging section angle', units = 'deg',
                              minimum = 0, maximum = 90, allowDefault = True)]
 
-        applyRules(Configuration(raoThroatAngle = 30.0), rules)
-        with pytest.raises(Exception, match = 'Rao throat angle'):
-            applyRules(Configuration(raoThroatAngle = 95.0), rules)
+        applyRules(Configuration(convergingSectionAngle = 30.0), rules)
+        with pytest.raises(Exception, match = 'Converging section angle'):
+            applyRules(Configuration(convergingSectionAngle = 95.0), rules)
 
     def testAnyOtherStringIsRejected(self):
 
-        rules = [numericRule('raoThroatAngle', 'Rao throat angle',
+        rules = [numericRule('convergingSectionAngle', 'Converging section angle',
                              minimum = 0, maximum = 90, allowDefault = True)]
 
         with pytest.raises(Exception, match = 'must be a number'):
-            applyRules(Configuration(raoThroatAngle = 'automatic'), rules)
+            applyRules(Configuration(convergingSectionAngle = 'automatic'), rules)
 
 class TestOrdering:
 

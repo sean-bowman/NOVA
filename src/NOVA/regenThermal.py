@@ -1,21 +1,22 @@
+
 # -- NOVA: Regenerative Cooling Heat Transfer -- #
 
 '''
 
-The thermal model of a regeneratively cooled jacket, and the views that present it.
+The thermal model of a regeneratively cooled jacket.
 
 A cooling channel is solved one station at a time, marching from the coolant inlet. At each
 station the hot wall temperature is unknown, so it is converged: a guess sets the gas-side
 coefficient, the coefficient sets the heat flux, the flux sets a new wall temperature, and the
-loop repeats until the two agree. The coolant state is then advanced to the next station through
-the heat it absorbed and the pressure it lost.
+loop repeats until the two agree. The coolant state is then advanced to the next station
+through the heat it absorbed and the pressure it lost.
 
 The model takes its geometry and its gas state through one dictionary and reads nothing off a
-Nozzle, so it can be driven directly. What it does need from the run around it -- where to write
-figures, which wall alloy, whether to draw anything -- arrives as a RegenThermalContext.
+Nozzle, so it can be driven directly. What it does need from the run around it -- where to
+write figures, which wall alloy, whether to draw anything -- arrives as a RegenThermalContext.
 
-Three channel families are supported and any combination of them may be solved in one pass, which
-is what lets the fluted result be plotted against the circular one it replaced:
+Three channel families are supported and any combination of them may be solved in one pass,
+which is what lets the fluted result be plotted against the circular one it replaced:
 
     circle   Circular channels. Coolant side is Gnielinski with a roughness-corrected friction
              factor.
@@ -31,21 +32,22 @@ correlation as given in Huzel and Huang, NASA SP-125:
 
     h_g = (0.026 / D_t^0.2) (mu_0^0.2 c_p0 / Pr_0^0.6) (P_c / c*)^0.8 (D_t / R_c)^0.1 (A_t / A)^0.9 sigma
 
-with the stagnation Prandtl number from 4 gamma / (9 gamma - 5), the stagnation viscosity from the
-fit mu_0 = 1.184e-7 M^0.5 T_0^0.6, and sigma the boundary layer correction. That viscosity constant
-is the SI form of SP-125's 46.6e-10 M^0.5 T^0.6 in lbm/(in s) with T in Rankine, which converts to
-1.18408e-7 in SI. See tests/testRegenThermal.py for the comparison against a worked example.
+with the stagnation Prandtl number from 4 gamma / (9 gamma - 5), the stagnation viscosity from
+the fit mu_0 = 1.184e-7 M^0.5 T_0^0.6, and sigma the boundary layer correction. That viscosity
+constant is the SI form of SP-125's 46.6e-10 M^0.5 T^0.6 in lbm/(in s) with T in Rankine, which
+converts to 1.18408e-7 in SI. See tests/testRegenThermal.py for the comparison against a worked
+example.
 
 **Coolant side, not validated.** The circular correlation is Gnielinski, which is published and
-whose range of validity is known, but nothing here checks the implementation against a reference
-case. The fluted correlation is a fifty-fifty blend of Gnielinski with a spirally fluted
-correlation, with a roughness amplification applied to the second term only. No source states that
-blend or its range of validity, and no measurement is available to set it against. It is a
-correlation of convenience and results that rest on it should be read that way.
+whose range of validity is known, but nothing here checks the implementation against a
+reference case. The fluted correlation is a fifty-fifty blend of Gnielinski with a spirally
+fluted correlation, with a roughness amplification applied to the second term only. No source
+states that blend or its range of validity. No measurement is available to set it against. It
+is a correlation of convenience and results that rest on it should be read that way.
 
-**The gas state the model reads is one dimensional.** Every gas-side property comes from CEA at a
-one-dimensional station, while the near-wall Mach number the method of characteristics returns
-departs from the one-dimensional value by up to 42 per cent near the throat. The two are
+**The gas state the model reads is one dimensional.** Every gas-side property comes from CEA at
+a one-dimensional station, while the near-wall Mach number the method of characteristics
+returns departs from the one-dimensional value by up to 42 percent near the throat. The two are
 inconsistent with each other, and the throat is where the heat flux is highest.
 
 All units are mass base SI:
@@ -70,43 +72,13 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-import matplotlib.pyplot as plt
-
-# Plotly backs the interactive views only. A plotly-free install loses the .html figures and
-# nothing else, so the import is defensive and the gate below reports the skip once.
-try:
-    import plotly.graph_objects as go
-    from plotly.offline import plot
-    from plotly.subplots import make_subplots
-    plotlyAvailable = True
-except ImportError:
-    go = plot = make_subplots = None
-    plotlyAvailable = False
-
-from .utils import (fluidProps, ConvergenceFailureError, InvalidInputError,
-                    headlessPlots, showFigure)
+from .fluidProperties import fluidProps
+from .errors import ConvergenceFailureError, InvalidInputError
 from .ablative import blowingCorrection
+from .figures import regenHeatTransferModelPlots
 from .materials import wallMaterialCurves
 from .radiativeCooling import effectiveGasSideDriving, wallRadiationCoefficient
 from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
-
-_plotlyNotices = set()
-
-def _plotlyGate(featureName: str) -> bool:
-
-    '''
-
-    True when plotly is importable. Otherwise note once that an interactive view is being
-    skipped and return False, so the caller can carry on without it.
-
-    '''
-
-    if plotlyAvailable:
-        return True
-    if featureName not in _plotlyNotices:
-        _plotlyNotices.add(featureName)
-        print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
-    return False
 
 @dataclass
 class RegenThermalContext:
@@ -125,23 +97,17 @@ class RegenThermalContext:
         Wall alloy name, resolved by materials.wallMaterialCurves.
     dataFolder : str
         Directory the figures are written to when export is on.
-    plotsAdv : str
+    plotsEnabled : str
         'on' draws the interactive heat transfer view.
-    plotsDocs : str
-        'on' also writes the Matplotlib version the documentation uses.
     export : str
         'on' writes figures to dataFolder rather than opening them.
-    debugMode : bool
-        True dumps the local state of a failed station to a file in dataFolder.
 
     '''
 
-    material:   str  = 'GRCop-42'
-    dataFolder: str  = ''
-    plotsAdv:   str  = 'off'
-    plotsDocs:  str  = 'off'
-    export:     str  = 'off'
-    debugMode:  bool = False
+    material:     str  = 'GRCop-42'
+    dataFolder:   str  = ''
+    plotsEnabled: str  = 'off'
+    export:       str  = 'off'
 
 def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber: float,
                                  exhaustGamma: float, exhaustGasConstant: float,
@@ -1217,18 +1183,12 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                     # Check scalars
                     if isinstance(value, (float, int)) and math.isnan(value):
                         print(f"{name} is NaN (scalar)")
-                        if context.debugMode:
-                            breakpoint()
-                        else:
-                            raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
+                        raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
 
                     # Check arrays
                     if isinstance(value, np.ndarray) and np.isnan(value).any():
                         print(f"{name} contains NaN (array)")
-                        if context.debugMode:
-                            breakpoint()
-                        else:
-                            raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
+                        raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
                 except:
                     pass  # Ignore variables that can't be NaN
 
@@ -1546,7 +1506,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             circlePlotOutputs = {}
 
     # Plots
-    if plots and context.plotsAdv == 'on' and _plotlyGate('the interactive heat transfer view'):
+    if plots and context.plotsEnabled == 'on':
         if not runAdiabaticColdWall:
             regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel,\
                                              flutedResults=flutedPlotOutputs, circleResults=circlePlotOutputs, titleFlare=titleFlare,
@@ -1561,491 +1521,3 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         return flutedHeatTransferOutputs, flutedPlotOutputs, \
                 circleHeatTransferOutputs, circlePlotOutputs
 
-def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
-                                 flutedResults: dict = None, circleResults: dict = None,
-                                 titleFlare: str = '', xReference = [], rReference = []):
-
-    # Helper function to add a trace
-    def add_trace(row, col, x, y, name, color=None, showlegend=False, dash='solid', secondary_y=False, legendgroup=None, **kwargs):
-        '''
-        Adds a trace to the specified subplot with optional legend grouping.
-
-        Args:
-            row (int): Row number of the subplot.
-            col (int): Column number of the subplot.
-            x (array-like): x-axis data.
-            y (array-like): y-axis data.
-            name (str): Name of the trace.
-            color (str, optional): Color of the trace. Defaults to None.
-            showlegend (bool, optional): Whether to show the legend. Defaults to False.
-            dash (str, optional): Line dash style. Defaults to 'solid'.
-            secondary_y (bool, optional): Whether to plot on secondary y-axis. Defaults to False.
-            legendgroup (str, optional): Legend group for the trace. Defaults to None.
-            **kwargs: Additional keyword arguments for go.Scatter.
-        '''
-        fig.add_trace(
-            go.Scatter(x=x, y=y, name=name, line=dict(color=color, dash=dash), showlegend=showlegend, legendgroup=legendgroup, **kwargs),
-            row=row, col=col, secondary_y=secondary_y
-            )
-
-    maxTemperatureCopper = 800 # Kelvin
-
-    if not adiabatic:
-
-        # -- Local Scope the Inputs Dictionary -- #
-
-        # Fluted
-        if flutedResults is not None:
-            if len(flutedResults) != 0:
-                runFluted                               = True
-                xHotWall3D                              = flutedResults["xHotWall3D"]
-                rHotWall3D                              = flutedResults["rHotWall3D"]
-                flutedCoolantTemperature                = flutedResults["temperature"]
-                flutedCoolantPressure                   = flutedResults["pressure"]
-                flutedHotWallTemperature                = flutedResults["wallTemperature"]
-                flutedCoolantVelocity                   = flutedResults["velocity"]
-                flutedCoolantMachNumber                 = flutedResults["machNumber"]
-                flutedHeatTransfer                      = flutedResults["heatTransfer"]
-                flutedCoolantDensity                    = flutedResults["density"]
-                flutedCoolantViscosity                  = flutedResults["viscosity"]
-                flutedCoolantSpecificHeat               = flutedResults["specificHeat"]
-                flutedCoolantNusseltNumber              = flutedResults["nusseltNumber"]
-                flutedExhaustConvectiveHeatTransferCoef = flutedResults["exhaustConvectiveHeatTransferCoef"]
-                flutedCoolantConvectiveHeatTransferCoef = flutedResults["coolantConvectiveHeatTransferCoef"]
-                flutedCoolantReynoldsNumber             = flutedResults["reynoldsNumber"]
-                flutedRadiativeHeatTransfer             = flutedResults["radiativeHeatTransfer"]
-                flutedDrivingTemperature                = flutedResults["drivingTemperature"]
-            else:
-                runFluted = False
-        else:
-            runFluted = False
-        # Circle
-        if circleResults is not None:
-            if len(circleResults) != 0:
-                runCircle                               = True
-                xHotWall3D                              = circleResults["xHotWall3D"]
-                rHotWall3D                              = circleResults["rHotWall3D"]
-                circleCoolantTemperature                = circleResults["temperature"]
-                circleCoolantPressure                   = circleResults["pressure"]
-                circleHotWallTemperature                = circleResults["wallTemperature"]
-                circleCoolantVelocity                   = circleResults["velocity"]
-                circleCoolantMachNumber                 = circleResults["machNumber"]
-                circleHeatTransfer                      = circleResults["heatTransfer"]
-                circleCoolantDensity                    = circleResults["density"]
-                circleCoolantViscosity                  = circleResults["viscosity"]
-                circleCoolantSpecificHeat               = circleResults["specificHeat"]
-                circleCoolantNusseltNumber              = circleResults["nusseltNumber"]
-                circleExhaustConvectiveHeatTransferCoef = circleResults["exhaustConvectiveHeatTransferCoef"]
-                circleCoolantConvectiveHeatTransferCoef = circleResults["coolantConvectiveHeatTransferCoef"]
-                circleCoolantReynoldsNumber             = circleResults["reynoldsNumber"]
-                circleRadiativeHeatTransfer             = circleResults["radiativeHeatTransfer"]
-                circleDrivingTemperature                = circleResults["drivingTemperature"]
-            else:
-                runCircle = False
-        else:
-            runCircle = False
-
-        # -- Process Results -- #
-
-        if runFluted:
-
-            flutedFinalPressure     = flutedCoolantPressure[0]
-            flutedCoolantInitialPressure = flutedCoolantPressure[-1]
-            flutedTotalPressureDrop = flutedCoolantInitialPressure - flutedFinalPressure
-
-            print(f'Total fluted pressure drop: {flutedTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {flutedFinalPressure/1e6:.4f}(MPa)')
-
-            # -- Store supercritical transition temperature for plotting -- #
-            flutedCoolantInitialTemperature = flutedCoolantTemperature[-1]
-            flutedCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', flutedCoolantInitialTemperature, flutedCoolantInitialPressure)
-            flutedSuperCriticalRange         = flutedCoolantTemperature > flutedCoolantCriticalTemperature
-
-            flutedCoolantSubcriticalTemperature   = flutedCoolantTemperature.copy()
-            flutedCoolantSupercriticalTemperature = flutedCoolantTemperature.copy()
-
-            flutedCoolantSubcriticalTemperature[flutedSuperCriticalRange]    = 'NaN'
-            flutedCoolantSupercriticalTemperature[~flutedSuperCriticalRange] = 'NaN'
-
-        elif runCircle:
-
-            circleFinalPressure     = circleCoolantPressure[0]
-            circleCoolantInitialPressure = circleCoolantPressure[-1]
-            circleTotalPressureDrop = circleCoolantInitialPressure - circleFinalPressure
-
-            print(f'Total circle pressure drop: {circleTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {circleFinalPressure/1e6:.4f}(MPa)')
-
-            # -- Store supercritical transition temperature for plotting -- #
-            circleCoolantInitialTemperature = circleCoolantTemperature[-1]
-            circleCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', circleCoolantInitialTemperature, circleCoolantInitialPressure)
-            circleSuperCriticalRange         = circleCoolantTemperature > circleCoolantCriticalTemperature
-
-            circleCoolantSubcriticalTemperature   = circleCoolantTemperature.copy()
-            circleCoolantSupercriticalTemperature = circleCoolantTemperature.copy()
-
-            circleCoolantSubcriticalTemperature[circleSuperCriticalRange]    = 'NaN'
-            circleCoolantSupercriticalTemperature[~circleSuperCriticalRange] = 'NaN'
-
-        # -- Plotly implementation -- #
-
-        # Instantiate Figure
-        fig = make_subplots(rows=4, cols=3, subplot_titles=(
-            'Pressure', 'Temperature', 'Wall Temperature',
-            'Streamwise Velocity', 'Mach Number', 'Heat Transfer',
-            'Density', 'Viscosity', 'Heat Capacity',
-            'Nusselt Number', 'Heat Transfer Coef', 'Reynolds Number'),
-        horizontal_spacing = 0.05,   #setting spaceing between plots
-        vertical_spacing = 0.05,
-        specs=[[{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}],
-            [{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}],
-            [{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}],
-            [{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}]
-            ]
-        )
-
-        # Legend
-        colors = {
-                'Fluted': 'cyan',
-                'Supercritical': 'cyan',
-                'Subcritical': 'blue',
-                'Circular': 'magenta',
-                'GRCop Melting Temp': 'red',
-                'Nozzle': 'grey'
-        }
-        for name, color in colors.items():
-            fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', line=dict(color=color), name=name, showlegend=True))
-
-        # Nozzle Contours
-        for i in [1,2,3]:
-            for j in [1,2,3,4]:
-                if len(xReference)==0 or len(rReference)==0:
-                    add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
-                else:
-                    add_trace(j, i, xReference, rReference, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
-
-        # -- Titles -- #
-
-        # Coolant Pressure
-        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
-        # Coolant Temperature
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
-        # Wall Temperature
-        if len(xReference)==0:
-            add_trace(1, 3, xReference, maxTemperatureCopper * np.ones(len(xReference)), 'GRCop Melting Temp', colors['GRCop Melting Temp'], dash='solid')
-        else:
-            add_trace(1, 3, xHotWall3D, maxTemperatureCopper * np.ones(len(xHotWall3D)), 'GRCop Melting Temp', colors['GRCop Melting Temp'], dash='solid')
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=3, secondary_y=False, gridcolor='#4a4a4a')
-        # Velocity
-        fig.update_yaxes(title_text=r'$\text {Velocity [m/s]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
-        # Mach
-        fig.update_yaxes(title_text=r'$\text {Mach Number [-]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
-        # Heat Transfer
-        fig.update_yaxes(title_text=r'$\text {Heat Transfer [W]}$', row=2, col=3, secondary_y=False, gridcolor='#4a4a4a')
-        # Density
-        fig.update_yaxes(title_text=r'$\rho \text{ [kg/m}^{3} \text{]}$', row=3, col=1, secondary_y=False, gridcolor='#4a4a4a')
-        # Viscosity
-        fig.update_yaxes(title_text=r'$\mu \text{ [Pa*s]}$', row=3, col=2, secondary_y=False, gridcolor='#4a4a4a')
-        # Specific Heat
-        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=3, col=3, secondary_y=False, gridcolor='#4a4a4a')
-        # Nusselt
-        fig.update_yaxes(title_text=r'$\text {Nu [-]}$', row=4, col=1, secondary_y=False, gridcolor='#4a4a4a')
-        # Heat Transfer Coef
-        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=4, col=2, secondary_y=False, gridcolor='#4a4a4a')
-        # Reynolds
-        fig.update_yaxes(title_text=r'$\text {Re [-]}$', row=4, col=3, secondary_y=False, gridcolor='#4a4a4a')
-
-        # -- Data -- #
-
-        if runFluted:
-            # Coolant Pressure
-            add_trace(1, 1, xHotWall3D, flutedCoolantPressure/1e6, 'Fluted', colors['Fluted'])
-            # Coolant Temperature
-            add_trace(1, 2, xHotWall3D, flutedCoolantSupercriticalTemperature, 'Supercritical', colors['Supercritical'])
-            add_trace(1, 2, xHotWall3D, flutedCoolantSubcriticalTemperature, 'Subcritical', colors['Subcritical'], mode='markers')
-            # Wall Temperature
-            add_trace(1, 3, xHotWall3D, flutedHotWallTemperature, 'Fluted', colors['Fluted'])
-            # Velocity
-            add_trace(2, 1, xHotWall3D, flutedCoolantVelocity, 'Fluted', colors['Fluted'])
-            # Mach
-            add_trace(2, 2, xHotWall3D, flutedCoolantMachNumber, 'Fluted', colors['Fluted'])
-            # Heat Transfer
-            add_trace(2, 3, xHotWall3D, flutedHeatTransfer, 'Fluted', colors['Fluted'])
-            # Density
-            add_trace(3, 1, xHotWall3D, flutedCoolantDensity, 'Fluted', colors['Fluted'])
-            # Viscosity
-            add_trace(3, 2, xHotWall3D, flutedCoolantViscosity, 'Fluted', colors['Fluted'])
-            # Specific Heat
-            add_trace(3, 3, xHotWall3D, flutedCoolantSpecificHeat, 'Fluted', colors['Fluted'])
-            # Nusselt
-            add_trace(4, 1, xHotWall3D, flutedCoolantNusseltNumber, 'Fluted', colors['Fluted'])
-            # Heat Transfer Coef
-            add_trace(4, 2, xHotWall3D, flutedCoolantConvectiveHeatTransferCoef, 'Coolant - Fluted', colors['Fluted'])
-            add_trace(4, 2, xHotWall3D, flutedExhaustConvectiveHeatTransferCoef, 'Exhaust - Fluted', colors['Fluted'], dash='dot')
-            # Reynolds
-            add_trace(4, 3, xHotWall3D, flutedCoolantReynoldsNumber, 'Fluted', colors['Fluted'])
-            # The gas-side driving temperature belongs beside the wall it drives, and the
-            # radiative share beside the total it is part of. Neither earns a panel of its own.
-            add_trace(1, 3, xHotWall3D, flutedDrivingTemperature, 'Driving gas - Fluted',
-                      colors['Fluted'], dash = 'dash')
-            if np.any(flutedRadiativeHeatTransfer):
-                add_trace(2, 3, xHotWall3D, flutedRadiativeHeatTransfer, 'Radiative - Fluted',
-                          colors['Fluted'], dash = 'dot')
-
-        if runCircle:
-            # Coolant Pressure
-            add_trace(1, 1, xHotWall3D, circleCoolantPressure/1e6, 'Circular', colors['Circular'])
-            # Coolant Temperature
-            add_trace(1, 2, xHotWall3D, circleCoolantTemperature, 'Circular', colors['Circular'])
-            # Wall Temperature
-            add_trace(1, 3, xHotWall3D, circleHotWallTemperature, 'Circular', colors['Circular'])
-            # Velocity
-            add_trace(2, 1, xHotWall3D, circleCoolantVelocity, 'Circular', colors['Circular'])
-            # Mach
-            add_trace(2, 2, xHotWall3D, circleCoolantMachNumber, 'Circular', colors['Circular'])
-            # Heat Transfer
-            add_trace(2, 3, xHotWall3D, circleHeatTransfer, 'Circular', colors['Circular'])
-            # Density
-            add_trace(3, 1, xHotWall3D, circleCoolantDensity, 'Circular', colors['Circular'])
-            # Viscosity
-            add_trace(3, 2, xHotWall3D, circleCoolantViscosity, 'Circular', colors['Circular'])
-            # Specific Heat
-            add_trace(3, 3, xHotWall3D, circleCoolantSpecificHeat, 'Circular', colors['Circular'])
-            # Nusselt
-            add_trace(4, 1, xHotWall3D, circleCoolantNusseltNumber, 'Circular', colors['Circular'])
-            # Heat Transfer Coef
-            add_trace(4, 2, xHotWall3D, circleCoolantConvectiveHeatTransferCoef, 'Coolant - Circular', colors['Circular'])
-            add_trace(4, 2, xHotWall3D, circleExhaustConvectiveHeatTransferCoef, 'Exhaust - Circular', colors['Circular'], dash='dot')
-            # Reynolds
-            add_trace(4, 3, xHotWall3D, circleCoolantReynoldsNumber, 'Circular', colors['Circular'])
-            add_trace(1, 3, xHotWall3D, circleDrivingTemperature, 'Driving gas - Circular',
-                      colors['Circular'], dash = 'dash')
-            if np.any(circleRadiativeHeatTransfer):
-                add_trace(2, 3, xHotWall3D, circleRadiativeHeatTransfer, 'Radiative - Circular',
-                          colors['Circular'], dash = 'dot')
-
-        # Update layout for all subplots
-        for i in range(1, 13):
-
-            row = (i - 1) // 3 + 1
-            col = (i - 1) % 3 + 1
-
-            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$' if row == 4 else '', row=row, col=col, gridcolor='#4a4a4a', tickfont=dict(color='white' if row == 4 else 'rgba(0,0,0,0)'))
-
-            # Add secondary y-axis for Nozzle Radius only on rightmost plots - OUTSIDE the loop
-            fig.update_yaxes(title_text=r'$\text {Nozzle Radius [m]}$' if col == 3 else '', row = row, col = col, secondary_y=True, title_font=dict(color=colors['Nozzle'] if col == 3 else 'rgba(0,0,0,0)'), tickfont=dict(color=colors['Nozzle'] if col == 3 else 'rgba(0,0,0,0)'), showgrid=False)
-
-        # Update overall layout
-        fig.update_layout(
-            #height=1200,
-            #width=1800,
-            title_text=f'Regen Channel Properties: {int(nChannel)} Channels{titleFlare}',
-            title_x=0.5,  # Center the main title
-            autosize=True,
-            title_font=dict(size=24),
-            plot_bgcolor='black',
-            paper_bgcolor='black',
-            font=dict(color='white', family = "Computer Modern"),
-            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
-        )
-
-        if context.export == 'on':
-
-            print(f'Saving Heat Transfer Outputs to .html')
-
-            if context.plotsDocs == 'on':
-                # Enlarge for the save at the aspect the figure was drawn at.
-                figure = plt.gcf()
-                figure.set_size_inches(16, 10)
-                figure.tight_layout()
-
-                # Save the final heat transfer figure to the data folder
-                plt.savefig(context.dataFolder + '\\heatTransferModelOutput.png', bbox_inches = 'tight')
-
-            plot(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
-
-        else:
-
-            if context.plotsDocs == 'on':
-                plt.show(block = False)
-
-            showFigure(fig)
-
-    if adiabatic:
-
-        # -- Local Scope the Inputs Dictionary -- #
-        # Fluted
-        if flutedResults is not None:
-            if len(flutedResults) != 0:
-                runFluted                                 = True
-                xHotWall3D                                = flutedResults["xHotWall3D"]
-                rHotWall3D                                = flutedResults["rHotWall3D"]
-                flutedCoolantTemperature                  = flutedResults["temperature"]
-                flutedCoolantPressure                     = flutedResults["pressure"]
-                flutedCoolantSpecificHeat                 = flutedResults["specificHeat"]
-                flutedAdiabaticConvectiveHeatTransferCoef = flutedResults["adiabaticConvectiveHeatTransferCoef"]
-            else:
-                runFluted = False
-        else:
-            runFluted = False
-        # Circle
-        if circleResults is not None:
-            if len(circleResults) != 0:
-                runCircle                                 = True
-                xHotWall3D                                = circleResults["xHotWall3D"]
-                rHotWall3D                                = circleResults["rHotWall3D"]
-                circleCoolantTemperature                  = circleResults["temperature"]
-                circleCoolantPressure                     = circleResults["pressure"]
-                circleCoolantSpecificHeat                 = circleResults["specificHeat"]
-                circleAdiabaticConvectiveHeatTransferCoef = circleResults["adiabaticConvectiveHeatTransferCoef"]
-            else:
-                runCircle = False
-        else:
-            runCircle = False
-
-        # -- Process Results -- #
-
-        if runFluted:
-
-            flutedFinalPressure     = flutedCoolantPressure[0]
-            flutedCoolantInitialPressure = flutedCoolantPressure[-1]
-            flutedTotalPressureDrop = flutedCoolantInitialPressure - flutedFinalPressure
-
-            print(f'Total fluted pressure drop: {flutedTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {flutedFinalPressure/1e6:.4f}(MPa)')
-
-            # -- Store supercritical transition temperature for plotting -- #
-            flutedCoolantInitialTemperature = flutedCoolantTemperature[-1]
-            flutedCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', flutedCoolantInitialTemperature, flutedCoolantInitialPressure)
-            flutedSuperCriticalRange         = flutedCoolantTemperature > flutedCoolantCriticalTemperature
-
-            flutedCoolantSubcriticalTemperature   = flutedCoolantTemperature.copy()
-            flutedCoolantSupercriticalTemperature = flutedCoolantTemperature.copy()
-
-            flutedCoolantSubcriticalTemperature[flutedSuperCriticalRange]    = 'NaN'
-            flutedCoolantSupercriticalTemperature[~flutedSuperCriticalRange] = 'NaN'
-
-        elif runCircle:
-
-            circleFinalPressure     = circleCoolantPressure[0]
-            circleCoolantInitialPressure = circleCoolantPressure[-1]
-            circleTotalPressureDrop = circleCoolantInitialPressure - circleFinalPressure
-
-            print(f'Total circle pressure drop: {circleTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {circleFinalPressure/1e6:.4f}(MPa)')
-
-            # -- Store supercritical transition temperature for plotting -- #
-            circleCoolantInitialTemperature = circleCoolantTemperature[-1]
-            circleCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', circleCoolantInitialTemperature, circleCoolantInitialPressure)
-            circleSuperCriticalRange         = circleCoolantTemperature > circleCoolantCriticalTemperature
-
-            circleCoolantSubcriticalTemperature   = circleCoolantTemperature.copy()
-            circleCoolantSupercriticalTemperature = circleCoolantTemperature.copy()
-
-            circleCoolantSubcriticalTemperature[circleSuperCriticalRange]    = 'NaN'
-            circleCoolantSupercriticalTemperature[~circleSuperCriticalRange] = 'NaN'
-
-        # -- Plotly implementation -- #
-
-        # Instantiate Figure
-        fig = make_subplots(rows=2, cols=2, subplot_titles=(
-            'Pressure', 'Temperature',
-            'Heat Capacity', 'Heat Transfer Coef'),
-        horizontal_spacing = 0.05,   #setting spaceing between plots
-        vertical_spacing = 0.05,
-        specs=[[{"secondary_y": True}, {"secondary_y": True}],
-            [{"secondary_y": True}, {"secondary_y": True}],
-            ]
-        )
-
-        # Legend
-        colors = {
-                'Fluted': 'cyan',
-                'Supercritical': 'cyan',
-                'Subcritical': 'blue',
-                'Circular': 'magenta',
-                'Nozzle': 'grey'
-        }
-        for name, color in colors.items():
-            fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', line=dict(color=color), name=name, showlegend=True))
-
-        # Nozzle Contours
-        for i in [1,2]:
-            for j in [1,2]:
-                add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
-
-        # -- Titles -- #
-
-        # Coolant Pressure
-        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
-        # Coolant Temperature
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
-        # Specific Heat
-        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
-        # Heat Transfer Coef
-        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
-
-        # -- Data -- #
-
-        if runFluted:
-            # Coolant Pressure
-            add_trace(1, 1, xHotWall3D, flutedCoolantPressure/1e6, 'Fluted', colors['Fluted'])
-            # Coolant Temperature
-            add_trace(1, 2, xHotWall3D, flutedCoolantSupercriticalTemperature, 'Supercritical', colors['Supercritical'])
-            add_trace(1, 2, xHotWall3D, flutedCoolantSubcriticalTemperature, 'Subcritical', colors['Subcritical'], mode='markers')
-            # Specific Heat
-            add_trace(2, 1, xHotWall3D, flutedCoolantSpecificHeat, 'Fluted', colors['Fluted'])
-            # Heat Transfer Coef
-            add_trace(2, 2, xHotWall3D, flutedAdiabaticConvectiveHeatTransferCoef, 'Fluted', colors['Fluted'])
-
-        if runCircle:
-            # Coolant Pressure
-            add_trace(1, 1, xHotWall3D, circleCoolantPressure/1e6, 'Circular', colors['Circular'])
-            # Coolant Temperature
-            add_trace(1, 2, xHotWall3D, circleCoolantTemperature, 'Circular', colors['Circular'])
-            # Specific Heat
-            add_trace(2, 1, xHotWall3D, circleCoolantSpecificHeat, 'Circular', colors['Circular'])
-            # Heat Transfer Coef
-            add_trace(2, 2, xHotWall3D, circleAdiabaticConvectiveHeatTransferCoef, 'Circular', colors['Circular'])
-
-        # Update layout for all subplots
-        for i in [1,2]:
-
-            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$', row=2, col=i, gridcolor='#4a4a4a', tickfont=dict(color='white'))
-            fig.update_xaxes(title_text= '',                          row=1, col=i, gridcolor='#4a4a4a', tickfont=dict(color='rgba(0,0,0,0)'))
-
-            # Add secondary y-axis for Nozzle Radius only on rightmost plots - OUTSIDE the loop
-            fig.update_yaxes(title_text=r'$\text {Nozzle Radius [m]}$', row = i, col = 2, secondary_y=True, title_font=dict(color=colors['Nozzle']), tickfont=dict(color=colors['Nozzle']), showgrid=False)
-            fig.update_yaxes(title_text= '',                            row = i, col = 1, secondary_y=True, title_font=dict(color=colors['Nozzle']), tickfont=dict(color='rgba(0,0,0,0)'), showgrid=False)
-
-        # Update overall layout
-        fig.update_layout(
-            #height=1200,
-            #width=1800,
-            title_text=f'Regen Channel Properties: {int(nChannel)} Channels{titleFlare}',
-            title_x=0.5,  # Center the main title
-            autosize=True,
-            title_font=dict(size=24),
-            plot_bgcolor='black',
-            paper_bgcolor='black',
-            font=dict(color='white', family = "Computer Modern"),
-            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
-        )
-
-        if context.export == 'on':
-
-            print(f'Saving Heat Transfer Outputs to .html')
-
-            if context.plotsDocs == 'on':
-                # Enlarge for the save at the aspect the figure was drawn at.
-                figure = plt.gcf()
-                figure.set_size_inches(16, 10)
-                figure.tight_layout()
-
-                # Save the final heat transfer figure to the data folder
-                plt.savefig(context.dataFolder + '\\heatTransferModelOutput.png', bbox_inches = 'tight')
-
-            plot(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
-
-        else:
-
-            if context.plotsDocs == 'on':
-                plt.show(block = False)
-
-            showFigure(fig)

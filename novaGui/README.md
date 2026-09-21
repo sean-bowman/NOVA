@@ -1,6 +1,7 @@
+
 # NOVA GUI
 
-A Tkinter front end for the NOVA nozzle design suite. It builds a configuration in the `nozzleConfig.json` schema, runs `Nozzle.generateNozzle()` on a background thread, and presents the result across five tabs.
+A Tkinter front end for the NOVA nozzle design suite. It builds a configuration in the `NOVANozzle.json` schema, runs `Nozzle.generateNozzle()` on a background thread, and presents the result across five tabs.
 
 ## Launch
 
@@ -40,7 +41,7 @@ The run bar hands the form contents to a `PipelineRunner`, which:
 - redirects the output folder to the location set in the Export tab,
 - writes the config to `<name>RunConfig.json` and calls `generateNozzle()`.
 
-Program-option flags `export`, `visualizeContour` and `plotsBasic` are forced on for every run so the geometry and analysis tabs have files to read. With cooling channels enabled and the "Interactive 3D views" box checked, `plotsAdv` and `plotJacket` are forced on as well.
+Program-option flags `export` and `plotsEnabled` are forced on for every run so the geometry and analysis tabs have files to read.
 
 Progress printed by NOVA drives the run bar and is mirrored into the collapsible run log.
 
@@ -51,14 +52,14 @@ plain dataclass that mentions neither plotting library, then offers a plotly ren
 `novaGui/plotting.py` renders the same dataclasses with Matplotlib.
 
 Matplotlib draws every inline pane, because it is the only backend that renders into a Tk
-canvas and it is a required dependency. Plotly draws the interactive companion, which opens in
-the system browser: it pans, zooms and reads values off a mesh far better than a static pane,
-and it genuinely cannot be embedded in Tkinter (tkhtml has no canvas or WebGL, and static
-export through kaleido needs a separate Chrome install).
+canvas. Plotly draws the interactive companion, which opens in the system browser: it pans,
+zooms and reads values off a mesh far better than a static pane, and it genuinely cannot be
+embedded in Tkinter (tkhtml has no canvas or WebGL, and static export through kaleido needs a
+separate Chrome install). Both Matplotlib and plotly are required dependencies.
 
 Every view in the 2D tab has an **Open interactive** button, and the 3D tab's revolved contour
-uses its **Open in browser** button the same way. Both grey out when plotly is not installed.
-A run also writes the HTML companions beside its PNGs automatically.
+uses its **Open in browser** button the same way. Both grey out until a nozzle has been
+generated. A run also writes the HTML companions beside its PNGs automatically.
 
 ## Display scaling
 

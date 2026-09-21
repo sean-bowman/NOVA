@@ -60,36 +60,20 @@ Author: Sean Bowman
 
 '''
 
-# Global imports for Nozzle class
+# The facade holds configuration, delegates each stage to the module that owns it, and stores
+# what comes back. Numerics, plotting and dataframes belong to those modules, so the only
+# third-party name this file needs is numpy.
 import os
-import warnings
-import copy
 from typing import Any
-from dataclasses import dataclass, field
 import numpy as np
-import pandas as pd
 # The CEA interface needs rocketcea, which is the one dependency here that is
 # commonly missing, so the failure names it.
+# The state objects and solvers each stage delegates to. Nothing arrives by wildcard, so this
+# block is the whole of what the module binds for its own use.
 try:
-    from .utils import *
-    from .utils import (RegenGeometryError, InvalidInputError,
-                        NumericalInstabilityError, PressureDropError,
-                        ConvergenceFailureError, ThermalConstraintError,
-                        GeometricConstraintError, VoluteGenerationError,
-                        chunkInterpolate, arcSpline, plotLine, parallelOffset,
-                        isentropicValues, fluidProps, createErrorContext,
-                        writeFile, lineIntersection, revolveContour,
-                        intersection, pickleObject, DCM, py2cad)
-    from .ceaInterface import *
-    from .ceaInterface import CEA
-    from .Volute import *
-    from .Volute import Volute
-    from .materials import wallMaterialCurves, sampleWallMaterial, availableWallMaterials, resolveWallMaterialName
     from .figures import exportInteractiveFigures
-    from .keepOut import KeepOutEnvelope, keepOutEnvelope, revolveKeepOut, packingClearance
-    from .channelSizing import (ChannelSizingState, channelSizingOutputs, solveChannelRadii)
-    from .regenChannels import (RegenChannelState, regenChannelOutputs, solveRegenChannels,
-                                validateRegenChannelInputs)
+    from .channelSizing import ChannelSizingState
+    from .regenChannels import RegenChannelState, regenChannelOutputs, solveRegenChannels
     from .nozzleVolutes import RegenVoluteState, regenVoluteOutputs, solveRegenVolutes
     from .chamber import (ConvergingSectionState, convergingSectionOutputs,
                           solveConvergingSection)
@@ -100,82 +84,27 @@ try:
     from .exports import (exportData as writeExportData,
                           exportExhaustPropertiesFEA as writeExhaustPropertiesFEA,
                           pickleNozzle as writePickledNozzle)
-    from .channelGeometry import (ChannelGeometryInputs,
-                                  generateCrossSections as buildCrossSections,
-                                  getMaxChannelRadius as maxChannelRadius)
-    from .regenThermal import (RegenThermalContext, validateRegenHeatTransferInputs,
+    from .channelGeometry import ChannelGeometryInputs
+    from .regenThermal import (RegenThermalContext,
                                regenHeatTransferModel as solveRegenHeatTransfer,
                                regenHeatTransferModelPlots as drawRegenHeatTransfer)
-    from .gasDynamics import (prandtlMeyerAngle, machFromPrandtlMeyerAngle, machAngle,
-                              machFromPressureRatio, stagnationRatio, staticPressureRatio,
-                              staticTemperatureRatio, areaMachRelation, radiusMachRelation,
-                              machFromAreaRatio, conicalLength, divergenceLossFactor)
-    from .characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
-                                  wallCharacteristicProjection)
-    from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
-                                limitingCharacteristicIntersection, throatIntersection)
+    from .characteristics import CharacteristicGas
+    from .contourKernel import ThroatGeometry
     from .contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
-                          conicalContour, divergingSectionFamily, raoParabolicContour,
-                          raoWallAngles, wallAnglesFromContour,
+                          conicalContour, divergingSectionFamily,
                           truncatedIdealContour as solveTruncatedIdealContour,
                           thrustOptimizedParabolicContour as solveThrustOptimizedParabolicContour,
                           thrustOptimizedContour as solveThrustOptimizedContourWall,
                           solveDesignPoint)
+
+    # The gas dynamics relations are re-exported rather than used here. The plume tests, the
+    # showcase scripts and the studies in experimental/ reach for them through this module.
+    from .gasDynamics import (prandtlMeyerAngle, machFromPrandtlMeyerAngle, machAngle,
+                              machFromPressureRatio, stagnationRatio, staticPressureRatio,
+                              staticTemperatureRatio, areaMachRelation, radiusMachRelation,
+                              machFromAreaRatio, conicalLength, divergenceLossFactor)
 except ImportError as error:
     raise ImportError('Could not import NOVA\'s modules: {}. If the CEA interface is the problem, install its backend with "pip install rocketcea".'.format(error)) from error
-
-# Progress tracking
-from tqdm import tqdm
-
-# Visualization imports
-import bisect
-import math
-import matplotlib.pyplot as plt
-import matplotlib.tri as tri
-# Plotly is optional. It backs the interactive HTML views only; every figure it draws also
-# has a Matplotlib equivalent, so a plotly-free install loses the .html files and nothing else.
-try:
-    import plotly
-    import plotly.graph_objects as go
-    import plotly.colors
-    from plotly.subplots import make_subplots
-    from plotly.offline import plot
-    from plotly.express.colors import sample_colorscale
-    plotlyAvailable = True
-except ImportError:
-    plotly = go = make_subplots = plot = sample_colorscale = None
-    plotlyAvailable = False
-
-# Features already reported as skipped, so the notice prints once per process rather than once
-# per cross section.
-_plotlyNotices = set()
-
-def _plotlyGate(featureName: str) -> bool:
-
-    '''
-
-    True when plotly is importable. Otherwise note once that an interactive view is being
-    skipped and return False, so the caller can carry on without it.
-
-    '''
-
-    if plotlyAvailable:
-        return True
-    if featureName not in _plotlyNotices:
-        _plotlyNotices.add(featureName)
-        print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
-    return False
-
-# Scientific computing imports
-from scipy.interpolate import UnivariateSpline, interp1d, CubicSpline, griddata
-from scipy.optimize import fsolve, least_squares, minimize_scalar
-from scipy.spatial import KDTree
-from joblib import Parallel, delayed, cpu_count
-import sympy as sym
-
-# Data handling
-from pandas import read_csv
-from datetime import datetime
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Exhaust Plume -- #
@@ -186,12 +115,11 @@ from datetime import datetime
 # studies in experimental/, the showcase scripts and the test suite all reach for them through
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
-from .plume import *
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
-                   PlumeFlow, PlumePoint, solvePlumeStructure, solvePlumeField,
-                   plumeCharacteristicSeed,
+                    PlumeFlow, PlumePoint, solvePlumeStructure, solvePlumeField,
+                    plumeCharacteristicSeed,
                     fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
-                    obliqueShockDeflection, obliqueShockState, _exitWallAngle,
+                    obliqueShockDeflection, obliqueShockState,
                     freeJetRefineLine, freeJetGeneralPoint, freeJetSameFamilyPoint,
                     freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCenterLineTarget,
                     freeJetCenterLinePoint, freeJetCrossing, freeJetLeadingCharacteristic,
@@ -209,153 +137,158 @@ class Nozzle:
 
     '''
 
-    Rocket nozzle design and analysis class.
+    A nozzle: its wall, its cooling jacket, and the exhaust that leaves it.
 
-    This class provides a comprehensive framework for designing rocket nozzle geometry,
-    regenerative cooling systems, and performing thermo-fluid analysis. It implements
-    the Axisymmetric Method of Characteristics (AxMoC) for optimized nozzle contour
-    generation and includes tools for manufacturing-ready geometry export.
+    The class carries one engine's configuration and delegates each stage of a run to the module
+    that owns it. It holds state and sequences the work; the physics lives in `contour`,
+    `chamber`, `regenChannels`, `channelSizing`, `regenThermal`, `nozzleVolutes`,
+    `radiativeCooling` and `plume`.
 
-    Core Capabilities:
-    ------------------
-    1. Nozzle Contour Generation
-       - Truncated Ideal Contour (TIC) via Method of Characteristics
-       - Pressure-matched contour optimization
-       - Conical nozzle alternative
-       - Traditional converging section
+    ----------------------------------------------------------------------
+                                What it builds
+    ----------------------------------------------------------------------
 
-    2. Regenerative Cooling System Design
-       - Helical/fluted cooling channel generation
-       - Dynamic channel radius optimization
-       - Inlet and return volute generation
-       - 3D mesh generation for manufacturing
+    Diverging wall, in four families selected by `divergingSectionType`: a cone, a truncated
+    ideal contour solved by the axisymmetric method of characteristics, a thrust-optimized
+    parabola read off the Rao chart, and a thrust-optimized contour searched over a cubic Bezier
+    bell.
 
-    3. Thermo-Fluid Analysis
-       - Exhaust-side heat transfer (Bartz correlation)
-       - Coolant-side convective heat transfer
-       - Wall temperature distribution
-       - Pressure drop calculations
-       - Steady-state operation modeling
+    Converging section and combustion chamber, sized from `Lstar` or `chamberLength`.
 
-    4. Additional Features
-       - Correlated exhaust plume structure
-       - FEA property export for structural analysis
-       - CEA (Chemical Equilibrium with Applications) integration
+    Regenerative cooling jacket: channels of circular or fluted cross section, sized station by
+    station against a wall temperature limit, with the coolant marched from inlet to outlet. Film
+    cooling and an uncooled radiation-cooled extension attach to the same solve.
 
-    Primary Input Attributes:
-    -------------------------
-    Fuel : str
-        CEA propellant name for fuel (case sensitive)
-    Oxidizer : str
-        CEA propellant name for oxidizer (case sensitive)
-    chamberPressure : float
-        Chamber stagnation pressure [Pa]
-    thrust : float
-        Target thrust [N] (specify this OR engineMassFlow)
-    engineMassFlow : float
-        Engine mass flow rate [kg/s] (specify this OR thrust)
-    targetExitPressure : float
-        Target nozzle exit pressure [Pa] (specify this OR expansionRatio)
-    expansionRatio : float
-        Nozzle area expansion ratio [-] (specify this OR targetExitPressure)
+    Inlet and return volutes, and the keep-out envelope they route around.
+
+    Exhaust plume, either from correlations or by continuing the characteristics march past the
+    lip.
+
+    ----------------------------------------------------------------------
+                                    Units
+    ----------------------------------------------------------------------
+
+    Every quantity crossing a public method boundary is mass-base SI: meters, square and cubic
+    meters, kilograms, seconds, kelvin, pascals and kilograms per second. Angles are degrees, as
+    configurations name them. Conversions belong at the edge, in `units`.
+
+    ----------------------------------------------------------------------
+                                Primary inputs
+    ----------------------------------------------------------------------
+
+    Set by `setInputs` from a configuration, or assigned directly.
+
+    Fuel, Oxidizer : str
+        CEA propellant names, case sensitive.
     OFRatio : float
-        Oxidizer to fuel mass ratio [-]
+        Oxidizer to fuel mass ratio [-], or 'maxisp' to let CEA pick it.
+    chamberPressure : float
+        Chamber stagnation pressure [Pa].
+    thrust : float
+        Target thrust [N]. Specify this or `engineMassFlow`, not both.
+    engineMassFlow : float
+        Engine mass flow [kg/s]. Specify this or `thrust`, not both.
+    expansionRatio : float
+        Exit area ratio [-]. Specify this or `targetExitPressure`, not both.
+    targetExitPressure : float
+        Target exit static pressure [Pa]. Specify this or `expansionRatio`, not both.
+    divergingSectionType : str
+        'cone', 'tic' (truncated ideal contour), 'top' (thrust-optimized parabola) or 'toc'
+        (thrust-optimized contour, searched).
     lengthFraction : float
-        Nozzle length as fraction of equivalent 15-deg conical nozzle [-]
-    contourType : str
-        Converging section type: 'trad'
+        Length as a fraction of the equivalent 15 degree cone [-].
 
-    Regenerative Cooling Attributes:
-    --------------------------------
+    Cooling jacket:
+
+    material : str
+        Wall alloy, resolved against the materials store.
     coolant : str
-        REFPROP fluid name for coolant (case sensitive)
-    coolantInitialTemperature : float
-        Coolant inlet temperature [K]
-    coolantInitialPressure : float
-        Coolant inlet pressure [Pa]
-    coolantMassFlow : float
-        Coolant mass flow rate [kg/s]
-    hotWallThickness : float
-        Hot wall (combustion side) thickness [m]
-    shellThickness : float
-        Outer shell thickness [m]
+        REFPROP fluid name, case sensitive.
+    coolantInitialTemperature, coolantInitialPressure, coolantMassFlow : float
+        Coolant state at the jacket inlet [K], [Pa], [kg/s].
+    channelType : str
+        'circle' or 'fluted'.
+    nChannel : int
+        Channels around the circumference [-].
     numFlutes : int
-        Number of cooling channels
+        Flutes on one fluted channel [-]. Unrelated to `nChannel`.
+    hotWallThickness, shellThickness, infillThickness : float
+        Wall between coolant and exhaust, outer shell, and material left between neighboring
+        channels [m].
+    maxWallTemperature : float
+        Hot wall temperature the sizing loop solves each station to [K].
 
-    Key Output Attributes:
-    ----------------------
-    xNozzleWall : np.ndarray
-        Axial coordinates of nozzle wall [m]
-    rNozzleWall : np.ndarray
-        Radial coordinates of nozzle wall [m]
+    ----------------------------------------------------------------------
+                                Primary outputs
+    ----------------------------------------------------------------------
+
+    xNozzleWall, rNozzleWall : numpy.ndarray
+        Wall coordinates, axial and radial [m].
     thrustCoef : float
-        Thrust coefficient [-]
+        Thrust coefficient of the generated contour [-].
     exitExpansionRatio : float
-        Calculated exit expansion ratio [-]
-    nozzleNearWallTemperature : np.ndarray
-        Hot gas temperature near wall [K]
-    nozzleNearWallPressure : np.ndarray
-        Hot gas pressure near wall [Pa]
+        Area ratio the contour actually reaches [-].
+    nozzleNearWallTemperature, nozzleNearWallPressure : numpy.ndarray
+        Exhaust state along the wall [K], [Pa].
+    channelRadius : numpy.ndarray
+        Solved channel radius at each station [m].
 
-    Public Methods:
-    ---------------
-    setInputs(inputsPath, debugMode)
-        Load configuration from CSV file or dictionary
-    truncatedIdealContour(targetExitMach, lengthFraction, ...)
-        Generate optimized diverging section via MOC
-    pressureMatchTruncatedIdealContour(lengthFraction, ...)
-        Generate pressure-matched nozzle contour
-    convergingSection(raoThroatAngle, ...)
-        Generate converging section geometry
-    conicalNozzle(conicalHalfAngle)
-        Generate simple conical nozzle
-    truncateForRegen()
-        Prepare geometry for regenerative cooling section
-    generateRegenChannels()
-        Generate 3D cooling channel geometry
-    regenHeatTransferModel()
-        Run transient heat transfer analysis
-    regenHeatTransferSteadyState(...)
-        Run steady-state thermal analysis
-    generateRegenVolutes()
-        Generate inlet and return manifold volutes
-    generateTVCGeometry(...)
-        Generate thrust vector control geometry
-    steadyStateOperationNozzle(...)
-        Analyze steady-state nozzle operation with flowfield
-    plumeStructure(ambientPressure, ...)
-        Correlated exhaust plume structure: jet boundary, shock cells, Mach disk
-    exportData(filename)
-        Export geometry and analysis data
-    generateNozzle(debugMode, configPath)
-        High-level wrapper to run full nozzle generation pipeline
-    pickleNozzle(filename)
-        Serialize nozzle object for later use
+    An output still None after a run means that branch was never reached, which is kept rather
+    than hidden behind a zero.
 
-    Typical Workflow:
-    -----------------
-    1. Instantiate: nozzle = Nozzle()
-    2. Set inputs: nozzle.setInputs(configPath) or set attributes directly
-    3. Generate contour: nozzle.pressureMatchTruncatedIdealContour(lengthFraction)
-    4. Generate converging: nozzle.convergingSection()
-    5. Prepare for regen: nozzle.truncateForRegen()
-    6. Generate channels: nozzle.generateRegenChannels()
-    7. Run heat transfer: nozzle.regenHeatTransferModel()
-    8. Generate volutes: nozzle.generateRegenVolutes()
-    9. Export: nozzle.exportData(filename)
+    ----------------------------------------------------------------------
+                                    Methods
+    ----------------------------------------------------------------------
 
-    Or use the high-level wrapper:
-        nozzle = Nozzle()
-        nozzle.generateNozzle(configPath='path/to/config.json')
+    Contour:
 
-    Examples:
-    ---------
-    Basic nozzle generation from config file:
+        truncatedIdealContour               characteristics wall, returns its figure of merit
+        thrustOptimizedParabolicContour     Rao chart parabola
+        thrustOptimizedContour              searched cubic Bezier bell
+        solveTruncatedIdealDesignPoint      solves the design Mach for a requested design point
+        conicalNozzle                       straight-walled cone
+        convergingSection                   chamber and converging wall onto the diverging contour
+        truncateForRegen                    splits the contour into jacket and extension
+
+    Cooling:
+
+        generateRegenChannels               channels and the jacket around them
+        regenHeatTransferModel              coolant and wall thermal state along the jacket
+        regenHeatTransferModelPlots         draws that result
+        generateRegenVolutes                inlet and return volutes
+        generateRadiativeExtension          wall temperature of the uncooled extension
+
+    Plume:
+
+        plumeContour                        characteristics net a plume is seeded from
+        plumeStructure                      correlated jet boundary, shock cells and Mach disk
+        plumeCharacteristicSeed             mesh and gas state the march starts from
+        plumeField                          plume interior, continuing the march past the lip
+
+    Configuration, export and the whole run:
+
+        setInputs                           read a configuration and close the design point
+        exportData                          contours, geometry, exhaust properties and the pickle
+        exportExhaustPropertiesFEA          near-wall exhaust properties for a structural analysis
+        pickleNozzle                        pickle the object
+        generateNozzle                      the full pipeline, from configuration to export
+
+    Each solver is fed by a state builder of the same name: `convergingSectionState`,
+    `regenStationState`, `regenChannelState`, `channelSizingState`, `channelGeometryInputs`,
+    `regenThermalContext`, `regenVoluteState` and `radiativeExtensionInputs`. They gather what
+    the solver reads off this object, so the solver itself never touches a `Nozzle`.
+
+    ----------------------------------------------------------------------
+                                     Use
+    ----------------------------------------------------------------------
+
+    The whole pipeline from a configuration:
 
     >>> nozzle = Nozzle()
-    >>> nozzle.generateNozzle(configPath='config.json')
+    >>> nozzle.generateNozzle()                                # the shipped reference nozzle
+    >>> nozzle.generateNozzle(configPath = 'myEngine.json')    # or one of your own
 
-    Manual attribute-based setup:
+    Or a stage at a time, setting the inputs directly:
 
     >>> nozzle = Nozzle()
     >>> nozzle.Fuel = 'HDPE'
@@ -364,21 +297,9 @@ class Nozzle:
     >>> nozzle.thrust = 150e3
     >>> nozzle.OFRatio = 2.7
     >>> nozzle.targetExitPressure = 101325
-    >>> nozzle.pressureMatchTruncatedIdealContour(lengthFraction=0.8)
+    >>> nozzle.solveTruncatedIdealDesignPoint(lengthFraction = 0.8)
 
-    Notes:
-    ------
-    - Requires CEA (Chemical Equilibrium with Applications) for combustion analysis
-    - Requires REFPROP via ctREFPROP for coolant property evaluation
-    - All geometric outputs in SI units (meters)
-    - All thermodynamic outputs in SI units (Pa, K, kg/s, etc.)
-
-    See Also:
-    ---------
-    Volute : Class for generating inlet and return volute geometries
-    utils  : Utility functions for fluid properties and geometry
-
-    Author: Sean Bowman
+    Requires rocketcea for the thermochemistry and ctREFPROP for coolant properties.
 
     '''
 
@@ -422,16 +343,14 @@ class Nozzle:
         self.expansionRatio                           = None     # [-]
 
         # Additional optional properties
-        self.visualizeContour                         = None     # [bool]
         self.lengthFraction                           = None     # [float]
         self.OFRatio: float | str | None              = None     # [-]
         self.fuelInitialTemperature                   = None     # [K]
         self.oxidizerInitialTemperature               = None     # [K]
         self.numContourPoints: int | None             = None     # [int]
-        self.contourType                              = None     # [str]
-        self.truncationMethod                         = None     # [str]
-        self.raoThroatAngle                           = None     # [deg]
-        self.chamberInterfaceAngle                    = None     # [deg]
+        self.regenTruncationType                      = None     # [str] 'none', 'temp' or 'er'
+        self.regenTruncationValue                     = None     # [K] or [-], by regenTruncationType
+        self.convergingSectionAngle                   = None     # [deg]
         self.chamberDiameter: float | None            = None     # [m]
 
         # Combustion chamber sizing. Specify one; leave the other unset.
@@ -458,9 +377,6 @@ class Nozzle:
         # CEA
         self.ceaOutput: Any                           = None     # CEA object; set once CEA runs, guarded by hasattr
         self.chamberRGasConstant: float | None        = None     # [-]
-        # The one exponent the constant-gamma solve runs in, and the two candidates for it.
-        # Both candidates are recorded whichever is selected, because the gap between them
-        # is the size of the approximation.
         self.gammaModel                               = 'chamber' # [str]
         self.combustionChamberGamma                   = None     # [-]
         self.effectiveGamma                           = None     # [-]
@@ -524,11 +440,6 @@ class Nozzle:
         self.fluteHelixAngle: float | None            = None     # [deg]
         self.interfaceLength                          = None     # [m]
 
-        # Printability options
-        self.printabilityCheck                        = None     # [bool]
-        self.printDirection                           = None     # [str]
-        self.maxOverhangAngle                         = None     # [deg]
-
         # dynamicChannelRadii
         self.dcrData                                  = {}
         self.channelType                              = None     # [str]
@@ -582,9 +493,6 @@ class Nozzle:
         self.zNozzleShellMesh                         = None     # [m]
 
         self.allNozzlePoints                          = None     # [m]
-        # Stations the printability audit marked as unsupported. Empty until that audit runs,
-        # and read by the cross-section builder whether or not it has.
-        self.nonPrintableIndices                      = None     # [int]
 
         self.yChannel: np.ndarray                     = np.array([]) # [m]
         self.xChannel: np.ndarray                     = np.array([]) # [m]
@@ -605,7 +513,6 @@ class Nozzle:
         self.voluteRelativeRoll                       = None     # [deg]
         self.voluteFOS                                = 1        # []
 
-        self.plotKeepOut                              = None     # 'on' , 'off'
         self.keepOutAxialOffset                       = None     # [m]
         self.keepOutRadius                            = None     # [m], None takes the chamber radius
         self.keepOutDepth                             = None     # [m], None takes half the keep-out radius
@@ -670,10 +577,6 @@ class Nozzle:
         # -- Heat Transfer Model -- #
 
         # Inputs
-        self.drivingTemperatureModel                  = 'recovery' # [str]
-
-        # Film cooling. A sheet of coolant between the wall and the exhaust lowers the
-        # temperature the wall is driven by; it does not carry heat away like a jacket.
         self.filmCooling                              = 'off'    # [str]
         self.filmCoolant                              = None     # [fluid name]
         self.filmMassFlow                             = None     # [kg/s]
@@ -691,8 +594,6 @@ class Nozzle:
         self.regenSectionFilmWallMixtureRatio         = None     # [-]
         self.regenSectionFilmEntrainmentMultiplier    = None     # [-]
 
-        # Radiation-cooled extension. Past the end of the jacket the wall survives by
-        # radiating, and the balance there is nonlinear in a way the jacket's is not.
         self.makeRadiativeExtension                   = 'off'    # [str]
         self.extensionMaterial                        = None     # [material name]
         self.extensionThickness                       = None     # [m]
@@ -736,22 +637,10 @@ class Nozzle:
         self.nozzlePlumeStructure: Any                = None     # PlumeStructure, set by plumeStructure()
         self.nozzlePlumeField: Any                    = None     # PlumeField, set by plumeField()
 
-        # -- TVC Properties -- #
-
-        # Geometry
-        self.xNozzleMesh                              = None
-        self.yNozzleMesh                              = None
-        self.zNozzleMesh                              = None
-
         # -- Program Options -- #
 
-        self.debugMode                                = False
-
         # Plot Options
-        self.plotsBasic                               = None     # 'on' , 'off'
-        self.plotsAdv                                 = None     # 'on' , 'off'
-        self.plotJacket                               = None     # 'on', 'off'
-        self.plotsDebug                               = None     # 'on' , 'off'
+        self.plotsEnabled                             = None     # 'on' , 'off'
 
         # Export Options
         self.export                                   = None     # 'on' , 'off'
@@ -759,9 +648,6 @@ class Nozzle:
 
         self.dataFolder                               = None
         self.topLevelDirectory                        = None
-
-        # Hidden Options
-        self.plotsDocs                                = 'off'
 
     # ------------------------------------------------------------------------------------------------------------------------------------- #
     # -- Helper Methods -- #
@@ -827,37 +713,35 @@ class Nozzle:
 
     # -- Input Handling Methods -- #
 
-    def setInputs(self, inputsPath: str | dict, debugMode: bool = False) -> None:
+    def setInputs(self, inputsPath: str | dict) -> None:
 
-        """
+        '''
 
         Read a configuration onto this object and run the thermochemistry for its design point.
 
-        The reader is `config.setInputs`, which handles a JSON path, a dictionary or a workbook
-        path and normalizes the differences between them.
+        The reader is `config.setInputs`, which handles a JSON path or a dictionary and
+        normalizes the difference between them.
 
         Parameters:
         -----------
         inputsPath : str | dict
             Path to a .json configuration, or the fields already loaded.
-        debugMode : bool
-            True dumps the local state of a failed station during later solves.
 
         Raises:
         -------
         InvalidInputError
             If the configuration cannot be read, or its design point cannot be closed.
 
-        """
+        '''
 
-        readConfiguration(self, inputsPath, debugMode = debugMode)
+        readConfiguration(self, inputsPath)
 
     # -- Method of Characteristics and Nozzle Contour Generation/Optimization Methods -- #
 
     def truncatedIdealContour(self, targetExitMach: float, lengthFraction: float,
-                              isPressureMatching: bool = False, assignOutputsToObject: bool = False) -> float:
+                              truncate: bool = False, assignOutputsToObject: bool = False) -> float:
 
-        """
+        '''
 
         Generate a truncated ideal contour for this nozzle and return its figure of merit.
 
@@ -871,19 +755,20 @@ class Nozzle:
             Exit Mach number the ideal nozzle is designed to before truncation [-].
         lengthFraction : float
             Truncation length as a fraction of the 15 degree conical reference [-].
-        isPressureMatching : bool
-            True truncates at the target length and returns the exit pressure residual, which is
-            what the pressure match drives to zero. False runs the wall to the end of the mesh.
+        truncate : bool
+            True cuts the wall at the requested area ratio and returns the length-fraction
+            residual, which is what the design Mach number search drives to zero. False runs the
+            wall to the end of the mesh.
         assignOutputsToObject : bool
             True computes and stores the mesh, the near-wall arrays and the derived performance.
 
         Returns:
         --------
         float
-            Exit pressure residual while pressure matching without assignment, thrust coefficient
+            Length-fraction residual while searching without assignment, thrust coefficient
             otherwise. The full solution is on the object when assignOutputsToObject is set.
 
-        """
+        '''
 
         gas = CharacteristicGas(self.chamberGamma, self.chamberRGasConstant,
                                 self.chamberStagnationTemperature)
@@ -901,13 +786,11 @@ class Nozzle:
             targetExitPressure = self.targetExitPressure,
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
-            truncateOn = self.truncateOn,
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'],
-            plotsDocs = self.plotsDocs)
+            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
 
         solution = solveTruncatedIdealContour(solution, targetExitMach, lengthFraction,
-                                              isPressureMatching = isPressureMatching,
+                                              truncate = truncate,
                                               assignOutputsToObject = assignOutputsToObject)
 
         # Anything the solve left as None is a branch it did not reach, so it is not copied and a
@@ -919,25 +802,17 @@ class Nozzle:
 
         self.nozzleContourSolution = solution
 
-        if isPressureMatching and not assignOutputsToObject:
-            # The residual the design Mach number is solved on, which is whichever requested
-            # number the cut itself does not already satisfy.
-            #
-            # 'areaRatio' cuts at the requested expansion ratio, so the length is left.
-            # 'wallPressure' cuts where the wall reaches the target pressure, so the length is
-            # again what is left, and the area ratio falls out of both.
-            # 'length' cuts at the requested length, so the residual is the exit pressure, and
-            # neither the area ratio nor the pressure is guaranteed. That mode is legacy.
-            if self.truncateOn in ('areaRatio', 'wallPressure'):
-                return solution.deliveredLengthFraction - lengthFraction
-            return solution.pressureError
+        if truncate and not assignOutputsToObject:
+            # The wall is cut at the requested area ratio, so the length is what is left; the
+            # design Mach number search drives this residual to zero.
+            return solution.deliveredLengthFraction - lengthFraction
         else:
             return solution.thrustCoef
 
     def thrustOptimizedParabolicContour(self, lengthFraction: float, wallAngles: tuple = None,
                                         assignOutputsToObject: bool = True) -> float:
 
-        """
+        '''
 
         Build a thrust-optimized parabolic diverging section, the family most flight bells are.
 
@@ -960,7 +835,7 @@ class Nozzle:
         float
             Thrust coefficient. The full solution is on the object.
 
-        """
+        '''
 
         gas = CharacteristicGas(self.chamberGamma, self.chamberRGasConstant,
                                 self.chamberStagnationTemperature)
@@ -978,10 +853,8 @@ class Nozzle:
             targetExitPressure = self.targetExitPressure,
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
-            truncateOn = self.truncateOn,
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'],
-            plotsDocs = self.plotsDocs)
+            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
 
         solution = solveThrustOptimizedParabolicContour(
             solution, lengthFraction, wallAngles = wallAngles,
@@ -998,7 +871,7 @@ class Nozzle:
     def thrustOptimizedContour(self, lengthFraction: float, designVariables: tuple = None,
                                **optimizerSettings) -> float:
 
-        """
+        '''
 
         Build a thrust-optimized diverging section by searching the cubic-Bezier bell family.
 
@@ -1033,7 +906,7 @@ class Nozzle:
         float
             Thrust coefficient. The full solution is on the object.
 
-        """
+        '''
 
         from .contourOptimization import solveThrustOptimizedContour
 
@@ -1059,10 +932,8 @@ class Nozzle:
             targetExitPressure = self.targetExitPressure,
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
-            truncateOn = self.truncateOn,
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'],
-            plotsDocs = self.plotsDocs)
+            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
 
         solution = solveThrustOptimizedContourWall(solution, lengthFraction, designVariables,
                                                    assignOutputsToObject = True)
@@ -1076,17 +947,17 @@ class Nozzle:
         self.nozzleContourOptimization = record
         return solution.thrustCoef
 
-    def pressureMatchTruncatedIdealContour(self, lengthFraction: float | str,
-                                           lowerBound: float = 0.65, upperBound: float = 0.9):
+    def solveTruncatedIdealDesignPoint(self, lengthFraction: float | str,
+                                       lowerBound: float = 0.65, upperBound: float = 0.9):
 
-        """
+        '''
 
         Solve for the design Mach number that makes the contour deliver its requested design point.
 
         The solve is `contour.solveDesignPoint`. A truncated ideal contour has two design numbers,
         an area ratio and a length, and one free parameter: the exit Mach number the underlying
-        ideal nozzle is designed to. Which of the two numbers binds is set by `truncateOn`; the
-        solve varies the design Mach number until the other one is delivered too.
+        ideal nozzle is designed to. The wall is cut at the requested area ratio, and the solve
+        varies the design Mach number until the length is delivered too.
 
         Parameters:
         -----------
@@ -1096,14 +967,14 @@ class Nozzle:
         lowerBound, upperBound : float
             Bounds on the length fraction for that sweep.
 
-        """
+        '''
 
         return solveDesignPoint(self, lengthFraction,
                                 lowerBound = lowerBound, upperBound = upperBound)
 
     def convergingSectionState(self):
 
-        """
+        '''
 
         The chamber state and diverging contour the converging section is built from.
 
@@ -1112,7 +983,7 @@ class Nozzle:
         ConvergingSectionState
             Inputs seeded, outputs left for the build to fill.
 
-        """
+        '''
 
         state = ConvergingSectionState()
         for name in ConvergingSectionState.__dataclass_fields__:
@@ -1120,12 +991,11 @@ class Nozzle:
 
         return state
 
-    def convergingSection(self, raoThroatAngle: float = 'default',
-                          chamberInterfaceAngle: float = 'default',
+    def convergingSection(self, convergingSectionAngle: float = 'default',
                           chamberDiameter: float = 'default', inletVolute: bool = 'default',
                           outletVolute: bool = 'default', geometryOnly: bool = False) -> None:
 
-        """
+        '''
 
         Build the combustion chamber and converging section onto the diverging contour.
 
@@ -1134,10 +1004,8 @@ class Nozzle:
 
         Parameters:
         -----------
-        raoThroatAngle : float
+        convergingSectionAngle : float
             Wall angle at the throat inlet [deg]. 'default' works it out from the contour.
-        chamberInterfaceAngle : float
-            Wall angle where the converging run meets the chamber [deg]. 'default' as above.
         chamberDiameter : float
             Chamber barrel diameter [m]. 'default' takes the configured value.
         inletVolute, outletVolute : bool
@@ -1152,11 +1020,10 @@ class Nozzle:
         GeometricConstraintError
             If the wall cannot be closed onto the throat as specified.
 
-        """
+        '''
 
         state = solveConvergingSection(self.convergingSectionState(),
-                                       raoThroatAngle        = raoThroatAngle,
-                                       chamberInterfaceAngle = chamberInterfaceAngle,
+                                       convergingSectionAngle = convergingSectionAngle,
                                        chamberDiameter       = chamberDiameter,
                                        inletVolute           = inletVolute,
                                        outletVolute          = outletVolute,
@@ -1173,7 +1040,7 @@ class Nozzle:
 
     def regenStationState(self):
 
-        """
+        '''
 
         The contour and propellants the regen split is made from.
 
@@ -1182,7 +1049,7 @@ class Nozzle:
         RegenStationState
             Inputs seeded, outputs left for the split to fill.
 
-        """
+        '''
 
         state = RegenStationState()
         for name in RegenStationState.__dataclass_fields__:
@@ -1192,20 +1059,21 @@ class Nozzle:
 
     def truncateForRegen(self):
 
-        """
+        '''
 
         Split the contour into the regen section and the extension beyond it, and sample the
         exhaust state at every station of both.
 
         The split itself is `regenStations.solveRegenStations`, which takes the contour and the
-        propellants explicitly. Where the cut falls is set by `truncationMethod`.
+        propellants explicitly. Where the cut falls is set by `regenTruncationType` and
+        `regenTruncationValue`.
 
         Raises:
         -------
         ThermalConstraintError
             If the requested truncation temperature is never reached along the contour.
 
-        """
+        '''
 
         state = solveRegenStations(self.regenStationState())
 
@@ -1220,14 +1088,14 @@ class Nozzle:
 
     def exportExhaustPropertiesFEA(self) -> None:
 
-        """
+        '''
 
         Write the near-wall exhaust properties a structural or thermal analysis reads.
 
         These are the one-dimensional station properties, which are not the near-wall state the
         characteristics solve returns; see `regenStations` for the size of that difference.
 
-        """
+        '''
 
         return writeExhaustPropertiesFEA(self)
 
@@ -1265,7 +1133,7 @@ class Nozzle:
 
     def plumeContour(self):
 
-        """
+        '''
 
         The characteristics net and gas state a plume is seeded from.
 
@@ -1274,7 +1142,7 @@ class Nozzle:
         PlumeContour
             The nineteen fields the plume solve reads, and nothing else about this nozzle.
 
-        """
+        '''
 
         contour = PlumeContour()
         for name in PlumeContour.__dataclass_fields__:
@@ -1285,7 +1153,7 @@ class Nozzle:
     def plumeStructure(self, ambientPressure: float, plumeLength: float = None,
                        numBoundaryPoints: int = 400):
 
-        """
+        '''
 
         Correlated structure of the exhaust plume at a given ambient pressure.
 
@@ -1306,7 +1174,7 @@ class Nozzle:
         PlumeStructure
             Cell train, Mach disk and boundary, with its own notes on what is and is not modeled.
 
-        """
+        '''
 
         self.nozzlePlumeStructure = solvePlumeStructure(
             self.plumeContour(), ambientPressure = ambientPressure,
@@ -1316,7 +1184,7 @@ class Nozzle:
 
     def plumeCharacteristicSeed(self) -> dict:
 
-        """
+        '''
 
         The mesh and gas state the plume march starts from.
 
@@ -1325,14 +1193,14 @@ class Nozzle:
         dict
             Exit line, mesh and gas properties, as `plume.plumeCharacteristicSeed` returns them.
 
-        """
+        '''
 
         return plumeCharacteristicSeed(self.plumeContour())
 
     def plumeField(self, ambientPressure: float, numRays: int = 40, exitPoints: int = 140,
                    maxLines: int = 2000, lineLimit: int = 250) -> 'PlumeField':
 
-        """
+        '''
 
         Solve the plume interior by continuing the nozzle characteristics march past the lip.
 
@@ -1355,7 +1223,7 @@ class Nozzle:
         PlumeField
             The solved interior, with its own notes on where it stopped and why.
 
-        """
+        '''
 
         self.nozzlePlumeField = solvePlumeField(
             self.plumeContour(), ambientPressure = ambientPressure, numRays = numRays,
@@ -1365,7 +1233,7 @@ class Nozzle:
 
     def generateRegenChannels(self):
 
-        """
+        '''
 
         Build the regenerative cooling channels and the jacket around them.
 
@@ -1377,7 +1245,7 @@ class Nozzle:
         The geometry and sizing inputs are derived inside the build rather than passed in,
         because both depend on arrays the build itself produces: the sizing solve works on the
         regen section after the volute interfaces have trimmed it, and the cross-section builder
-        reads the printability stations and the wall point cloud as they are filled in.
+        reads the wall point cloud as it is filled in.
 
         Raises:
         -------
@@ -1386,7 +1254,7 @@ class Nozzle:
         RegenGeometryError
             If the channels cannot be laid out on the contour as specified.
 
-        """
+        '''
 
         state = solveRegenChannels(self.regenChannelState(), self.regenThermalContext())
 
@@ -1401,7 +1269,7 @@ class Nozzle:
 
     def radiativeExtensionInputs(self):
 
-        """
+        '''
 
         The shell an uncooled extension is made of, and the exhaust running past it.
 
@@ -1410,7 +1278,7 @@ class Nozzle:
         tuple
             The `RadiativeShell` and a dict of the solver's remaining arguments.
 
-        """
+        '''
 
         # The joint is adiabatic unless a temperature is given for it. The jacket solve does not
         # surface a per-station hot wall temperature onto the Nozzle, so there is nothing to read
@@ -1446,7 +1314,7 @@ class Nozzle:
 
     def generateRadiativeExtension(self):
 
-        """
+        '''
 
         Solve the wall temperature of the uncooled extension beyond the jacket.
 
@@ -1464,7 +1332,7 @@ class Nozzle:
         ConvergenceFailureError
             If the balance does not settle.
 
-        """
+        '''
 
         shell, arguments = self.radiativeExtensionInputs()
         result = radiativeNozzleExtension(shell, **arguments)
@@ -1476,7 +1344,7 @@ class Nozzle:
 
     def regenVoluteState(self):
 
-        """
+        '''
 
         The channel ends and volute definition the volute build reads off this object.
 
@@ -1488,7 +1356,7 @@ class Nozzle:
         RegenVoluteState
             Inputs seeded, outputs left for the build to fill.
 
-        """
+        '''
 
         state = RegenVoluteState()
         for name in RegenVoluteState.__dataclass_fields__:
@@ -1498,7 +1366,7 @@ class Nozzle:
 
     def generateRegenVolutes(self):
 
-        """
+        '''
 
         Build the inlet and return volutes onto the cooling channels.
 
@@ -1514,7 +1382,7 @@ class Nozzle:
         VoluteGenerationError
             If a volute cannot be grown on the geometry as specified.
 
-        """
+        '''
 
         state = solveRegenVolutes(self.regenVoluteState())
 
@@ -1529,7 +1397,7 @@ class Nozzle:
 
     def regenChannelState(self):
 
-        """
+        '''
 
         The contour, coolant and channel definition the jacket build reads off this object.
 
@@ -1543,7 +1411,7 @@ class Nozzle:
         RegenChannelState
             Inputs seeded, outputs left for the build to fill.
 
-        """
+        '''
 
         state = RegenChannelState()
         for name in RegenChannelState.__dataclass_fields__:
@@ -1553,7 +1421,7 @@ class Nozzle:
 
     def channelSizingState(self):
 
-        """
+        '''
 
         The engine, coolant and regen section the sizing solve reads off this object.
 
@@ -1567,7 +1435,7 @@ class Nozzle:
         ChannelSizingState
             Inputs seeded, outputs left for the solve to fill.
 
-        """
+        '''
 
         state = ChannelSizingState()
         for name in ChannelSizingState.__dataclass_fields__:
@@ -1577,17 +1445,17 @@ class Nozzle:
 
     def channelGeometryInputs(self):
 
-        """
+        '''
 
         The channel definition the cross-section builder reads off this object.
 
         Returns:
         --------
         ChannelGeometryInputs
-            Resolution, channel family, wall thicknesses, flute definition and the two arrays the
-            surrounding run fills in: the nozzle wall point cloud and the unsupported stations.
+            Resolution, channel family, wall thicknesses, flute definition and the nozzle wall
+            point cloud the surrounding run fills in.
 
-        """
+        '''
 
         return ChannelGeometryInputs(
             numCrossSections     = self.numCrossSections,
@@ -1602,13 +1470,11 @@ class Nozzle:
             interfaceLength      = self.interfaceLength,
             numInletInterfaceCS  = self.numInletInterfaceCS,
             numReturnInterfaceCS = self.numReturnInterfaceCS,
-            printabilityCheck    = self.printabilityCheck,
-            nonPrintableIndices  = self.nonPrintableIndices,
             allNozzlePoints      = self.allNozzlePoints)
 
     def regenThermalContext(self):
 
-        """
+        '''
 
         The run-level settings the thermal model reads off this object.
 
@@ -1617,20 +1483,18 @@ class Nozzle:
         RegenThermalContext
             Wall alloy, output location and figure flags. Nothing that changes a computed number.
 
-        """
+        '''
 
-        return RegenThermalContext(material   = self.material,
-                                   dataFolder = self.dataFolder,
-                                   plotsAdv   = self.plotsAdv,
-                                   plotsDocs  = self.plotsDocs,
-                                   export     = self.export,
-                                   debugMode  = self.debugMode)
+        return RegenThermalContext(material     = self.material,
+                                   dataFolder   = self.dataFolder,
+                                   plotsEnabled = self.plotsEnabled,
+                                   export       = self.export)
 
     def regenHeatTransferModel(self, inputsDict: dict, constantColdWallTemperature: float = None,
                                returnDict: bool = False, plots: bool = True,
                                titleFlare: str = '', xReference = [], rReference = []):
 
-        """
+        '''
 
         Solve the coolant and wall thermal state along the jacket.
 
@@ -1649,7 +1513,7 @@ class Nozzle:
         returnDict : bool
             Return the per-station results rather than only drawing them.
         plots : bool
-            Draw the interactive view, subject to plotsAdv.
+            Draw the interactive view, subject to plotsEnabled.
         titleFlare : str
             Appended to figure titles.
         xReference, rReference : array_like
@@ -1661,7 +1525,7 @@ class Nozzle:
             Fluted, circular and data-map results, each as an outputs dictionary and a plotting
             dictionary. A family that was not solved returns empty dictionaries.
 
-        """
+        '''
 
         return solveRegenHeatTransfer(self.regenThermalContext(), inputsDict,
                                       constantColdWallTemperature = constantColdWallTemperature,
@@ -1674,7 +1538,7 @@ class Nozzle:
                                     titleFlare: str = '',
                                     xReference = [], rReference = []):
 
-        """
+        '''
 
         Draw the thermal results, one panel per quantity, with as many channel families overlaid
         as were solved.
@@ -1697,7 +1561,7 @@ class Nozzle:
         xReference, rReference : array_like
             Wall contour drawn beneath the results for reference [m].
 
-        """
+        '''
 
         return drawRegenHeatTransfer(self.regenThermalContext(), coolant, nChannel,
                                      adiabatic = adiabatic, flutedResults = flutedResults,
@@ -1708,7 +1572,7 @@ class Nozzle:
 
     def exportData(self, filename: str = 'default'):
 
-        """
+        '''
 
         Write the contours, geometry, exhaust properties and pickled run to the output directory.
 
@@ -1720,13 +1584,13 @@ class Nozzle:
         filename : str
             Base name for the written files. 'default' takes the run's configured name.
 
-        """
+        '''
 
         return writeExportData(self, filename = filename)
 
     def pickleNozzle(self, filename: str):
 
-        """
+        '''
 
         Pickle this object so a later session can reopen the result without re-solving.
 
@@ -1735,7 +1599,7 @@ class Nozzle:
         filename : str
             Destination path. A missing .pkl extension is added.
 
-        """
+        '''
 
         return writePickledNozzle(self, filename)
 
@@ -1744,17 +1608,36 @@ class Nozzle:
     def generateNozzle(self, configPath: str = None):
 
         '''
-        
-        Wrapper around public methods that perform nozzle generation from contour to regen jacket to heat transfer.
-        
+
+        Run the whole pipeline, from a configuration to the exported result.
+
+        The stages run in the order each one's inputs become available: diverging contour,
+        converging section and chamber, regen truncation, cooling channels, volutes, the
+        radiation-cooled extension, the correlated plume, then the figures and the export. Every
+        stage after the contour is gated by its own configuration flag, so a run does as much as
+        the configuration asks for and no more.
+
+        Parameters:
+        -----------
+        configPath : str
+            Path to a .json configuration. Left unset, the shipped reference nozzle in
+            `assets/NOVANozzle.json` is read.
+
+        Raises:
+        -------
+        InvalidInputError
+            If the configuration cannot be read, or its design point cannot be closed.
+        NotImplementedError
+            If `divergingSectionType` names a contour family that is not built.
+
         '''
 
         import os
 
         if configPath is None:
-            # Point program to the local config file (relative to Nozzle.py location)
-            nozzleModuleDirectory = os.path.dirname(__file__)
-            configPath = nozzleModuleDirectory + '\\assets\\nozzleConfig.json'
+            # No configuration given runs the shipped reference nozzle, resolved relative to this
+            # module so it works from an installed package as well as from a checkout.
+            configPath = os.path.join(os.path.dirname(__file__), 'assets', 'NOVANozzle.json')
 
         # Read inputs
         self.setInputs(inputsPath = configPath)
@@ -1765,9 +1648,9 @@ class Nozzle:
         # unrecognized value raises rather than quietly building a truncated ideal contour.
         match divergingSectionFamily(self.divergingSectionType):
             case 'conical':
-                self.conicalNozzle(conicalHalfAngle = self.conicalHalfAngle)
+                self.conicalNozzle()
             case 'truncatedIdeal':
-                self.pressureMatchTruncatedIdealContour(self.lengthFraction)
+                self.solveTruncatedIdealDesignPoint(self.lengthFraction)
             case 'thrustOptimizedParabola':
                 self.thrustOptimizedParabolicContour(self.lengthFraction)
             case 'thrustOptimizedContour':
@@ -1820,8 +1703,8 @@ class Nozzle:
 
             self.exportData()
 
-            # Interactive plotly companions for the figures Matplotlib just wrote as PNGs.
-            # Silently skipped when plotly is not installed.
+            # Interactive plotly companions for the figures Matplotlib just wrote as PNGs, plus
+            # the 3D assembly views that have no static twin.
             exportInteractiveFigures(self, self.dataFolder)
 
             # Inside the outputs directory, named for the run. Passing the directory itself put the

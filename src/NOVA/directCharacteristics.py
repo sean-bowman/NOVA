@@ -6,18 +6,18 @@
 Marching a characteristics net against a wall that was given rather than solved for.
 
 A truncated ideal contour solves the inverse problem. Its downstream boundary is prescribed, a
-uniform axial exit line, and the wall falls out of the mesh as the streamline that reaches it. The
-wall is an output.
+uniform axial exit line, and the wall falls out of the mesh as the streamline that reaches it.
+The wall is an output.
 
-A thrust-optimized parabola and a thrust-optimized contour invert that. Their wall is drawn first,
-from two angles in one case and by an optimizer in the other, and the flow has to be solved on it.
-That is the forward problem, and it is a different march: the boundary that is known has swapped
-ends, so the direction the net is built in swaps with it. The truncated ideal march steps inward
-from a known exit line toward an unknown wall; this one steps outward from a known wall toward the
-axis.
+A thrust-optimized parabola and a thrust-optimized contour invert that. Their wall is drawn
+first, from two angles in one case and by an optimizer in the other, and the flow has to be
+solved on it. That is the forward problem, a different march: the boundary that is known has
+swapped ends, so the direction the net is built in swaps with it. The truncated ideal march
+steps inward from a known exit line toward an unknown wall; this one steps outward from a known
+wall toward the axis.
 
-The unit processes are the same ones. `characteristics.axisymmetricMethodOfCharacteristics` for an
-interior point, `characteristics.axisPoint` on the centerline, and
+The unit processes are the same ones. `characteristics.axisymmetricMethodOfCharacteristics` for
+an interior point, `characteristics.axisPoint` on the centerline, and
 `contourKernel.wallIntersection` where a characteristic reaches the wall. Nothing here
 reimplements a compatibility relation, which is what keeps the two families' interiors
 comparable: a difference between a truncated ideal contour and a parabola solved here is a
@@ -29,39 +29,40 @@ The mesh
 Right-running characteristics are launched from the wall and marched to the axis, one per line.
 Index `i` runs along a line, zero at the wall and increasing toward the axis; index `j` selects
 the line and increases downstream. A point `[i, j]` is where line `j` crosses the left-running
-characteristic arriving from `[i + 1, j - 1]`, one step closer to the axis on the line before it.
+characteristic arriving from `[i + 1, j - 1]`, one step closer to the axis on the line before
+it.
 
-Line length is preserved as the march advances: the wall contributes a point at the top, the axis
-contributes one at the bottom, and the interior gives up one. So the net is a parallelogram in
-index space rather than the triangle the throat kernel builds.
+Line length is preserved as the march advances: the wall contributes a point at the top, the
+axis contributes one at the bottom, and the interior gives up one. So the net is a
+parallelogram in index space rather than the triangle the throat kernel builds.
 
 Unlike the throat kernel this needs no predictor and no corrector. The kernel integrates its
-left-running family backwards from the wall and has to guess a wall point before it can solve for
-one; here every step runs forward along both families from data that is already known.
+left-running family backwards from the wall and has to guess a wall point before it can solve
+for one; here every step runs forward along both families from data that is already known.
 
 Where it stops
 --------------
 
-Two ways. The wall runs out, which is the ordinary end of a nozzle, and the line budget runs out,
-which is a guard rather than a result.
+Two ways. The wall runs out, which is the ordinary end of a nozzle, and the line budget runs
+out, which is a guard rather than a result.
 
-A crossing is not one of them. Two adjacent right-running lines meeting is compression coalescing
-into an internal shock, which a truncated ideal contour cannot do by construction and both
-thrust-optimized families can, so the march looks for it. But it records it and carries on rather
-than stopping, and the flag is an indicator rather than a measurement.
+A crossing is not one of them. Two adjacent right-running lines meeting is compression
+coalescing into an internal shock, which a truncated ideal contour cannot do by construction
+and both thrust-optimized families can, so the march looks for it. But it records it and
+carries on rather than stopping, and the flag is an indicator rather than a measurement.
 
 What the flag is worth, stated plainly. It reliably separates the families it is meant to: a
 truncated ideal contour's own wall reports nothing, and every thrust-optimized parabola tried
-reports something, which is what the literature says of the two. What is NOT established is where
-it says the shock is, or how it behaves on a badly over-turned wall, where it has been seen to
-report nothing while flagging a gentler wall that ought to compress less. Until that is understood
-the location should be read as "somewhere around here" and the absence of a flag should not be
-read as the absence of a shock.
+reports something, which is what the literature says of the two. What is NOT established is
+where it says the shock is, or how it behaves on a badly over-turned wall, where it has been
+seen to report nothing while flagging a gentler wall that ought to compress less. Until that is
+understood the location should be read as "somewhere around here" and the absence of a flag
+should not be read as the absence of a shock.
 
 Detecting a crossing is also not capturing it. The net is isentropic through the fold, which is
-defensible only while the shock is weak. Nothing here applies a Rankine-Hugoniot jump or carries
-an entropy rise downstream, so a contour with a strong internal shock is solved as though it had
-none.
+defensible only while the shock is weak. Nothing here applies a Rankine-Hugoniot jump or
+carries an entropy rise downstream, so a contour with a strong internal shock is solved as
+though it had none.
 
 Lengths are non-dimensional against the throat radius. Angles are in radians.
 
@@ -72,17 +73,17 @@ The check that settles this module needs no external reference: marched over a t
 contour's own converged wall, it has to reproduce that contour's near-wall state and thrust
 coefficient. A truncated ideal wall is a streamline of a shock-free field, so the forward march
 over it is solving the same problem the inverse march already solved, and the inverse march is
-verified in `docs/NozzleContourValidation.md`. It is a manufactured solution generated by a solver
-that has already been checked.
+verified in `docs/NozzleContourValidation.md`. It is a manufactured solution generated by a
+solver that has already been checked.
 
-Beyond that: mass flux through every line must equal the choked throat flow, which is internal but
-exact, and the unit processes carry their own second-order verification in
+Beyond that: mass flux through every line must equal the choked throat flow, which is internal
+but exact, and the unit processes carry their own second-order verification in
 `tests/testCharacteristics.py`.
 
-Not validated: the flowfield point by point, for the same reason the truncated ideal contour's is
-not, which is that no source publishes a tabulated axisymmetric solution for a rocket bell. And
-anything downstream of a detected fold, where the isentropic assumption the net is built on has
-stopped holding.
+Not validated: the flowfield point by point, for the same reason the truncated ideal contour's
+is not, which is that no source publishes a tabulated axisymmetric solution for a rocket bell.
+And anything downstream of a detected fold, where the isentropic assumption the net is built on
+has stopped holding.
 
 Author: Sean Bowman
 
@@ -277,7 +278,7 @@ def marchPrescribedWall(gas: CharacteristicGas, wall, startingLine: tuple,
     #
     # The march places wall points where the characteristics happen to land, so the last one falls
     # short of the exit by whatever the local spacing is. On the worked case that is the final
-    # two and a half per cent of the wall, which is a delivered area ratio of 39.3 against a
+    # two and a half percent of the wall, which is a delivered area ratio of 39.3 against a
     # requested 40, and for a family whose selling point is delivering its design point exactly
     # that is not a rounding error, it is the claim.
     #
@@ -405,7 +406,7 @@ def _closeOnExit(gas: CharacteristicGas, wall, previousMach: np.ndarray,
     # case the point that fails sits at a radius of 0.06 and an axial station of 43, against an
     # exit at 15.9. That is outside the nozzle twice over, and the part of the exit plane near the
     # axis is covered by the lines that came before. Losing it costs nothing; refusing to close
-    # the wall over it costs the last two and a half per cent of the contour.
+    # the wall over it costs the last two and a half percent of the contour.
     #
     # The failure itself is the axisymmetric source term going singular as the radius goes to
     # zero, which is a known property of the formulation rather than of this line.
@@ -702,7 +703,7 @@ def shockFromWallEnvelope(gas: CharacteristicGas, wallX, wallR, wallAngle, wallM
     out in the mesh. Every wall point launches a right-running characteristic at `theta - mu`. In
     a diverging section past the inflection the wall angle is falling, so each characteristic
     leaves at a shallower angle than the one before it and the family converges. Where two
-    neighbours meet is where their compression has coalesced, and the earliest such meeting inside
+    neighbors meet is where their compression has coalesced, and the earliest such meeting inside
     the nozzle is the onset. This is the classical envelope construction and it needs nothing from
     the interior of the mesh at all.
 

@@ -1,3 +1,4 @@
+
 # -- NOVA GUI Embedded Matplotlib Helpers -- #
 
 '''
@@ -9,10 +10,10 @@ stack is touched.
 
 The renderers take figure descriptions from NOVA.figures, which also
 carries a plotly renderer for the same descriptions. Matplotlib draws the inline
-pane because it is always installed and draws into a Tk canvas; plotly draws the
-interactive companion opened in a browser, which it does far better and which Tk
-cannot host. Neither view can drift from the other, because both read one
-description.
+pane because it draws into a Tk canvas; plotly draws the interactive companion
+opened in a browser, which it does far better and which Tk cannot host. Both are
+required dependencies, and neither view can drift from the other, because both
+read one description.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -337,19 +338,6 @@ interactiveBuilders = {
     'plume':       lambda module, nozzle: module.plotlyPlume(module.plumeFigure(nozzle)),
 }
 
-def interactiveAvailable() -> bool:
-
-    '''
-
-    True when plotly is installed, so the interactive companion views can be produced.
-
-    '''
-
-    try:
-        return bool(backend.figuresModule().plotlyAvailable)
-    except Exception:
-        return False
-
 def openInteractive(nozzle, view: str, folder: str) -> str:
 
     '''
@@ -368,7 +356,7 @@ def openInteractive(nozzle, view: str, folder: str) -> str:
 
     Returns:
     --------
-    str : the path written, or None when plotly is unavailable or the view has no data
+    str : the path written, or None when the view has no data
 
     '''
 
@@ -376,7 +364,7 @@ def openInteractive(nozzle, view: str, folder: str) -> str:
     import webbrowser
 
     figuresModule = backend.figuresModule()
-    if not figuresModule.plotlyAvailable or view not in interactiveBuilders:
+    if view not in interactiveBuilders:
         return None
 
     figure = interactiveBuilders[view](figuresModule, nozzle)

@@ -35,7 +35,7 @@ from NOVA.filmCooling import (FILMCONDUCTIVITYEXPONENT, FILMPRANDTLEXPONENT,
                               referenceEntrainmentFraction, referenceTemperatureCorrection,
                               velocityRatioCorrection, velocityRatioFunction,
                               wallMixtureRatio)
-from NOVA.utils import InvalidInputError
+from NOVA.errors import InvalidInputError
 
 def publishedEffectiveness(transferGroup, slotHeight, gasVelocity, coolantVelocity,
                            diffusivity):

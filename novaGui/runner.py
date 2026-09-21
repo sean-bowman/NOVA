@@ -1,3 +1,4 @@
+
 # -- NOVA Pipeline Runner -- #
 
 '''
@@ -42,7 +43,7 @@ from .progress import StageTracker
 # Files NOVA writes into <name>Outputs/. Names are fixed except the contour and
 # geometry text/STL files, which are prefixed with the run's `filename`.
 figureFiles = {
-    'contour':      'contourSegmentsVizualization.png',
+    'contour':      'contourSegmentsVisualization.png',
     'mach':         'machContours.png',
     'pressure':     'pressureContours.png',
     'temperature':  'temperatureContours.png',
@@ -54,7 +55,7 @@ htmlFiles = {
     'jacket':       'regenJacketView.html',
     'volute':       'VoluteView.html',
     'heatTransfer': 'heatTransferModelOutput.html',
-    # Plotly companions written by figures.exportInteractiveFigures; absent without plotly.
+    # Plotly companions written by figures.exportInteractiveFigures.
     'revolved':     'revolvedContourView.html',
     'contour':      'contourInteractive.html',
     'nearWall':     'nearWallInteractive.html',
@@ -165,7 +166,7 @@ class PipelineRunner:
 
         return self._busy
 
-    def start(self, configDict: dict, outputBaseDir: str, generateAllFigures: bool = True) -> None:
+    def start(self, configDict: dict, outputBaseDir: str) -> None:
 
         '''
 
@@ -179,14 +180,14 @@ class PipelineRunner:
         self._busy = True
         self._thread = threading.Thread(
             target = self._worker,
-            args = (dict(configDict), outputBaseDir, generateAllFigures),
+            args = (dict(configDict), outputBaseDir),
             daemon = True,
         )
         self._thread.start()
 
     # -- Worker -- #
 
-    def _worker(self, configDict: dict, outputBaseDir: str, generateAllFigures: bool) -> None:
+    def _worker(self, configDict: dict, outputBaseDir: str) -> None:
 
         result = RunResult()
         started = time.perf_counter()
@@ -198,7 +199,7 @@ class PipelineRunner:
             self._queue.put(('status', ('running', 'loading NOVA')))
             nozzleModule, nozzleClass = self._loadNova(outputBaseDir)
 
-            forced = self._applyForcedFlags(configDict, generateAllFigures)
+            forced = self._applyForcedFlags(configDict)
             os.makedirs(outputBaseDir, exist_ok = True)
 
             runName = str(configDict.get('filename') or 'novaRun')
@@ -276,7 +277,7 @@ class PipelineRunner:
             nozzleModule._novaGuiPlotPatched = True
 
         # Silence progress bars in every NOVA module that binds tqdm by name.
-        for moduleName in ('NOVA.Nozzle', 'NOVA.utils', 'NOVA.Volute'):
+        for moduleName in ('NOVA.Nozzle', 'NOVA.Volute'):
             module = sys.modules.get(moduleName)
             if module is None or not hasattr(module, 'tqdm'):
                 continue
@@ -291,7 +292,7 @@ class PipelineRunner:
 
         return nozzleModule, nozzleClass
 
-    def _applyForcedFlags(self, configDict: dict, generateAllFigures: bool) -> list:
+    def _applyForcedFlags(self, configDict: dict) -> list:
 
         '''
 
@@ -312,11 +313,6 @@ class PipelineRunner:
 
         for key in configSchema.forcedFlags:
             force(key)
-
-        coolingOn = configDict.get('makeCoolingChannels') in (True, 'on')
-        if generateAllFigures and coolingOn:
-            for key in configSchema.forcedCoolingFlags:
-                force(key)
 
         return forced
 

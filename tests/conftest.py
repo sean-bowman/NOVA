@@ -9,7 +9,7 @@ things that are fixed at import time. Two of them are.
 
 **No figure may open a window.** NOVA draws a lot of them, and a suite that opens even a few
 leaves somebody clicking through browser tabs and Tk windows before the run can finish. Setting
-`NOVA_HEADLESS` here reaches `utils.headlessPlots`, which selects a non-interactive matplotlib
+`NOVA_HEADLESS` here reaches `figures.headlessPlots`, which selects a non-interactive matplotlib
 backend before pyplot is imported and turns off plotly's browser launch. Nothing is suppressed
 except the display: every figure is still built and every file still written, so a test that
 checks an export still has something to check.

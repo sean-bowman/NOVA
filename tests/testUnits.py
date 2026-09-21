@@ -128,6 +128,117 @@ def testStandardReferenceStatesAreDistinct():
     assert units.SCFM_STD_TEMPERATURE == pytest.approx(288.7055556, rel = 1e-7)
 
 # --------------------------------------------------------------------------------------------- #
+# -- The general conversion -- #
+# --------------------------------------------------------------------------------------------- #
+
+# Pairs whose answer is fixed by a definition rather than by a measurement, so the expected value
+# can be written down exactly. The tolerance is the width of the definition, not of the method.
+definedConversions = (
+    ('pressure, psi to Pa',       1.0,      'psi',   'Pa',    6894.757293168361),
+    ('pressure, bar to Pa',       1.0,      'bar',   'Pa',    100000.0),
+    ('pressure, MPa to Pa',       1.0,      'MPa',   'Pa',    1000000.0),
+    ('length, inch to metre',     1.0,      'in',    'm',     0.0254),
+    ('length, foot to metre',     1.0,      'ft',    'm',     0.3048),
+    ('force, lbf to newton',      1.0,      'lbf',   'N',     4.4482216152605),
+    ('mass flow, lbm/s to kg/s',  1.0,      'lbm/s', 'kg/s',  0.45359237),
+    ('mass flow, t/h to kg/s',    3.6,      't/h',   'kg/s',  1.0),
+    ('angle, degree to radian',   180.0,    'deg',   'rad',   np.pi),
+    ('temperature, degC to K',    0.0,      'degC',  'K',     273.15),
+    ('temperature, degF to K',    32.0,     'degF',  'K',     273.15),
+    ('temperature, degR to K',    491.67,   'degR',  'K',     273.15),
+)
+
+@pytest.mark.parametrize('name, value, currentlyIs, shouldBe, expected', definedConversions)
+def testConvertMatchesTheDefinition(name, value, currentlyIs, shouldBe, expected):
+
+    '''Each pair is fixed by a definition, so the answer is exact to within the float.'''
+
+    assert units.convert(value, currentlyIs, shouldBe) == pytest.approx(expected, rel = 1e-12), name
+
+@pytest.mark.parametrize('name, value, currentlyIs, shouldBe, expected', definedConversions)
+def testConvertInvertsItself(name, value, currentlyIs, shouldBe, expected):
+
+    '''Converting back returns the value that went in, affine pairs included.'''
+
+    there = units.convert(value, currentlyIs, shouldBe)
+    back  = units.convert(there, shouldBe, currentlyIs)
+
+    assert back == pytest.approx(value, abs = 1e-9), name
+
+def testConvertReturnsTheSameObjectForANoOp():
+
+    '''
+
+    A conversion between one unit and itself has to be exact rather than reconstructed. Sending it
+    through the registry would return an equal float built from a new computation, and would copy
+    an array rather than hand back the one that was passed.
+
+    '''
+
+    assert units.convert(7.0, 'Pa', 'Pa') == 7.0
+
+    array = np.array([1.0, 2.0, 3.0])
+    assert units.convert(array, 'm', 'm') is array
+
+def testConvertAcceptsNovaDisplaySpellings():
+
+    '''
+
+    The display names are NOVA's, not the registry's: 'lbf' is `force_pound`, 'lbm/s' is
+    `pound / s`, 't/h' is `metric_ton / hour`, 'in' is `inch` and 'deg' is `degree`. A conversion
+    that skipped the translation would raise on every one of them.
+
+    '''
+
+    for unit, dimension in (('lbf', 'force'), ('lbm/s', 'massFlow'), ('t/h', 'massFlow'),
+                            ('in', 'length'), ('ft', 'length'), ('deg', 'angle'),
+                            ('rad', 'angle')):
+        si = units.siUnit(dimension)
+        assert units.convert(units.convert(1.0, unit, si), si, unit) == pytest.approx(1.0,
+                                                                                      rel = 1e-12)
+
+def testConvertWorksBeyondTheDisplayDimensions():
+
+    '''
+
+    The reason for a unit-to-unit entry point rather than a dimension-driven one. Energy per mass,
+    dynamic viscosity and thermal conductivity all reach NOVA from CEA in US customary units, and
+    none of them has a DIMENSIONS entry to name.
+
+    '''
+
+    assert units.convert(1.0, 'Btu/lb', 'J/kg') == pytest.approx(units.J_PER_KG_PER_BTU_PER_LBM,
+                                                                 rel = 1e-6)
+    assert units.convert(1.0, 'millipoise', 'Pa*s') == pytest.approx(units.PA_S_PER_MILLIPOISE,
+                                                                     rel = 1e-12)
+    assert units.convert(1.0, 'lb/ft**3', 'kg/m**3') == pytest.approx(
+        units.KG_PER_M3_PER_LBM_PER_FT3, rel = 1e-12)
+
+def testConvertRefusesUnitsThatMeasureDifferentThings():
+
+    '''A pressure is not a length, and asking for one in the other is an error, not a number.'''
+
+    import pint
+
+    with pytest.raises(pint.DimensionalityError):
+        units.convert(1.0, 'Pa', 'm')
+
+    with pytest.raises(pint.UndefinedUnitError):
+        units.convert(1.0, 'Pa', 'notAUnit')
+
+def testConvertCarriesArraysThrough():
+
+    '''Conversion at the boundary is as likely to meet a column of numbers as a single one.'''
+
+    psia = np.array([0.0, 14.6959487755, 1000.0])
+    pascals = units.convert(psia, 'psi', 'Pa')
+
+    assert isinstance(pascals, np.ndarray)
+    assert pascals[0] == pytest.approx(0.0, abs = 1e-12)
+    assert pascals[1] == pytest.approx(101325.0, rel = 1e-9)
+    assert pascals[2] == pytest.approx(units.PA_PER_PSIA * 1000.0, rel = 1e-12)
+
+# --------------------------------------------------------------------------------------------- #
 # -- The display boundary -- #
 # --------------------------------------------------------------------------------------------- #
 
@@ -187,6 +298,23 @@ def testEverySchemaUnitResolvesToADimension():
     for unitString, dimension in units.UNIT_TO_DIMENSION.items():
         assert dimension in units.DIMENSIONS, unitString
         assert unitString in units.DIMENSIONS[dimension]['units']
+
+@pytest.mark.parametrize('dimension, unit', everyDisplayUnit)
+def testTheDisplayBoundaryAgreesWithTheGeneralConversion(dimension, unit):
+
+    '''
+
+    `toSI` and `fromSI` delegate to `convert`, so they cannot answer differently. This is the
+    guard on that delegation: if one of them grows an implementation of its own, the two drift
+    and this fails.
+
+    '''
+
+    si = units.siUnit(dimension)
+
+    for value in (0.0, 1.0, -3.5, 1234.5):
+        assert units.toSI(value, dimension, unit) == units.convert(value, unit, si)
+        assert units.fromSI(value, dimension, unit) == units.convert(value, si, unit)
 
 # --------------------------------------------------------------------------------------------- #
 # -- US Standard Atmosphere 1976 -- #

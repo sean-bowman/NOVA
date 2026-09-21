@@ -1,12 +1,13 @@
+
 # -- NOVA: Units and Physical Constants -- #
 
 '''
 
-One unit registry, and every conversion factor in NOVA derived from it.
+One unit registry, from which every conversion factor in NOVA is derived.
 
-Everything inside NOVA is mass-base SI: meters, kilograms, seconds, kelvin, pascals, and degrees
-for angles. Conversion belongs at the boundary, where a catalogue figure in psi or a MIL spec in
-Btu/lbm is read, and not in the solvers. This module is that boundary.
+Everything inside NOVA is mass-base SI: meters, kilograms, seconds, kelvin, pascals, and
+degrees for angles. Conversion belongs at the boundary, where a catalog figure in psi or a MIL
+spec in Btu/lbm is read, and not in the solvers. This module is that boundary.
 
 The constants below are not transcribed. Each is computed from `ureg` at import, so a factor
 cannot drift from its definition or be typed wrong, and the unit each one converts between is
@@ -17,13 +18,15 @@ places where a hand-entered value was ambiguous rather than wrong, both recorded
                         Quantities versus magnitudes
 ----------------------------------------------------------------------
 
-The solvers take and return plain floats, not `pint.Quantity` objects. A characteristic mesh runs
-to hundreds of thousands of point evaluations, and unit objects in that loop buy nothing: the
-arrays are all in one unit system by construction. What Pint is for here is the edge, where a
-number arrives carrying a unit that is not NOVA's.
+The solvers take and return plain floats, not `pint.Quantity` objects. A characteristic mesh
+runs to hundreds of thousands of point evaluations, and unit objects in that loop buy nothing:
+the arrays are all in one unit system by construction. What Pint is for here is the edge, where
+a number arrives carrying a unit that is not NOVA's.
 
-`toSI` and `fromSI` are that edge for the GUI, which stores every field in SI and displays it in
-whatever the field's dropdown is set to.
+`convert(value, currentlyIs, shouldBe)` is the general form of that edge: two unit names and a
+number. `toSI` and `fromSI` are the narrower form the GUI uses, which stores every field in SI
+and displays it in whatever the field's dropdown is set to. Both delegate to `convert`, so
+there is one conversion path rather than two that can disagree.
 
 ----------------------------------------------------------------------
                         Validation status
@@ -43,11 +46,11 @@ precision except three, and each disagreement is a definition rather than an err
 
 The US Standard Atmosphere model below was checked against the tabulated pressures of
 NASA-TM-X-74335 at 0, 5000, 11000, 20000, 32000, 47000 and 71000 m (101325, 54019.9, 22632.06,
-5474.889, 868.0187, 110.9063 and 3.956420 Pa). Worst error 2.2e-5 per cent, at 5000 m; the layer
+5474.889, 868.0187, 110.9063 and 3.956420 Pa). Worst error 2.2e-5 percent, at 5000 m; the layer
 bases are exact because they are the model's own table entries.
 
 `utils.py` carried a second implementation of the same two functions, and the package exported
-whichever import ran last. It was the less accurate of the two, drifting to 0.018 per cent by
+whichever import ran last. It was the less accurate of the two, drifting to 0.018 percent by
 71 km against this one's 2.2e-5, so this is the implementation that survives.
 
 Author: Sean Bowman
@@ -198,6 +201,61 @@ def _asRegistryUnit(unit: str) -> str:
 
     return _registryName.get(unit, unit)
 
+def convert(value, currentlyIs: str, shouldBe: str):
+
+    '''
+
+    Convert a value from one unit to another.
+
+    The general entry point. `toSI` and `fromSI` answer the narrower question of what a display
+    field is stored as; this one takes two units and nothing else, so it reaches pairs the seven
+    display dimensions do not cover.
+
+    Units are named as the rest of NOVA names them, and anything the registry already spells the
+    same way works too: 'psi', 'MPa', 'lbf', 'lbm/s', 'in', 'deg', 'degR', 'Btu/lb'.
+
+    Temperature is handled without a special case. Celsius and Fahrenheit are affine and Rankine
+    is a ratio of interval sizes; the registry knows which is which, so the caller does not have
+    to. Note that an affine conversion applies to an absolute temperature, not to a difference:
+    `convert(10, 'degC', 'K')` is 283.15, not 10.
+
+    Parameters:
+    -----------
+    value : float | numpy.ndarray
+        The quantity to convert.
+    currentlyIs : str
+        The unit `value` is in.
+    shouldBe : str
+        The unit to return it in.
+
+    Returns:
+    --------
+    float | numpy.ndarray
+        The same physical quantity, expressed in `shouldBe`.
+
+    Raises:
+    -------
+    pint.DimensionalityError
+        If the two units measure different things.
+    pint.UndefinedUnitError
+        If either name is not a unit.
+
+    Examples:
+    ---------
+    >>> convert(1000.0, 'psi', 'Pa')
+    6894757.293168361
+    >>> convert(0.0, 'degC', 'K')
+    273.15
+
+    '''
+
+    # The no-op has to stay exact. Round-tripping through the registry would return a float that
+    # is equal but reconstructed, and for an array it would copy.
+    if currentlyIs == shouldBe:
+        return value
+
+    return Quantity(value, _asRegistryUnit(currentlyIs)).to(_asRegistryUnit(shouldBe)).magnitude
+
 def dimensionForUnit(unitString: str):
 
     '''
@@ -253,11 +311,7 @@ def toSI(value: float, dimension: str, unit: str) -> float:
 
     '''
 
-    target = DIMENSIONS[dimension]['si']
-    if unit == target:
-        return value
-
-    return Quantity(value, _asRegistryUnit(unit)).to(_asRegistryUnit(target)).magnitude
+    return convert(value, unit, DIMENSIONS[dimension]['si'])
 
 def fromSI(value: float, dimension: str, unit: str) -> float:
 
@@ -267,11 +321,7 @@ def fromSI(value: float, dimension: str, unit: str) -> float:
 
     '''
 
-    source = DIMENSIONS[dimension]['si']
-    if unit == source:
-        return value
-
-    return Quantity(value, _asRegistryUnit(source)).to(_asRegistryUnit(unit)).magnitude
+    return convert(value, DIMENSIONS[dimension]['si'], unit)
 
 # --------------------------------------------------------------------------------------------- #
 # -- Standard Atmosphere -- #
@@ -372,6 +422,8 @@ __all__ = [
     # Reference states and flow coefficients
     'LEAK_STD_TEMPERATURE', 'LEAK_STD_PRESSURE', 'SCFM_STD_TEMPERATURE', 'SCFM_STD_PRESSURE',
     'KV_PER_CV', 'CV_PER_KV',
+    # Conversion
+    'convert',
     # Display boundary
     'DIMENSIONS', 'UNIT_TO_DIMENSION', 'dimensionForUnit', 'unitsFor', 'siUnit', 'toSI', 'fromSI',
     # Atmosphere

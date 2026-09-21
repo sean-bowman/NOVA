@@ -1,3 +1,4 @@
+
 # -- NOVA GUI Run Progress Tracking -- #
 
 '''
@@ -55,8 +56,7 @@ def _coolingStages() -> list:
         Stage(r'Solving for channel radii',               0.80, 0.88, 'solving channel radii'),
         Stage(r'Scanning Nozzle Wall',                    0.88, 0.90, 'scanning nozzle wall'),
         Stage(r'Scanning Cross Sections',                 0.90, 0.92, 'scanning cross sections'),
-        Stage(r'Generating Jacket Geometry',              0.92, 0.94, 'building jacket geometry'),
-        Stage(r'Running printability audit',              0.94, 0.95, 'printability audit'),
+        Stage(r'Generating Jacket Geometry',              0.92, 0.95, 'building jacket geometry'),
     ]
 
 def _voluteStages() -> list:

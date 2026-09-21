@@ -6,25 +6,27 @@
 The throat, the transonic starting line, and the intersections that seed a characteristics net.
 
 A characteristics march cannot start at the throat, because the flow there is sonic and the
-characteristics are degenerate. It starts on a line a short distance downstream where the flow is
-already supersonic and where its state is known from a transonic solution rather than from the
-march. Everything in this module exists to produce that line and the first few points off it.
+characteristics are degenerate. It starts on a line a short distance downstream where the flow
+is already supersonic and where its state is known from a transonic solution rather than from
+the march. Everything in this module exists to produce that line and the first few points off
+it.
 
-The transonic solution is Sauer's. It is the leading term of a series that Hall, and Kliegel and
-Quan, later extended; their first-order throat conditions are identical to his, and the solutions
-separate away from the throat plane, which is exactly where the starting line is drawn. NASA
-SP-8120's recommendation at this throat curvature ratio names a 29-term series, but that count
-belongs to a reference-streamline inverse method in a proprietary program, where terms buy a close
-fit to the requested wall rather than order of accuracy. It is not a target for the asymptotic
-series below. The monograph's second permitted route is Kliegel and Levine, which is this family,
-and whose series its authors found non-convergent at higher approximations. So the choice of
-Sauer alone is a real and measurable simplification rather than a matter of taste. See
+The transonic solution is Sauer's. It is the leading term of a series that Hall, and Kliegel
+and Quan, later extended; their first-order throat conditions are identical to his, and the
+solutions separate away from the throat plane, which is exactly where the starting line is
+drawn. NASA SP-8120's recommendation at this throat curvature ratio names a 29-term series, but
+that count belongs to a reference-streamline inverse method in a proprietary program, where
+terms buy a close fit to the requested wall rather than order of accuracy. It is not a target
+for the asymptotic series below. The monograph's second permitted route is Kliegel and Levine,
+which is this family, and whose series its authors found non-convergent at higher
+approximations. So the choice of Sauer alone is a real and measurable simplification rather
+than a matter of taste. See
 `docs/NozzleContourMethods.md` for the size of the omitted term.
 
-The throat wall is Rao's: a circular entrant arc of 1.5 throat radii meeting a circular exit arc
-of 0.382 throat radii at the throat plane. Those two numbers are the same ones the thrust-optimized
-parabolic construction uses, so a contour built here and a published bell start from the same
-throat.
+The throat wall is Rao's: a circular entrant arc of 1.5 throat radii meeting a circular exit
+arc of 0.382 throat radii at the throat plane. Those two numbers are the same ones the
+thrust-optimized parabolic construction uses, so a contour built here and a published bell
+start from the same throat.
 
 Lengths are non-dimensional against the throat radius. Angles are in radians.
 
@@ -71,7 +73,7 @@ def transonicThroatVelocity(gamma: float, curvature: float, model: str = 'sauer'
     so selecting nothing changes nothing.
 
     `secondOrder` adds the term Hall and Kliegel and Quan agree on. At the commonly used curvature
-    of 1.5 it is 29 per cent as large as the term it corrects, which is the number
+    of 1.5 it is 29 percent as large as the term it corrects, which is the number
     `docs/NozzleContourMethods.md` quotes as the size of the simplification.
 
     `smallRadius` is the same two terms rearranged into inverse powers of `R + 1` rather than of

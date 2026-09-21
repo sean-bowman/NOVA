@@ -39,7 +39,7 @@ from NOVA.ablative import AblationEnvironment, BPrimeTable, CharringMaterial, \
                           solveMaterialResponse
 from NOVA.materials import availableAblativeMaterials, ablativeResponseData, \
                            ablativeResponseProvenance
-from NOVA.utils import ConvergenceFailureError, InvalidInputError
+from NOVA.errors import ConvergenceFailureError, InvalidInputError
 
 # ------------------------------------------------------------------------------------------------
 # Reference data

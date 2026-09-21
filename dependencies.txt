@@ -23,8 +23,11 @@ ctREFPROP>=0.10.5
 # -- Plotting -- #
 # Matplotlib is required. It draws every figure NOVA saves as a PNG and every
 # plot embedded in the GUI, because it is the only backend that renders into a
-# Tk canvas.
+# Tk canvas. Plotly is required too. It draws the interactive HTML companion
+# beside every figure and the 3D channel-mesh, jacket and volute views, which
+# have no Matplotlib equivalent.
 matplotlib>=3.10
+plotly>=5.0
 
 # -- GUI -- #
 # tkinter ships with CPython. tkinterweb embeds the interactive plotly HTML
@@ -42,17 +45,10 @@ joblib>=1.5
 tqdm>=4.65
 
 # ---------------------------------------------------------------------------
-# Optional extras, each imported lazily by the one feature that needs it. A
-# JSON-driven run touches none of them.
+# Optional. Nothing NOVA does at runtime reads it.
 #
-#   plotly    -- interactive HTML companions for every result figure, and the
-#                3D channel-mesh / jacket / volute views. Without it those
-#                .html files are simply not written and the GUI's "Open
-#                interactive" buttons stay disabled; every PNG is unaffected.
 #   kaleido   -- static image export of plotly figures. Needs a Chrome install
 #                (`plotly_get_chrome`); only used to regenerate README figures.
-#   pywin32   -- Excel config input, utils.py readExcel()
-#   pypdf     -- PDF report stitching, utils.py stitchPDF()
 #
-# pip install plotly kaleido pywin32 pypdf
+# pip install kaleido
 # ---------------------------------------------------------------------------

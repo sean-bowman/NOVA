@@ -1,3 +1,4 @@
+
 # -- NOVA: Cooling Channel Sizing -- #
 
 '''
@@ -6,9 +7,9 @@ Sizing a cooling channel so the wall it protects runs at the temperature it is a
 
 The channel radius at a station is not a free choice. Too small and the coolant chokes, the
 pressure drop runs away and the wall overheats; too large and the channel will not fit between
-its neighbours, or will not print. What sets it is the hot wall temperature, and that is not
-known until the channel is drawn, the coolant marched through it and the heat balance solved.
-So the radius is solved for, station by station, marching from the coolant inlet.
+its neighbors, or will not print. What sets it is the hot wall temperature, which is not known
+until the channel is drawn, the coolant marched through it and the heat balance solved. So the
+radius is solved for, station by station, marching from the coolant inlet.
 
 At each station the loop proposes a radius, rebuilds the cross section, runs the thermal model,
 reads the hot wall temperature back, and steps again. It is a one-dimensional root find on a
@@ -16,26 +17,27 @@ monotone function: a wider channel runs cooler. It is written as an adaptive sec
 backtracking, overshoot damping and a step fraction that ramps with the distance from target.
 
 Three things bound the answer. The channel may not exceed the largest that fits between its
-neighbours at that station, it may not fall below the minimum the process can build, and where
+neighbors at that station, it may not fall below the minimum the process can build, and where
 it is bounded the wall temperature is whatever it comes out as.
 
 ----------------------------------------------------------------------
                             Validation status
 ----------------------------------------------------------------------
 
-**Not validated, and there is nothing available to validate it against.** The result is a
+**Not validated, for want of anything to validate it against.** The result is a
 converged fixed point of a geometry model and a thermal model, and no published case states a
 channel radius distribution alongside the conditions that produced it. What can be said is
 internal: the loop converges to the requested wall temperature within its stated tolerance where
 the bounds allow, and reports the bound it hit where they do not.
 
-The thermal model it converges against carries its own disclosures, which this inherits in full.
-In particular the coolant-side correlation is unvalidated, so a channel sized against it is sized
-against an unvalidated number, however tightly the loop converges.
+The thermal model it converges against carries its own disclosures, which this inherits in
+full. In particular the coolant-side correlation is unvalidated, so a channel sized against it
+is sized against an unvalidated number, however tightly the loop converges.
 
-The convergence is a hand-rolled search rather than a bracketed method. It has a fixed iteration
-ceiling and a tolerance of one part in ten thousand of the target wall temperature, and where it
-exhausts its iterations it says so rather than returning the last iterate silently.
+The convergence is a hand-rolled search rather than a bracketed method. It has a fixed
+iteration ceiling and a tolerance of one part in ten thousand of the target wall temperature,
+and where it exhausts its iterations it says so rather than returning the last iterate
+silently.
 
 All units are mass base SI:
     - Length      [m]
@@ -54,12 +56,12 @@ import numpy as np
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-from .utils import (DCM, parallelOffset, ConvergenceFailureError, createErrorContext,
-                    InvalidInputError)
+from .geometryTools import DCM, parallelOffset
+from .errors import ConvergenceFailureError, createErrorContext, InvalidInputError
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
-from .regenThermal import (regenHeatTransferModel as solveRegenHeatTransfer,
-                           regenHeatTransferModelPlots as drawRegenHeatTransfer)
+from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
+from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
 # The quantities the thermal model returns per station and the sizing loop carries through to the
 # comparison figure. Held once because the per-station loop and the full-contour pass both fill
@@ -70,21 +72,13 @@ def drivingTemperatureArray(state):
 
     The gas temperature the heat flux is driven by, at every trimmed station.
 
-    Three things can supply it, in order of precedence: a film coolant, which lowers it
-    toward the coolant temperature over the length the film survives; the recovery
-    temperature, which is the adiabatic wall temperature and the right answer without a
-    film; and the static temperature, which is kept only to reproduce earlier results.
-
-    Convection into a wall is driven by the adiabatic wall temperature, which for a turbulent
-    boundary layer is the static temperature raised by the recovery factor times the dynamic rise.
-    Driving it with the static temperature instead understates the flux by the whole of that rise,
-    which is negligible in the chamber and approaches a factor of two by the end of a supersonic
-    jacket.
+    Two things can supply it, in order of precedence: a film coolant, which lowers it toward
+    the coolant temperature over the length the film survives, and the recovery temperature,
+    which is the adiabatic wall temperature convection into a wall is actually driven by.
 
     Parameters:
     -----------
     state : ChannelSizingState
-        Carries both arrays and the choice between them.
 
     Returns:
     --------
@@ -94,47 +88,18 @@ def drivingTemperatureArray(state):
     Raises:
     -------
     InvalidInputError
-        If the model is not one of the two, or if the recovery temperature was asked for and the
-        run did not produce one.
+        If the recovery temperature was needed and the run did not produce one.
 
     """
 
-    # Unset means the physical choice. The dataclass starts every field at None, so the
-    # default is resolved here rather than declared there.
-    model = state.drivingTemperatureModel or 'recovery'
-
     if state.regenSectionFilmDrivingTemperatureTrimmed is not None:
-
-        # A film was solved, and it was built on the recovery temperature. Asking for the
-        # static model as well describes nothing: the film's effectiveness is defined
-        # against the adiabatic wall temperature, so the two cannot both be the potential.
-        if model == 'static':
-            raise InvalidInputError(
-                message = 'Film cooling and the static driving temperature cannot be '
-                          'combined. Film effectiveness is defined against the adiabatic '
-                          'wall temperature, so a film built on it cannot then be driven '
-                          'by the static temperature instead.',
-                parameterName = 'drivingTemperatureModel',
-                value = model,
-                validRange = "'recovery', or switch the film off")
-
         return state.regenSectionFilmDrivingTemperatureTrimmed
-
-    if model == 'static':
-        return state.regenSectionNearWallTemperatureTrimmed
-
-    if model != 'recovery':
-        raise InvalidInputError(
-            message = 'Unknown driving temperature model.',
-            parameterName = 'drivingTemperatureModel',
-            value = model,
-            validRange = "'recovery' or 'static'")
 
     if state.regenSectionNearWallRecoveryTemperatureTrimmed is None:
         raise InvalidInputError(
-            message = 'The recovery temperature was asked for and the run did not produce one. '
-                      'It is built alongside the other near-wall properties, so a run that '
-                      'reached the jacket should carry it.',
+            message = 'The run did not produce a recovery temperature. It is built alongside '
+                      'the other near-wall properties, so a run that reached the jacket should '
+                      'carry it.',
             parameterName = 'regenSectionNearWallRecoveryTemperatureTrimmed',
             value = None,
             validRange = 'one value per trimmed station')
@@ -170,7 +135,7 @@ class ChannelSizingState:
     maxWallTemperature : float
         Hot wall temperature the loop converges to [K].
     hotWallThickness, infillThickness : float
-        Wall between coolant and exhaust, and material left between neighbours [m].
+        Wall between coolant and exhaust, and material left between neighbors [m].
     material : str
         Wall alloy, resolved by materials.wallMaterialCurves.
     coolant : str
@@ -204,20 +169,14 @@ class ChannelSizingState:
         wall temperature, and it is what the heat flux is actually driven by.
     regenSectionFilmDrivingTemperatureTrimmed : Any
         Driving temperature with a film coolant between the wall and the exhaust [K], or
-        None where no film was asked for. When present it supersedes both of the above,
-        because it was built from the recovery temperature and is what the wall now sees.
-    drivingTemperatureModel : str
-        'recovery' or 'static'. Which of the two above drives the solve. 'static' exists to
-        reproduce results recorded before the recovery temperature was carried through, and
-        it understates the flux by the whole recovery rise.
+        None where no film was asked for. When present it supersedes the recovery
+        temperature, because it was built from it and is what the wall now sees.
     regenSectionNearWallMachNumberTrimmed : Any
         Near-wall Mach number at each trimmed station [-].
     regenSectionNearWallPressureTrimmed : Any
         Near-wall exhaust pressure at each trimmed station [Pa].
     dcrData : dict
         Working store the loop fills as it goes.
-    debugMode : bool
-        True dumps the local state of a failed station.
 
     '''
 
@@ -251,11 +210,9 @@ class ChannelSizingState:
     regenSectionNearWallTemperatureTrimmed: Any   = None
     regenSectionNearWallRecoveryTemperatureTrimmed: Any = None
     regenSectionFilmDrivingTemperatureTrimmed: Any = None
-    drivingTemperatureModel:                Any   = None
     regenSectionNearWallMachNumberTrimmed:  Any   = None
     regenSectionNearWallPressureTrimmed:    Any   = None
     dcrData:                                dict  = field(default_factory = dict)
-    debugMode:                              bool  = False
 
     # -- What the solve produces -- #
     channelRadius:                          Any   = None   # [m], one per station
@@ -609,7 +566,7 @@ def solveChannelRadii(state, geometry, thermal):
           `heatTransferModel_oneStation()` for stepwise geometry and thermal calculations.
         - Updates `state.dcrData` with channel heat transfer inputs and centerline coordinates.
         - Sets `state.coolantExitPressure` and `state.coolantExitTemperature`.
-        - Generates diagnostic plots when `thermal.plotsAdv == 'on'`.
+        - Generates diagnostic plots when `thermal.plotsEnabled == 'on'`.
 
         ---
 
@@ -695,8 +652,8 @@ def solveChannelRadii(state, geometry, thermal):
 
             ### Raises
 
-            - `ConvergenceFailureError` - If minimum radius reached without convergence (debugMode=False).
-            - `ConvergenceFailureError` - If iteration limit exceeded without convergence (debugMode=False).
+            - `ConvergenceFailureError` - If minimum radius reached without convergence.
+            - `ConvergenceFailureError` - If iteration limit exceeded without convergence.
 
             ---
 
@@ -898,49 +855,42 @@ def solveChannelRadii(state, geometry, thermal):
 
             # If we exited due to iteration cap and radius is at minimum, terminate with fail state
             if iterationsUsed >= maxSolverIterations and currentRadius <= minChannelRadius:
-                if not state.debugMode:
-                    raise ConvergenceFailureError(
-                        message=f"Minimum channel radius reached at station {i} without achieving temperature convergence",
-                        context=createErrorContext(
-                            stationIndex=i,
-                            iterationCount=iterationsUsed,
-                            channelRadius=currentRadius,
-                            minChannelRadius=minChannelRadius,
-                            wallTemperature=hotWallTemperature,
-                            targetTemperature=maxWallTemperature[i],
-                            temperatureError=abs(hotWallTemperature - maxWallTemperature[i]),
-                            tempTolerance=tempTolerance
-                        ),
-                        iterations=iterationsUsed,
-                        tolerance=tempTolerance,
-                        residual=abs(hotWallTemperature - maxWallTemperature)
-                    )
-                print(f"\nWarning: Minimum channel radius reached at station {i}. Wall temp = {hotWallTemperature:.1f} K")
-                return 0
+                raise ConvergenceFailureError(
+                    message=f"Minimum channel radius reached at station {i} without achieving temperature convergence",
+                    context=createErrorContext(
+                        stationIndex=i,
+                        iterationCount=iterationsUsed,
+                        channelRadius=currentRadius,
+                        minChannelRadius=minChannelRadius,
+                        wallTemperature=hotWallTemperature,
+                        targetTemperature=maxWallTemperature[i],
+                        temperatureError=abs(hotWallTemperature - maxWallTemperature[i]),
+                        tempTolerance=tempTolerance
+                    ),
+                    iterations=iterationsUsed,
+                    tolerance=tempTolerance,
+                    residual=abs(hotWallTemperature - maxWallTemperature)
+                )
 
             # If we exited due to iteration cap without convergence, terminate with fail state
             if abs(hotWallTemperature - maxWallTemperature) > tempTolerance and iterationsUsed >= maxSolverIterations and not minMaxed:
-                if not state.debugMode:
-                    raise ConvergenceFailureError(
-                        message=f"Temperature convergence failed at station {i} after {maxSolverIterations} iterations",
-                        context=createErrorContext(
-                            stationIndex=i,
-                            iterationCount=iterationsUsed,
-                            channelRadius=currentRadius,
-                            wallTemperature=hotWallTemperature,
-                            targetTemperature=maxWallTemperature,
-                            temperatureError=abs(hotWallTemperature - maxWallTemperature),
-                            tempTolerance=tempTolerance,
-                            coolantPressure=heatTransferDict_i['coolantInitialPressure'],
-                            coolantTemperature=heatTransferDict_i['coolantInitialTemperature']
-                        ),
-                        iterations=iterationsUsed,
-                        tolerance=tempTolerance,
-                        residual=abs(hotWallTemperature - maxWallTemperature)
-                    )
-                print(f"\nWarning: station {i} did not converge within {maxSolverIterations} iterations."
-                      f"\nFinal wall temp at station {i} = {hotWallTemperature:.2f} K")
-                return 0
+                raise ConvergenceFailureError(
+                    message=f"Temperature convergence failed at station {i} after {maxSolverIterations} iterations",
+                    context=createErrorContext(
+                        stationIndex=i,
+                        iterationCount=iterationsUsed,
+                        channelRadius=currentRadius,
+                        wallTemperature=hotWallTemperature,
+                        targetTemperature=maxWallTemperature,
+                        temperatureError=abs(hotWallTemperature - maxWallTemperature),
+                        tempTolerance=tempTolerance,
+                        coolantPressure=heatTransferDict_i['coolantInitialPressure'],
+                        coolantTemperature=heatTransferDict_i['coolantInitialTemperature']
+                    ),
+                    iterations=iterationsUsed,
+                    tolerance=tempTolerance,
+                    residual=abs(hotWallTemperature - maxWallTemperature)
+                )
 
             # Accept new coolant temperature and pressure as next station initial conditions
             heatTransferDict_i['coolantInitialTemperature'] = heatTransferDict_i['newCoolantTemperature']

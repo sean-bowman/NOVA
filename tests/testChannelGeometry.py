@@ -58,7 +58,7 @@ def nozzleWallCloud(numStations, wallRadius = 0.058, length = 0.3, numSlices = 2
 
 def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60):
 
-    '''A circular-channel definition with printability and interfaces off.'''
+    '''A circular-channel definition with interfaces off.'''
 
     return ChannelGeometryInputs(
         numCrossSections     = numCrossSections,
@@ -70,8 +70,6 @@ def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60
         interfaceLength      = 0.0,
         numInletInterfaceCS  = 0,
         numReturnInterfaceCS = 0,
-        printabilityCheck    = 'off',
-        nonPrintableIndices  = [],
         allNozzlePoints      = nozzleWallCloud(numCrossSections))
 
 def discretisedCircleArea(radius, numCSPointsChannel):

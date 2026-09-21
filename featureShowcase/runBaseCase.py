@@ -7,13 +7,12 @@ here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 from NOVA import Nozzle
 
-config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'loxLh2Example.json')))
+config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json')))
 config.update({
     'Lstar': 1.0,                    # exercises combustion chamber generation
     'material': 'GRCop-42',          # exercises the material-indifferent wall curves
     'plumeAmbientPressure': 101325.0,
-    'plotsBasic': True,
-    'plotsAdv': False,
+    'plotsEnabled': True,
     'export': True,
     'filename': 'showcaseBase',
 })
@@ -28,6 +27,5 @@ with open(os.path.join(here, 'showcaseBase.pkl'), 'wb') as handle:
     pickle.dump(nozzle, handle)
 print('BASE RUN COMPLETE')
 print('chamberDiameter      ', getattr(nozzle, 'chamberDiameter', None))
-print('chamberInterfaceAngle', getattr(nozzle, 'chamberInterfaceAngle', None))
 print('material             ', getattr(nozzle, 'material', None))
 print('plume                ', type(getattr(nozzle, 'nozzlePlumeStructure', None)).__name__)

@@ -21,7 +21,7 @@ subsonic solution.
 import numpy as np
 import pytest
 
-from NOVA.utils import arcSpline
+from NOVA.geometryTools import arcSpline
 
 # --------------------------------------------------------------------------------------------- #
 # -- The resampling itself -- #

@@ -79,33 +79,6 @@ def testConductivityAgainstReference(material, temperature, expected, tolerance)
         f'expected {expected:.1f} +/- {tolerance * 100:.0f}% (error {relativeError * 100:.1f}%)'
     )
 
-def testLegacyKeysResolve():
-
-    '''
-
-    The keys the earlier heat transfer model used still map to a curve.
-
-    '''
-
-    assert resolveWallMaterialName('cu') == 'GRCop-42'
-    assert resolveWallMaterialName('al') == 'AlSi10Mg'
-    assert resolveWallMaterialName('in') == 'Inconel 718'
-    assert wallMaterialCurves('cu')['fallback'] is False
-    assert wallMaterialCurves('in')['fallback'] is False
-
-def testLegacyCopperCurveUnchanged():
-
-    '''
-
-    The 'cu' path still returns exactly the NASA GRCop-42 data the model shipped with, so a
-    pre-existing copper run does not move.
-
-    '''
-
-    curves = wallMaterialCurves('cu')
-    expected = np.array([289, 301, 310, 313, 312, 308, 301, 293, 284, 274], dtype = float)
-    assert np.array_equal(curves['thermalConductivity'], expected)
-
 def testAliasAndCaseInsensitivity():
 
     for alias in ('GRCop-42', 'grcop42', 'GRCOP 42', 'copper'):
@@ -227,7 +200,7 @@ def testWhichMaterialsCarryMeasuredStrength():
     single product form. Adding one should fail this test and be accompanied by a citation and a
     reference check.
 
-    See src/NOVA/docs/materialsDatabaseRoadmap.md.
+    See docs/materialsDatabaseRoadmap.md.
 
     '''
 

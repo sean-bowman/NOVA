@@ -4,7 +4,7 @@ A record of where the cooling work stands, written to be picked up cold. It cove
 
 The work extended NOVA past the regenerative jacket: film cooling, radiative cooling, and a radiation-cooled nozzle extension. Along the way it turned up a defect in the jacket itself, a calibration choice in the contour solve, and two robustness holes in the gas dynamics. Those are recorded here alongside the features because they are the parts most likely to be rediscovered the hard way.
 
-The full technical account is `src/NOVA/docs/reports/coolingModelExtension_2026-09-11.md`. This file is the shorter view: what to pick up next, and what not to repeat.
+The full technical account is `docs/reports/coolingModelExtension_2026-09-11.md`. This file is the shorter view: what to pick up next, and what not to repeat.
 
 ## Where the code is
 
@@ -17,9 +17,9 @@ The full technical account is `src/NOVA/docs/reports/coolingModelExtension_2026-
 | `src/NOVA/materials.py` | Emissivity as a surface property with provenance, and `surfaceEmissivity` |
 | `examples/filmAndRadiativeCooling.py` | Both film closures on one engine, then a coated columbium extension swept along the same contour |
 
-The suite stands at 1141 tests. The regression harness carries seven cases: `contour`, `contourEffectiveGamma`, `regenCircle`, `regenCircleFilm`, `regenCircleEntrainment`, `regenCircleStatic`, `regenFluted`. Baselines are tracked in the repository so a change that moves a number shows up in the diff.
+The regression harness carries `contour`, `contourEffectiveGamma`, `contourParabola`, `contourToc`, `regenCircle`, `regenCircleFilm`, `regenCircleEntrainment`, `regenFluted`. Baselines are tracked in the repository so a change that moves a number shows up in the diff.
 
-Twenty-one configuration keys were added. The ones that change an answer rather than switching a feature on are `drivingTemperatureModel`, `filmCoolingModel` and `gammaModel`, and each keeps the earlier behavior reachable under a named value with a harness case pinning it.
+Twenty-one configuration keys were added. Of the ones that change an answer rather than switching a feature on, `filmCoolingModel` and `gammaModel` remain: each keeps the earlier behavior reachable under a named value with a harness case pinning it. `drivingTemperatureModel` did the same for the static driving temperature, but the static path was never the physical answer and was removed once the recovery temperature was carried through; there is no longer an earlier behavior to keep reachable.
 
 ## What is validated, and against what
 

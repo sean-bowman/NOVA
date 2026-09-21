@@ -73,13 +73,13 @@ def runCase(areaRatio, lengthFraction, mesh = 50, fuel = 'LH2', oxidizer = 'LOX'
     fails, so a sweep can report a hole rather than stopping at one.
     '''
     config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets',
-                                         'loxLh2Example.json')))
+                                         'NOVANozzle.json')))
     config.update({'Fuel': fuel, 'Oxidizer': oxidizer, 'OFRatio': mixtureRatio,
                    'chamberPressure': chamberPressure, 'thrust': thrust,
                    'targetExitPressure': None, 'expansionRatio': areaRatio,
                    'lengthFraction': lengthFraction, 'Lstar': None,
-                   'plumeAmbientPressure': None, 'plotsBasic': False, 'plotsAdv': False,
-                   'export': False, 'visualizeContour': False, 'filename': 'contourValidation'})
+                   'plumeAmbientPressure': None, 'plotsEnabled': False,
+                   'export': False, 'filename': 'contourValidation'})
     configPath = os.path.join(here, 'validationConfig.json')
     json.dump(config, open(configPath, 'w'), indent = 2)
 
@@ -88,7 +88,7 @@ def runCase(areaRatio, lengthFraction, mesh = 50, fuel = 'LH2', oxidizer = 'LOX'
     try:
         nozzle.setInputs(inputsPath = configPath)
         nozzle.numCharacteristicsRequested = mesh
-        nozzle.pressureMatchTruncatedIdealContour(float(lengthFraction))
+        nozzle.solveTruncatedIdealDesignPoint(float(lengthFraction))
     except Exception as error:                                      # noqa: BLE001
         print(f'    FAILED eps {areaRatio} bell {lengthFraction} mesh {mesh}: {error}')
         return None

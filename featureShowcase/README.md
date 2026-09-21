@@ -5,7 +5,7 @@ Representative plotted outputs for the NOVA nozzle designer, rendered from a sin
 ## The case
 
 LOX/LH2 upper stage, Pc = 1000 psia, MR = 5.5, expansion ratio 40, 100 kN thrust, truncated ideal
-contour at an 80 percent length fraction. Two settings differ from `assets/loxLh2Example.json`:
+contour at an 80 percent length fraction. Two settings differ from `assets/NOVANozzle.json`:
 `Lstar` is 1.0 m so the combustion chamber is generated, and `material` is GRCop-42.
 
 Reproduce with:
@@ -108,7 +108,7 @@ the pressure-matching finding.
 
 **Contour verification.** The worked case delivers the area ratio and the length fraction it was
 asked for, exactly. See
-[NozzleContourValidation.md](../src/NOVA/docs/NozzleContourValidation.md) for what that
+[NozzleContourValidation.md](../docs/NozzleContourValidation.md) for what that
 check does and does not establish, for the comparison against the Rao wall-angle chart, and for
 the defects the comparison found.
 
@@ -226,8 +226,7 @@ yield strength and CTE are temperature-resolved only for GRCop-42.
 ## Interactive figures
 
 The HTML views load plotly from a shared `plotly.min.js` beside them rather than embedding it in
-each file, which is why the seven views total about 2 MB rather than 30 MB. Plotly is optional. On
-a machine without it the PNG figures still render and the HTML export is skipped.
+each file, which is why the seven views total about 2 MB rather than 30 MB.
 
 ## Units
 

@@ -2,7 +2,7 @@
 Individual plume figures, one operating regime per file, drawn at equal aspect ratio.
 
 The boundary, shock cell spacing and Mach disk are correlations from
-src/NOVA/docs/references_plumeStructure_2026-09-04.md. The plume interior is not a
+docs/references_plumeStructure_2026-09-04.md. The plume interior is not a
 solved flowfield and is not shaded as one.
 '''
 import os

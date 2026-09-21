@@ -1,3 +1,4 @@
+
 # -- NOVA: Cooling Channel Cross Sections -- #
 
 '''
@@ -14,14 +15,13 @@ plane normal to it. A fluted profile is additionally rolled about the tangent as
 which is what makes the flutes helical. A circular profile is rotationally symmetric, so it is
 not rolled.
 
-Where a channel would otherwise print unsupported, the flutes are locally compressed toward a
-circle. That blend is what `conditionalGaussian` applies, and the stations it applies to come
-from the printability audit that runs before this module is called.
+A fluted channel is drawn circular for a short run at each volute interface and blends into the
+full flute amplitude between them. That blend is what `conditionalGaussian` applies.
 
-Two things are returned. The swept surface, as (x, y, z) arrays of shape
-(numCSPointsChannel, numCrossSections), is the geometry. The cross-sectional area, wetted
-surface area, turn angle and radius of curvature at each station are what the thermal model
-needs, and are returned as a dictionary keyed the way that model reads them.
+Two things are returned. The swept surface, as (x, y, z) arrays of shape (numCSPointsChannel,
+numCrossSections), is the geometry. The cross-sectional area, wetted surface area, turn angle
+and radius of curvature at each station are what the thermal model needs. They are returned as
+a dictionary keyed the way that model reads them.
 
 ----------------------------------------------------------------------
                         Geometry conventions
@@ -34,8 +34,8 @@ tool:
     - Y is orthogonal to X in the plane of the volute scroll
     - Z completes the set and is the nozzle axis
 
-Planar cross sections are therefore drawn in the YZ plane, which is what makes geometry exported
-from here line up with the conventions of a CAD package.
+Planar cross sections are therefore drawn in the YZ plane, which is what makes geometry
+exported from here line up with the conventions of a CAD package.
 
 All units are mass base SI:
     - Length [m]
@@ -47,7 +47,7 @@ Author: Sean Bowman
 '''
 
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -55,7 +55,7 @@ from joblib import Parallel, delayed, cpu_count
 from scipy.spatial import KDTree
 from tqdm import tqdm
 
-from .utils import DCM
+from .geometryTools import DCM
 
 @dataclass
 class ChannelGeometryInputs:
@@ -94,10 +94,6 @@ class ChannelGeometryInputs:
         Stations in the inlet interface.
     numReturnInterfaceCS : int
         Stations in the return interface.
-    printabilityCheck : str
-        'on' compresses flutes toward a circle where the channel would print unsupported.
-    nonPrintableIndices : Any
-        Stations the printability audit marked, which the compression blends across.
     allNozzlePoints : Any
         Nozzle wall point cloud the compression search queries for the nearest wall point.
 
@@ -115,8 +111,6 @@ class ChannelGeometryInputs:
     interfaceLength:      float = 0.0
     numInletInterfaceCS:  int   = 0
     numReturnInterfaceCS: int   = 0
-    printabilityCheck:    str   = 'off'
-    nonPrintableIndices:  Any   = field(default_factory = list)
     allNozzlePoints:      Any   = None
 
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
@@ -356,7 +350,8 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
         '''
 
-        Wrapper around the Gaussian curve cross section compression logic for individualized debugging.
+        The flute amplitude at one station: zero at the volute interfaces, blended up to full
+        amplitude between them.
 
         '''
 
@@ -366,122 +361,27 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         ampInterfaceBlendDown          = np.linspace(1, 0, numInterfaceBlendCrossSections + 1)
 
         i = iterator
-        currentCompression = 0
 
-        match geometry.printabilityCheck:
-
-            case 'on':
-
-                # -- Find non-printable indices -- #
-
-                # Figure out how many different places need to be un-fluted for printability
-                indexGap = 5
-                splitIndex = []
-                numCompressions = len([val for val in np.diff(geometry.nonPrintableIndices) if val > indexGap]) + 1
-                compressionGroups = []
-
-                # Split the non-printable indices into groups for each section of un-fluted channel
-                for i in range(len(geometry.nonPrintableIndices)-1):
-                    currentGap = geometry.nonPrintableIndices[i+1] - geometry.nonPrintableIndices[i]
-                    if currentGap > indexGap:
-                        # Store each split identifier
-                        splitIndex.append(i+1)
-
-                # Separate the split groups into elements of a list
-                # First section
-                compressionGroups.append(geometry.nonPrintableIndices[:splitIndex[0]])
-                # Middle sections
-                for i in range(numCompressions-2):
-                    compressionGroups.append(geometry.nonPrintableIndices[splitIndex[i]:splitIndex[i+1]])
-                # Final section
-                compressionGroups.append(geometry.nonPrintableIndices[splitIndex[-1]:])
-
-                # Check for case where printability compression goes to the boundary of a channel
-                if any(numInterfaceCrossSections + numInterfaceBlendCrossSections > index for index in geometry.nonPrintableIndices):
-                    numInterfaceCrossSections = compressionGroups[0][-1]
-                    # This compression is handled now at the channel boundary, remove a counter for the number of compressions
-                    numCompressions -= 1
-                    # Remove the reference to the first region that is already used
-                    compressionGroups = compressionGroups[1:]
-
-                # -- Apply circle blends to problem areas -- #
-
-                # Check for which (if any) compression regions for printability we are in
-                for j in range(numCompressions):
-
-                    if any(i >= index for index in compressionGroups[j]):
-
-                        currentCompression = j
-
-                # -- Handle inlet and outlet of channels -- #
-
-                # Circular outlet region
-                if i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections:
-
-                    amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-
-                # Blend from circular outlet region to beginning of fluted region
-                elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections) and (i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections):
-
-                    amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendUp[i - int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
-
-                # Blend from end of fluted region to beginning of circular outlet region
-                elif (i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS):
-
-                    amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections)]
-
-                # Circular inlet region
-                elif i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS:
-
-                    amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-
-                # -- Compress to circles where applicable for printability and blend between flutes and circles accordingly -- #
-
-                # In between circular inlet and oulet regions
-                elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections):
-
-                        # Un-fluted region identified by printability audit
-                        if (i > compressionGroups[currentCompression][0]) and (i < compressionGroups[currentCompression][-1]):
-
-                            amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-
-                        # Blending region associated with the inlet of current compression
-                        elif (i > compressionGroups[currentCompression][0] - numInterfaceBlendCrossSections) and (i <= compressionGroups[currentCompression][0]):
-
-                            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendDown[i - (compressionGroups[currentCompression][0] - numInterfaceBlendCrossSections)]
-
-                        # Blending region associated with the outlet of current compression
-                        elif (i >= compressionGroups[currentCompression][-1]) and (i < compressionGroups[currentCompression][-1] + numInterfaceBlendCrossSections):
-
-                            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendUp[i - (compressionGroups[currentCompression][-1] + numInterfaceBlendCrossSections)]
-
-                        # Otherwise, it's fluted
-                        else:
-
-                            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve
-
-            case 'off':
-
-                # Circlular outlet region
-                if i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections:
-                    amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-                    isCircle = 1
-                # Blend from end of circular outelt region to beginning of fluted region
-                elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections) and (i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections):
-                    amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendUp[i - int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
-                    isCircle = 1 - ampInterfaceBlendUp[i-int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
-                # From beginning to end of fluted region
-                elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections):
-                    amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve
-                    isCircle = 0
-                # Blend from end of fluted region to beginning of circular inlet region
-                elif (i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS):
-                    amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections)]
-                    isCircle = 1 - ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - numInterfaceBlendCrossSections - geometry.numInletInterfaceCS)]
-                # Cirlular inlet region
-                elif i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS:
-                        amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-                        isCircle = 1
+        # Circlular outlet region
+        if i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections:
+            amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
+            isCircle = 1
+        # Blend from end of circular outelt region to beginning of fluted region
+        elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections) and (i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections):
+            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendUp[i - int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
+            isCircle = 1 - ampInterfaceBlendUp[i-int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
+        # From beginning to end of fluted region
+        elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections):
+            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve
+            isCircle = 0
+        # Blend from end of fluted region to beginning of circular inlet region
+        elif (i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS):
+            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections)]
+            isCircle = 1 - ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - numInterfaceBlendCrossSections - geometry.numInletInterfaceCS)]
+        # Cirlular inlet region
+        elif i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS:
+                amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
+                isCircle = 1
 
         return amplitudeGausFluted, isCircle
 

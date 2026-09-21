@@ -1,3 +1,4 @@
+
 # -- NOVA GUI Application -- #
 
 '''
@@ -17,7 +18,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from . import theme
-from .widgets import ConsolePane, Tooltip
+from .widgets import ConsolePane
 from .runner import PipelineRunner
 from .tabs import ConfigTab, Geometry2DTab, Geometry3DTab, AnalysisTab, ExportTab
 
@@ -85,13 +86,6 @@ class NovaApp(tk.Tk):
         self._runButton = ttk.Button(runBar, text = '  Generate Nozzle  ', style = 'Accent.TButton',
                                      command = self._generate)
         self._runButton.pack(side = 'left')
-
-        self._generateAllFigures = tk.BooleanVar(value = True)
-        figureToggle = ttk.Checkbutton(runBar, text = 'Interactive 3D views',
-                                       variable = self._generateAllFigures)
-        figureToggle.pack(side = 'left', padx = 14)
-        Tooltip(figureToggle, 'Also write the plotly channel-mesh and jacket HTML views when '
-                              'cooling channels are enabled. Adds time to the run.')
 
         self._logButton = ttk.Button(runBar, text = 'Show log', command = self._toggleConsole, width = 10)
         self._logButton.pack(side = 'right')
@@ -187,7 +181,7 @@ class NovaApp(tk.Tk):
         self._setRunningState(True)
 
         try:
-            self.runner.start(config, self.exportTab.outputBaseDir, self._generateAllFigures.get())
+            self.runner.start(config, self.exportTab.outputBaseDir)
         except RuntimeError as exc:
             self._setRunningState(False)
             messagebox.showerror('Cannot start', str(exc))

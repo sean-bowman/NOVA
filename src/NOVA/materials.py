@@ -223,10 +223,10 @@ _WALLCURVEDATA = {
             'thermalConductivity': ('NASA GRCop-42/-84 typical average summary.', (25, 900)),
             'yieldStrength':       ('NASA GRCop-42 tensile report.', (25, 900)),
             # The first two entries, 1.5e-6/K at 25 degC and 9.3e-6/K at 100 degC, are not
-            # physical for a copper alloy: they imply 45 per cent less expansion by 100 degC
+            # physical for a copper alloy: they imply 45 percent less expansion by 100 degC
             # than a constant 17e-6/K would, and no copper alloy expands like an Invar. From
             # 300 degC upward the curve is sensible and agrees with a constant 17e-6/K to
-            # within 12 per cent. The low end reads like a fit artefact near the reference
+            # within 12 percent. The low end reads like a fit artefact near the reference
             # temperature, where a mean from 293 K is ill conditioned. Left as the source
             # gives it rather than corrected to a guess.
             'cte':                 ('NASA GRCop-42 thermal expansion report. The 25 and '
@@ -503,8 +503,6 @@ _WALLCURVEDATA = {
     },
 }
 
-# Free-text names, and the legacy 'cu' / 'al' / 'in' keys the earlier heat transfer model used,
-# folded to the canonical entries above.
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Non-metallic and refractory materials -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -526,7 +524,7 @@ _WALLCURVEDATA = {
 # tabulated tensile data. The equivalents here are either access controlled (the DTIC ablative
 # thermal property reports), paywalled (MIL-HDBK-17 for composites, CINDAS) or do not exist in
 # one place. What is freely available is vendor datasheets giving room-temperature values and
-# journal papers characterising one formulation.
+# journal papers characterizing one formulation.
 #
 # So these entries are SELECTION grade, not analysis grade. They answer "will this survive here,
 # what does it weigh, and roughly how does it conduct", which is the question these materials are
@@ -551,7 +549,7 @@ _MATERIALCLASSES = {
         'density':      1760.0,        # [kg/m^3]
         'properties': {
             # The datasheet reports with-grain values only. Isomolded ATJ is near isotropic but
-            # not isotropic: across-grain strength runs roughly 10 to 20 per cent lower.
+            # not isotropic: across-grain strength runs roughly 10 to 20 percent lower.
             'thermalConductivity': {'withGrain': 116.0},        # [W/m-K] at room temperature
             'cte':                 {'withGrain': 3.0e-6},       # [1/K], mean to 100 degC
             'tensileStrength':     {'withGrain': 26.0e6},       # [Pa]
@@ -579,7 +577,7 @@ _MATERIALCLASSES = {
             'elasticModulus':      ('GrafTech GT-5028 Rev 2, room temperature, with grain.',
                                     'producerDatasheet'),
             'maxUseTemperatureC':  ('Inert limit is the sublimation-limited working range for '
-                                    'bulk graphite. The oxidising limit is where measurable '
+                                    'bulk graphite. The oxidizing limit is where measurable '
                                     'oxidation begins in air, not where the part fails.',
                                     'literatureRepresentative'),
         },
@@ -618,19 +616,19 @@ _MATERIALCLASSES = {
             'maxUseTemperatureC':  ('PMC12610372 gives 1750 degC in air and above 2500 degC '
                                     'inert. The 1750 figure requires an oxidation-protection '
                                     'coating; bare 2D C/C oxidises measurably from about 400 '
-                                    'degC, which is the limit stored under oxidising.',
+                                    'degC, which is the limit stored under oxidizing.',
                                     'literatureReview'),
         },
         'notes': ('Through-thickness tensile and shear strength of a 2D layup are far below the '
                   'in-plane values, which is what governs a bonded or bolted joint. 3D '
-                  'reinforcement recovers 30 to 40 per cent of it. No through-thickness values '
+                  'reinforcement recovers 30 to 40 percent of it. No through-thickness values '
                   'are stored because none were found tabulated.'),
     },
 
     'C/SiC': {
         'class':        'composite',
         'form':         'carbon fiber, silicon carbide matrix, CVI or RS',
-        'application':  'Nozzle extensions where bare carbon-carbon would oxidise',
+        'application':  'Nozzle extensions where bare carbon-carbon would oxidize',
         'density':      2050.0,        # [kg/m^3], 2.0 to 2.1
         'properties': {
             'tensileStrength':     {'inPlane': 230.0e6},        # [Pa]
@@ -650,7 +648,7 @@ _MATERIALCLASSES = {
             'elasticModulus':      ('PMC12610372, reaction sintered, air, steady.',
                                     'literatureReview'),
             'fractureToughness':   ('PMC12610372, CVI+PIP, inert.', 'literatureReview'),
-            'maxUseTemperatureC':  ('PMC12610372 gives 1300 to 1500 degC in an oxidising '
+            'maxUseTemperatureC':  ('PMC12610372 gives 1300 to 1500 degC in an oxidizing '
                                     'atmosphere. Retained strength at 1500 to 1700 degC is about '
                                     '88 MPa, which is what sets the inert figure.',
                                     'literatureReview'),
@@ -662,7 +660,7 @@ _MATERIALCLASSES = {
     'SiC/SiC': {
         'class':        'composite',
         'form':         'silicon carbide fiber and matrix, 2D woven or 3D braided',
-        'application':  'Hot structure, turbine and nozzle components in oxidising service',
+        'application':  'Hot structure, turbine and nozzle components in oxidizing service',
         'density':      2700.0,        # [kg/m^3], 2.4 to 3.0
         'properties': {
             'tensileStrength':     {'inPlane': 287.0e6},        # [Pa]
@@ -755,7 +753,7 @@ _MATERIALCLASSES = {
 
     '7YSZ': {
         'class':        'ceramic',
-        'form':         '7 to 8 wt% yttria stabilised zirconia, APS or EB-PVD',
+        'form':         '7 to 8 wt% yttria stabilized zirconia, APS or EB-PVD',
         'application':  'Thermal barrier coating over a metallic wall',
         'density':      6000.0,        # [kg/m^3], bulk; a sprayed coating is 10 to 20 % porous
         'properties': {
@@ -892,12 +890,12 @@ _MATERIALCLASSES = {
             'tensileStrength': ('Same source and same transposition caveat as the yield strength.',
                                 'literatureReview'),
             'elongation':      ('NASA MSFC AIAA 2020 Table 3, as-built Z direction, 16.67 +/- 0.2 '
-                                'per cent; wrought specification minimum is 20 per cent.',
+                                'percent; wrought specification minimum is 20 percent.',
                                 'literatureReview'),
             'maxUseTemperatureC': ('C103 is used to roughly 1400 degC in vacuum or inert '
                                    'atmosphere. It oxidises catastrophically in air from about '
                                    '400 degC and is always used with a silicide coating, '
-                                   'typically R512E, in any oxidising service.',
+                                   'typically R512E, in any oxidizing service.',
                                    'literatureReview'),
             'emissivity':      ('Levine and Merutka, Performance of Coated Columbium and Tantalum '
                                 'Alloys in Plasma Arc Reentry Simulation Tests, NASA Lewis '
@@ -919,20 +917,20 @@ _MATERIALCLASSES = {
         'notes': ('The classic radiatively cooled extension material. Its temperature-dependent '
                   'strength is published only as a figure in the sources found, so no curve is '
                   'stored; strength at 1093 degC is roughly 172 MPa ultimate, and elongation '
-                  'still exceeds 50 per cent at 1371 degC.'),
+                  'still exceeds 50 percent at 1371 degC.'),
     },
 }
 
 _WALLMATERIALALIASES = {
-    'cu': 'GRCop-42', 'copper': 'GRCop-42', 'grcop42': 'GRCop-42', 'grcop-42': 'GRCop-42',
+    'copper': 'GRCop-42', 'grcop42': 'GRCop-42', 'grcop-42': 'GRCop-42',
     'grcop 42': 'GRCop-42', 'gr-cop42': 'GRCop-42', 'grcop': 'GRCop-42',
     'cucrzr': 'CuCrZr', 'c18150': 'CuCrZr', 'c18200': 'CuCrZr', 'cu-cr-zr': 'CuCrZr',
     'ofhc': 'OFHC Copper', 'ofhc copper': 'OFHC Copper', 'c10100': 'OFHC Copper',
     'c10200': 'OFHC Copper', 'pure copper': 'OFHC Copper', 'etp copper': 'OFHC Copper',
     'narloyz': 'NARloy-Z', 'narloy-z': 'NARloy-Z', 'narloy z': 'NARloy-Z',
-    'al': 'AlSi10Mg', 'aluminum': 'AlSi10Mg', 'aluminium': 'AlSi10Mg', 'alsi10mg': 'AlSi10Mg',
+    'aluminum': 'AlSi10Mg', 'aluminium': 'AlSi10Mg', 'alsi10mg': 'AlSi10Mg',
     '6061': 'Al 6061-T6', '6061-t6': 'Al 6061-T6', 'al6061': 'Al 6061-T6', 'al 6061': 'Al 6061-T6',
-    'in': 'Inconel 718', 'inconel': 'Inconel 718', 'inconel718': 'Inconel 718',
+    'inconel': 'Inconel 718', 'inconel718': 'Inconel 718',
     'in718': 'Inconel 718', 'alloy 718': 'Inconel 718', 'inconel 718': 'Inconel 718',
     'inconel625': 'Inconel 625', 'in625': 'Inconel 625', 'alloy 625': 'Inconel 625',
     'inconel 625': 'Inconel 625',
@@ -946,8 +944,8 @@ def resolveWallMaterialName(material) -> str:
 
     '''
 
-    Fold a free-text or legacy material key to a canonical wall-alloy name. Unknown input
-    returns None so the caller can decide whether to fall back or raise.
+    Fold a free-text material name to a canonical wall-alloy name. Unknown input returns None
+    so the caller can decide whether to fall back or raise.
 
     '''
 
@@ -981,7 +979,7 @@ def propertyProvenance(material, propertyName: str) -> tuple:
     Parameters:
     -----------
     material : str
-        Canonical name, legacy key or alias.
+        Canonical name or alias.
     propertyName : str
         One of 'thermalConductivity', 'yieldStrength', 'cte', 'elongation'.
 
@@ -1008,7 +1006,7 @@ def propertyIsMeasured(material, propertyName: str) -> bool:
     Parameters:
     -----------
     material : str
-        Canonical name, legacy key or alias.
+        Canonical name or alias.
     propertyName : str
         One of 'thermalConductivity', 'yieldStrength', 'cte', 'elongation'.
 
@@ -1034,7 +1032,7 @@ def wallMaterialCurves(material) -> dict:
     Parameters:
     -----------
     material : str
-        Canonical name, legacy key ('cu', 'al', 'in') or a recognized alias.
+        Canonical name or a recognized alias.
 
     Returns:
     --------
@@ -1279,7 +1277,7 @@ def surfaceEmissivity(material: str, condition: str = None):
     Total hemispherical emissivity of a material's surface, where one is carried.
 
     Emissivity is a property of a surface rather than of an alloy. Oxide state and roughness set
-    it, a polished and an oxidised sample of the same metal differ by an order of magnitude, and
+    it, a polished and an oxidized sample of the same metal differ by an order of magnitude, and
     it moves over a firing as the surface changes. So it is keyed on a surface condition, and the
     store carries a value only where one could be traced to a source describing that condition.
 

@@ -5,54 +5,56 @@
 
 Finding the bell wall that gives the most thrust for a given length and area ratio.
 
-Rao's 1958 result is a variational one: he wrote the thrust as an integral over a control surface,
-applied the calculus of variations, and derived conditions the optimum wall satisfies. That is the
-canonical method and it is not what this does. This is Allman and Hoffman's 1981 alternative,
-which fixes the initial expansion, gives the rest of the wall a small number of coefficients, and
-varies them directly against the thrust the flow solver returns. The two were shown to agree, and
-the direct route has a property the variational one does not: nothing in it has to be transcribed
-from equations that cannot be checked against anything.
+Rao's 1958 result is a variational one: he wrote the thrust as an integral over a control
+surface, applied the calculus of variations, and derived conditions the optimum wall satisfies.
+That is the canonical method and it is not what this does. This is Allman and Hoffman's 1981
+alternative, which fixes the initial expansion, gives the rest of the wall a small number of
+coefficients, and varies them directly against the thrust the flow solver returns. The two were
+shown to agree, and the direct route has a property the variational one does not: nothing in it
+has to be transcribed from equations that cannot be checked against anything.
 
 Why the answer means something
 ------------------------------
 
-An optimizer that returns a number is not evidence of an optimum. Three things here are what make
-the result readable.
+An optimizer that returns a number is not evidence of an optimum. Three things here are what
+make the result readable.
 
 **The search space contains the incumbent.** A quadratic Bezier is exactly a cubic with its
 interior control points placed two thirds of the way along the same tangents, so every Rao
-parabola is a member of the cubic family searched here. The optimizer starts at the parabola the
-chart gives, which means it can only improve on it, and "does the optimum beat the parabola" stops
-being a race between two search procedures and becomes a question about the two families.
+parabola is a member of the cubic family searched here. The optimizer starts at the parabola
+the chart gives, which means it can only improve on it, and "does the optimum beat the
+parabola" stops being a race between two search procedures and becomes a question about the two
+families.
 
-**The design constraints are absorbed rather than imposed.** The exit point is fixed by the area
-ratio and the length, so every candidate delivers the requested design point exactly, whatever its
-interior control points do. The optimizer never sees a constraint and never has to trade
-feasibility against objective.
+**The design constraints are absorbed rather than imposed.** The exit point is fixed by the
+area ratio and the length, so every candidate delivers the requested design point exactly,
+whatever its interior control points do. The optimizer never sees a constraint and never has to
+trade feasibility against objective.
 
 **The noise floor is measured before the margin is claimed.** A thrust coefficient read off a
 discrete mesh is only piecewise smooth: the exit-plane sampler's edge set changes as the plane
-crosses different cells, and the wall point count changes discretely with the inflection angle. So
-the search is derivative-free, and the perturbation check that follows it is reported against a
-measured noise floor rather than against zero. A margin smaller than the noise is reported as
-exactly that.
+crosses different cells, and the wall point count changes discretely with the inflection angle.
+So the search is derivative-free, and the perturbation check that follows it is reported
+against a measured noise floor rather than against zero. A margin smaller than the noise is
+reported as exactly that.
 
 What the objective is, and what it deliberately is not
 ------------------------------------------------------
 
-The raw thrust coefficient, among candidates whose exit plane closes mass to within a small band
-of the incumbent's. Both halves of that were arrived at by getting it wrong first.
+The raw thrust coefficient, among candidates whose exit plane closes mass to within a small
+band of the incumbent's. Both halves of that were arrived at by getting it wrong first.
 
-Dividing the coefficient by the mass closure is the right way to COMPARE two families, because the
-exit plane samples less mass than the throat passes and the momentum term scales with what it
-samples: over a threefold change in mesh a fixed contour's raw coefficient moves 0.89 per cent
+Dividing the coefficient by the mass closure is the right way to COMPARE two families, because
+the exit plane samples less mass than the throat passes and the momentum term scales with what
+it
+samples: over a threefold change in mesh a fixed contour's raw coefficient moves 0.89 percent
 while the ratio moves 0.066. It is the wrong thing to OPTIMIZE, because the optimizer can raise
-the ratio by driving the denominator down. Given that objective it did exactly that, walking to a
-wall whose closure had fallen from 96 to 87 per cent and claiming a 21.8 per cent gain over the
+the ratio by driving the denominator down. Given that objective it did exactly that, walking to
+a wall whose closure had fallen from 96 to 87 percent and claiming a 21.8 percent gain over the
 parabola, which is two orders of magnitude larger than anything the literature reports.
 
-So the band does the work the division was doing. Candidates are compared on raw coefficient, and
-a candidate whose plane closes materially worse than the incumbent's is refused rather than
+So the band does the work the division was doing. Candidates are compared on raw coefficient,
+and a candidate whose plane closes materially worse than the incumbent's is refused rather than
 scored, on the grounds that its mesh is not comparable and its coefficient therefore is not
 either.
 
@@ -61,12 +63,13 @@ The limit this cannot express
 
 **The march is isentropic, so nothing here charges a wall for the shock it would form.** A bell
 that turns hard enough generates compression that coalesces, and the stagnation pressure lost
-across that shock is precisely what stops a real thrust-optimized contour from turning harder. A
-solver that does not model it sees only the benefit of turning, so an unconstrained search over
-this family walks toward the hardest turn the box allows and reports a gain that does not exist.
+across that shock is precisely what stops a real thrust-optimized contour from turning harder.
+A solver that does not model it sees only the benefit of turning, so an unconstrained search
+over this family walks toward the hardest turn the box allows and reports a gain that does not
+exist.
 
-The inflection angle is therefore bounded to the range Rao's own chart covers, and that bound is
-a statement about where this model is trustworthy rather than about where good nozzles live. It
+The inflection angle is therefore bounded to the range Rao's own chart covers. That bound is a
+statement about where this model is trustworthy rather than about where good nozzles live. It
 should be relaxed when, and only when, the shock loss is in the solve. Until then a converged
 point sitting against that bound is a result about the bound.
 
@@ -75,17 +78,19 @@ Both coefficients and the closure are recorded on every candidate either way.
 Validation status
 -----------------
 
-**Not validated against an external optimum, and there is no obvious way to be.** No source in the
-reference set publishes wall coordinates for a Rao optimum contour, so there is nothing to compare
-a contour against point by point. What can be established is internal and is: that the converged
-point beats its neighbourhood by more than the measured noise, that it beats the parabola it
-started from, and that the optimum does not move when the mesh is refined. The first two are
-reported on every solve; the third needs the coarse and fine solves the driver runs anyway.
+**Not validated against an external optimum.** No source in the
+reference set publishes wall coordinates for a Rao optimum contour, so there is nothing to
+compare a contour against point by point. What can be established is internal and is: that the
+converged point beats its neighborhood by more than the measured noise, that it beats the
+parabola it started from, and that the optimum does not move when the mesh is refined. The
+first two are reported on every solve; the third needs the coarse and fine solves the driver
+runs anyway.
 
-The published expectation the result is read against is the ordering, not a number: SP-8120 puts a
-truncated ideal contour of the order of a quarter of a per cent behind the optimum, and reviews put
-the gain from length-constrained optimization at half to one per cent in thrust at equal length.
-A result outside that band is a reason to look at the solver rather than a discovery.
+The published expectation the result is read against is the ordering, not a number: SP-8120
+puts a truncated ideal contour of the order of a quarter of a percent behind the optimum, and
+reviews put the gain from length-constrained optimization at half to one percent in thrust at
+equal length. A result outside that band is a reason to look at the solver rather than a
+discovery.
 
 Author: Sean Bowman
 
@@ -105,8 +110,8 @@ from .wallGeometry import parabolaAsCubicTensions
 # while the march had no shock in it, because an isentropic solve charges a wall nothing for
 # turning and the search ran straight to whatever limit it was given. The wall envelope now finds
 # the coalescence and the exit plane is integrated against the stagnation pressure it costs, so
-# the penalty is in the objective rather than in the box: the debit is 0.06 per cent at an
-# inflection of 38 degrees and 3.6 per cent at 42. Whether that is enough to hold the search back
+# the penalty is in the objective rather than in the box: the debit is 0.06 percent at an
+# inflection of 38 degrees and 3.6 percent at 42. Whether that is enough to hold the search back
 # on its own is a question the search answers, not this comment.
 designVariableBounds = ((np.radians(15.0), np.radians(45.0)),      # inflection angle [rad]
                         (np.radians(0.0),  np.radians(20.0)),      # exit angle [rad]
@@ -220,7 +225,7 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
         A restart that improves the merit by less than this ends the loop.
     perturbationFraction : float
         Size of the perturbation, as a fraction of each variable's range, used to test whether the
-        converged point beats its neighbourhood.
+        converged point beats its neighborhood.
 
     Returns:
     --------
@@ -250,7 +255,7 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
     # coarse pass is about a quarter cheaper per evaluation, not an order.
     #
     # What it costs is the result. The merit moves by more between two meshes than the optimum
-    # beats its own neighbourhood by, so the landscape at a coarse mesh is not the landscape the
+    # beats its own neighborhood by, so the landscape at a coarse mesh is not the landscape the
     # answer is read off. A search at a mesh of 14 returned a wall that scored 1.707 at the
     # working mesh against the parabola's 1.778: it had converged, on a different problem.
     if numCharacteristicsCoarse is None:
@@ -266,10 +271,8 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
             targetExitPressure = nozzle.targetExitPressure,
             numContourPoints = nozzle.numContourPoints,
             requestedAreaRatio = float(nozzle.expansionRatio),
-            truncateOn = nozzle.truncateOn,
             numCharacteristicsRequested = mesh,
-            ambientSpecificImpulse = nozzle.ceaOutput.nozzlePerformance['ambientISP[s]'],
-            plotsDocs = 'off')
+            ambientSpecificImpulse = nozzle.ceaOutput.nozzlePerformance['ambientISP[s]'])
 
     evaluations = {'count': 0}
 
@@ -355,7 +358,7 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
     # objective with any structure to it those directions can become nearly parallel, at which
     # point it reports success while sitting somewhere a single coordinate step would improve on.
     # The first run of this driver did exactly that: it converged, declared success, and left a
-    # neighbour better by fifteen thousand times the measured noise floor. Restarting resets the
+    # neighbor better by fifteen thousand times the measured noise floor. Restarting resets the
     # direction set, and the loop ends when a whole restart cannot better the point it began at.
     start = np.array(incumbentSearch, dtype = float)
     bestMerit, restarts = -np.inf, 0
@@ -390,9 +393,9 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
     #
     # Rejection is graded rather than infinite, so an infeasible candidate still carries a finite
     # score, and a search on a tight budget can wander into that region and converge inside it.
-    # Left alone the driver then hands back a penalised wall as its answer: the study that
+    # Left alone the driver then hands back a penalized wall as its answer: the study that
     # prompted this guard had two design points reporting gains of minus thirty-seven and minus
-    # forty-three per cent, on walls whose exit planes closed four points worse than the parabola
+    # forty-three percent, on walls whose exit planes closed four points worse than the parabola
     # they were being compared with.
     #
     # Failing to improve on the incumbent is a legitimate outcome and belongs in the output as
@@ -409,7 +412,7 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
     # made below.
     # Perturbations walk the SEARCH space, not the design vector. Under `quadratic` the two are
     # different sizes, and nudging a tension directly would step off the subfamily the search was
-    # confined to, which would test a neighbourhood the optimizer was never allowed to reach.
+    # confined to, which would test a neighborhood the optimizer was never allowed to reach.
     spans = np.array([upper - lower for lower, upper in searchBounds])
 
     def admissible(searchPoint):
@@ -417,11 +420,11 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
         The merit of a candidate that was actually scored, or None if it was refused.
 
         Finiteness is not the test, and using it was a defect. A refused candidate comes back
-        with a large negative merit or a graded penalty, and both are finite, so a neighbourhood
-        in which every perturbation is refused looked like a neighbourhood in which every
+        with a large negative merit or a graded penalty, and both are finite, so a neighborhood
+        in which every perturbation is refused looked like a neighborhood in which every
         perturbation was worse. That is what a demonstrated optimum is supposed to mean, and it
-        made "no admissible neighbour exists" indistinguishable from "this point beats its
-        neighbours". A candidate counts only when its merit IS its thrust coefficient, which is
+        made "no admissible neighbor exists" indistinguishable from "this point beats its
+        neighbors". A candidate counts only when its merit IS its thrust coefficient, which is
         the case exactly when nothing was subtracted from it.
         '''
         value, thrust, _ = merit(toDesignVector(searchPoint), numCharacteristicsFine)
@@ -484,7 +487,7 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
         'objectiveNoiseFloor':    noiseFloor,
         'perturbationMargin':     perturbationMargin,
         'admissibleNeighbours':   admissibleNeighbours,
-        # Three things have to hold together. A neighbour has to have been scored at all, it has
+        # Three things have to hold together. A neighbor has to have been scored at all, it has
         # to be worse, and it has to be worse by more than the mesh moves the answer on its own.
         'isLocalOptimum':         bool(admissibleNeighbours > 0
                                        and np.isfinite(perturbationMargin)

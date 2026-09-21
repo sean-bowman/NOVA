@@ -3,26 +3,27 @@
 
 '''
 
-The exhaust plume: its outer structure from correlation, and its interior from characteristics.
+The exhaust plume: its outer structure from correlation, its interior from characteristics.
 
 Three layers sit here, in increasing order of how much they actually solve.
 
-The correlations place the jet boundary, the shock cell spacing and the Mach disk from published
-fits. They need only the exit state, they cover every operating point, and they solve nothing.
-Every one of them traces to `docs/references_plumeStructure_2026-09-04.md`.
+The correlations place the jet boundary, the shock cell spacing and the Mach disk from
+published fits. They need only the exit state, they cover every operating point, and they solve
+nothing. Every one of them traces to `docs/references_plumeStructure_2026-09-04.md`.
 
 The free-jet lattice, the `freeJet*` functions, is a transcription of the axisymmetric
 method-of-characteristics program in NASA TN D-2327. It solves a jet from a supplied exit Mach
 number and wall angle, independent of any nozzle.
 
-The plume march, `PlumeFlow` through `solvePlumeMarch`, continues NOVA's own nozzle characteristics
-solution past the lip. Inside the nozzle the outer boundary is a wall and the contour prescribes
-the flow angle; past the lip it is a free streamline at ambient pressure and the angle falls out.
-Nothing else changes, which is what makes the two halves one solution rather than a solution and a
-picture. Its interior point calls the same routine the contour solver calls, so the two cannot
-drift apart.
+The plume march, `PlumeFlow` through `solvePlumeMarch`, continues NOVA's own nozzle
+characteristics solution past the lip. Inside the nozzle the outer boundary is a wall and the
+contour prescribes the flow angle; past the lip it is a free streamline at ambient pressure and
+the angle falls out. Nothing else changes, which is what makes the two halves one solution
+rather than a solution and a picture. Its interior point calls the same routine the contour
+solver calls, so the two cannot drift apart.
 
-Where the march stands, what is validated and against what, and what is still open is recorded in
+Where the march stands, what is validated and against what, and what is still open is recorded
+in
 `experimental/plumeDevelopmentState.md`.
 
 Author: Sean Bowman
@@ -70,17 +71,17 @@ separationPressureRatio = 0.4
 # the compression waves reflected from the jet boundary have not yet coalesced, the flow really is
 # isentropic, and the net reproduces the first shock cell without any shock model at all. Measured
 # against Prandtl's cell length over exit Mach 1.5 to 5.0, the net runs long by between 3.9 and
-# 10.0 per cent everywhere inside these bounds, and the error is systematic rather than scattered.
+# 10.0 percent everywhere inside these bounds, and the error is systematic rather than scattered.
 #
 # Outside them it is not defensible and `plumeField` refuses rather than returning a field:
 #
 #   Pe/Pa below 1.05   a jet this close to design has no wave structure worth resolving
-#   Pe/Pa above 2.0    the first cell runs short, reaching -10 per cent by 3.0 and -46 by 5.0,
+#   Pe/Pa above 2.0    the first cell runs short, reaching -10 percent by 3.0 and -46 by 5.0,
 #                      because the internal shock that recompresses the core is not solved
 #   overexpanded       the lip turns through an oblique shock rather than an expansion fan, which
 #                      this formulation does not carry
 #   divergent exit     the solved cell length falls away steeply with exit wall angle, reaching
-#                      -25 per cent by 5 degrees and -34 by 11. Love et al. (NASA TR R-6) measured
+#                      -25 percent by 5 degrees and -34 by 11. Love et al. (NASA TR R-6) measured
 #                      that effect and report it as small over 0 to 20 degrees, so this is a
 #                      defect in the march rather than a region merely lacking a reference. The
 #                      net also stops surviving a divergent exit: the boundary falls from 1 139
@@ -99,7 +100,7 @@ separationPressureRatio = 0.4
 #                      opening much faster than the march advances. That is the remaining defect.
 #
 # The strongly underexpanded plume that `plumeStructure` correlates is deliberately outside this
-# envelope. Against NASA TN D-2327 the net reaches 47 per cent low on maximum jet radius there.
+# envelope. Against NASA TN D-2327 the net reaches 47 percent low on maximum jet radius there.
 plumeFieldMinPressureRatio = 1.05
 plumeFieldMaxPressureRatio = 2.0
 plumeFieldMinExitMach = 1.5
@@ -145,7 +146,7 @@ def shockCellLength(jetDiameter: float, jetMach: float,
 
     Shock cell spacing, Prandtl's formula: lambda = C * d_j * sqrt(Mj^2 - 1).
 
-    Both arguments must be the **fully expanded** jet values. This is a linearised,
+    Both arguments must be the **fully expanded** jet values. This is a linearized,
     small-perturbation result: it predicts the first cell of a weakly imperfectly expanded jet
     well and does not capture the downstream shortening caused by viscous dissipation, so an
     average spacing taken from it runs long against experiment.
@@ -512,7 +513,7 @@ def freeJetRefineLine(gas, line, fraction=0.10, limit=800):
 
     Characteristics absorbed at the jet boundary leave the net coarser than they found it, and
     nothing in a plain point-to-point march puts that resolution back. Left alone the lines decay
-    until each step spans a large fraction of the jet, at which point the linearised source term
+    until each step spans a large fraction of the jet, at which point the linearized source term
     in eq (C11) is no longer valid over a step and the solution degrades.
 
     A segment is split when it is longer than `fraction` of the local radius, which holds the
@@ -524,7 +525,7 @@ def freeJetRefineLine(gas, line, fraction=0.10, limit=800):
 
     The local radius is floored at a small part of the line's own radial extent. Taken literally
     it goes to zero on the axis, and the splitting then packs thousands of points into the last
-    fraction of a per cent of the jet radius. A line built against an A array like that spends
+    fraction of a percent of the jet radius. A line built against an A array like that spends
     every point it has crawling beside the axis, never reaches the boundary, and the march stops.
     The source terms do not need that resolution there: the term is l_A (x_C - x_A) / y_A, and the
     step in x collapses in proportion to y as the axis is approached, so the quotient stays
@@ -1009,7 +1010,7 @@ def freeJetInitialLine(gas, seed, numPoints = 200):
         return None
     # The column is normalized on its own outermost point rather than on the reported exit radius.
     # The mesh is curvilinear, so the column gathered within a tolerance of the exit station can
-    # reach a per cent or so beyond the lip, and a first point outside the jet boundary ends the
+    # reach a percent or so beyond the lip, and a first point outside the jet boundary ends the
     # march on the line it starts.
 
     radii, angles, machs = [], [], []
@@ -1508,7 +1509,7 @@ def plumeShockCrossing(flow: PlumeFlow, aPoints: list, index: int, reference: Pl
     search began from wins, which is the selection statements 740, 760, 770 and 780 make.
 
     The box the report draws round the candidates does not discriminate at high resolution. It
-    spans four neighbouring points of the previous line and one point of the current one, so its
+    spans four neighboring points of the previous line and one point of the current one, so its
     axial extent is set by the line spacing while its radial extent shrinks as the line is
     refined. Two almost parallel characteristics then appear to cross inside it even though they
     would not meet for many jet radii, and every such false merge deletes a wave the net needed.
@@ -1712,7 +1713,7 @@ def plumeCornerFan(flow: PlumeFlow, lip: PlumePoint, boundaryMach: float,
 
     The wall stops constraining the flow at the lip, so it turns through a Prandtl-Meyer expansion
     from the wall state to the ambient pressure. Every ray shares the lip position and they differ
-    only in how far through the turn they sit, which is what makes the fan centerd.
+    only in how far through the turn they sit, which is what makes the fan centered.
 
     '''
     lipNu = prandtlMeyerAngle(lip.mach, flow.gamma)
@@ -1737,15 +1738,15 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     `shocks` drives the coalescence of crossing same-family characteristics and defaults off. It
     behaves correctly in one respect, firing more often as the pressure ratio rises: 0.3 merges
     per line at Pe/Pa 1.5, 0.95 at 5 and 1.5 at 20. But the crossing test it rests on is
-    resolution dependent. Neighbouring characteristics on a refined line cross locally under any
+    resolution dependent. Neighboring characteristics on a refined line cross locally under any
     convergence at all, so the detector fires on weak compression that would not coalesce for many
     jet radii, and each false merge deletes a wave. On a parallel exit at Pe/Pa 1.5, where the
     reflected compressions have not coalesced and the pattern is genuinely isentropic, it cuts the
     march from 3 790 lines to 119. Detecting a true envelope needs a criterion that does not scale
     with mesh spacing, and until there is one this stays off by default.
 
-    `numRays` sets how finely the lip fan is discretised, and the right value is not settled. On a
-    uniform exit line held at fourteen degrees, mass drift falls from 7.2 per cent at forty rays to
+    `numRays` sets how finely the lip fan is discretized, and the right value is not settled. On a
+    uniform exit line held at fourteen degrees, mass drift falls from 7.2 percent at forty rays to
     1.2 at a hundred and twenty and barely moves again by three hundred and sixty. On the exit
     plane of an actual contoured nozzle it goes the other way: a hundred and twenty rays cut the
     march from three hundred and thirty-nine lines to thirty-nine. The default stays at forty
@@ -1755,7 +1756,7 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     Structure follows TN D-2327 p.37 in NOVA's sign convention, where r is positive above the
     center line. Each line is a first-family characteristic running from a start point outward
     until it reaches the free boundary. Point C at index i on line j takes its second-family
-    neighbour from index i of line j-1 and its first-family neighbour from index i-1 of line j.
+    neighbor from index i of line j-1 and its first-family neighbor from index i-1 of line j.
     Start points come from the exit plane, lip first.
 
     Returns a dict with the lines, the boundary streamline and why the march stopped.
@@ -1772,8 +1773,8 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     # An overexpanded lip turns the flow inward. Strictly that turn is an oblique shock, and this
     # takes it as an isentropic compression instead, which is the same fan machinery run with a
     # falling Mach number. The approximation is measured rather than assumed: at exit Mach 3 the
-    # isentropic turn matches the shock turn to 0.2 per cent down to Pe/Pa 0.6 and 0.8 per cent at
-    # 0.4, and the stagnation pressure the shock would cost is 1.3 and 7.4 per cent there. Below
+    # isentropic turn matches the shock turn to 0.2 percent down to Pe/Pa 0.6 and 0.8 percent at
+    # 0.4, and the stagnation pressure the shock would cost is 1.3 and 7.4 percent there. Below
     # about 0.4 the nozzle separates internally anyway, by the Summerfield criterion, and no
     # attached plume model applies. Both numbers are returned so a caller can judge.
     lipPressure = flow.staticPressure(lip.mach)
@@ -1934,7 +1935,7 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
             previous = _resamplePlumeLine(flow, previous, lineLimit)
 
     # Mass drift is the solver's report on itself: worst and final departure from the flux
-    # crossing the exit plane, in per cent, carrying no reference outside the solution.
+    # crossing the exit plane, in percent, carrying no reference outside the solution.
     # A short march may never hit a sampling interval, and a solve with no quality number is worse
     # than a slow one, so the last line that spans the jet is always measured.
     spanning = [one for one in lines if one and one[0].r <= 1e-9]
@@ -1970,7 +1971,7 @@ def advancePlumeFront(flow: PlumeFlow, front: list, boundaryMach: float) -> list
                              streamline leaving the old boundary point
 
     The pairs at either end are skipped because they are degenerate: the boundary point already
-    sits on the first-family characteristic of its inner neighbour, so crossing the two again
+    sits on the first-family characteristic of its inner neighbor, so crossing the two again
     returns it unchanged. That costs the front one point per step, which the refinement puts back.
 
     `front` runs from the axis outward, index 0 on the center line and the last point on the free
@@ -1982,7 +1983,7 @@ def advancePlumeFront(flow: PlumeFlow, front: list, boundaryMach: float) -> list
 
     # Both end pairs are degenerate and are handled by their own processes instead. The boundary
     # point was computed as the intersection of the first-family characteristic from its inner
-    # neighbour with the boundary streamline, so it already lies on that characteristic and
+    # neighbor with the boundary streamline, so it already lies on that characteristic and
     # crossing the two again returns the same point. The axis point is the mirror of that.
     axis = plumeAxisPoint(flow, front[1])
     if axis is None:
@@ -2016,12 +2017,12 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     Solve the plume by advancing the exit plane downstream as a front.
 
     The front has to be a line that is not itself a characteristic. That rules out seeding it from
-    the march, whose lines are first-family characteristics: neighbouring points on one are joined
-    by the very characteristic the advance would cross against its neighbour's, and the
+    the march, whose lines are first-family characteristics: neighboring points on one are joined
+    by the very characteristic the advance would cross against its neighbor's, and the
     intersection returns a point already there. The exit plane is the natural choice, being a
     station rather than a wave.
 
-    The lip corner is the price. A centerd fan turns the flow through a finite angle at a single
+    The lip corner is the price. A centered fan turns the flow through a finite angle at a single
     point, which a front cannot hold, so the turning is instead spread over the first few steps as
     the free boundary condition rotates the outermost point. That smears the expansion near the
     lip and washes out downstream.
@@ -2030,8 +2031,8 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     after about thirty steps having carried the boundary less than one lip radius, against the
     march's sixteen. The march remains the solver; this is kept because the reason the obvious
     approach fails is worth keeping. Seeding a front from the march's own lines cannot work: those
-    lines are first-family characteristics, so neighbouring points on one are joined by exactly the
-    characteristic the advance would cross against its neighbour's, and the intersection returns a
+    lines are first-family characteristics, so neighboring points on one are joined by exactly the
+    characteristic the advance would cross against its neighbor's, and the intersection returns a
     point that is already there. Any working front has to start from a station, and the remaining
     problem is holding it away from the characteristic directions as it turns downstream.
 
@@ -2521,7 +2522,7 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
     ambientPressure : float
         Back pressure the jet discharges into [Pa].
     numRays : int
-        Rays in the centerd fan at the lip. Raising it helps a uniform exit and hurts a
+        Rays in the centered fan at the lip. Raising it helps a uniform exit and hurts a
         contoured one, and why is not yet understood, so it is left where the real handover
         works.
     exitPoints : int
@@ -2647,11 +2648,11 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
     drift = abs(result.massDriftWorst)
     result.notes.append(
         f'Mass conservation: the flux through the last line differs from the exit plane by '
-        f'{result.massDriftWorst:+.3f} per cent. Every line spans the jet, so they must all '
+        f'{result.massDriftWorst:+.3f} percent. Every line spans the jet, so they must all '
         f'carry the same flow; this needs no reference outside the solution and is the measure '
         f'of how far the answer can be trusted.')
     # Grading rather than refusing. The bands come from what has been measured: a parallel exit
-    # near design holds a few hundredths of a per cent, and anything past a few per cent has
+    # near design holds a few hundredths of a percent, and anything past a few percent has
     # lost the flow it started with.
     if not np.isfinite(drift):
         result.trustworthy = False
@@ -2660,13 +2661,13 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
     elif drift > 5.0:
         result.trustworthy = False
         result.notes.append(
-            f'DO NOT TRUST: losing {drift:.1f} per cent of the mass flow means this field is '
+            f'DO NOT TRUST: losing {drift:.1f} percent of the mass flow means this field is '
             f'not a solution of the flow it started from. It is drawn only to show what the '
             f'march currently produces here.')
     elif drift > 1.0:
         result.trustworthy = False
         result.notes.append(
-            f'Marginal: {drift:.1f} per cent of the mass flow is unaccounted for. Treat the '
+            f'Marginal: {drift:.1f} percent of the mass flow is unaccounted for. Treat the '
             f'field as indicative and not as a result.')
     else:
         result.trustworthy = True
@@ -2680,7 +2681,7 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
         result.notes.append(
             f'Overexpanded: the lip turns inward through what is really an oblique shock, '
             f'taken here as an isentropic compression. The shock would cost '
-            f'{100.0 * (1.0 - net["lipStagnationRatio"]):.2f} per cent of stagnation pressure, '
+            f'{100.0 * (1.0 - net["lipStagnationRatio"]):.2f} percent of stagnation pressure, '
             f'which is the size of the approximation.')
 
     return result

@@ -13,22 +13,23 @@ the characteristics net has to be marched against it. Marching against a wall me
 same two questions at every step, thousands of times over a solve, so both have exact answers
 here rather than numerical ones.
 
-**Where does a straight characteristic meet the wall.** For every segment type below this is the
-root of a polynomial: linear for a line, quadratic for a circular arc and a quadratic Bezier,
-cubic for a cubic Bezier. `contourKernel.throatIntersection` spends an `fsolve` per wall point on
-the circular-arc case, which is the quadratic solved here in closed form.
+**Where does a straight characteristic meet the wall.** For every segment type below this is
+the root of a polynomial: linear for a line, quadratic for a circular arc and a quadratic
+Bezier, cubic for a cubic Bezier. `contourKernel.throatIntersection` spends an `fsolve` per
+wall point on the circular-arc case, which is the quadratic solved here in closed form.
 
-**What angle is the wall at that point.** The tangent of a parametric curve is its derivative, so
-this is exact too. Nothing is finite-differenced. That matters more than it sounds: the wall is
-where the compression waves that coalesce into a bell's internal shock are generated, so an error
-in the wall angle is an error in where the shock forms, not just in the wall.
+**What angle is the wall at that point.** The tangent of a parametric curve is its derivative,
+so this is exact too. Nothing is finite-differenced. That matters more than it sounds: the wall
+is where the compression waves that coalesce into a bell's internal shock are generated, so an
+error in the wall angle is an error in where the shock forms, not just in the wall.
 
 Sampled points with an interpolated slope were the obvious alternative and are the wrong tool.
-They put interpolation error exactly at the boundary that generates the waves, and `utils.arcSpline`
-in particular is a resampler whose arc-length inverse is itself numerical. `arcSpline` keeps its
-existing job, resampling a finished wall onto even spacing, and stays out of the march.
+They put interpolation error exactly at the boundary that generates the waves, and
+`utils.arcSpline` in particular is a resampler whose arc-length inverse is itself numerical.
+`arcSpline` keeps its existing job, resampling a finished wall onto even spacing, and stays out
+of the march.
 
-Segments are parameterised on t in [0, 1] and a wall reports position along itself as
+Segments are parameterized on t in [0, 1] and a wall reports position along itself as
 `segmentIndex + t`, which is monotone from throat to exit and is all the march needs to refuse a
 ray that lands on a segment it has already passed. It is a station, not an arc length; the true
 arc length is available separately and is not on the hot path.
@@ -39,15 +40,15 @@ axis, positive where the wall opens outward.
 Validation status
 -----------------
 
-Checked against closed-form geometry and against the construction it replaces. The Rao parabolic
-wall built here reproduces `contour.raoParabolicContour` point for point, which is covered by the
-existing tests of that construction. Ray intersections are checked against a brute-force scan of
-the same segment, and tangent angles against a central difference of the parametric point, both
-to tolerances far tighter than the mesh. The endpoints and end angles reproduce what was
-requested, by construction and by test.
+Checked against closed-form geometry and against the construction it replaces. The Rao
+parabolic wall built here reproduces `contour.raoParabolicContour` point for point, which is
+covered by the existing tests of that construction. Ray intersections are checked against a
+brute-force scan of the same segment, and tangent angles against a central difference of the
+parametric point, both to tolerances far tighter than the mesh. The endpoints and end angles
+reproduce what was requested, by construction and by test.
 
-Nothing here is a physical model, so there is nothing to validate against experiment. What can be
-wrong is the arithmetic, and that is what the tests above bound.
+Nothing here is a physical model, so there is nothing to validate against experiment. What can
+be wrong is the arithmetic. That is what the tests above bound.
 
 Author: Sean Bowman
 
@@ -59,7 +60,7 @@ class WallSegment:
 
     '''
 
-    One analytic piece of a prescribed wall, parameterised on t in [0, 1].
+    One analytic piece of a prescribed wall, parameterized on t in [0, 1].
 
     Subclasses supply `point`, `tangentAngle` and `_rayParameters`. Everything else is shared.
 
@@ -543,7 +544,7 @@ class PrescribedWall:
 
         Points are spread so that each segment carries the same chord error, not so that each
         carries the same length. Those are very different allocations here, and the difference is
-        not cosmetic: a throat arc is two per cent of a bell's length and turns through most of
+        not cosmetic: a throat arc is two percent of a bell's length and turns through most of
         its total angle, so splitting by length alone gives the arc about five points out of four
         hundred and a straight-line reading of the wall there is off by nearly a thousandth of a
         throat radius. Splitting by length gives the wrong answer in exactly the region the

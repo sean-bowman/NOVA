@@ -1,3 +1,4 @@
+
 # -- NOVA: Regenerative Cooling Volutes -- #
 
 '''
@@ -7,9 +8,9 @@ The manifolds that feed the cooling channels and collect them again.
 A regeneratively cooled jacket has to get coolant in and out. Sixty channels cannot each have
 their own feedline, so they are gathered into a scroll that wraps the nozzle once: the inlet
 volute distributes flow from a single interface into every channel, and the return volute
-collects it back. Each is a duct whose cross section grows around the scroll in proportion to the
-flow it is carrying, which is what keeps the velocity, and so the distribution between channels,
-roughly even.
+collects it back. Each is a duct whose cross section grows around the scroll in proportion to
+the flow it is carrying, which is what keeps the velocity, and so the distribution between
+channels, roughly even.
 
 The scroll geometry itself lives in Volute.py, which draws one from a scroll radius, a cross
 section family and an area distribution. What happens here is everything around it: reading the
@@ -21,16 +22,16 @@ result clears the keep-out envelope behind the chamber.
                             Validation status
 ----------------------------------------------------------------------
 
-**The wall thickness is a hoop stress calculation against manufacturer data, and is as good as
-that data.** The thickness follows from the pressure differential, the local radius and an
+**The wall thickness is a hoop stress calculation against manufacturer data.** It is as good as
+that data. The thickness follows from the pressure differential, the local radius and an
 allowable stress read from the alloy's yield curve at the coolant temperature. The curves are
-manufacturer figures interpolated on a cubic spline, and the spline extrapolates outside the data
-it was given without saying so. That is worth knowing: a lookup below the lowest datum returns a
-number that no measurement supports.
+manufacturer figures interpolated on a cubic spline, and the spline extrapolates outside the
+data it was given without saying so. That is worth knowing: a lookup below the lowest datum
+returns a number that no measurement supports.
 
 **Nothing else here is validated.** The scroll area distribution, the flare into the interface
-and the print supports are geometry, and the claim made for them is that they close and that they
-clear what they are meant to clear.
+and the print supports are geometry, and the claim made for them is that they close and that
+they clear what they are meant to clear.
 
 ----------------------------------------------------------------------
                         Geometry conventions
@@ -61,42 +62,11 @@ import numpy as np
 from scipy.interpolate import CubicSpline
 
 from . import units
-from .utils import (DCM, revolveContour, InvalidInputError, VoluteGenerationError,
-                    createErrorContext, headlessPlots, showFigure)
+from .geometryTools import DCM
+from .errors import InvalidInputError, VoluteGenerationError, createErrorContext
 from .Volute import Volute
 from .keepOut import keepOutEnvelope, revolveKeepOut
 from .validation import applyRules, arrayRule, presentRule
-
-# Plotly backs the interactive volute view only. A plotly-free install loses the .html figure and
-# nothing else.
-try:
-    import plotly
-    import plotly.colors
-    import plotly.graph_objects as go
-    from plotly.offline import plot
-    from plotly.express.colors import sample_colorscale
-    plotlyAvailable = True
-except ImportError:
-    plotly = go = plot = sample_colorscale = None
-    plotlyAvailable = False
-
-_plotlyNotices = set()
-
-def _plotlyGate(featureName: str) -> bool:
-
-    '''
-
-    True when plotly is importable. Otherwise note once that an interactive view is being
-    skipped and return False, so the caller can carry on without it.
-
-    '''
-
-    if plotlyAvailable:
-        return True
-    if featureName not in _plotlyNotices:
-        _plotlyNotices.add(featureName)
-        print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
-    return False
 
 # What a volute needs from the channel build it attaches to. The volute is grown onto the ends of
 # the channels, so what it reads is geometry the sizing solve produced rather than configuration.
@@ -148,7 +118,6 @@ class RegenVoluteState:
     # -- What the volute build reads -- #
     chamberDiameter:                       Any = None
     channelRadius:                         Any = None
-    contourType:                           Any = None
     coolantExitPressure:                   Any = None
     coolantExitTemperature:                Any = None
     coolantInitialPressure:                Any = None
@@ -166,11 +135,8 @@ class RegenVoluteState:
     keepOutRadius:                         Any = None
     makeInletVolute:                       Any = None
     makeReturnVolute:                      Any = None
-    numCSPointsChannel:                    Any = None
     numCSPointsVolute:                     Any = None
     numCSVolute:                           Any = None
-    plotKeepOut:                           Any = None
-    plotsAdv:                              Any = None
     rChannelCenterline2D:                  Any = None
     returnGraylocDiameter:                 Any = None
     returnVoluteAlignment:                 Any = None
@@ -179,17 +145,8 @@ class RegenVoluteState:
     returnVoluteTilt:                      Any = None
     voluteFOS:                             Any = None
     voluteRelativeRoll:                    Any = None
-    xChannel:                              Any = None
     xChannelCenterline2D:                  Any = None
-    xNozzleHotWallMesh:                    Any = None
-    xNozzleShellMesh:                      Any = None
     xRegenNozzle:                          Any = None
-    yChannel:                              Any = None
-    yNozzleHotWallMesh:                    Any = None
-    yNozzleShellMesh:                      Any = None
-    zChannel:                              Any = None
-    zNozzleHotWallMesh:                    Any = None
-    zNozzleShellMesh:                      Any = None
 
     # -- Read and written as the volutes are grown -- #
     inletVolute:                           Any = None
@@ -399,7 +356,6 @@ def solveRegenVolutes(state):
         inletVolute.pressureDifferential           = state.coolantInitialPressure
         inletVolute.alignWallBy                    = 'inner'
         # options
-        inletVolute.plots                          = 'off'
         inletVolute.export                         = 'off'
 
         # make geometry with error handling
@@ -503,7 +459,6 @@ def solveRegenVolutes(state):
         returnVolute.pressureDifferential       = state.coolantExitPressure
         returnVolute.alignWallBy                = 'inner'
         # options
-        returnVolute.plots                      = 'off'
         returnVolute.export                     = 'off'
 
         # make geometry with error handling
@@ -556,239 +511,17 @@ def solveRegenVolutes(state):
 
         generateRegenReturnVolute()
 
-    # ----------- #
-    # -- PLOTS -- #
-    # ----------- #
-
-    if state.plotsAdv == 'on' and _plotlyGate('the interactive volute view'):
-
-        # check alignment of channel turnaround with return volute smallest cross section
-        channelAlignmentCheckRollReturn = np.pi/2 # [rad]
-        xChannelAlignmentCheckRolledReturn, yChannelAlignmentCheckRolledReturn, zChannelAlignmentCheckRolledReturn, = \
-        [np.zeros((state.numCSPointsChannel, len(state.xChannel[0,:]))) for _ in range(3)]
-        for i in range(len(state.xChannel[0,:])):
-            valueMatrix = [state.xChannel[:,i], state.yChannel[:,i], state.zChannel[:,i]]
-            eulerAngles = [channelAlignmentCheckRollReturn, 0, 0]
-            xChannelAlignmentCheckRolledReturn[:,i], yChannelAlignmentCheckRolledReturn[:,i], zChannelAlignmentCheckRolledReturn[:,i] \
-            = DCM(eulerAngles, valueMatrix, transpose = False, rotationOrder = 'xyz')
-
-        # Print Bed
-        xPrint, yPrint, zPrint = revolveContour([min(state.xRegenNozzle),max(state.xRegenNozzle)],[0.5*state.chamberDiameter,0.5*state.chamberDiameter])
-
-        # The volume behind the chamber that the volutes have to route around. A traditional
-        # contour has no turnaround wrapping it, so the envelope is placed relative to the
-        # chamber end here rather than falling out of the wall construction.
-        if state.contourType == 'trad':
-            state.nozzleKeepOut = keepOutEnvelope(chamberRadius = 0.5*state.chamberDiameter,
-                                                 axialOffset   = state.keepOutAxialOffset + min(state.xRegenNozzle),
-                                                 radius        = state.keepOutRadius,
-                                                 depth         = state.keepOutDepth,
-                                                 hubRadius     = state.keepOutHubRadius,
-                                                 numPoints     = state.numCSVolute)
-
-        # The winder keep-out is the envelope closed back out to the chamber wall along a
-        # 35 degree ramp, which is the shallowest a winder can approach it.
-        hubX, hubR = state.nozzleKeepOut.hub
-        xKeepOut2D = [hubX,
-                        hubX + 0.02,
-                        hubX + 0.02 + (0.5*state.chamberDiameter - hubR)*np.tan(np.deg2rad(35)),
-                        state.xRegenNozzle[-1]]
-        rKeepOut2D = [hubR,
-                        hubR,
-                        state.chamberDiameter * 0.5,
-                        state.chamberDiameter * 0.5]
-        xKeepOut3D, yKeepOut3D, zKeepOut3D = revolveContour(xKeepOut2D,rKeepOut2D)
-
-        state.xKeepOut3D, state.yKeepOut3D, state.zKeepOut3D = revolveKeepOut(state.nozzleKeepOut)
-
-        colori = sample_colorscale(plotly.colors.cyclical.HSV,
-                        list(np.linspace(0,1,int(np.ceil(state.numCSVolute/5)))))
-        colorii = colori.copy()
-        for i in range(5):
-            colorii = np.append(colorii,colori)
-
-        fig = go.Figure()
-        # Print bed reference
-        fig.add_trace(go.Surface(x = zPrint , y = xPrint , z = yPrint,
-                            colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                            opacity = 0.15,
-                            showscale = False))
-        # Winder keep out
-        fig.add_trace(go.Surface(x = zKeepOut3D, y = xKeepOut3D, z = yKeepOut3D,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.3,
-                                showscale = False))
-        # Chamber closure keep-out
-        if state.plotKeepOut == 'on':
-            fig.add_trace(go.Surface(x = state.zKeepOut3D, y = state.xKeepOut3D, z = state.yKeepOut3D,
-                                    colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                    opacity = 0.3,
-                                    showscale = False))
-        # Nozzle walls
-        fig.add_trace(go.Surface(x = state.xNozzleHotWallMesh, y = state.yNozzleHotWallMesh, z = state.zNozzleHotWallMesh,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.7,
-                                showscale = False))
-        fig.add_trace(go.Surface(x = state.xNozzleShellMesh,   y = state.yNozzleShellMesh,   z = state.zNozzleShellMesh,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.7,
-                                showscale = False))
-        # Representative channel
-        fig.add_trace(go.Surface(x = xChannelAlignmentCheckRolledReturn, y = yChannelAlignmentCheckRolledReturn, z = zChannelAlignmentCheckRolledReturn,
-                                colorscale = [[0, 'red'], [1,'red']],
-                                opacity = 1,
-                                showscale = False))
-        # Volutes
-        if state.makeInletVolute == 'on':
-            fig.add_trace(go.Surface(x = state.xInletVolute, y = state.yInletVolute, z = state.zInletVolute,
-                                    colorscale = [[0,'cyan'],[1,'cyan']],
-                                    opacity = 0.8,
-                                    showscale = False))
-            for i in range(state.numCSVolute):
-                fig.add_trace(go.Scatter3d(x = state.xInletVolute[i,:], y = state.yInletVolute[i,:], z = state.zInletVolute[i,:],
-                                    mode = 'lines',
-                                    line = dict(color = colorii[i],
-                                                width = 5)))
-            # if len(np.array(state.xInletVoluteShell)) != 0:
-            if state.inletVolute.wallThickness is not None:
-                fig.add_trace(go.Surface(x = state.xInletVoluteShell, y = state.yInletVoluteShell, z = state.zInletVoluteShell,
-                                        colorscale = [[0,'yellow'],[1,'yellow']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xInletVoluteShell[i,:], y = state.yInletVoluteShell[i,:], z = state.zInletVoluteShell[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-            if state.inletVolute.circlePrintability == 'thin':
-                fig.add_trace(go.Surface(x = state.xInletVoluteSupportWall, y = state.yInletVoluteSupportWall, z = state.zInletVoluteSupportWall,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportWall[i,:], y = state.yInletVoluteSupportWall[i,:], z = state.zInletVoluteSupportWall[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-                fig.add_trace(go.Surface(x = state.xInletVoluteSupportUpper, y = state.yInletVoluteSupportUpper, z = state.zInletVoluteSupportUpper,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportUpper[i,:], y = state.yInletVoluteSupportUpper[i,:], z = state.zInletVoluteSupportUpper[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-            if state.inletVolute.circlePrintability == 'thick':
-                fig.add_trace(go.Surface(x = state.xInletVoluteSupportWall, y = state.yInletVoluteSupportWall, z = state.zInletVoluteSupportWall,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportWall[i,:], y = state.yInletVoluteSupportWall[i,:], z = state.zInletVoluteSupportWall[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-                fig.add_trace(go.Surface(x = state.xInletVoluteSupportUpper, y = state.yInletVoluteSupportUpper, z = state.zInletVoluteSupportUpper,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportUpper[i,:], y = state.yInletVoluteSupportUpper[i,:], z = state.zInletVoluteSupportUpper[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-                fig.add_trace(go.Surface(x = state.xInletVoluteSupportLower, y = state.yInletVoluteSupportLower, z = state.zInletVoluteSupportLower,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xInletVoluteSupportLower[i,:], y = state.yInletVoluteSupportLower[i,:], z = state.zInletVoluteSupportLower[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-        if state.makeReturnVolute == 'on':
-            fig.add_trace(go.Surface(x = state.xReturnVolute, y = state.yReturnVolute, z = state.zReturnVolute,
-                                    colorscale = [[0,'cyan'],[1,'cyan']],
-                                    opacity = 0.8,
-                                    showscale = False))
-            for i in range(state.numCSVolute):
-                fig.add_trace(go.Scatter3d(x = state.xReturnVolute[i,:], y = state.yReturnVolute[i,:], z = state.zReturnVolute[i,:],
-                                    mode = 'lines',
-                                    line = dict(color = colorii[i],
-                                                width = 5)))
-            if state.returnVolute.wallThickness is not None:
-                fig.add_trace(go.Surface(x = state.xReturnVoluteShell, y = state.yReturnVoluteShell, z = state.zReturnVoluteShell,
-                                        colorscale = [[0,'yellow'],[1,'yellow']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xReturnVoluteShell[i,:], y = state.yReturnVoluteShell[i,:], z = state.zReturnVoluteShell[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-            if state.returnVolute.circlePrintability == 'thin':
-                fig.add_trace(go.Surface(x = state.xReturnVoluteSupportWall, y = state.yReturnVoluteSupportWall, z = state.zReturnVoluteSupportWall,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportWall[i,:], y = state.yReturnVoluteSupportWall[i,:], z = state.zReturnVoluteSupportWall[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-                fig.add_trace(go.Surface(x = state.xReturnVoluteSupportUpper, y = state.yReturnVoluteSupportUpper, z = state.zReturnVoluteSupportUpper,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportUpper[i,:], y = state.yReturnVoluteSupportUpper[i,:], z = state.zReturnVoluteSupportUpper[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-            if state.returnVolute.circlePrintability == 'thick':
-                fig.add_trace(go.Surface(x = state.xReturnVoluteSupportWall, y = state.yReturnVoluteSupportWall, z = state.zReturnVoluteSupportWall,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportWall[i,:], y = state.yReturnVoluteSupportWall[i,:], z = state.zReturnVoluteSupportWall[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-                fig.add_trace(go.Surface(x = state.xReturnVoluteSupportUpper, y = state.yReturnVoluteSupportUpper, z = state.zReturnVoluteSupportUpper,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportUpper[i,:], y = state.yReturnVoluteSupportUpper[i,:], z = state.zReturnVoluteSupportUpper[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-                fig.add_trace(go.Surface(x = state.xReturnVoluteSupportLower, y = state.yReturnVoluteSupportLower, z = state.zReturnVoluteSupportLower,
-                                        colorscale = [[0,'magenta'],[1,'magenta']],
-                                        opacity = 0.35,
-                                        showscale = False))
-                for i in range(state.numCSVolute):
-                    fig.add_trace(go.Scatter3d(x = state.xReturnVoluteSupportLower[i,:], y = state.yReturnVoluteSupportLower[i,:], z = state.zReturnVoluteSupportLower[i,:],
-                                        mode = 'lines',
-                                        line = dict(color = colorii[i],
-                                                    width = 5)))
-        # Show
-        fig.update_layout(scene = dict(xaxis_title = 'Nozzle Radius [m]',
-                                    yaxis_title = 'Nozzle Axis [m]',
-                                    zaxis_title = 'Nozzle Radius [m]'),
-                                    title = {'text' : 'Volutes',
-                                            'x': 0.5,
-                                            'xanchor': 'center',
-                                            'y': 0.9,
-                                            'yanchor': 'top'},
-                                    scene_aspectmode = 'data',
-                                    template = 'plotly_dark',
-                                    showlegend = False)
-        if state.export == 'on':
-            plot(fig, filename = state.dataFolder + '\\VoluteView.html', auto_open = not headlessPlots())
-        else:
-            showFigure(fig)
+    # The volume behind the chamber that the volutes have to route around. The converging
+    # section has no turnaround wrapping it, so the envelope is placed relative to the chamber
+    # end here rather than falling out of the wall construction. Generated whenever a volute is
+    # built, since routing and the keep-out export both need it whether or not the run also
+    # draws a figure for it.
+    state.nozzleKeepOut = keepOutEnvelope(chamberRadius = 0.5*state.chamberDiameter,
+                                         axialOffset   = state.keepOutAxialOffset + min(state.xRegenNozzle),
+                                         radius        = state.keepOutRadius,
+                                         depth         = state.keepOutDepth,
+                                         hubRadius     = state.keepOutHubRadius,
+                                         numPoints     = state.numCSVolute)
+    state.xKeepOut3D, state.yKeepOut3D, state.zKeepOut3D = revolveKeepOut(state.nozzleKeepOut)
 
     return state

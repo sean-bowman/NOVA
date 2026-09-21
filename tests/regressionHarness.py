@@ -47,20 +47,151 @@ repositoryRoot   = os.path.dirname(harnessDirectory)
 packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
 baselineFolder   = os.path.join(harnessDirectory, 'baselines')
 
-# The cases the harness records. Each names a configuration in assets/ and the overrides that
-# make it a harness run rather than a user run: no figures, no export, no plume.
+# An override of ABSENT removes the key instead of setting it, which is not the same thing: a key
+# read with .get() and absent yields None, while a key present and null yields NaN.
+ABSENT = object()
+
+# NOVANozzle.json is the reference nozzle with every feature that composes switched on, which is
+# more than any one baseline pins. This strips it back to a bare contour: no jacket, no film, no
+# volutes, no extension, no keep-out. Every case starts here and switches back on only what it is
+# there to record, so a case is a statement about one path rather than about everything the
+# reference nozzle happens to carry.
+strippedToContour = {
+    'makeCoolingChannels'           : False,
+    'numCrossSections'              : 100,
+    'numCSPointsChannel'            : 50,
+    'material'                      : None,
+    'channelType'                   : None,
+    'nChannel'                      : None,
+    'hotWallThickness'              : None,
+    'shellThickness'                : None,
+    'infillThickness'               : None,
+    'maxWallTemperature'            : None,
+    'interfaceLength'               : None,
+    'coolantClass'                  : None,
+    'coolant'                       : None,
+    'coolantInitialTemperature'     : None,
+    'coolantInitialPressure'        : None,
+    'coolantMassFlow'               : None,
+    'Lstar'                         : None,
+    'regenTruncationType'           : 'none',
+    'regenTruncationValue'          : None,
+
+    'filmCooling'                   : False,
+    'filmCoolant'                   : None,
+    'filmMassFlow'                  : None,
+    'filmInletTemperature'          : None,
+    'filmInjectionAxialPosition'    : None,
+    'filmSlotHeight'                : None,
+
+    'makeRadiativeExtension'        : 'off',
+
+    # These six are read with .get(), so an absent key reaches the nozzle as None while a key
+    # present and null reaches it as NaN: config.py rewrites every null before the .get() runs.
+    # Both mean unset and neither is read with the extension off, but the captured state records
+    # which one it was. Dropping the keys keeps that record identical to the baselines.
+    'extensionMaterial'             : ABSENT,
+    'extensionThickness'            : ABSENT,
+    'extensionThermalConductivity'  : ABSENT,
+    'extensionInnerEmissivity'      : ABSENT,
+    'extensionOuterEmissivity'      : ABSENT,
+    'extensionJointTemperature'     : ABSENT,
+
+    'makeInletVolute'               : False,
+    'makeReturnVolute'              : False,
+    'numCSVolute'                   : None,
+    'numCSPointsVolute'             : None,
+    'voluteRelativeRoll'            : None,
+    'inletVoluteCrossSection'       : None,
+    'inletVoluteAlignment'          : None,
+    'inletVoluteTilt'               : None,
+    'inletGraylocDiameter'          : None,
+    'inletVoluteAxialOffset'        : None,
+    'inletVoluteFlareRoverD'        : None,
+    'inletVoluteFlareLength'        : None,
+    'returnVoluteCrossSection'      : None,
+    'returnVoluteAlignment'         : None,
+    'returnVoluteTilt'              : None,
+    'returnGraylocDiameter'         : None,
+    'returnVoluteRadialOffset'      : None,
+    'returnVoluteFlareRoverD'       : None,
+    'returnVoluteReturnAngle'       : None,
+    'returnVoluteFlareLen'          : None,
+}
+
+# The jacket the regen cases are pinned on, switched back on over the stripped contour. Sixty
+# circular channels in GRCop-42, hydrogen at 3.4 kg/s entering at 12 MPa and 30 K, above the
+# hydrogen critical point. Both volutes are built, the return turnaround located by radial
+# offset. Every number here is pinned by a baseline, so changing one moves that baseline.
+regenOverrides = {
+    'makeCoolingChannels'      : True,
+    'numCrossSections'         : 60,
+    'numCSPointsChannel'       : 40,
+    'hotWallThickness'         : 0.001,
+    'shellThickness'           : 0.002,
+    'infillThickness'          : 0.001,
+    'material'                 : 'GRCop-42',
+    'nChannel'                 : 60,
+    'channelType'              : 'circle',
+    'maxWallTemperature'       : 800.0,
+    'interfaceLength'          : 0.02,
+    'coolantClass'             : 'fuel',
+    'coolant'                  : 'Hydrogen',
+    'coolantInitialTemperature': 30.0,
+    'coolantInitialPressure'   : 12000000.0,
+    'coolantMassFlow'          : 3.4,
+    'makeInletVolute'          : True,
+    'makeReturnVolute'         : True,
+    'numCSVolute'              : 60,
+    'numCSPointsVolute'        : 40,
+    'voluteRelativeRoll'       : 0.0,
+    'inletVoluteCrossSection'  : 'circle',
+    'inletVoluteAlignment'     : 'o',
+    'inletVoluteTilt'          : 0.0,
+    'inletGraylocDiameter'     : 1.0,
+    'inletVoluteAxialOffset'   : 0.01,
+    'inletVoluteFlareRoverD'   : 1.5,
+    'inletVoluteFlareLength'   : 0.03,
+    'returnVoluteCrossSection' : 'circle',
+    'returnVoluteAlignment'    : 'o',
+    'returnVoluteTilt'         : 0.0,
+    'returnGraylocDiameter'    : 1.0,
+    'returnVoluteRadialOffset' : 0.015,
+    'returnVoluteFlareRoverD'  : 1.5,
+    'returnVoluteReturnAngle'  : 45.0,
+    'returnVoluteFlareLen'     : 0.03,
+}
+
+# The same jacket with the channel cross section swapped to fluted. The fluted coolant-side
+# correlation is a blend of Gnielinski with a spirally fluted correlation; it is unvalidated,
+# and NOVA ships without the flute heat transfer study the data-map variant reads, so the
+# analytical correlation is what runs here.
+flutedOverrides = {
+    **regenOverrides,
+    'channelType'       : 'fluted',
+    'numFlutes'         : 8,
+    'fluteAmplitudeCoef': 0.3,
+    'fluteHelixAngle'   : 15.0,
+}
+
+# The cases the harness records. Every case runs assets/NOVANozzle.json and differs only in what
+# it overrides on top, so a case is a statement about one path rather than a separate file to
+# keep in step. The shared harnessOverrides below make it a harness run rather than a user run:
+# no figures, no export, no plume.
 harnessCases = {
     'contour': {
-        'config': 'loxLh2Example.json',
+        'config': 'NOVANozzle.json',
         'description': 'Diverging contour, converging section and regen truncation, no jacket',
     },
     'regenCircle': {
-        'config': 'regenExample.json',
+        'config': 'NOVANozzle.json',
         'description': 'Full jacket with circular channels and both volutes',
+        'overrides': dict(regenOverrides),
     },
     'regenFluted': {
-        'config': 'regenExampleFluted.json',
+        'config': 'NOVANozzle.json',
         'description': 'Full jacket with fluted channels and both volutes',
+        'overrides': dict(flutedOverrides),
     },
     # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
     # and the physical choice. This case pins the static-temperature model that preceded it, so
@@ -68,9 +199,10 @@ harnessCases = {
     # A hydrogen film injected at the chamber end of the same jacket. It pins the film path and
     # records what a film that is badly matched in velocity actually buys, which is not much.
     'regenCircleFilm': {
-        'config': 'regenExample.json',
+        'config': 'NOVANozzle.json',
         'description': 'Circular channels with a hydrogen film injected at the chamber end',
         'overrides': {
+            **regenOverrides,
             'filmCooling': True,
             'filmCoolant': 'Hydrogen',
             'filmMassFlow': 0.30,
@@ -80,9 +212,10 @@ harnessCases = {
         },
     },
     'regenCircleEntrainment': {
-        'config': 'regenExample.json',
+        'config': 'NOVANozzle.json',
         'description': 'The same hydrogen film solved by the SP-8124 entrainment model',
         'overrides': {
+            **regenOverrides,
             'filmCooling': True,
             'filmCoolant': 'Hydrogen',
             'filmMassFlow': 0.30,
@@ -93,9 +226,9 @@ harnessCases = {
         },
     },
     'contourEffectiveGamma': {
-        'config': 'regenExample.json',
+        'config': 'NOVANozzle.json',
         'description': 'The contour solved at the effective gamma rather than the chamber value',
-        'overrides': {'gammaModel': 'effective', 'makeCoolingChannels': False},
+        'overrides': {**regenOverrides, 'gammaModel': 'effective', 'makeCoolingChannels': False},
     },
     # The prescribed-wall path, which shares the kernel with the truncated ideal contour and
     # nothing else: the wall is drawn before the flow is solved and marched forward rather than
@@ -103,7 +236,7 @@ harnessCases = {
     # leaves every truncated ideal baseline untouched, which is exactly the kind of half-visible
     # move a single-family gate cannot catch.
     'contourParabola': {
-        'config': 'loxLh2Example.json',
+        'config': 'NOVANozzle.json',
         'description': 'A thrust-optimized parabola, drawn from the chart and marched forward',
         'overrides': {'divergingSectionType': 'top', 'makeCoolingChannels': False},
     },
@@ -118,24 +251,16 @@ harnessCases = {
     # so the baseline records a number the weak-shock treatment actually supports while covering
     # the detector, the jump, the downstream debit and the coefficient it is subtracted from.
     'contourToc': {
-        'config': 'loxLh2Example.json',
+        'config': 'NOVANozzle.json',
         'description': 'A pinned thrust-optimized contour carrying a weak internal shock',
         'overrides': {'divergingSectionType': 'toc', 'makeCoolingChannels': False,
                       'divergingSectionDesignVariables': [35.0, 8.0, 0.312534, 0.367698]},
     },
-    'regenCircleStatic': {
-        'config': 'regenExample.json',
-        'description': 'Circular channels driven by the static temperature rather than recovery',
-        'overrides': {'drivingTemperatureModel': 'static'},
-    },
 }
 
 harnessOverrides = {
-    'plotsBasic'          : False,
-    'plotsAdv'            : False,
-    'plotJacket'          : False,
-    'plotsDebug'          : False,
-    'visualizeContour'    : False,
+    **strippedToContour,
+    'plotsEnabled'        : False,
     'export'              : False,
     'plumeAmbientPressure': None,
 }
@@ -178,6 +303,8 @@ def runCase(caseName: str, scratchFolder: str) -> object:
         config = json.load(handle)
     config.update(harnessOverrides)
     config.update(case.get('overrides', {}))
+    for key in [key for key, value in config.items() if value is ABSENT]:
+        del config[key]
     config['filename'] = caseName
 
     os.makedirs(scratchFolder, exist_ok = True)

@@ -1,10 +1,11 @@
+
 # -- NOVA: Regenerative Cooling Channel Build -- #
 
 '''
 
 Assembling a regeneratively cooled jacket from a contour and a coolant.
 
-This is the orchestration of the channel build, and it is orchestration rather than physics. The
+This is the orchestration of the channel build rather than the physics. The
 physics lives in three modules it calls: channelGeometry draws a cross section and sweeps it,
 channelSizing converges the radius at each station against a wall temperature, and regenThermal
 solves the heat balance those two are converged against.
@@ -31,14 +32,14 @@ object as it goes, so what the build reads and what it produces are both stated 
                             Validation status
 ----------------------------------------------------------------------
 
-**Nothing here is validated, and nothing here computes a physical result.** The build is
+**Nothing here computes a physical result, so nothing here is validated.** The build is
 geometry: it decides where a channel runs and what surfaces come out of it. The numbers that
 carry physical meaning come from the three modules it calls, and each of those carries its own
 validation status, which this inherits unchanged.
 
 What the geometry can be held to is consistency, and the tests do that: a channel that fits
-between its neighbours, a centerline that stays on the wall it was offset from, and surfaces that
-close.
+between its neighbors, a centerline that stays on the wall it was offset from, and surfaces
+that close.
 
 ----------------------------------------------------------------------
                         Geometry conventions
@@ -64,48 +65,15 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 
-from .utils import (DCM, arcSpline, chunkInterpolate, intersection, parallelOffset, plotLine,
-                    revolveContour, GeometricConstraintError, InvalidInputError,
-                    headlessPlots, showFigure)
+from .geometryTools import DCM, arcSpline, chunkInterpolate, intersection, parallelOffset
+from .errors import GeometricConstraintError, InvalidInputError
 from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
 from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
 from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
-
-# Plotly backs the interactive channel views only. A plotly-free install loses the .html figures
-# and nothing else.
-try:
-    import plotly
-    import plotly.colors
-    import plotly.graph_objects as go
-    from plotly.offline import plot
-    from plotly.express.colors import sample_colorscale
-    plotlyAvailable = True
-except ImportError:
-    plotly = go = plot = sample_colorscale = None
-    plotlyAvailable = False
-
-_plotlyNotices = set()
-
-def _plotlyGate(featureName: str) -> bool:
-
-    '''
-
-    True when plotly is importable. Otherwise note once that an interactive view is being
-    skipped and return False, so the caller can carry on without it.
-
-    '''
-
-    if plotlyAvailable:
-        return True
-    if featureName not in _plotlyNotices:
-        _plotlyNotices.add(featureName)
-        print(f'plotly is not installed; skipping {featureName}. Install it with "pip install plotly".')
-    return False
 
 @dataclass
 class RegenChannelState:
@@ -127,8 +95,6 @@ class RegenChannelState:
     # -- What the build reads -- #
     chamberDiameter:                           Any = None
     channelType:                               Any = None
-    contourType:                               Any = None
-    dataFolder:                                Any = None
     export:                                    Any = None
     fluteAmplitudeCoef:                        Any = None
     gammaRegenSection:                         Any = None
@@ -142,36 +108,26 @@ class RegenChannelState:
     makeCoolingChannels:                       Any = None
     makeInletVolute:                           Any = None
     makeReturnVolute:                          Any = None
-    maxOverhangAngle:                          Any = None
     molecularWeightRegenSection:               Any = None
     nChannel:                                  Any = None
     numCSPointsChannel:                        Any = None
     numContourPoints:                          Any = None
     numCrossSections:                          Any = None
-    plotJacket:                                Any = None
-    plotsAdv:                                  Any = None
-    printDirection:                            Any = None
-    printabilityCheck:                         Any = None
     rRegenNozzle:                              Any = None
     regenSectionNearWallMachNumber:            Any = None
     regenSectionNearWallPressure:              Any = None
     regenSectionNearWallRecoveryTemperature:   Any = None
     regenSectionNearWallTemperature:           Any = None
     regenSectionFilmDrivingTemperature:        Any = None
-    drivingTemperatureModel:                   Any = None
     returnVoluteAxialOffset:                   Any = None
     returnVoluteFlareLen:                      Any = None
     returnVoluteRadialOffset:                  Any = None
     returnVoluteReturnAngle:                   Any = None
     shellThickness:                            Any = None
-    xNozzleMesh:                               Any = None
     xRegenNozzle:                              Any = None
-    yNozzleMesh:                               Any = None
-    zNozzleMesh:                               Any = None
 
     chamberPressure:                           Any = None
     dcrData:                                   Any = None
-    debugMode:                                 Any = None
     interfaceLength:                           Any = None
     material:                                  Any = None
     maxWallTemperature:                        Any = None
@@ -192,7 +148,6 @@ class RegenChannelState:
     gammaRegenSectionTrimmed:                  Any = None
     gasConstantRegenSectionTrimmed:            Any = None
     molecularWeightRegenSectionTrimmed:        Any = None
-    nonPrintableIndices:                       Any = None
     numInletInterfaceCS:                       Any = None
     numReturnInterfaceCS:                      Any = None
     rChannelCenterline2D:                      Any = None
@@ -258,7 +213,7 @@ class RegenChannelState:
 # and a static read of this module cannot see that it does.
 _buildOutputs = (
     'allNozzlePoints', 'channelRadius', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
-    'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed', 'nonPrintableIndices',
+    'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed',
     'numInletInterfaceCS', 'numReturnInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
     'rInletInterface', 'rNozzleShell', 'rRegenNozzleInterfaced', 'rRegenNozzleTrimmed',
     'rReturnInterface', 'regenSectionNearWallMachNumberTrimmed',
@@ -344,9 +299,8 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
 
     The channel definition the cross-section builder reads, taken from the build state.
 
-    Derived at each call rather than once, because two of its fields are filled in as the build
-    proceeds: the stations the printability audit marks, and the nozzle wall point cloud the
-    compression search queries.
+    Derived at each call rather than once, because the nozzle wall point cloud the compression
+    search queries is filled in as the build proceeds.
 
     '''
 
@@ -363,8 +317,6 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
         interfaceLength      = state.interfaceLength,
         numInletInterfaceCS  = state.numInletInterfaceCS,
         numReturnInterfaceCS = state.numReturnInterfaceCS,
-        printabilityCheck    = state.printabilityCheck,
-        nonPrintableIndices  = state.nonPrintableIndices,
         allNozzlePoints      = state.allNozzlePoints)
 
 def _sizingState(state) -> 'ChannelSizingState':
@@ -408,11 +360,9 @@ def _sizingState(state) -> 'ChannelSizingState':
         regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed,
         regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed,
         regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperatureTrimmed,
-        drivingTemperatureModel                = state.drivingTemperatureModel,
         regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed,
         regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed,
-        dcrData                            = state.dcrData,
-        debugMode                          = state.debugMode)
+        dcrData                            = state.dcrData)
 
 def solveRegenChannels(state, thermal):
 
@@ -544,91 +494,89 @@ def solveRegenChannels(state, thermal):
 
         def interfaceToReturn() -> tuple:
 
-            if state.contourType == 'trad':
+            trimmedThroatIndex = state.rRegenNozzleTrimmed.argmin()
 
-                trimmedThroatIndex = state.rRegenNozzleTrimmed.argmin()
+            turnaroundReturnAngle = np.deg2rad(90 - state.returnVoluteReturnAngle)
 
-                turnaroundReturnAngle = np.deg2rad(90 - state.returnVoluteReturnAngle)
+            ## Locate the turnaround relative to the existing nozzle converging section
+            # The axial and radial offsets are two ways of naming the same station, so
+            # exactly one of them is a well-posed request. Giving both leaves the station
+            # ambiguous and giving neither leaves it undefined.
+            hasAxialOffset  = not np.isnan(state.returnVoluteAxialOffset)
+            hasRadialOffset = not np.isnan(state.returnVoluteRadialOffset)
 
-                ## Locate the turnaround relative to the existing nozzle converging section
-                # The axial and radial offsets are two ways of naming the same station, so
-                # exactly one of them is a well-posed request. Giving both leaves the station
-                # ambiguous and giving neither leaves it undefined.
-                hasAxialOffset  = not np.isnan(state.returnVoluteAxialOffset)
-                hasRadialOffset = not np.isnan(state.returnVoluteRadialOffset)
+            if hasAxialOffset == hasRadialOffset:
+                raise InvalidInputError(
+                    message = ('The return volute turnaround is located by exactly one of '
+                               'returnVoluteAxialOffset or returnVoluteRadialOffset; '
+                               f'{"both were" if hasAxialOffset else "neither was"} specified'),
+                    parameterName = 'returnVoluteAxialOffset, returnVoluteRadialOffset',
+                    value = (state.returnVoluteAxialOffset, state.returnVoluteRadialOffset),
+                    validRange = 'Exactly one specified, the other left unset')
 
-                if hasAxialOffset == hasRadialOffset:
-                    raise InvalidInputError(
-                        message = ('The return volute turnaround is located by exactly one of '
-                                   'returnVoluteAxialOffset or returnVoluteRadialOffset; '
-                                   f'{"both were" if hasAxialOffset else "neither was"} specified'),
-                        parameterName = 'returnVoluteAxialOffset, returnVoluteRadialOffset',
-                        value = (state.returnVoluteAxialOffset, state.returnVoluteRadialOffset),
-                        validRange = 'Exactly one specified, the other left unset')
+            # Axial offset option
+            if hasAxialOffset:
+                xHotWallConverging   = state.xRegenNozzleTrimmed[:trimmedThroatIndex]
+                # Find the point on the contour that aligns most closely with the axial offset requested
+                returnTurnaroundIndex = np.abs(xHotWallConverging - (xHotWallConverging[0] + state.returnVoluteAxialOffset)).argmin()
 
-                # Axial offset option
-                if hasAxialOffset:
-                    xHotWallConverging   = state.xRegenNozzleTrimmed[:trimmedThroatIndex]
-                    # Find the point on the contour that aligns most closely with the axial offset requested
-                    returnTurnaroundIndex = np.abs(xHotWallConverging - (xHotWallConverging[0] + state.returnVoluteAxialOffset)).argmin()
+            # Radial offset option
+            else:
+                returnTurnaroundIndex = np.abs(state.rRegenNozzleTrimmed[:trimmedThroatIndex] - (0.5*state.chamberDiameter-state.returnVoluteRadialOffset)).argmin()
 
-                # Radial offset option
-                else:
-                    returnTurnaroundIndex = np.abs(state.rRegenNozzleTrimmed[:trimmedThroatIndex] - (0.5*state.chamberDiameter-state.returnVoluteRadialOffset)).argmin()
+            # The index is reused as the point count of the resampled turnaround curve, so
+            # a station at the very start of the contour leaves nothing to resample onto.
+            if returnTurnaroundIndex < 2:
+                raise GeometricConstraintError(
+                    message = ('The requested return volute turnaround sits at the start of the '
+                               'converging section, leaving no contour to interface to'),
+                    constraintType = 'returnVoluteTurnaroundStation',
+                    value = returnTurnaroundIndex,
+                    limit = 2)
 
-                # The index is reused as the point count of the resampled turnaround curve, so
-                # a station at the very start of the contour leaves nothing to resample onto.
-                if returnTurnaroundIndex < 2:
-                    raise GeometricConstraintError(
-                        message = ('The requested return volute turnaround sits at the start of the '
-                                   'converging section, leaving no contour to interface to'),
-                        constraintType = 'returnVoluteTurnaroundStation',
-                        value = returnTurnaroundIndex,
-                        limit = 2)
+            # Create the turnaround turn
+            if state.channelType == 'circle':
+                maxChannelRadiusAtReturn,_ = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
+            else:
+                _,maxChannelRadiusAtReturn = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
+            turnaroundRadius = state.inletVoluteFlareRoverD * (state.shellThickness + maxChannelRadiusAtReturn*2 + state.hotWallThickness)
+            turnaroundLength = state.returnVoluteFlareLen
+            state.returnVoluteFlareRad = turnaroundRadius
 
-                # Create the turnaround turn
-                if state.channelType == 'circle':
-                    maxChannelRadiusAtReturn,_ = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
-                else:
-                    _,maxChannelRadiusAtReturn = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
-                turnaroundRadius = state.inletVoluteFlareRoverD * (state.shellThickness + maxChannelRadiusAtReturn*2 + state.hotWallThickness)
-                turnaroundLength = state.returnVoluteFlareLen
-                state.returnVoluteFlareRad = turnaroundRadius
+            # Calculate angle of the nozzle contour at the interface location between the two curves to guarantee tangency
+            angleAtTurnaroundStart = np.arctan2(abs(state.rRegenNozzleTrimmed[returnTurnaroundIndex] - state.rRegenNozzleTrimmed[returnTurnaroundIndex - 1]),
+                                                abs(state.xRegenNozzleTrimmed[returnTurnaroundIndex] - state.xRegenNozzleTrimmed[returnTurnaroundIndex - 1]))
+            turnaroundAngles       = np.linspace(3*np.pi/2 - angleAtTurnaroundStart, turnaroundReturnAngle, int(np.floor(state.numContourPoints / 4)))
 
-                # Calculate angle of the nozzle contour at the interface location between the two curves to guarantee tangency
-                angleAtTurnaroundStart = np.arctan2(abs(state.rRegenNozzleTrimmed[returnTurnaroundIndex] - state.rRegenNozzleTrimmed[returnTurnaroundIndex - 1]),
-                                                    abs(state.xRegenNozzleTrimmed[returnTurnaroundIndex] - state.xRegenNozzleTrimmed[returnTurnaroundIndex - 1]))
-                turnaroundAngles       = np.linspace(3*np.pi/2 - angleAtTurnaroundStart, turnaroundReturnAngle, int(np.floor(state.numContourPoints / 4)))
+            turnaroundCenterX = state.xRegenNozzleTrimmed[returnTurnaroundIndex] + turnaroundRadius * np.cos(np.pi/2 - angleAtTurnaroundStart)
+            turnaroundCenterR = state.rRegenNozzleTrimmed[returnTurnaroundIndex] + turnaroundRadius * np.sin(np.pi/2 - angleAtTurnaroundStart)
 
-                turnaroundCenterX = state.xRegenNozzleTrimmed[returnTurnaroundIndex] + turnaroundRadius * np.cos(np.pi/2 - angleAtTurnaroundStart)
-                turnaroundCenterR = state.rRegenNozzleTrimmed[returnTurnaroundIndex] + turnaroundRadius * np.sin(np.pi/2 - angleAtTurnaroundStart)
+            turnaroundX = turnaroundRadius * np.cos(turnaroundAngles) + turnaroundCenterX
+            turnaroundR = turnaroundRadius * np.sin(turnaroundAngles) + turnaroundCenterR
 
-                turnaroundX = turnaroundRadius * np.cos(turnaroundAngles) + turnaroundCenterX
-                turnaroundR = turnaroundRadius * np.sin(turnaroundAngles) + turnaroundCenterR
+            fluidReturnX = turnaroundX[-1] + turnaroundLength * np.sin(turnaroundReturnAngle)
+            fluidReturnR = turnaroundR[-1] - turnaroundLength * np.cos(turnaroundReturnAngle)
 
-                fluidReturnX = turnaroundX[-1] + turnaroundLength * np.sin(turnaroundReturnAngle)
-                fluidReturnR = turnaroundR[-1] - turnaroundLength * np.cos(turnaroundReturnAngle)
+            fullReturnX = np.concatenate([turnaroundX, np.linspace(turnaroundX[-1], fluidReturnX,100)[1:]])
+            fullReturnR = np.concatenate([turnaroundR, np.linspace(turnaroundR[-1], fluidReturnR,100)[1:]])
 
-                fullReturnX = np.concatenate([turnaroundX, np.linspace(turnaroundX[-1], fluidReturnX,100)[1:]])
-                fullReturnR = np.concatenate([turnaroundR, np.linspace(turnaroundR[-1], fluidReturnR,100)[1:]])
+            state.xRegenNozzleTrimmed    = state.xRegenNozzleTrimmed[returnTurnaroundIndex:]
+            state.rRegenNozzleTrimmed    = state.rRegenNozzleTrimmed[returnTurnaroundIndex:]
 
-                state.xRegenNozzleTrimmed    = state.xRegenNozzleTrimmed[returnTurnaroundIndex:]
-                state.rRegenNozzleTrimmed    = state.rRegenNozzleTrimmed[returnTurnaroundIndex:]
+            xReturnTurnaround, rReturnTurnaround = fullReturnX[1:-1], fullReturnR[1:-1]
+            xReturnTurnaround, rReturnTurnaround = arcSpline(xReturnTurnaround, rReturnTurnaround, newNumPoints = returnTurnaroundIndex)
 
-                xReturnTurnaround, rReturnTurnaround = fullReturnX[1:-1], fullReturnR[1:-1]
-                xReturnTurnaround, rReturnTurnaround = arcSpline(xReturnTurnaround, rReturnTurnaround, newNumPoints = returnTurnaroundIndex)
+            state.gammaRegenSectionTrimmed               = state.gammaRegenSectionTrimmed[returnTurnaroundIndex:]
+            state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSectionTrimmed[returnTurnaroundIndex:]
+            state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSectionTrimmed[returnTurnaroundIndex:]
+            state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed[returnTurnaroundIndex:]
+            state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed[returnTurnaroundIndex:]
+            if state.regenSectionFilmDrivingTemperatureTrimmed is not None:
+                state.regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperatureTrimmed[returnTurnaroundIndex:]
+            state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed[returnTurnaroundIndex:]
+            state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed[returnTurnaroundIndex:]
 
-                state.gammaRegenSectionTrimmed               = state.gammaRegenSectionTrimmed[returnTurnaroundIndex:]
-                state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSectionTrimmed[returnTurnaroundIndex:]
-                state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSectionTrimmed[returnTurnaroundIndex:]
-                state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed[returnTurnaroundIndex:]
-                state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed[returnTurnaroundIndex:]
-                if state.regenSectionFilmDrivingTemperatureTrimmed is not None:
-                    state.regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperatureTrimmed[returnTurnaroundIndex:]
-                state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed[returnTurnaroundIndex:]
-                state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed[returnTurnaroundIndex:]
-
-                return np.flip(xReturnTurnaround), np.flip(rReturnTurnaround)
+            return np.flip(xReturnTurnaround), np.flip(rReturnTurnaround)
         # ------------------------------------------------------------------------------------------------------------------------------------ #
         # -- Generate interfaces -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
@@ -867,74 +815,6 @@ def solveRegenChannels(state, thermal):
 
     generateChannelCenterline()
 
-    if state.printabilityCheck == 'on':
-
-        def printabilityAudit():
-
-            '''
-
-            Check for regions of channel geometry that will exceed the defined maximum overhang angle for printing
-
-            '''
-
-            # Check for print direction and locally scope variables
-            if state.printDirection == 'FEU':
-                xChannelCenterline3D = state.xChannelCenterline3D
-                yChannelCenterline3D = state.yChannelCenterline3D
-                zChannelCenterline3D = state.zChannelCenterline3D
-            elif state.printDirection == 'FED':
-                xChannelCenterline3D = -state.xChannelCenterline3D
-                yChannelCenterline3D = state.yChannelCenterline3D
-                zChannelCenterline3D = state.zChannelCenterline3D
-
-            pathAnglesY, pathAnglesZ = [np.zeros(len(xChannelCenterline3D)) for _ in range(2)]
-            # Calculate angles with respect to print direction
-            for i in range(1, len(xChannelCenterline3D)-1):
-                pathAnglesY[i] = np.rad2deg(np.arctan((xChannelCenterline3D[i+1] - xChannelCenterline3D[i-1]) / (yChannelCenterline3D[i+1] - yChannelCenterline3D[i-1])))
-                pathAnglesZ[i] = np.rad2deg(np.arctan((xChannelCenterline3D[i+1] - xChannelCenterline3D[i-1]) / (zChannelCenterline3D[i+1] - zChannelCenterline3D[i-1])))
-
-            # Calculate first and last angles with forward/backward differencing
-            pathAnglesY[0] = np.rad2deg(np.arctan((xChannelCenterline3D[1] - xChannelCenterline3D[0]) / (yChannelCenterline3D[1] - yChannelCenterline3D[0])))
-            pathAnglesY[-1] = np.rad2deg(np.arctan((xChannelCenterline3D[-1] - xChannelCenterline3D[-2]) / (yChannelCenterline3D[-1] - yChannelCenterline3D[-2])))
-
-            pathAnglesZ[0] = np.rad2deg(np.arctan((xChannelCenterline3D[1] - xChannelCenterline3D[0]) / (zChannelCenterline3D[1] - zChannelCenterline3D[0])))
-            pathAnglesZ[-1] = np.rad2deg(np.arctan((xChannelCenterline3D[-1] - xChannelCenterline3D[-2]) / (zChannelCenterline3D[-1] - zChannelCenterline3D[-2])))
-
-            # Assign ranges for printability
-            printableRangeY = abs(pathAnglesY) < state.maxOverhangAngle
-            printableRangeZ = abs(pathAnglesZ) < state.maxOverhangAngle
-
-            printableRange = np.logical_or(printableRangeY, printableRangeZ)
-            nonPrintableIndices = [index for index, value in enumerate(printableRange) if value]
-
-            printableY    = yChannelCenterline3D.copy()
-            notPrintableY = yChannelCenterline3D.copy()
-            printableZ    = zChannelCenterline3D.copy()
-            notPrintableZ = zChannelCenterline3D.copy()
-
-            printableY[printableRangeY]     = 'NaN'
-            notPrintableY[~printableRangeY] = 'NaN'
-            printableZ[printableRangeZ]     = 'NaN'
-            notPrintableZ[~printableRangeZ] = 'NaN'
-
-            state.nonPrintableIndices = nonPrintableIndices
-
-            if state.nonPrintableIndices:
-                indexGap = 5
-                numCompressions = len([val for val in np.diff(state.nonPrintableIndices) if val > indexGap]) + 1
-                print(f'{numCompressions} areas located that exceed {state.maxOverhangAngle} degree overhang angle')
-
-            if state.plotsAdv == 'on' and _plotlyGate('advanced 3D channel views'):
-                plotLine(xChannelCenterline3D[nonPrintableIndices], yChannelCenterline3D[nonPrintableIndices], zChannelCenterline3D[nonPrintableIndices],
-                            lineStyle = '', markerStyle = '*', color = 'red')
-                plt.plot(xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D, 'g')
-                plt.gca().plot_surface(state.xNozzleMesh, state.yNozzleMesh, state.zNozzleMesh, alpha = 0.5)
-                plt.gca().set_aspect('equal')
-
-        print(f'Running printability audit')
-
-        printabilityAudit()
-
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Generate channel cross sections and 3D geometry -- #
     # ------------------------------------------------------------------------------------------------------------------------------------ #
@@ -1032,157 +912,5 @@ def solveRegenChannels(state, thermal):
     if  state.makeCoolingChannels == 'jacket':
 
         state.xAllChannels, state.yAllChannels, state.zAllChannels = generateCoolingJacket(state.xChannel, state.yChannel, state.zChannel)
-
-    # ------------------------------------------------------------------------------------------------------------------------------------ #
-    # -- Plots -- #
-    # ------------------------------------------------------------------------------------------------------------------------------------ #
-
-    if state.plotsAdv == 'on' and _plotlyGate('advanced 3D channel views'):
-
-        xPrint, yPrint, zPrint = revolveContour([min(state.xRegenNozzle),max(state.xRegenNozzle)],[0.5*state.chamberDiameter,0.5*state.chamberDiameter])
-
-        colori = sample_colorscale(plotly.colors.cyclical.HSV,
-                        list(np.linspace(0,1,int(np.ceil(state.numCrossSections/5)))))
-        colorii = colori.copy()
-        for i in range(5):
-            colorii = np.append(colorii,colori)
-
-        if state.makeCoolingChannels == 'jacket':
-
-            # -- Three Channel Mesh View -- #
-            fig = go.Figure()
-            # Print volume reference
-            fig.add_trace(go.Surface(x = yPrint , y = zPrint , z = xPrint,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.3,
-                                showscale = False))
-            # Nozzle wall reference
-            fig.add_trace(go.Surface(x = state.zNozzleColdWallMesh , y = state.xNozzleColdWallMesh , z = state.yNozzleColdWallMesh,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.8,
-                                showscale = False))
-            # Interfaced channels
-            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,2], y = state.xAllChannels[:,:,2], z = state.yAllChannels[:,:,2],
-                                    colorscale = [[0, 'yellow'], [1,'yellow']],
-                                    opacity = .999,
-                                    showscale = False))
-            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,1], y = state.xAllChannels[:,:,1], z = state.yAllChannels[:,:,1],
-                                    colorscale = [[0, 'cyan'], [1,'cyan']],
-                                    opacity = 1,
-                                    showscale = False))
-            fig.add_trace(go.Surface(x = state.zAllChannels[:,:,3], y = state.xAllChannels[:,:,3], z = state.yAllChannels[:,:,3],
-                                    colorscale = [[0, 'magenta'], [1,'magenta']],
-                                    opacity = 1,
-                                    showscale = False))
-            # Centerline
-            fig.add_trace(go.Scatter3d(x = state.zChannelCenterline3D, y = state.xChannelCenterline3D, z = state.yChannelCenterline3D,
-                                        mode = 'lines',
-                                        line = dict(color = 'red',
-                                                width = 10)))
-            # Cross section traces
-            for i in range(state.numCrossSections):
-                fig.add_trace(go.Scatter3d(x = state.zAllChannels[:,i,2], y = state.xAllChannels[:,i,2],z = state.yAllChannels[:,i,2],
-                                        mode = 'lines',
-                                        opacity = 0.8,
-                                        line = dict(color = colorii[i],
-                                                    width = 10),
-                                        name = f'CS {i}'))
-            # Finish
-            fig.update_layout(scene = dict(xaxis_title = 'Nozzle Radius [m]',
-                                    yaxis_title = 'Nozzle Axis [m]',
-                                    zaxis_title = 'Nozzle Radius [m]'),
-                                    title = {'text': 'Three Channel Mesh View',
-                                                'x': 0.5,
-                                                'xanchor': 'center',
-                                                'y': 0.9,
-                                                'yanchor': 'top'},
-                                    scene_aspectmode = 'data',
-                                    template = 'plotly_dark',
-                                    showlegend = False)
-            if state.export == 'on':
-                print(f'Saving Three Channel Mesh View to .html')
-                plot(fig, filename = state.dataFolder + '\\threeChannelMeshViewInterfaced.html', auto_open = not headlessPlots())
-            else:
-                showFigure(fig)
-
-            if state.plotJacket == 'on' and _plotlyGate('the full regen jacket view'):
-
-                colori = sample_colorscale(plotly.colors.cyclical.HSV,
-                                        list(np.linspace(0,1,state.nChannel)))
-
-                fig = go.Figure()
-                fig.add_trace(go.Surface(x = state.zNozzleColdWallMesh, y = state.xNozzleColdWallMesh, z = state.yNozzleColdWallMesh,
-                                        colorscale = [[0, 'cyan'], [1,'cyan']],
-                                        opacity = 0.5,
-                                        showscale = False))
-                for i in range(state.nChannel):
-                    fig.add_trace(go.Surface(x = state.zAllChannels[:,:,i], y = state.xAllChannels[:,:,i], z = state.yAllChannels[:,:,i],
-                                        colorscale = [[0, colori[i]], [1,colori[i]]],
-                                        opacity = 1,
-                                        showscale = False))
-                fig.update_layout(scene = dict(xaxis_title = 'Nozzle Radius [m]',
-                                        yaxis_title = 'Nozzle Axis [m]',
-                                        zaxis_title = 'Nozzle Radius [m]'),
-                                        title = {'text': 'Regen Jacket',
-                                                    'x': 0.5,
-                                                    'xanchor': 'center',
-                                                    'y': 0.9,
-                                                    'yanchor': 'top'},
-                                        scene_aspectmode = 'data',
-                                        template = 'plotly_dark')
-                                #   scene_camera = dict(eye = dict(x = 0, y = 2, z = 0))) # good for comparing wrap angles
-                if state.export == 'on':
-                    print(f'Saving Full Regen Jacket View to .html')
-                    plot(fig, filename = state.dataFolder + '\\regenJacketView.html', auto_open = not headlessPlots())
-                else:
-                    showFigure(fig)
-        else:
-
-            # -- One Channel Mesh View -- #
-            fig = go.Figure()
-            # Print volume reference
-            fig.add_trace(go.Surface(x = yPrint , y = zPrint , z = xPrint,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.3,
-                                showscale = False))
-            # Nozzle wall reference
-            fig.add_trace(go.Surface(x = state.zNozzleColdWallMesh , y = state.xNozzleColdWallMesh , z = state.yNozzleColdWallMesh,
-                                colorscale = [[0,'darkgrey'],[1,'darkgrey']],
-                                opacity = 0.8,
-                                showscale = False))
-            # Interfaced channels
-            fig.add_trace(go.Surface(x = state.zChannel, y = state.xChannel, z = state.yChannel,
-                                    colorscale = [[0, 'yellow'], [1,'yellow']],
-                                    opacity = .975,
-                                    showscale = False))
-            fig.add_trace(go.Scatter3d(x = state.zChannelCenterline3D, y = state.xChannelCenterline3D, z = state.yChannelCenterline3D,
-                                        mode = 'lines',
-                                        line = dict(color = 'red',
-                                                width = 10)))
-            # Cross section traces
-            for i in range(state.numCrossSections):
-                fig.add_trace(go.Scatter3d(x = state.zChannel[:,i], y = state.xChannel[:,i],z = state.yChannel[:,i],
-                                    mode = 'lines',
-                                    opacity = 0.8,
-                                    line = dict(color = colorii[i],
-                                                width = 10),
-                                    name = f'CS {i}'))
-            # Finish
-            fig.update_layout(scene = dict(xaxis_title = 'Nozzle Radius [m]',
-                                    yaxis_title = 'Nozzle Axis [m]',
-                                    zaxis_title = 'Nozzle Radius [m]'),
-                                    title = {'text': 'Channel Mesh View',
-                                                'x': 0.5,
-                                                'xanchor': 'center',
-                                                'y': 0.9,
-                                                'yanchor': 'top'},
-                                    scene_aspectmode = 'data',
-                                    template = 'plotly_dark',
-                                    showlegend = False)
-            if state.export == 'on':
-                print(f'Saving Three Channel Mesh View to .html')
-                plot(fig, filename = state.dataFolder + '\\threeChannelMeshViewInterfaced.html', auto_open = not headlessPlots())
-            else:
-                showFigure(fig)
 
     return state

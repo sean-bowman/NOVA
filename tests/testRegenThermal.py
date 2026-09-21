@@ -277,11 +277,9 @@ class TestContext:
 
         context = RegenThermalContext()
 
-        assert context.material  == 'GRCop-42'
-        assert context.plotsAdv  == 'off'
-        assert context.plotsDocs == 'off'
-        assert context.export    == 'off'
-        assert context.debugMode is False
+        assert context.material     == 'GRCop-42'
+        assert context.plotsEnabled == 'off'
+        assert context.export       == 'off'
 
     def testItCarriesNothingThatChangesANumber(self):
 
@@ -289,7 +287,7 @@ class TestContext:
         # arithmetic, this list has to change, which is the point of the test.
         fields = set(RegenThermalContext.__dataclass_fields__)
 
-        assert fields == {'material', 'dataFolder', 'plotsAdv', 'plotsDocs', 'export', 'debugMode'}
+        assert fields == {'material', 'dataFolder', 'plotsEnabled', 'export'}
 
 class TestInputValidation:
 

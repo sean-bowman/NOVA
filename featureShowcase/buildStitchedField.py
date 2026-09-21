@@ -21,7 +21,7 @@ import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
-from matplotlib.gridspec import GridSpec
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -35,7 +35,6 @@ copper     = '#E0975A'
 green      = '#86C06C'
 ink        = '#E8E6E1'
 muted      = '#8B93A7'
-warn       = '#E8A0A0'
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
@@ -117,9 +116,7 @@ def drawStitched(nozzle, quantity):
         levels = np.linspace(lowest, highest, 80)
         normalization = None
 
-    figure = plt.figure(figsize = (13.5, 5.4))
-    grid = GridSpec(2, 1, height_ratios = [1.0, 0.045], hspace = 0.42, figure = figure)
-    axes = figure.add_subplot(grid[0])
+    figure, axes = plt.subplots(figsize = (13.5, 5.4))
 
     axes.contourf(upstreamX * 1e3, upstreamR * 1e3, upstreamValues,
                   levels = levels, cmap = colorMap, extend = 'both', norm = normalization)
@@ -148,7 +145,11 @@ def drawStitched(nozzle, quantity):
     axes.set_aspect('equal', adjustable = 'box')
     axes.grid(False)
 
-    bar = figure.colorbar(mesh, cax = figure.add_subplot(grid[1]), orientation = 'horizontal',
+    # A colorbar axis matched to the nozzle axes' own rendered width, which the equal aspect
+    # ratio shrinks well below the figure width. A colorbar spanning the full figure instead
+    # would leave the nozzle sitting in dead space on both sides once the figure is saved tight.
+    cax = make_axes_locatable(axes).append_axes('bottom', size = '4%', pad = 0.5)
+    bar = figure.colorbar(mesh, cax = cax, orientation = 'horizontal',
                           label = f'{label} {unit}' + (', logarithmic' if logarithmic else ''))
     if logarithmic:
         # Decade ticks. The default picks the level values themselves, which on a geometric
@@ -157,12 +158,6 @@ def drawStitched(nozzle, quantity):
         decades = decades[(decades >= levels[0]) & (decades <= levels[-1])]
         bar.set_ticks(decades)
         bar.set_ticklabels([f'{value:g}' for value in decades])
-    figure.text(0.012, 0.005,
-                'One color scale spans both halves, and they are not the same kind of result. '
-                'Upstream of the throat nothing is solved: the local area ratio fixes one Mach '
-                'number per station and it is held across the section. Downstream the field is the '
-                'characteristics solution, with a state at every node.',
-                fontsize = 8, color = warn, va = 'bottom')
 
     path = os.path.join(here, f'stitchedField{quantity.capitalize()}.png')
     figure.savefig(path, dpi = 150, bbox_inches = 'tight')

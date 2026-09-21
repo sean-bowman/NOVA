@@ -3,7 +3,9 @@ Representative plotted outputs for the NOVA nozzle designer.
 
 Renders geometry, flowfield, plume and material views from the renderer-independent figure
 dataclasses in src/NOVA/figures.py, so the same data that drives the GUI panes and the
-interactive exports also drives these figures.
+interactive exports also drives these figures. The contour, near-wall and field panels are
+drawn by the same Matplotlib renderers a real run calls to write its own PNGs, so neither can
+drift from the other.
 '''
 import os
 import pickle
@@ -13,7 +15,6 @@ import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.gridspec import GridSpec
 
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
@@ -26,11 +27,8 @@ from NOVA import materials as materialModule
 
 background = '#1a1e2a'
 panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
 ink        = '#E8E6E1'
 muted      = '#8B93A7'
-blue       = '#6BA3D6'
 
 # One hue per wall alloy. A sampled colormap put the four copper alloys within a few
 # degrees of each other, which is unreadable on a ten-series axis, so the assignment is
@@ -71,107 +69,24 @@ def savePanel(figure, name):
 
 def drawContour(nozzle):
     '''Wall contour with the generated combustion chamber called out.'''
-    data = figureModule.contourFigure(nozzle)
-    figure, axes = plt.subplots(figsize = (11, 4.2))
-    x, r = np.asarray(data.x) * 1e3, np.asarray(data.r) * 1e3
-    axes.plot(x, r, color = copper, lw = 1.8)
-    axes.plot(x, -r, color = copper, lw = 1.8)
-    axes.fill_between(x, r, -r, color = copper, alpha = 0.08)
-
-    if len(data.xRegen):
-        xRegen, rRegen = np.asarray(data.xRegen) * 1e3, np.asarray(data.rRegen) * 1e3
-        axes.plot(xRegen, rRegen, color = green, lw = 1.2, label = 'regen jacket')
-        axes.plot(xRegen, -rRegen, color = green, lw = 1.2)
-
-    axes.axvline(data.throatX * 1e3, color = muted, ls = '--', lw = 0.9)
-    axes.annotate(f'throat  r = {data.throatRadius * 1e3:.1f} mm',
-                  (data.throatX * 1e3, 0.0), textcoords = 'offset points',
-                  xytext = (6, 6), color = muted, fontsize = 8)
-
-    chamberDiameter = getattr(nozzle, 'chamberDiameter', None)
-    if chamberDiameter:
-        axes.axhline(chamberDiameter * 0.5e3, color = blue, ls = ':', lw = 1.0)
-        axes.axhline(-chamberDiameter * 0.5e3, color = blue, ls = ':', lw = 1.0)
-        axes.annotate(f'chamber D = {chamberDiameter * 1e3:.0f} mm',
-                      (x[0], chamberDiameter * 0.5e3), textcoords = 'offset points',
-                      xytext = (8, 6), color = blue, fontsize = 8)
-
-    axes.set_xlabel('Axial station [mm]')
-    axes.set_ylabel('Radius [mm]')
-    axes.set_title('Nozzle contour with generated combustion chamber')
-    axes.set_aspect('equal', adjustable = 'box')
-    return savePanel(figure, 'contour.png')
+    figure = figureModule.drawContourFigure(nozzle)
+    return savePanel(figure, 'contour.png') if figure is not None else None
 
 def drawNearWall(nozzle):
     '''Near-wall exhaust state along the axis.'''
-    data = figureModule.nearWallFigure(nozzle)
-    figure, axesList = plt.subplots(3, 1, figsize = (9, 7), sharex = True)
-    axis = np.asarray(data.axis) * 1e3
-
-    panels = ((axesList[0], data.temperature, 'Static temperature [K]', copper, 1.0),
-              (axesList[1], data.pressure, 'Static pressure [MPa]', green, 1e-6),
-              (axesList[2], data.mach, 'Mach number [-]', blue, 1.0))
-    for axes, values, label, color, scale in panels:
-        axes.plot(axis, np.asarray(values) * scale, color = color, lw = 1.6)
-        axes.set_ylabel(label)
-
-    axesList[0].set_title('Near-wall exhaust state')
-    axesList[-1].set_xlabel('Axial station [mm]')
-    return savePanel(figure, 'nearWallState.png')
+    figure = figureModule.drawNearWallFigure(nozzle)
+    return savePanel(figure, 'nearWallState.png') if figure is not None else None
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Flowfield -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
 def drawField(nozzle, quantity, name):
-    '''
-    Method-of-characteristics field over the curvilinear mesh. The color bar sits below the
-    axes so the plot itself takes the full width of the panel.
-    '''
-    data = figureModule.fieldFigure(nozzle, quantity)
-    if data is None:
+    '''Method-of-characteristics field over the curvilinear mesh, one quantity per call.'''
+    figure = figureModule.drawFieldFigure(nozzle, quantity)
+    if figure is None:
         print(f'  skipped {name}: no {quantity} field on this run')
         return None
-
-    figure = plt.figure(figsize = (11, 4.6))
-    grid = GridSpec(2, 1, height_ratios = [1.0, 0.05], hspace = 0.35, figure = figure)
-    axes = figure.add_subplot(grid[0])
-
-    # The mesh is curvilinear and padded with NaN, so the field is drawn from the finite nodes
-    # directly rather than as a structured grid.
-    xs, rs, vs = [], [], []
-    for xBlock, rBlock, valueBlock in zip(data.xBlocks, data.rBlocks, data.valueBlocks):
-        xBlock = np.asarray(xBlock, dtype = float).ravel()
-        rBlock = np.asarray(rBlock, dtype = float).ravel()
-        valueBlock = np.asarray(valueBlock, dtype = float).ravel()
-        keep = np.isfinite(xBlock) & np.isfinite(rBlock) & np.isfinite(valueBlock)
-        xs.append(xBlock[keep])
-        rs.append(rBlock[keep])
-        vs.append(valueBlock[keep])
-
-    scale = 1e-6 if quantity == 'pressure' else 1.0
-    xs = np.concatenate(xs) * 1e3
-    rs = np.concatenate(rs) * 1e3
-    vs = np.concatenate(vs) * scale
-
-    mesh = axes.tricontourf(np.concatenate([xs, xs]), np.concatenate([rs, -rs]),
-                            np.concatenate([vs, vs]), levels = 80, cmap = 'viridis')
-    wallX, wallR = np.asarray(data.wallX) * 1e3, np.asarray(data.wallR) * 1e3
-    axes.plot(wallX, wallR, color = copper, lw = 1.4)
-    axes.plot(wallX, -wallR, color = copper, lw = 1.4)
-    # The contour is a truncated ideal nozzle, so the characteristics mesh extends past the
-    # delivered wall to the full ideal exit. Clip to the wall that is actually built.
-    axes.set_xlim(wallX.min(), wallX.max())
-    axes.set_ylim(-1.08 * abs(wallR).max(), 1.08 * abs(wallR).max())
-    axes.set_xlabel('Axial station [mm]')
-    axes.set_ylabel('Radius [mm]')
-    axes.set_title(data.title)
-    axes.set_aspect('equal', adjustable = 'box')
-    axes.grid(False)
-
-    label = data.label.replace('[Pa]', '[MPa]') if quantity == 'pressure' else data.label
-    figure.colorbar(mesh, cax = figure.add_subplot(grid[1]), orientation = 'horizontal',
-                    label = label)
     return savePanel(figure, name)
 def drawMaterialCurves():
 
@@ -332,11 +247,8 @@ def main():
     drawMaterialCurves()
     drawCryogenicRatio()
 
-    if figureModule.plotlyAvailable:
-        written = figureModule.exportInteractiveFigures(nozzle, here)
-        print(f'  wrote {len(written)} interactive figures')
-    else:
-        print('  plotly not installed, interactive export skipped')
+    written = figureModule.exportInteractiveFigures(nozzle, here)
+    print(f'  wrote {len(written)} interactive figures')
 
 if __name__ == '__main__':
     main()

@@ -37,7 +37,12 @@ def referenceConfiguration(**overrides):
 
     '''
 
-    The shipped LOX/LH2 regen example, with the plotting and geometry export switched off.
+    The reference nozzle's jacket, with everything the cases below are not about switched off.
+
+    `NOVANozzle.json` carries every feature that composes, which is more than a film study wants.
+    The film and the extension are what the cases vary, so everything else is held fixed: the
+    jacket runs the full contour, the volutes are not built, and no figure is drawn. Building the
+    volutes alone adds minutes to a run that reads nothing from them.
 
     Returns:
     --------
@@ -47,14 +52,30 @@ def referenceConfiguration(**overrides):
     '''
 
     assetPath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                             'src', 'NOVA', 'assets', 'regenExample.json')
+                             'src', 'NOVA', 'assets', 'NOVANozzle.json')
     with io.open(assetPath, encoding = 'utf-8') as handle:
         configuration = json.load(handle)
 
+    # The jacket the cases share: sixty circular channels in GRCop-42, hydrogen at 3.4 kg/s
+    # entering at 12 MPa and 30 K, above the hydrogen critical point, over the full contour.
     configuration.update({
-        'plotsBasic': 'off', 'plotsAdv': 'off', 'plotsDocs': 'off', 'plotsDebug': 'off',
-        'export': 'off', 'visualizeContour': 'off', 'plotJacket': 'off', 'plotKeepOut': 'off',
-        'makePlume': False, 'makeInletVolute': False, 'makeReturnVolute': False})
+        'makeCoolingChannels': True, 'material': 'GRCop-42', 'channelType': 'circle',
+        'nChannel': 60, 'numCrossSections': 60, 'numCSPointsChannel': 40,
+        'hotWallThickness': 0.001, 'shellThickness': 0.002, 'infillThickness': 0.001,
+        'maxWallTemperature': 800.0, 'interfaceLength': 0.02,
+        'coolantClass': 'fuel', 'coolant': 'Hydrogen', 'coolantInitialTemperature': 30.0,
+        'coolantInitialPressure': 12000000.0, 'coolantMassFlow': 3.4,
+        'regenTruncationType': 'none', 'regenTruncationValue': None})
+
+    # Each case switches on the one feature it is about. Inheriting them from the reference
+    # nozzle instead would put a film on the case that exists to run without one.
+    configuration.update({
+        'filmCooling': False, 'filmCoolant': None, 'filmMassFlow': None,
+        'filmInletTemperature': None, 'filmInjectionAxialPosition': None, 'filmSlotHeight': None,
+        'makeRadiativeExtension': 'off',
+        'makeInletVolute': False, 'makeReturnVolute': False})
+
+    configuration.update({'plotsEnabled': 'off', 'export': 'off'})
     configuration.update(overrides)
 
     return configuration
@@ -198,7 +219,8 @@ def radiationCooledExtension(outputFolder):
     print('=' * 86)
 
     nozzle = runConfiguration(
-        referenceConfiguration(truncationMethod = 'er 3.0', makeCoolingChannels = False),
+        referenceConfiguration(regenTruncationType = 'er', regenTruncationValue = 3.0,
+                               makeCoolingChannels = False),
         os.path.join(outputFolder, 'extension'))
 
     axial = nozzle.xExtension

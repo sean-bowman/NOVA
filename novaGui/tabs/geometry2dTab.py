@@ -1,3 +1,4 @@
+
 # -- 2D Geometry Tab -- #
 
 '''
@@ -17,8 +18,7 @@ from tkinter import ttk, messagebox
 
 from .. import runner
 from ..widgets import Tooltip
-from ..plotting import (MplPane, drawContour, drawNearWall, drawPlume,
-                        interactiveAvailable, openInteractive)
+from ..plotting import MplPane, drawContour, drawNearWall, drawPlume, openInteractive
 
 class Geometry2DTab(ttk.Frame):
 
@@ -65,9 +65,7 @@ class Geometry2DTab(ttk.Frame):
                                              command = self._openInteractive, state = 'disabled')
         self._interactiveButton.pack(side = 'right')
         Tooltip(self._interactiveButton,
-                lambda: ('Render this view with plotly and open it in your browser.'
-                         if interactiveAvailable() else
-                         'Requires plotly.  pip install plotly'))
+               'Render this view with plotly and open it in your browser.')
 
         self._pane = MplPane(self)
         self._pane.pack(fill = 'both', expand = True, padx = 8, pady = (0, 8))
@@ -118,15 +116,14 @@ class Geometry2DTab(ttk.Frame):
         folder = getattr(self._result, 'outputDir', '') or '.'
         if openInteractive(nozzle, key, folder) is None:
             messagebox.showinfo('Interactive view unavailable',
-                                'This view has no data to render, or plotly is not installed.')
+                                'This view has no data to render.')
 
     def _render(self) -> None:
 
         label = self._view.get()
         nozzle = getattr(self._result, 'nozzle', None)
 
-        canInteract = (nozzle is not None and interactiveAvailable()
-                       and bool(self._interactiveKey()))
+        canInteract = nozzle is not None and bool(self._interactiveKey())
         self._interactiveButton.configure(state = 'normal' if canInteract else 'disabled')
 
         if label in self._computed:

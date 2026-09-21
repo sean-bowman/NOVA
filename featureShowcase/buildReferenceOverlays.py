@@ -115,14 +115,14 @@ def runEngine(name):
     '''Generate a NOVA contour at one engine's published operating point.'''
     spec = engines[name]
     config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets',
-                                         'loxLh2Example.json')))
+                                         'NOVANozzle.json')))
     config.update({'Fuel': spec['fuel'], 'Oxidizer': spec['oxidizer'],
                    'OFRatio': spec['mixtureRatio'],
                    'chamberPressure': spec['chamberPressure'], 'thrust': spec['thrust'],
                    'targetExitPressure': None, 'expansionRatio': spec['areaRatio'],
                    'lengthFraction': spec['lengthFraction'], 'Lstar': None,
-                   'plumeAmbientPressure': None, 'plotsBasic': False, 'plotsAdv': False,
-                   'export': False, 'visualizeContour': False, 'filename': 'referenceOverlays'})
+                   'plumeAmbientPressure': None, 'plotsEnabled': False,
+                   'export': False, 'filename': 'referenceOverlays'})
     configPath = os.path.join(here, 'overlayConfig.json')
     json.dump(config, open(configPath, 'w'), indent = 2)
 
@@ -130,7 +130,7 @@ def runEngine(name):
     nozzle = Nozzle()
     try:
         nozzle.setInputs(inputsPath = configPath)
-        nozzle.pressureMatchTruncatedIdealContour(float(spec['lengthFraction']))
+        nozzle.solveTruncatedIdealDesignPoint(float(spec['lengthFraction']))
     except Exception as error:                                          # noqa: BLE001
         print(f'    FAILED {name}: {error}')
         return None

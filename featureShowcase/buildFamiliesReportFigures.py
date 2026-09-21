@@ -323,9 +323,9 @@ def drawThroatAndTransonic():
 
 def workedContour():
 
-    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'loxLh2Example.json')))
-    config.update({'plumeAmbientPressure': None, 'plotsBasic': False, 'plotsAdv': False,
-                   'export': False, 'visualizeContour': False, 'makeCoolingChannels': 'off',
+    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json')))
+    config.update({'plumeAmbientPressure': None, 'plotsEnabled': False,
+                   'export': False, 'makeCoolingChannels': 'off',
                    'filename': 'familiesReport'})
     scratch = os.path.join(root, 'runs', 'familiesReport')
     os.makedirs(scratch, exist_ok = True)
@@ -334,7 +334,7 @@ def workedContour():
     Nozzle._getOutputRoot = lambda self, _base = scratch: _base
     nozzle = Nozzle()
     nozzle.setInputs(inputsPath = path)
-    nozzle.pressureMatchTruncatedIdealContour(0.80)
+    nozzle.solveTruncatedIdealDesignPoint(0.80)
     return nozzle
 
 def drawBoundaryLayer():

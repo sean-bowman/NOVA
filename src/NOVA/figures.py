@@ -3,20 +3,28 @@
 
 '''
 
-One description of each result figure, and a plotly renderer for it.
+Every plotting concern outside the GUI, in one place: what a figure shows, and how both
+backends draw it.
 
-NOVA draws every figure twice. Matplotlib renders the panes embedded in the GUI and the PNGs
-written beside a run, because it draws into a Tk canvas and is always installed. Plotly renders
-the interactive HTML opened in a browser, because it pans, zooms and reads values off a mesh far
-better than a static image, and it cannot be embedded in Tk at all.
+NOVA draws every result figure twice. Matplotlib renders the PNGs written beside a run, since
+those are meant to be viewed as a static image or embedded in a document. Plotly renders the
+interactive HTML companion opened in a browser, since it pans, zooms and reads values off a mesh
+far better than a static image can. Both are required dependencies.
 
-Rather than write each figure twice, the extractors here pull the arrays and labels off a
-Nozzle into a plain dataclass that neither library appears in. novaGui.plotting renders those
-with Matplotlib; the plotly builders below render the same objects for export. A figure is
-described once, and the two renderings cannot drift.
+Rather than write each figure twice, the extractors pull the arrays and labels off a Nozzle into
+a plain dataclass that neither library appears in, and each backend's renderers draw from that
+one description. A figure is described once, and the two renderings cannot drift. The GUI is the
+one exception: its panes are embedded in a live Tk canvas rather than saved or exported, which
+`novaGui.plotting` draws with its own renderers against these same descriptions, styled from the
+GUI's own theme rather than this module's.
 
-Plotly is optional. Every builder returns None when it is not installed, and
-exportInteractiveFigures() then writes nothing and reports an empty list.
+Every figure a run can produce is built here, including the 3D assembly views that have no
+Matplotlib counterpart: the volute assembly, the channel mesh and jacket, and the regen heat
+transfer dashboard. Those skip the two-stage extractor-then-renderer split, since there is only
+one renderer to keep in step with, and build the plotly figure directly off a Nozzle or a
+solve's own state object. The modules that generate the geometry those figures describe call in
+here rather than building a figure themselves, so what a module computes and what it draws stay
+in two different files.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -27,14 +35,80 @@ import os
 from dataclasses import dataclass, field
 
 import numpy as np
+import matplotlib
 
-try:
-    import plotly.graph_objects as go
-    from plotly.offline import plot as _writePlotlyFigure
-    plotlyAvailable = True
-except ImportError:
-    go = _writePlotlyFigure = None
-    plotlyAvailable = False
+def headlessPlots() -> bool:
+
+    '''
+
+    Whether figures should be written and left alone rather than put in front of somebody.
+
+    A design run draws a lot of figures, and every one of them opens a window or a browser tab
+    that has to be closed by hand before the next run. That is fine once and intolerable in a
+    loop, which is what running tests or iterating on a feature is. Setting the environment
+    variable `NOVA_HEADLESS` suppresses the display of all of them without suppressing the
+    figures themselves: matplotlib windows never open, plotly writes its HTML and does not
+    launch a browser, and every file that would have been produced is still produced.
+
+    This is deliberately not a configuration field. It is a property of where NOVA is running
+    rather than of the engine being designed, so it belongs to the shell or the harness that
+    started the run, not to the JSON that describes the nozzle.
+
+    Returns:
+    --------
+    bool
+        True when figures should not be displayed.
+
+    '''
+
+    return os.environ.get('NOVA_HEADLESS', '').strip().lower() not in ('', '0', 'false', 'off')
+
+# Selected before pyplot is imported, so the choice sticks rather than having to be forced back
+# afterwards. This covers matplotlib only; a plotly figure ignores the matplotlib backend and
+# opens a browser tab of its own, which is what `showFigure` below is for.
+if headlessPlots():
+    matplotlib.use('Agg', force = True)
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import plotly.colors
+import plotly.graph_objects as go
+from plotly.express.colors import sample_colorscale
+from plotly.offline import plot as _writePlotlyFigure
+
+from .geometryTools import DCM, revolveContour
+from .fluidProperties import fluidProps
+
+def showFigure(figure) -> None:
+
+    '''
+
+    Put a figure in front of somebody, unless NOVA is running headless.
+
+    Every display of a figure goes through here rather than calling `.show()` directly, and
+    `tests/testPlotSuppression.py` fails the build if a new one does not. That is worth a test
+    because the failure is silent and cumulative: a call that opens a browser tab costs nothing
+    the first time and buries a developer on the twentieth, and there is no error to notice.
+
+    A plotly figure is the case that matters. It ignores the matplotlib backend entirely, and its
+    browser renderer starts a local web server and opens a tab against it, which is why
+    suppressing it is a separate problem from selecting a non-interactive backend.
+
+    Parameters:
+    -----------
+    figure : plotly.graph_objects.Figure | matplotlib.figure.Figure
+        Anything with a `show` method.
+
+    Returns:
+    --------
+    None
+
+    '''
+
+    if headlessPlots():
+        return
+
+    figure.show()
 
 # Palette shared with the GUI theme. Duplicated rather than imported because this module belongs
 # to the solver package and must not depend on the front end; both derive from the same style
@@ -48,6 +122,18 @@ palette = {
     'accent':     '#E0975A',
     'green':      '#86C06C',
     'blue':       '#7baee8',
+}
+
+# Palette for the Matplotlib PNGs, kept separate from the plotly palette above since the two
+# renderings are tuned independently against their own backgrounds.
+mplPalette = {
+    'background': '#1a1e2a',
+    'panel':      '#222735',
+    'copper':     '#E0975A',
+    'green':      '#86C06C',
+    'ink':        '#E8E6E1',
+    'muted':      '#8B93A7',
+    'blue':       '#6BA3D6',
 }
 
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -86,6 +172,7 @@ class NearWallFigure:
     temperature: np.ndarray                        # [K]
     pressure: np.ndarray                           # [Pa]
     mach: np.ndarray                               # [-]
+    velocity: np.ndarray = field(default_factory = lambda: np.array([]))   # [m/s]
     title: str = 'Near-wall exhaust state'
 
 @dataclass
@@ -209,6 +296,7 @@ def nearWallFigure(nozzle):
     temperature = _asArray(getattr(nozzle, 'nozzleNearWallTemperature', []))
     pressure = _asArray(getattr(nozzle, 'nozzleNearWallPressure', []))
     mach = _asArray(getattr(nozzle, 'nozzleNearWallMachNumber', []))
+    velocity = _asArray(getattr(nozzle, 'nozzleNearWallVelocity', []))
     if x.size == 0 or temperature.size == 0:
         return None
 
@@ -217,7 +305,10 @@ def nearWallFigure(nozzle):
         pressure = np.full(temperature.size, np.nan)
     if mach.size != temperature.size:
         mach = np.full(temperature.size, np.nan)
-    return NearWallFigure(axis = axis, temperature = temperature, pressure = pressure, mach = mach)
+    if velocity.size != temperature.size:
+        velocity = np.full(temperature.size, np.nan)
+    return NearWallFigure(axis = axis, temperature = temperature, pressure = pressure,
+                          mach = mach, velocity = velocity)
 
 def revolvedFigure(nozzle, sweepDeg: float = 300.0):
 
@@ -358,7 +449,7 @@ def plotlyContour(data: ContourFigure):
 
     '''
 
-    if not plotlyAvailable or data is None:
+    if data is None:
         return None
 
     figure = go.Figure()
@@ -401,7 +492,7 @@ def plotlyNearWall(data: NearWallFigure):
 
     '''
 
-    if not plotlyAvailable or data is None:
+    if data is None:
         return None
 
     from plotly.subplots import make_subplots
@@ -439,7 +530,7 @@ def plotlyRevolved(data: RevolvedFigure):
 
     '''
 
-    if not plotlyAvailable or data is None:
+    if data is None:
         return None
 
     theta = np.linspace(0.0, np.radians(data.sweepDeg), 80)
@@ -495,7 +586,7 @@ def plotlyField(data: FieldFigure):
 
     '''
 
-    if not plotlyAvailable or data is None:
+    if data is None:
         return None
 
     x = np.concatenate([block.ravel() for block in data.xBlocks])
@@ -542,7 +633,7 @@ def plotlyPlume(data):
 
     '''
 
-    if not plotlyAvailable or data is None:
+    if data is None:
         return None
 
     figure = go.Figure()
@@ -591,6 +682,899 @@ def plotlyPlume(data):
     return figure
 
 #--------------------------------------------------------------------------------------------------------------------------#
+# -- Matplotlib renderers -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def _applyMplStyle() -> None:
+
+    '''Themed rcParams for every Matplotlib figure this module draws.'''
+
+    plt.rcParams.update({
+        'figure.facecolor': mplPalette['background'], 'axes.facecolor': mplPalette['panel'],
+        'savefig.facecolor': mplPalette['background'], 'text.color': mplPalette['ink'],
+        'axes.labelcolor': mplPalette['ink'], 'axes.edgecolor': mplPalette['muted'],
+        'xtick.color': mplPalette['muted'], 'ytick.color': mplPalette['muted'],
+        'grid.color': '#333A4D', 'axes.grid': True, 'grid.alpha': 0.4, 'font.size': 9,
+        'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
+    })
+
+def drawContourFigure(nozzle):
+
+    '''
+
+    Wall contour with the generated combustion chamber called out.
+
+    Returns:
+    --------
+    matplotlib.figure.Figure or None
+        None when the run has no contour to draw.
+
+    '''
+
+    data = contourFigure(nozzle)
+    if data is None:
+        return None
+
+    _applyMplStyle()
+    figure, axes = plt.subplots(figsize = (11, 4.2))
+    x, r = np.asarray(data.x) * 1e3, np.asarray(data.r) * 1e3
+    axes.plot(x, r, color = mplPalette['copper'], lw = 1.8)
+    axes.plot(x, -r, color = mplPalette['copper'], lw = 1.8)
+    axes.fill_between(x, r, -r, color = mplPalette['copper'], alpha = 0.08)
+
+    if len(data.xRegen):
+        xRegen, rRegen = np.asarray(data.xRegen) * 1e3, np.asarray(data.rRegen) * 1e3
+        axes.plot(xRegen, rRegen, color = mplPalette['green'], lw = 1.2, label = 'regen jacket')
+        axes.plot(xRegen, -rRegen, color = mplPalette['green'], lw = 1.2)
+
+    axes.axvline(data.throatX * 1e3, color = mplPalette['muted'], ls = '--', lw = 0.9)
+    axes.annotate(f'throat  r = {data.throatRadius * 1e3:.1f} mm',
+                  (data.throatX * 1e3, 0.0), textcoords = 'offset points',
+                  xytext = (6, 6), color = mplPalette['muted'], fontsize = 8)
+
+    chamberDiameter = getattr(nozzle, 'chamberDiameter', None)
+    if chamberDiameter:
+        axes.annotate(f'chamber D = {chamberDiameter * 1e3:.0f} mm',
+                      (x[0], chamberDiameter * 0.5e3), textcoords = 'offset points',
+                      xytext = (8, 6), color = mplPalette['blue'], fontsize = 8)
+
+    axes.set_xlabel('Axial station [mm]')
+    axes.set_ylabel('Radius [mm]')
+    axes.set_title('Nozzle and chamber contour')
+    axes.set_aspect('equal', adjustable = 'box')
+    return figure
+
+def drawNearWallFigure(nozzle):
+
+    '''
+
+    Near-wall exhaust state along the axis: velocity, static temperature, static pressure and
+    Mach number.
+
+    Returns:
+    --------
+    matplotlib.figure.Figure or None
+        None when the flow solve did not run.
+
+    '''
+
+    data = nearWallFigure(nozzle)
+    if data is None:
+        return None
+
+    _applyMplStyle()
+    figure, axesList = plt.subplots(4, 1, figsize = (9, 9), sharex = True)
+    axis = np.asarray(data.axis) * 1e3
+
+    panels = ((axesList[0], data.velocity, 'Velocity [m/s]', mplPalette['blue'], 1.0),
+              (axesList[1], data.temperature, 'Static temperature [K]', mplPalette['copper'], 1.0),
+              (axesList[2], data.pressure, 'Static pressure [MPa]', mplPalette['green'], 1e-6),
+              (axesList[3], data.mach, 'Mach number [-]', mplPalette['blue'], 1.0))
+    for axes, values, label, color, scale in panels:
+        axes.plot(axis, np.asarray(values) * scale, color = color, lw = 1.6)
+        axes.set_ylabel(label)
+
+    axesList[0].set_title(data.title)
+    axesList[-1].set_xlabel('Axial station [mm]')
+    return figure
+
+def drawFieldFigure(nozzle, quantity: str):
+
+    '''
+
+    Method-of-characteristics field over the curvilinear mesh, one quantity per call.
+
+    Parameters:
+    -----------
+    quantity : str
+        One of 'mach', 'pressure', 'temperature'.
+
+    Returns:
+    --------
+    matplotlib.figure.Figure or None
+        None when the run built no characteristics mesh (a conical diverging section never
+        builds one).
+
+    '''
+
+    data = fieldFigure(nozzle, quantity)
+    if data is None:
+        return None
+
+    _applyMplStyle()
+    figure, axes = plt.subplots(figsize = (11, 4.6))
+
+    # The mesh is curvilinear and padded with NaN, so the field is drawn from its finite nodes
+    # directly rather than as a structured grid.
+    xs, rs, vs = [], [], []
+    for xBlock, rBlock, valueBlock in zip(data.xBlocks, data.rBlocks, data.valueBlocks):
+        xBlock = np.asarray(xBlock, dtype = float).ravel()
+        rBlock = np.asarray(rBlock, dtype = float).ravel()
+        valueBlock = np.asarray(valueBlock, dtype = float).ravel()
+        keep = np.isfinite(xBlock) & np.isfinite(rBlock) & np.isfinite(valueBlock)
+        xs.append(xBlock[keep])
+        rs.append(rBlock[keep])
+        vs.append(valueBlock[keep])
+
+    scale = 1e-6 if quantity == 'pressure' else 1.0
+    xs = np.concatenate(xs) * 1e3
+    rs = np.concatenate(rs) * 1e3
+    vs = np.concatenate(vs) * scale
+
+    mesh = axes.tricontourf(np.concatenate([xs, xs]), np.concatenate([rs, -rs]),
+                            np.concatenate([vs, vs]), levels = 80, cmap = 'viridis')
+    wallX, wallR = np.asarray(data.wallX) * 1e3, np.asarray(data.wallR) * 1e3
+    axes.plot(wallX, wallR, color = mplPalette['copper'], lw = 1.4)
+    axes.plot(wallX, -wallR, color = mplPalette['copper'], lw = 1.4)
+    # The contour is a truncated ideal nozzle, so the characteristics mesh extends past the
+    # delivered wall to the full ideal exit. Clip to the wall that is actually built.
+    axes.set_xlim(wallX.min(), wallX.max())
+    axes.set_ylim(-1.08 * abs(wallR).max(), 1.08 * abs(wallR).max())
+    axes.set_xlabel('Axial station [mm]')
+    axes.set_ylabel('Radius [mm]')
+    axes.set_title(data.title)
+    axes.set_aspect('equal', adjustable = 'box')
+    axes.grid(False)
+
+    # A colorbar axis matched to the nozzle axes' own rendered width, which the equal aspect
+    # ratio shrinks well below the figure width. A colorbar spanning the full figure instead
+    # would leave the nozzle sitting in dead space on both sides once the figure is saved tight.
+    label = data.label.replace('[Pa]', '[MPa]') if quantity == 'pressure' else data.label
+    cax = make_axes_locatable(axes).append_axes('bottom', size = '5%', pad = 0.5)
+    figure.colorbar(mesh, cax = cax, orientation = 'horizontal', label = label)
+    return figure
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- 3D assembly renderers, plotly only -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def _cyclicHSVColors(count: int):
+
+    '''Per-station wireframe colors around the HSV wheel, cycled every 5 stations.'''
+
+    base = sample_colorscale(plotly.colors.cyclical.HSV, list(np.linspace(0, 1, int(np.ceil(count / 5)))))
+    colors = np.array(base)
+    for _ in range(5):
+        colors = np.append(colors, base)
+    return colors
+
+def _addVoluteBranch(figure, nozzle, arrayPrefix: str, voluteName: str, colors) -> None:
+
+    '''
+
+    One volute branch: its surface and wireframe, then its shell and print supports if the
+    branch built them.
+
+    Parameters:
+    -----------
+    arrayPrefix : str
+        'Inlet' or 'Return', matching the x{arrayPrefix}Volute-style attribute names.
+    voluteName : str
+        'inletVolute' or 'returnVolute', the Volute instance carrying wallThickness and
+        circlePrintability.
+
+    '''
+
+    numCS = nozzle.numCSVolute
+    volute = getattr(nozzle, voluteName)
+
+    def addSurface(part: str, color: str, opacity: float) -> None:
+
+        x = getattr(nozzle, f'x{arrayPrefix}Volute{part}')
+        y = getattr(nozzle, f'y{arrayPrefix}Volute{part}')
+        z = getattr(nozzle, f'z{arrayPrefix}Volute{part}')
+        figure.add_trace(go.Surface(x = x, y = y, z = z, colorscale = [[0, color], [1, color]],
+                                    opacity = opacity, showscale = False))
+        for i in range(numCS):
+            figure.add_trace(go.Scatter3d(x = x[i, :], y = y[i, :], z = z[i, :], mode = 'lines',
+                                          line = dict(color = colors[i], width = 5)))
+
+    addSurface('', 'cyan', 0.8)
+
+    if volute.wallThickness is not None:
+        addSurface('Shell', 'yellow', 0.35)
+
+    if volute.circlePrintability in ('thin', 'thick'):
+        addSurface('SupportWall', 'magenta', 0.35)
+        addSurface('SupportUpper', 'magenta', 0.35)
+    if volute.circlePrintability == 'thick':
+        addSurface('SupportLower', 'magenta', 0.35)
+
+def volutesFigure(nozzle):
+
+    '''
+
+    The nozzle wall, the chamber and winder keep-out envelopes, and both volutes with their
+    shells and print supports, in one 3D assembly.
+
+    A representative channel is highlighted in red so the return volute's smallest cross
+    section can be checked by eye against the channel turnaround it has to align with.
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure or None
+        None when neither volute was built.
+
+    '''
+
+    if nozzle.makeInletVolute != 'on' and nozzle.makeReturnVolute != 'on':
+        return None
+
+    # The representative channel, rolled a quarter turn to the orientation the return volute's
+    # narrowest cross section is checked against. This is a display aid only; nothing downstream
+    # reads it.
+    numCSPointsChannel, numStations = nozzle.numCSPointsChannel, len(nozzle.xChannel[0, :])
+    channelX, channelY, channelZ = [np.zeros((numCSPointsChannel, numStations)) for _ in range(3)]
+    for i in range(numStations):
+        valueMatrix = [nozzle.xChannel[:, i], nozzle.yChannel[:, i], nozzle.zChannel[:, i]]
+        channelX[:, i], channelY[:, i], channelZ[:, i] = DCM(
+            [np.pi / 2, 0, 0], valueMatrix, transpose = False, rotationOrder = 'xyz')
+
+    printX, printY, printZ = revolveContour(
+        [min(nozzle.xRegenNozzle), max(nozzle.xRegenNozzle)],
+        [0.5 * nozzle.chamberDiameter, 0.5 * nozzle.chamberDiameter])
+
+    # The winder keep-out: the envelope closed back out to the chamber wall along a 35 degree
+    # ramp, which is the shallowest a winder can approach it. Display only, like the print bed.
+    hubX, hubR = nozzle.nozzleKeepOut.hub
+    winderX2D = [hubX, hubX + 0.02,
+                hubX + 0.02 + (0.5 * nozzle.chamberDiameter - hubR) * np.tan(np.deg2rad(35)),
+                nozzle.xRegenNozzle[-1]]
+    winderR2D = [hubR, hubR, nozzle.chamberDiameter * 0.5, nozzle.chamberDiameter * 0.5]
+    winderX, winderY, winderZ = revolveContour(winderX2D, winderR2D)
+
+    figure = go.Figure()
+    grey = [[0, 'darkgrey'], [1, 'darkgrey']]
+    figure.add_trace(go.Surface(x = printZ, y = printX, z = printY, colorscale = grey,
+                                opacity = 0.15, showscale = False))
+    figure.add_trace(go.Surface(x = winderZ, y = winderX, z = winderY, colorscale = grey,
+                                opacity = 0.3, showscale = False))
+    figure.add_trace(go.Surface(x = nozzle.zKeepOut3D, y = nozzle.xKeepOut3D, z = nozzle.yKeepOut3D,
+                                colorscale = grey, opacity = 0.3, showscale = False))
+    figure.add_trace(go.Surface(x = nozzle.xNozzleHotWallMesh, y = nozzle.yNozzleHotWallMesh,
+                                z = nozzle.zNozzleHotWallMesh, colorscale = grey, opacity = 0.7,
+                                showscale = False))
+    figure.add_trace(go.Surface(x = nozzle.xNozzleShellMesh, y = nozzle.yNozzleShellMesh,
+                                z = nozzle.zNozzleShellMesh, colorscale = grey, opacity = 0.7,
+                                showscale = False))
+    figure.add_trace(go.Surface(x = channelX, y = channelY, z = channelZ,
+                                colorscale = [[0, 'red'], [1, 'red']], opacity = 1,
+                                showscale = False))
+
+    colors = _cyclicHSVColors(nozzle.numCSVolute)
+    if nozzle.makeInletVolute == 'on':
+        _addVoluteBranch(figure, nozzle, 'Inlet', 'inletVolute', colors)
+    if nozzle.makeReturnVolute == 'on':
+        _addVoluteBranch(figure, nozzle, 'Return', 'returnVolute', colors)
+
+    figure.update_layout(
+        scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',
+                    zaxis_title = 'Nozzle Radius [m]'),
+        title = {'text': 'Volutes', 'x': 0.5, 'xanchor': 'center', 'y': 0.9, 'yanchor': 'top'},
+        scene_aspectmode = 'data', template = 'plotly_dark', showlegend = False)
+    return figure
+
+def _printBedTrace(nozzle):
+
+    '''The build volume's print bed as a flat disc at the chamber radius, spanning the regen section.'''
+
+    x, y, z = revolveContour([min(nozzle.xRegenNozzle), max(nozzle.xRegenNozzle)],
+                             [0.5 * nozzle.chamberDiameter, 0.5 * nozzle.chamberDiameter])
+    return go.Surface(x = y, y = z, z = x, colorscale = [[0, 'darkgrey'], [1, 'darkgrey']],
+                      opacity = 0.3, showscale = False)
+
+def channelMeshFigure(nozzle):
+
+    '''
+
+    The swept channel surface against the nozzle wall, with the centerline and every
+    cross-section wireframe called out.
+
+    `makeCoolingChannels` is 'on' or 'off' by the time a config is read, so the interfaced,
+    three-channel rendering this checks for under 'jacket' cannot currently be reached; what a
+    run actually gets is the single-channel rendering in the else branch below. Recorded as
+    found rather than silently corrected, since which of the two is meant to run is a design
+    question and not this function's to decide.
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure or None
+        None when no channel was generated.
+
+    '''
+
+    if getattr(nozzle, 'xChannel', None) is None:
+        return None
+
+    colors = _cyclicHSVColors(nozzle.numCrossSections)
+    figure = go.Figure()
+    figure.add_trace(_printBedTrace(nozzle))
+    figure.add_trace(go.Surface(x = nozzle.zNozzleColdWallMesh, y = nozzle.xNozzleColdWallMesh,
+                                z = nozzle.yNozzleColdWallMesh,
+                                colorscale = [[0, 'darkgrey'], [1, 'darkgrey']], opacity = 0.8,
+                                showscale = False))
+
+    if nozzle.makeCoolingChannels == 'jacket':
+        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, 2], y = nozzle.xAllChannels[:, :, 2],
+                                    z = nozzle.yAllChannels[:, :, 2],
+                                    colorscale = [[0, 'yellow'], [1, 'yellow']], opacity = 0.999,
+                                    showscale = False))
+        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, 1], y = nozzle.xAllChannels[:, :, 1],
+                                    z = nozzle.yAllChannels[:, :, 1],
+                                    colorscale = [[0, 'cyan'], [1, 'cyan']], opacity = 1,
+                                    showscale = False))
+        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, 3], y = nozzle.xAllChannels[:, :, 3],
+                                    z = nozzle.yAllChannels[:, :, 3],
+                                    colorscale = [[0, 'magenta'], [1, 'magenta']], opacity = 1,
+                                    showscale = False))
+        figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
+                                      z = nozzle.yChannelCenterline3D, mode = 'lines',
+                                      line = dict(color = 'red', width = 10)))
+        for i in range(nozzle.numCrossSections):
+            figure.add_trace(go.Scatter3d(x = nozzle.zAllChannels[:, i, 2], y = nozzle.xAllChannels[:, i, 2],
+                                          z = nozzle.yAllChannels[:, i, 2], mode = 'lines',
+                                          opacity = 0.8, line = dict(color = colors[i], width = 10),
+                                          name = f'CS {i}'))
+    else:
+        figure.add_trace(go.Surface(x = nozzle.zChannel, y = nozzle.xChannel, z = nozzle.yChannel,
+                                    colorscale = [[0, 'yellow'], [1, 'yellow']], opacity = 0.975,
+                                    showscale = False))
+        figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
+                                      z = nozzle.yChannelCenterline3D, mode = 'lines',
+                                      line = dict(color = 'red', width = 10)))
+        for i in range(nozzle.numCrossSections):
+            figure.add_trace(go.Scatter3d(x = nozzle.zChannel[:, i], y = nozzle.xChannel[:, i],
+                                          z = nozzle.yChannel[:, i], mode = 'lines', opacity = 0.8,
+                                          line = dict(color = colors[i], width = 10), name = f'CS {i}'))
+
+    figure.update_layout(
+        scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',
+                    zaxis_title = 'Nozzle Radius [m]'),
+        title = {'text': 'Channel Mesh View', 'x': 0.5, 'xanchor': 'center', 'y': 0.9,
+                'yanchor': 'top'},
+        scene_aspectmode = 'data', template = 'plotly_dark', showlegend = False)
+    return figure
+
+def regenJacketFigure(nozzle):
+
+    '''
+
+    Every channel in the jacket array, one color each.
+
+    Reachable only when `makeCoolingChannels` is 'jacket', which the config normalization never
+    produces today; see `channelMeshFigure`. Kept so the array-of-channels rendering exists if
+    that mode is reintroduced, rather than being lost along with the branch that built it.
+
+    Returns:
+    --------
+    plotly.graph_objects.Figure or None
+        None unless the jacket array was built.
+
+    '''
+
+    if nozzle.makeCoolingChannels != 'jacket' or getattr(nozzle, 'xAllChannels', None) is None:
+        return None
+
+    colors = sample_colorscale(plotly.colors.cyclical.HSV, list(np.linspace(0, 1, nozzle.nChannel)))
+    figure = go.Figure()
+    figure.add_trace(go.Surface(x = nozzle.zNozzleColdWallMesh, y = nozzle.xNozzleColdWallMesh,
+                                z = nozzle.yNozzleColdWallMesh,
+                                colorscale = [[0, 'cyan'], [1, 'cyan']], opacity = 0.5,
+                                showscale = False))
+    for i in range(nozzle.nChannel):
+        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, i], y = nozzle.xAllChannels[:, :, i],
+                                    z = nozzle.yAllChannels[:, :, i],
+                                    colorscale = [[0, colors[i]], [1, colors[i]]], opacity = 1,
+                                    showscale = False))
+    figure.update_layout(
+        scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',
+                    zaxis_title = 'Nozzle Radius [m]'),
+        title = {'text': 'Regen Jacket', 'x': 0.5, 'xanchor': 'center', 'y': 0.9, 'yanchor': 'top'},
+        scene_aspectmode = 'data', template = 'plotly_dark')
+    return figure
+
+def regenHeatTransferModelPlots(context, coolant, nChannel, adiabatic = False, \
+                                 flutedResults: dict = None, circleResults: dict = None,
+                                 titleFlare: str = '', xReference = [], rReference = []):
+
+    '''
+
+    The regen channel property dashboard: pressure, temperature, wall temperature, velocity,
+    Mach number, heat transfer, density, viscosity, heat capacity, Nusselt number, heat transfer
+    coefficient and Reynolds number along the channel, fluted and circular overlaid where both
+    were solved.
+
+    Draws whatever `flutedResults`/`circleResults` it is handed rather than solving anything
+    itself, since the channel sizing solve has already computed these station-by-station arrays
+    by the time a dashboard is worth drawing. Written to `context.dataFolder` when
+    `context.export` is 'on', shown inline otherwise.
+
+    '''
+
+    from plotly.subplots import make_subplots
+
+    # Helper function to add a trace
+    def add_trace(row, col, x, y, name, color=None, showlegend=False, dash='solid', secondary_y=False, legendgroup=None, **kwargs):
+        '''
+        Adds a trace to the specified subplot with optional legend grouping.
+
+        Args:
+            row (int): Row number of the subplot.
+            col (int): Column number of the subplot.
+            x (array-like): x-axis data.
+            y (array-like): y-axis data.
+            name (str): Name of the trace.
+            color (str, optional): Color of the trace. Defaults to None.
+            showlegend (bool, optional): Whether to show the legend. Defaults to False.
+            dash (str, optional): Line dash style. Defaults to 'solid'.
+            secondary_y (bool, optional): Whether to plot on secondary y-axis. Defaults to False.
+            legendgroup (str, optional): Legend group for the trace. Defaults to None.
+            **kwargs: Additional keyword arguments for go.Scatter.
+        '''
+        fig.add_trace(
+            go.Scatter(x=x, y=y, name=name, line=dict(color=color, dash=dash), showlegend=showlegend, legendgroup=legendgroup, **kwargs),
+            row=row, col=col, secondary_y=secondary_y
+            )
+
+    maxTemperatureCopper = 800 # Kelvin
+
+    if not adiabatic:
+
+        # -- Local Scope the Inputs Dictionary -- #
+
+        # Fluted
+        if flutedResults is not None:
+            if len(flutedResults) != 0:
+                runFluted                               = True
+                xHotWall3D                              = flutedResults["xHotWall3D"]
+                rHotWall3D                              = flutedResults["rHotWall3D"]
+                flutedCoolantTemperature                = flutedResults["temperature"]
+                flutedCoolantPressure                   = flutedResults["pressure"]
+                flutedHotWallTemperature                = flutedResults["wallTemperature"]
+                flutedCoolantVelocity                   = flutedResults["velocity"]
+                flutedCoolantMachNumber                 = flutedResults["machNumber"]
+                flutedHeatTransfer                      = flutedResults["heatTransfer"]
+                flutedCoolantDensity                    = flutedResults["density"]
+                flutedCoolantViscosity                  = flutedResults["viscosity"]
+                flutedCoolantSpecificHeat               = flutedResults["specificHeat"]
+                flutedCoolantNusseltNumber              = flutedResults["nusseltNumber"]
+                flutedExhaustConvectiveHeatTransferCoef = flutedResults["exhaustConvectiveHeatTransferCoef"]
+                flutedCoolantConvectiveHeatTransferCoef = flutedResults["coolantConvectiveHeatTransferCoef"]
+                flutedCoolantReynoldsNumber             = flutedResults["reynoldsNumber"]
+                flutedRadiativeHeatTransfer             = flutedResults["radiativeHeatTransfer"]
+                flutedDrivingTemperature                = flutedResults["drivingTemperature"]
+            else:
+                runFluted = False
+        else:
+            runFluted = False
+        # Circle
+        if circleResults is not None:
+            if len(circleResults) != 0:
+                runCircle                               = True
+                xHotWall3D                              = circleResults["xHotWall3D"]
+                rHotWall3D                              = circleResults["rHotWall3D"]
+                circleCoolantTemperature                = circleResults["temperature"]
+                circleCoolantPressure                   = circleResults["pressure"]
+                circleHotWallTemperature                = circleResults["wallTemperature"]
+                circleCoolantVelocity                   = circleResults["velocity"]
+                circleCoolantMachNumber                 = circleResults["machNumber"]
+                circleHeatTransfer                      = circleResults["heatTransfer"]
+                circleCoolantDensity                    = circleResults["density"]
+                circleCoolantViscosity                  = circleResults["viscosity"]
+                circleCoolantSpecificHeat               = circleResults["specificHeat"]
+                circleCoolantNusseltNumber              = circleResults["nusseltNumber"]
+                circleExhaustConvectiveHeatTransferCoef = circleResults["exhaustConvectiveHeatTransferCoef"]
+                circleCoolantConvectiveHeatTransferCoef = circleResults["coolantConvectiveHeatTransferCoef"]
+                circleCoolantReynoldsNumber             = circleResults["reynoldsNumber"]
+                circleRadiativeHeatTransfer             = circleResults["radiativeHeatTransfer"]
+                circleDrivingTemperature                = circleResults["drivingTemperature"]
+            else:
+                runCircle = False
+        else:
+            runCircle = False
+
+        # -- Process Results -- #
+
+        if runFluted:
+
+            flutedFinalPressure     = flutedCoolantPressure[0]
+            flutedCoolantInitialPressure = flutedCoolantPressure[-1]
+            flutedTotalPressureDrop = flutedCoolantInitialPressure - flutedFinalPressure
+
+            print(f'Total fluted pressure drop: {flutedTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {flutedFinalPressure/1e6:.4f}(MPa)')
+
+            # -- Store supercritical transition temperature for plotting -- #
+            flutedCoolantInitialTemperature = flutedCoolantTemperature[-1]
+            flutedCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', flutedCoolantInitialTemperature, flutedCoolantInitialPressure)
+            flutedSuperCriticalRange         = flutedCoolantTemperature > flutedCoolantCriticalTemperature
+
+            flutedCoolantSubcriticalTemperature   = flutedCoolantTemperature.copy()
+            flutedCoolantSupercriticalTemperature = flutedCoolantTemperature.copy()
+
+            flutedCoolantSubcriticalTemperature[flutedSuperCriticalRange]    = 'NaN'
+            flutedCoolantSupercriticalTemperature[~flutedSuperCriticalRange] = 'NaN'
+
+        elif runCircle:
+
+            circleFinalPressure     = circleCoolantPressure[0]
+            circleCoolantInitialPressure = circleCoolantPressure[-1]
+            circleTotalPressureDrop = circleCoolantInitialPressure - circleFinalPressure
+
+            print(f'Total circle pressure drop: {circleTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {circleFinalPressure/1e6:.4f}(MPa)')
+
+            # -- Store supercritical transition temperature for plotting -- #
+            circleCoolantInitialTemperature = circleCoolantTemperature[-1]
+            circleCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', circleCoolantInitialTemperature, circleCoolantInitialPressure)
+            circleSuperCriticalRange         = circleCoolantTemperature > circleCoolantCriticalTemperature
+
+            circleCoolantSubcriticalTemperature   = circleCoolantTemperature.copy()
+            circleCoolantSupercriticalTemperature = circleCoolantTemperature.copy()
+
+            circleCoolantSubcriticalTemperature[circleSuperCriticalRange]    = 'NaN'
+            circleCoolantSupercriticalTemperature[~circleSuperCriticalRange] = 'NaN'
+
+        # -- Plotly implementation -- #
+
+        # Instantiate Figure
+        fig = make_subplots(rows=4, cols=3, subplot_titles=(
+            'Pressure', 'Temperature', 'Wall Temperature',
+            'Streamwise Velocity', 'Mach Number', 'Heat Transfer',
+            'Density', 'Viscosity', 'Heat Capacity',
+            'Nusselt Number', 'Heat Transfer Coef', 'Reynolds Number'),
+        horizontal_spacing = 0.05,   #setting spaceing between plots
+        vertical_spacing = 0.05,
+        specs=[[{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}],
+            [{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}],
+            [{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}],
+            [{"secondary_y": True}, {"secondary_y": True}, {"secondary_y": True}]
+            ]
+        )
+
+        # Legend
+        colors = {
+                'Fluted': 'cyan',
+                'Supercritical': 'cyan',
+                'Subcritical': 'blue',
+                'Circular': 'magenta',
+                'GRCop Melting Temp': 'red',
+                'Nozzle': 'grey'
+        }
+        for name, color in colors.items():
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', line=dict(color=color), name=name, showlegend=True))
+
+        # Nozzle Contours
+        for i in [1,2,3]:
+            for j in [1,2,3,4]:
+                if len(xReference)==0 or len(rReference)==0:
+                    add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
+                else:
+                    add_trace(j, i, xReference, rReference, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
+
+        # -- Titles -- #
+
+        # Coolant Pressure
+        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        # Coolant Temperature
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        # Wall Temperature
+        if len(xReference)==0:
+            add_trace(1, 3, xReference, maxTemperatureCopper * np.ones(len(xReference)), 'GRCop Melting Temp', colors['GRCop Melting Temp'], dash='solid')
+        else:
+            add_trace(1, 3, xHotWall3D, maxTemperatureCopper * np.ones(len(xHotWall3D)), 'GRCop Melting Temp', colors['GRCop Melting Temp'], dash='solid')
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        # Velocity
+        fig.update_yaxes(title_text=r'$\text {Velocity [m/s]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        # Mach
+        fig.update_yaxes(title_text=r'$\text {Mach Number [-]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        # Heat Transfer
+        fig.update_yaxes(title_text=r'$\text {Heat Transfer [W]}$', row=2, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        # Density
+        fig.update_yaxes(title_text=r'$\rho \text{ [kg/m}^{3} \text{]}$', row=3, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        # Viscosity
+        fig.update_yaxes(title_text=r'$\mu \text{ [Pa*s]}$', row=3, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        # Specific Heat
+        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=3, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        # Nusselt
+        fig.update_yaxes(title_text=r'$\text {Nu [-]}$', row=4, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        # Heat Transfer Coef
+        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=4, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        # Reynolds
+        fig.update_yaxes(title_text=r'$\text {Re [-]}$', row=4, col=3, secondary_y=False, gridcolor='#4a4a4a')
+
+        # -- Data -- #
+
+        if runFluted:
+            # Coolant Pressure
+            add_trace(1, 1, xHotWall3D, flutedCoolantPressure/1e6, 'Fluted', colors['Fluted'])
+            # Coolant Temperature
+            add_trace(1, 2, xHotWall3D, flutedCoolantSupercriticalTemperature, 'Supercritical', colors['Supercritical'])
+            add_trace(1, 2, xHotWall3D, flutedCoolantSubcriticalTemperature, 'Subcritical', colors['Subcritical'], mode='markers')
+            # Wall Temperature
+            add_trace(1, 3, xHotWall3D, flutedHotWallTemperature, 'Fluted', colors['Fluted'])
+            # Velocity
+            add_trace(2, 1, xHotWall3D, flutedCoolantVelocity, 'Fluted', colors['Fluted'])
+            # Mach
+            add_trace(2, 2, xHotWall3D, flutedCoolantMachNumber, 'Fluted', colors['Fluted'])
+            # Heat Transfer
+            add_trace(2, 3, xHotWall3D, flutedHeatTransfer, 'Fluted', colors['Fluted'])
+            # Density
+            add_trace(3, 1, xHotWall3D, flutedCoolantDensity, 'Fluted', colors['Fluted'])
+            # Viscosity
+            add_trace(3, 2, xHotWall3D, flutedCoolantViscosity, 'Fluted', colors['Fluted'])
+            # Specific Heat
+            add_trace(3, 3, xHotWall3D, flutedCoolantSpecificHeat, 'Fluted', colors['Fluted'])
+            # Nusselt
+            add_trace(4, 1, xHotWall3D, flutedCoolantNusseltNumber, 'Fluted', colors['Fluted'])
+            # Heat Transfer Coef
+            add_trace(4, 2, xHotWall3D, flutedCoolantConvectiveHeatTransferCoef, 'Coolant - Fluted', colors['Fluted'])
+            add_trace(4, 2, xHotWall3D, flutedExhaustConvectiveHeatTransferCoef, 'Exhaust - Fluted', colors['Fluted'], dash='dot')
+            # Reynolds
+            add_trace(4, 3, xHotWall3D, flutedCoolantReynoldsNumber, 'Fluted', colors['Fluted'])
+            # The gas-side driving temperature belongs beside the wall it drives, and the
+            # radiative share beside the total it is part of. Neither earns a panel of its own.
+            add_trace(1, 3, xHotWall3D, flutedDrivingTemperature, 'Driving gas - Fluted',
+                      colors['Fluted'], dash = 'dash')
+            if np.any(flutedRadiativeHeatTransfer):
+                add_trace(2, 3, xHotWall3D, flutedRadiativeHeatTransfer, 'Radiative - Fluted',
+                          colors['Fluted'], dash = 'dot')
+
+        if runCircle:
+            # Coolant Pressure
+            add_trace(1, 1, xHotWall3D, circleCoolantPressure/1e6, 'Circular', colors['Circular'])
+            # Coolant Temperature
+            add_trace(1, 2, xHotWall3D, circleCoolantTemperature, 'Circular', colors['Circular'])
+            # Wall Temperature
+            add_trace(1, 3, xHotWall3D, circleHotWallTemperature, 'Circular', colors['Circular'])
+            # Velocity
+            add_trace(2, 1, xHotWall3D, circleCoolantVelocity, 'Circular', colors['Circular'])
+            # Mach
+            add_trace(2, 2, xHotWall3D, circleCoolantMachNumber, 'Circular', colors['Circular'])
+            # Heat Transfer
+            add_trace(2, 3, xHotWall3D, circleHeatTransfer, 'Circular', colors['Circular'])
+            # Density
+            add_trace(3, 1, xHotWall3D, circleCoolantDensity, 'Circular', colors['Circular'])
+            # Viscosity
+            add_trace(3, 2, xHotWall3D, circleCoolantViscosity, 'Circular', colors['Circular'])
+            # Specific Heat
+            add_trace(3, 3, xHotWall3D, circleCoolantSpecificHeat, 'Circular', colors['Circular'])
+            # Nusselt
+            add_trace(4, 1, xHotWall3D, circleCoolantNusseltNumber, 'Circular', colors['Circular'])
+            # Heat Transfer Coef
+            add_trace(4, 2, xHotWall3D, circleCoolantConvectiveHeatTransferCoef, 'Coolant - Circular', colors['Circular'])
+            add_trace(4, 2, xHotWall3D, circleExhaustConvectiveHeatTransferCoef, 'Exhaust - Circular', colors['Circular'], dash='dot')
+            # Reynolds
+            add_trace(4, 3, xHotWall3D, circleCoolantReynoldsNumber, 'Circular', colors['Circular'])
+            add_trace(1, 3, xHotWall3D, circleDrivingTemperature, 'Driving gas - Circular',
+                      colors['Circular'], dash = 'dash')
+            if np.any(circleRadiativeHeatTransfer):
+                add_trace(2, 3, xHotWall3D, circleRadiativeHeatTransfer, 'Radiative - Circular',
+                          colors['Circular'], dash = 'dot')
+
+        # Update layout for all subplots
+        for i in range(1, 13):
+
+            row = (i - 1) // 3 + 1
+            col = (i - 1) % 3 + 1
+
+            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$' if row == 4 else '', row=row, col=col, gridcolor='#4a4a4a', tickfont=dict(color='white' if row == 4 else 'rgba(0,0,0,0)'))
+
+            # Add secondary y-axis for Nozzle Radius only on rightmost plots - OUTSIDE the loop
+            fig.update_yaxes(title_text=r'$\text {Nozzle Radius [m]}$' if col == 3 else '', row = row, col = col, secondary_y=True, title_font=dict(color=colors['Nozzle'] if col == 3 else 'rgba(0,0,0,0)'), tickfont=dict(color=colors['Nozzle'] if col == 3 else 'rgba(0,0,0,0)'), showgrid=False)
+
+        # Update overall layout
+        fig.update_layout(
+            #height=1200,
+            #width=1800,
+            title_text=f'Regen Channel Properties: {int(nChannel)} Channels{titleFlare}',
+            title_x=0.5,  # Center the main title
+            autosize=True,
+            title_font=dict(size=24),
+            plot_bgcolor='black',
+            paper_bgcolor='black',
+            font=dict(color='white', family = "Computer Modern"),
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
+        )
+
+        if context.export == 'on':
+
+            print('Saving Heat Transfer Outputs to .html')
+
+            _writePlotlyFigure(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
+
+        else:
+
+            showFigure(fig)
+
+    if adiabatic:
+
+        # -- Local Scope the Inputs Dictionary -- #
+        # Fluted
+        if flutedResults is not None:
+            if len(flutedResults) != 0:
+                runFluted                                 = True
+                xHotWall3D                                = flutedResults["xHotWall3D"]
+                rHotWall3D                                = flutedResults["rHotWall3D"]
+                flutedCoolantTemperature                  = flutedResults["temperature"]
+                flutedCoolantPressure                     = flutedResults["pressure"]
+                flutedCoolantSpecificHeat                 = flutedResults["specificHeat"]
+                flutedAdiabaticConvectiveHeatTransferCoef = flutedResults["adiabaticConvectiveHeatTransferCoef"]
+            else:
+                runFluted = False
+        else:
+            runFluted = False
+        # Circle
+        if circleResults is not None:
+            if len(circleResults) != 0:
+                runCircle                                 = True
+                xHotWall3D                                = circleResults["xHotWall3D"]
+                rHotWall3D                                = circleResults["rHotWall3D"]
+                circleCoolantTemperature                  = circleResults["temperature"]
+                circleCoolantPressure                     = circleResults["pressure"]
+                circleCoolantSpecificHeat                 = circleResults["specificHeat"]
+                circleAdiabaticConvectiveHeatTransferCoef = circleResults["adiabaticConvectiveHeatTransferCoef"]
+            else:
+                runCircle = False
+        else:
+            runCircle = False
+
+        # -- Process Results -- #
+
+        if runFluted:
+
+            flutedFinalPressure     = flutedCoolantPressure[0]
+            flutedCoolantInitialPressure = flutedCoolantPressure[-1]
+            flutedTotalPressureDrop = flutedCoolantInitialPressure - flutedFinalPressure
+
+            print(f'Total fluted pressure drop: {flutedTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {flutedFinalPressure/1e6:.4f}(MPa)')
+
+            # -- Store supercritical transition temperature for plotting -- #
+            flutedCoolantInitialTemperature = flutedCoolantTemperature[-1]
+            flutedCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', flutedCoolantInitialTemperature, flutedCoolantInitialPressure)
+            flutedSuperCriticalRange         = flutedCoolantTemperature > flutedCoolantCriticalTemperature
+
+            flutedCoolantSubcriticalTemperature   = flutedCoolantTemperature.copy()
+            flutedCoolantSupercriticalTemperature = flutedCoolantTemperature.copy()
+
+            flutedCoolantSubcriticalTemperature[flutedSuperCriticalRange]    = 'NaN'
+            flutedCoolantSupercriticalTemperature[~flutedSuperCriticalRange] = 'NaN'
+
+        elif runCircle:
+
+            circleFinalPressure     = circleCoolantPressure[0]
+            circleCoolantInitialPressure = circleCoolantPressure[-1]
+            circleTotalPressureDrop = circleCoolantInitialPressure - circleFinalPressure
+
+            print(f'Total circle pressure drop: {circleTotalPressureDrop/1e6:.4f}(MPa) | Exit Pressure: {circleFinalPressure/1e6:.4f}(MPa)')
+
+            # -- Store supercritical transition temperature for plotting -- #
+            circleCoolantInitialTemperature = circleCoolantTemperature[-1]
+            circleCoolantCriticalTemperature = fluidProps(coolant, 'TP', 'TCRIT', circleCoolantInitialTemperature, circleCoolantInitialPressure)
+            circleSuperCriticalRange         = circleCoolantTemperature > circleCoolantCriticalTemperature
+
+            circleCoolantSubcriticalTemperature   = circleCoolantTemperature.copy()
+            circleCoolantSupercriticalTemperature = circleCoolantTemperature.copy()
+
+            circleCoolantSubcriticalTemperature[circleSuperCriticalRange]    = 'NaN'
+            circleCoolantSupercriticalTemperature[~circleSuperCriticalRange] = 'NaN'
+
+        # -- Plotly implementation -- #
+
+        # Instantiate Figure
+        fig = make_subplots(rows=2, cols=2, subplot_titles=(
+            'Pressure', 'Temperature',
+            'Heat Capacity', 'Heat Transfer Coef'),
+        horizontal_spacing = 0.05,   #setting spaceing between plots
+        vertical_spacing = 0.05,
+        specs=[[{"secondary_y": True}, {"secondary_y": True}],
+            [{"secondary_y": True}, {"secondary_y": True}],
+            ]
+        )
+
+        # Legend
+        colors = {
+                'Fluted': 'cyan',
+                'Supercritical': 'cyan',
+                'Subcritical': 'blue',
+                'Circular': 'magenta',
+                'Nozzle': 'grey'
+        }
+        for name, color in colors.items():
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', line=dict(color=color), name=name, showlegend=True))
+
+        # Nozzle Contours
+        for i in [1,2]:
+            for j in [1,2]:
+                add_trace(j, i, xHotWall3D, rHotWall3D, 'Nozzle Radius', color=colors['Nozzle'], dash='dot', showlegend=False, secondary_y=True)
+
+        # -- Titles -- #
+
+        # Coolant Pressure
+        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        # Coolant Temperature
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        # Specific Heat
+        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        # Heat Transfer Coef
+        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
+
+        # -- Data -- #
+
+        if runFluted:
+            # Coolant Pressure
+            add_trace(1, 1, xHotWall3D, flutedCoolantPressure/1e6, 'Fluted', colors['Fluted'])
+            # Coolant Temperature
+            add_trace(1, 2, xHotWall3D, flutedCoolantSupercriticalTemperature, 'Supercritical', colors['Supercritical'])
+            add_trace(1, 2, xHotWall3D, flutedCoolantSubcriticalTemperature, 'Subcritical', colors['Subcritical'], mode='markers')
+            # Specific Heat
+            add_trace(2, 1, xHotWall3D, flutedCoolantSpecificHeat, 'Fluted', colors['Fluted'])
+            # Heat Transfer Coef
+            add_trace(2, 2, xHotWall3D, flutedAdiabaticConvectiveHeatTransferCoef, 'Fluted', colors['Fluted'])
+
+        if runCircle:
+            # Coolant Pressure
+            add_trace(1, 1, xHotWall3D, circleCoolantPressure/1e6, 'Circular', colors['Circular'])
+            # Coolant Temperature
+            add_trace(1, 2, xHotWall3D, circleCoolantTemperature, 'Circular', colors['Circular'])
+            # Specific Heat
+            add_trace(2, 1, xHotWall3D, circleCoolantSpecificHeat, 'Circular', colors['Circular'])
+            # Heat Transfer Coef
+            add_trace(2, 2, xHotWall3D, circleAdiabaticConvectiveHeatTransferCoef, 'Circular', colors['Circular'])
+
+        # Update layout for all subplots
+        for i in [1,2]:
+
+            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$', row=2, col=i, gridcolor='#4a4a4a', tickfont=dict(color='white'))
+            fig.update_xaxes(title_text= '',                          row=1, col=i, gridcolor='#4a4a4a', tickfont=dict(color='rgba(0,0,0,0)'))
+
+            # Add secondary y-axis for Nozzle Radius only on rightmost plots - OUTSIDE the loop
+            fig.update_yaxes(title_text=r'$\text {Nozzle Radius [m]}$', row = i, col = 2, secondary_y=True, title_font=dict(color=colors['Nozzle']), tickfont=dict(color=colors['Nozzle']), showgrid=False)
+            fig.update_yaxes(title_text= '',                            row = i, col = 1, secondary_y=True, title_font=dict(color=colors['Nozzle']), tickfont=dict(color='rgba(0,0,0,0)'), showgrid=False)
+
+        # Update overall layout
+        fig.update_layout(
+            #height=1200,
+            #width=1800,
+            title_text=f'Regen Channel Properties: {int(nChannel)} Channels{titleFlare}',
+            title_x=0.5,  # Center the main title
+            autosize=True,
+            title_font=dict(size=24),
+            plot_bgcolor='black',
+            paper_bgcolor='black',
+            font=dict(color='white', family = "Computer Modern"),
+            legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
+        )
+
+        if context.export == 'on':
+
+            print('Saving Heat Transfer Outputs to .html')
+
+            _writePlotlyFigure(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
+
+        else:
+
+            showFigure(fig)
+
+#--------------------------------------------------------------------------------------------------------------------------#
 # -- Export -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
@@ -604,7 +1588,7 @@ def writeInteractiveFigure(figure, path: str) -> str:
 
     '''
 
-    if figure is None or not plotlyAvailable:
+    if figure is None:
         return None
     # 'directory' drops one shared plotly.min.js beside the HTML instead of inlining a 4.5 MB
     # copy into every file, which turns a six-figure export from ~30 MB into ~5 MB and still
@@ -621,6 +1605,9 @@ interactiveFigureBuilders = {
     'pressureFieldInteractive.html': lambda nozzle: plotlyField(fieldFigure(nozzle, 'pressure')),
     'temperatureFieldInteractive.html': lambda nozzle: plotlyField(fieldFigure(nozzle, 'temperature')),
     'plumeStructureInteractive.html': lambda nozzle: plotlyPlume(plumeFigure(nozzle)),
+    'VoluteView.html':               lambda nozzle: volutesFigure(nozzle),
+    'threeChannelMeshViewInterfaced.html': lambda nozzle: channelMeshFigure(nozzle),
+    'regenJacketView.html':          lambda nozzle: regenJacketFigure(nozzle),
 }
 
 def exportInteractiveFigures(nozzle, folder: str) -> list:
@@ -629,8 +1616,7 @@ def exportInteractiveFigures(nozzle, folder: str) -> list:
 
     Write the interactive HTML companion for every result figure that has data.
 
-    Silent no-op without plotly, so a run on a plotly-free install still produces its full set
-    of PNGs. A builder that raises is skipped with a note rather than sinking the export.
+    A builder that raises is skipped with a note rather than sinking the export.
 
     Parameters:
     -----------
@@ -644,9 +1630,6 @@ def exportInteractiveFigures(nozzle, folder: str) -> list:
     list : absolute paths of the files written
 
     '''
-
-    if not plotlyAvailable:
-        return []
 
     os.makedirs(folder, exist_ok = True)
     written = []
