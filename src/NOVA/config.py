@@ -100,7 +100,6 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         - Thermal constraints (maxWallTemperature, minCoolantExitTemperature)
         - Optimization bounds (nChannelUpperBound, nChannelLowerBound, etc.)
         - Coolant properties (coolant, coolantChoice, coolantInitialTemperature, etc.)
-        - Advanced features (numFlutes, fluteAmplitudeCoef, fluteHelixAngle, swirlPercent)
 
     Regen Volutes:
         - Inlet volute (makeInletVolute, inletVoluteCrossSection, inletVoluteAlignment, etc.)
@@ -257,10 +256,6 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.extensionAtmosphere            = inputsPath.get('extensionAtmosphere',
                                                                'inert')
         nozzle.extensionJointTemperature      = inputsPath.get('extensionJointTemperature')
-        nozzle.numFlutes                      = inputsPath['numFlutes']
-        nozzle.fluteAmplitudeCoef             = inputsPath['fluteAmplitudeCoef']
-        nozzle.fluteHelixAngle                = inputsPath['fluteHelixAngle']
-        nozzle.interfaceLength                = inputsPath['interfaceLength']
         nozzle.coolantClass                   = inputsPath['coolantClass']
         nozzle.coolant                        = inputsPath['coolant']
         nozzle.coolantInitialTemperature      = inputsPath['coolantInitialTemperature']
@@ -380,6 +375,17 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
                 value = value,
                 validRange = 'a finite number')
         nozzle.regenTruncationValue = float(value)
+
+    # Which cross section the jacket is built from. Checked only when there is a jacket, because a
+    # contour-only configuration has no reason to name one.
+    if nozzle.makeCoolingChannels == 'on' and nozzle.channelType != 'circle':
+        parked = (' Spirally fluted channels are kept in experimental/flutedChannels.py.'
+                  if nozzle.channelType == 'fluted' else '')
+        raise InvalidInputError(
+            message = f"channelType must be 'circle'.{parked}",
+            parameterName = 'channelType',
+            value = nozzle.channelType,
+            validRange = "'circle'")
 
     # Which diverging section family was asked for. Resolved here, once, so a spelling that names
     # nothing is rejected while the configuration is still being read rather than reaching the

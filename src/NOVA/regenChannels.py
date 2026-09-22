@@ -18,12 +18,10 @@ What happens here is the sequence, and the sequence matters:
     2. Channel radii. The sizing solve, station by station, which also produces the 2D centerline
        the channel follows and the coolant exit condition.
     3. Channel centerline. The 2D centerline is wrapped into three dimensions around the nozzle,
-       and the hot wall, cold wall and shell surfaces are built from it.
-    4. Printability audit. Where the channel would print unsupported, those stations are recorded
-       so the cross-section builder can compress the flutes toward a circle across them.
-    5. Three-dimensional channels. The cross sections are swept along the wrapped centerline into
-       the surfaces that get exported, and the nozzle wall point cloud is built.
-    6. Cooling jacket. Optionally, all channels merged into one volume rather than kept separate.
+       and the hot wall and shell surfaces are built from it.
+    4. Three-dimensional channels. The cross sections are swept along the wrapped centerline into
+       the surfaces that get exported, and the cold wall surface is built.
+    5. Cooling jacket. Optionally, all channels merged into one volume rather than kept separate.
 
 Every array the build produces is carried on a RegenChannelState rather than being set on an
 object as it goes, so what the build reads and what it produces are both stated in one place.
@@ -73,7 +71,7 @@ from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
 from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
-from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
+from .validation import applyRules, arrayRule, choiceRule, integerRule, numericRule, textRule
 
 @dataclass
 class RegenChannelState:
@@ -95,8 +93,6 @@ class RegenChannelState:
     # -- What the build reads -- #
     chamberDiameter:                           Any = None
     channelType:                               Any = None
-    export:                                    Any = None
-    fluteAmplitudeCoef:                        Any = None
     gammaRegenSection:                         Any = None
     gasConstantRegenSection:                   Any = None
     hotWallThickness:                          Any = None
@@ -128,7 +124,6 @@ class RegenChannelState:
 
     chamberPressure:                           Any = None
     dcrData:                                   Any = None
-    interfaceLength:                           Any = None
     material:                                  Any = None
     maxWallTemperature:                        Any = None
     nozzleScalingFactor:                       Any = None
@@ -139,9 +134,7 @@ class RegenChannelState:
     coolantInitialPressure:                    Any = None
     coolantInitialTemperature:                 Any = None
     coolantMassFlow:                           Any = None
-    fluteHelixAngle:                           Any = None
     minChannelRadius:                          Any = None
-    numFlutes:                                 Any = None
 
     # -- Read and written as the build proceeds -- #
     channelRadius:                             Any = None
@@ -191,19 +184,15 @@ class RegenChannelState:
     wallFractureStrainInterpolator:            Any = None
 
     # -- Produced by the build -- #
-    allNozzlePoints:                           Any = None
     channelSizingSolution:                     Any = None
     rChannelCenterline3D:                      Any = None
     rNozzleShell:                              Any = None
     returnVoluteFlareRad:                      Any = None
-    xChannelDefeatured:                        Any = None
     xNozzleHotWallMesh:                        Any = None
     xNozzleShell:                              Any = None
     xNozzleShellMesh:                          Any = None
-    yChannelDefeatured:                        Any = None
     yNozzleHotWallMesh:                        Any = None
     yNozzleShellMesh:                          Any = None
-    zChannelDefeatured:                        Any = None
     zNozzleHotWallMesh:                        Any = None
     zNozzleShellMesh:                          Any = None
 
@@ -212,7 +201,7 @@ class RegenChannelState:
 # outputs are appended rather than restated, because the build copies them onto its state by name
 # and a static read of this module cannot see that it does.
 _buildOutputs = (
-    'allNozzlePoints', 'channelRadius', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
+    'channelRadius', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
     'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed',
     'numInletInterfaceCS', 'numReturnInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
     'rInletInterface', 'rNozzleShell', 'rRegenNozzleInterfaced', 'rRegenNozzleTrimmed',
@@ -221,11 +210,11 @@ _buildOutputs = (
     'regenSectionNearWallRecoveryTemperatureTrimmed',
     'regenSectionFilmDrivingTemperatureTrimmed',
     'returnVoluteFlareRad', 'wrapAngles', 'xAllChannels', 'xChannel', 'xChannelCenterline2D',
-    'xChannelCenterline3D', 'xChannelDefeatured', 'xInletInterface', 'xNozzleColdWallMesh',
+    'xChannelCenterline3D', 'xInletInterface', 'xNozzleColdWallMesh',
     'xNozzleHotWallMesh', 'xNozzleShell', 'xNozzleShellMesh', 'xRegenNozzleInterfaced',
     'xRegenNozzleTrimmed', 'xReturnInterface', 'yAllChannels', 'yChannel', 'yChannelCenterline3D',
-    'yChannelDefeatured', 'yNozzleColdWallMesh', 'yNozzleHotWallMesh', 'yNozzleShellMesh',
-    'zAllChannels', 'zChannel', 'zChannelCenterline3D', 'zChannelDefeatured',
+    'yNozzleColdWallMesh', 'yNozzleHotWallMesh', 'yNozzleShellMesh',
+    'zAllChannels', 'zChannel', 'zChannelCenterline3D',
     'zNozzleColdWallMesh', 'zNozzleHotWallMesh', 'zNozzleShellMesh')
 
 regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs)))
@@ -234,13 +223,7 @@ regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs
 # rather than as branches: see validation.py.
 #
 # Checked in order, so the table runs from the contour the channels sit on, through the channel
-# definition itself, to the flute geometry only a fluted channel carries.
-
-def _isFluted(source):
-
-    '''True for a channel whose cross section carries flutes.'''
-
-    return read(source, 'channelType') == 'fluted'
+# definition itself, to the coolant.
 
 regenChannelRules = (
 
@@ -251,6 +234,8 @@ regenChannelRules = (
     integerRule('numCrossSections', 'Cross sections', minimum = 3, exclusiveMinimum = False),
 
     # -- The channels themselves -- #
+    choiceRule('channelType', 'Channel cross section', choices = ('circle',),
+               note = 'Spirally fluted channels are kept in experimental/flutedChannels.py'),
     integerRule('nChannel', 'Number of channels', minimum = 10, exclusiveMinimum = False),
     numericRule('minChannelRadius', 'Minimum channel radius', units = 'm',
                 minimum = 0.5e-3, exclusiveMinimum = False),
@@ -263,12 +248,6 @@ regenChannelRules = (
     numericRule('coolantMassFlow', 'Coolant mass flow', units = 'kg/s', minimum = 0),
     numericRule('coolantInitialPressure', 'Coolant inlet pressure', units = 'Pa', minimum = 0),
     numericRule('coolantInitialTemperature', 'Coolant inlet temperature', units = 'K', minimum = 0),
-
-    # -- Flute geometry, which only a fluted cross section carries -- #
-    numericRule('fluteHelixAngle', 'Flute helix angle', units = 'deg',
-                minimum = -90, maximum = 90, when = _isFluted),
-    integerRule('numFlutes', 'Number of flutes', minimum = 3, exclusiveMinimum = False,
-                when = _isFluted),
 )
 
 def validateRegenChannelInputs(state) -> None:
@@ -299,8 +278,8 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
 
     The channel definition the cross-section builder reads, taken from the build state.
 
-    Derived at each call rather than once, because the nozzle wall point cloud the compression
-    search queries is filled in as the build proceeds.
+    Derived at each call rather than once, because the interface station counts are filled in as
+    the build proceeds.
 
     '''
 
@@ -311,13 +290,8 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
         channelType          = state.channelType,
         hotWallThickness     = state.hotWallThickness,
         infillThickness      = state.infillThickness,
-        numFlutes            = state.numFlutes,
-        fluteAmplitudeCoef   = state.fluteAmplitudeCoef,
-        fluteHelixAngle      = state.fluteHelixAngle,
-        interfaceLength      = state.interfaceLength,
         numInletInterfaceCS  = state.numInletInterfaceCS,
-        numReturnInterfaceCS = state.numReturnInterfaceCS,
-        allNozzlePoints      = state.allNozzlePoints)
+        numReturnInterfaceCS = state.numReturnInterfaceCS)
 
 def _sizingState(state) -> 'ChannelSizingState':
 
@@ -348,8 +322,6 @@ def _sizingState(state) -> 'ChannelSizingState':
         nozzleScalingFactor                = state.nozzleScalingFactor,
         throatInletCurvatureNonDimensional = state.throatInletCurvatureNonDimensional,
         throatOutletCurvatureNonDimensional = state.throatOutletCurvatureNonDimensional,
-        fluteAmplitudeCoef                 = state.fluteAmplitudeCoef,
-        fluteHelixAngle                    = state.fluteHelixAngle,
         xRegenNozzle                       = state.xRegenNozzle,
         rRegenNozzle                       = state.rRegenNozzle,
         xRegenNozzleTrimmed                = state.xRegenNozzleTrimmed,
@@ -372,7 +344,7 @@ def solveRegenChannels(state, thermal):
     this method uses a stepwise (or marching) convergence algorithm to find the radius of the cooling channels at each discrete
     point along the length of the nozzle that ensures the nozzle hot wall does not exceed a certain temperature. After this
     initial channel radius distribution and channel pathline are found, volute turnaround paths are generated to interface the
-    channel with the inlet and return volutes. Then, the 3D geometry (spirally fluted or circular) of the channels are generated
+    channel with the inlet and return volutes. Then, the 3D geometry of the channels is generated
     for rendering with plotly, for use in regenHeatTransferModel() to predict performance, and for exporting to .stl for CAD.
 
     Raises:
@@ -394,8 +366,8 @@ def solveRegenChannels(state, thermal):
 
     # The cross-section geometry lives in channelGeometry.py, which takes the channel
     # definition explicitly and knows nothing about a Nozzle. These two wrappers supply it,
-    # rebuilding the inputs on each call because the printability stations and the nozzle
-    # point cloud are filled in as this method runs.
+    # rebuilding the inputs on each call because the interface station counts are filled in
+    # as this method runs.
 
     def generateCrossSections(xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                               channelRadius, crossSectionStyle, i: int = None):
@@ -433,10 +405,7 @@ def solveRegenChannels(state, thermal):
             flareAngle     = -np.deg2rad(state.inletVoluteTilt) # enforce perpendicularity by using volute tilt angle as flare angle
             flareLength    = state.inletVoluteFlareLength # length of linear extension
             numFlarePoints = 20 # number of points in the linear region, must be >1 to maintain linearity
-            if state.channelType == 'circle':
-                maxChannelRadiusAtInlet,_ = getMaxChannelRadius(state.rRegenNozzleTrimmed,len(state.xRegenNozzleTrimmed)-1)
-            else:
-                _,maxChannelRadiusAtInlet = getMaxChannelRadius(state.rRegenNozzleTrimmed,len(state.xRegenNozzleTrimmed)-1)
+            maxChannelRadiusAtInlet = getMaxChannelRadius(state.rRegenNozzleTrimmed,len(state.xRegenNozzleTrimmed)-1)
             filletRadius = state.inletVoluteFlareRoverD * (state.shellThickness + maxChannelRadiusAtInlet*2 + state.hotWallThickness) # radius of curvature for turn
 
             # Draw the exit plane w/ axial offset
@@ -535,10 +504,7 @@ def solveRegenChannels(state, thermal):
                     limit = 2)
 
             # Create the turnaround turn
-            if state.channelType == 'circle':
-                maxChannelRadiusAtReturn,_ = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
-            else:
-                _,maxChannelRadiusAtReturn = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
+            maxChannelRadiusAtReturn = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
             turnaroundRadius = state.inletVoluteFlareRoverD * (state.shellThickness + maxChannelRadiusAtReturn*2 + state.hotWallThickness)
             turnaroundLength = state.returnVoluteFlareLen
             state.returnVoluteFlareRad = turnaroundRadius
@@ -687,8 +653,7 @@ def solveRegenChannels(state, thermal):
 
                 Expected nozzle object properties:
                     nChannel (int)              : Number of cooling channels.
-                    infillThickness (float)     : Thickness of the infill material berween channels.
-                    fluteAmplitudeCoef (float)  : Coefficient for the flute amplitude.
+                    infillThickness (float)     : Thickness of the infill material between channels.
                     numCrossSections (int)      : Number of cross-sections along the nozzle.
 
                 Returns:
@@ -708,12 +673,8 @@ def solveRegenChannels(state, thermal):
             # Calculate the arc length of the nozzle region allocated to each channel.
             nozzleArcSlice = 2*np.pi*rCenterline2D/state.nChannel - state.infillThickness
 
-            # Calculate the diameter of each channel perpendicular to the pathline,
-            # including the flute amplitude.
-            if state.channelType == 'fluted':
-                channelDiameter = (2*channelRadius + state.fluteAmplitudeCoef*channelRadius)
-            elif state.channelType == 'circle':
-                channelDiameter = 2 * channelRadius
+            # Calculate the diameter of each channel perpendicular to the pathline.
+            channelDiameter = 2 * channelRadius
 
             # Calculate the arc length of the channel.
             channelArcLength = 4* rCenterline2D * np.arccos((2 * rCenterline2D**2 - (channelDiameter/4)**2) / (2 * rCenterline2D**2))
@@ -753,12 +714,7 @@ def solveRegenChannels(state, thermal):
         zNozzleHotWallMesh, yNozzleHotWallMesh, xNozzleHotWallMesh      \
             = [np.zeros((state.numCrossSections, state.numCrossSections)) for _ in range(3)]
 
-        # A flute reaches past the channel radius by its amplitude, so only a fluted channel adds
-        # it. A circular configuration carries a null amplitude, which reads as NaN.
-        if state.channelType == 'fluted':
-            shellOffset = state.hotWallThickness + 2.*state.channelRadius + state.fluteAmplitudeCoef*state.channelRadius + state.shellThickness
-        else:
-            shellOffset = state.hotWallThickness + 2.*state.channelRadius + state.shellThickness
+        shellOffset = state.hotWallThickness + 2.*state.channelRadius + state.shellThickness
         xNozzleShell, rNozzleShell          = parallelOffset(state.xRegenNozzleTrimmed,state.rRegenNozzleTrimmed,shellOffset)
         zNozzleShellMesh, yNozzleShellMesh, xNozzleShellMesh            \
             = [np.zeros((state.numCrossSections, state.numCrossSections)) for _ in range(3)]
@@ -796,10 +752,7 @@ def solveRegenChannels(state, thermal):
                                              state.channelRadius,
                                              np.ones(state.numInletInterfaceCS)*state.channelRadius[-1]])
         for i in range(len(state.channelRadius)):
-            if state.channelType == 'fluted':
-                _, maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleInterfaced,i)
-            else:
-                maxChannelRadius, _ = getMaxChannelRadius(state.rRegenNozzleInterfaced,i)
+            maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleInterfaced,i)
             if state.channelRadius[i] > maxChannelRadius:
                 state.channelRadius[i] = maxChannelRadius
         xOld = state.xRegenNozzleInterfaced
@@ -826,7 +779,7 @@ def solveRegenChannels(state, thermal):
 
     def generate3DChannels():
 
-        # Concatenated cold wall mesh for gaussian compression search
+        # Cold wall mesh
         xNozzleColdWall, rNozzleColdWall    = parallelOffset(state.xRegenNozzleInterfaced,state.rRegenNozzleInterfaced,state.hotWallThickness)
         zNozzleColdWallMesh, yNozzleColdWallMesh, xNozzleColdWallMesh   \
             = [np.zeros((state.numCrossSections, state.numCrossSections)) for _ in range(3)]
@@ -835,19 +788,9 @@ def solveRegenChannels(state, thermal):
             zNozzleColdWallMesh[i,:] = rNozzleColdWall[i] * np.cos(contourAngles)
             yNozzleColdWallMesh[i,:] = rNozzleColdWall[i] * np.sin(contourAngles)
             xNozzleColdWallMesh[:,i] = xNozzleColdWall
-        allNozzlePoints, nozzlePoints = [np.zeros((state.numCrossSections,3)) for _ in range(2)]
-        allNozzlePoints[:,0] = zNozzleColdWallMesh[0,:]
-        allNozzlePoints[:,1] = xNozzleColdWallMesh[0,:]
-        allNozzlePoints[:,2] = yNozzleColdWallMesh[0,:]
-        for i in range(state.numCrossSections-1):
-            nozzlePoints[:,0] = zNozzleColdWallMesh[i+1,:]
-            nozzlePoints[:,1] = xNozzleColdWallMesh[i+1,:]
-            nozzlePoints[:,2] = yNozzleColdWallMesh[i+1,:]
-            allNozzlePoints   = np.append(allNozzlePoints,nozzlePoints,0)
         state.xNozzleColdWallMesh = xNozzleColdWallMesh
         state.yNozzleColdWallMesh = yNozzleColdWallMesh
         state.zNozzleColdWallMesh = zNozzleColdWallMesh
-        state.allNozzlePoints = allNozzlePoints
 
         # Get update interface lengths
         xInletTrim  = state.xRegenNozzleTrimmed[-1]
@@ -873,14 +816,9 @@ def solveRegenChannels(state, thermal):
                 state.numReturnInterfaceCS  = np.argmin(np.abs(state.xRegenNozzleInterfaced[returnValidRange] - xReturnTrim))
                 state.numReturnInterfaceCS += PoI[0]
 
-        # Create standard (user-specified) channel
+        # Sweep the channel
         state.xChannel, state.yChannel, state.zChannel, _ = \
             generateCrossSections(state.xChannelCenterline3D,state.yChannelCenterline3D,state.zChannelCenterline3D,state.channelRadius,state.channelType)
-
-        # Create defeatured (circle) channel along pre-established 3D centerline for full 3D analysis
-        if state.channelType == 'fluted' and state.export == 'on':
-            state.xChannelDefeatured, state.yChannelDefeatured, state.zChannelDefeatured, _ = \
-                generateCrossSections(state.xChannelCenterline3D,state.yChannelCenterline3D,state.zChannelCenterline3D,state.channelRadius,'circle')
 
     generate3DChannels()
 

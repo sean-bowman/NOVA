@@ -191,42 +191,13 @@ class TestValidator:
         with pytest.raises(Exception):
             validateRegenChannelInputs(state)
 
-    def testAFlutedChannelNeedsItsFluteDefinition(self):
+    @pytest.mark.parametrize('channelType', ['fluted', 'hexagon'])
+    def testAFamilyThePackageDoesNotBuildIsRejected(self, channelType):
 
         state = workingInputs()
-        state.channelType = 'fluted'
+        state.channelType = channelType
 
-        with pytest.raises(Exception, match = 'flute'):
-            validateRegenChannelInputs(state)
-
-    def testAFlutedChannelWithItsDefinitionPasses(self):
-
-        state = workingInputs()
-        state.channelType = 'fluted'
-        state.fluteHelixAngle = 15.0
-        state.numFlutes = 8
-
-        validateRegenChannelInputs(state)
-
-    @pytest.mark.parametrize('helixAngle', [-90.0, 90.0, 120.0])
-    def testAnOutOfRangeHelixAngleIsRejected(self, helixAngle):
-
-        state = workingInputs()
-        state.channelType = 'fluted'
-        state.fluteHelixAngle = helixAngle
-        state.numFlutes = 8
-
-        with pytest.raises(Exception, match = 'fluteHelixAngle'):
-            validateRegenChannelInputs(state)
-
-    def testTooFewFlutesIsRejected(self):
-
-        state = workingInputs()
-        state.channelType = 'fluted'
-        state.fluteHelixAngle = 15.0
-        state.numFlutes = 2
-
-        with pytest.raises(Exception, match = 'numFlutes'):
+        with pytest.raises(Exception, match = 'channelType'):
             validateRegenChannelInputs(state)
 
 class TestModuleIndependence:

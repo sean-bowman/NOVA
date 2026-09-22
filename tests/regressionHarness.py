@@ -67,7 +67,6 @@ strippedToContour = {
     'shellThickness'                : None,
     'infillThickness'               : None,
     'maxWallTemperature'            : None,
-    'interfaceLength'               : None,
     'coolantClass'                  : None,
     'coolant'                       : None,
     'coolantInitialTemperature'     : None,
@@ -134,7 +133,6 @@ regenOverrides = {
     'nChannel'                 : 60,
     'channelType'              : 'circle',
     'maxWallTemperature'       : 800.0,
-    'interfaceLength'          : 0.02,
     'coolantClass'             : 'fuel',
     'coolant'                  : 'Hydrogen',
     'coolantInitialTemperature': 30.0,
@@ -162,18 +160,6 @@ regenOverrides = {
     'returnVoluteFlareLen'     : 0.03,
 }
 
-# The same jacket with the channel cross section swapped to fluted. The fluted coolant-side
-# correlation is a blend of Gnielinski with a spirally fluted correlation; it is unvalidated,
-# and NOVA ships without the flute heat transfer study the data-map variant reads, so the
-# analytical correlation is what runs here.
-flutedOverrides = {
-    **regenOverrides,
-    'channelType'       : 'fluted',
-    'numFlutes'         : 8,
-    'fluteAmplitudeCoef': 0.3,
-    'fluteHelixAngle'   : 15.0,
-}
-
 # The cases the harness records. Every case runs assets/NOVANozzle.json and differs only in what
 # it overrides on top, so a case is a statement about one path rather than a separate file to
 # keep in step. The shared harnessOverrides below make it a harness run rather than a user run:
@@ -187,11 +173,6 @@ harnessCases = {
         'config': 'NOVANozzle.json',
         'description': 'Full jacket with circular channels and both volutes',
         'overrides': dict(regenOverrides),
-    },
-    'regenFluted': {
-        'config': 'NOVANozzle.json',
-        'description': 'Full jacket with fluted channels and both volutes',
-        'overrides': dict(flutedOverrides),
     },
     # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
     # and the physical choice. This case pins the static-temperature model that preceded it, so

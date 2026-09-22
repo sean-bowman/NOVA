@@ -668,8 +668,6 @@ def exportNozzleStep(nozzle, folder: str, filename: str = 'nozzle') -> list:
 
     # -- Swept components, each in the axis order py2cad already writes it in -- #
     swept('Channel', ('zChannel', 'yChannel', 'xChannel'), flipAxial = True)
-    swept('DefeaturedChannel',
-          ('zChannelDefeatured', 'yChannelDefeatured', 'xChannelDefeatured'), flipAxial = True)
 
     for side in ('Inlet', 'Return'):
         swept(f'{side}Volute',

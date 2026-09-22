@@ -7,6 +7,7 @@ and features taken out of the package that are worth keeping the source of.
 |--------|-----------|
 | `tnd2327.py`, `convergeMarch.py`, `convergeRun.py`, `jetNetPrototype.py` | The MOC free-jet plume interior study, described below |
 | `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
+| `flutedChannels.py` | Spirally fluted cooling channels and their blended correlation, removed from the package |
 | `stepExport.py` | STEP export of every nozzle component as exact surfaces, described below |
 | `plumeDevelopmentState.md` | Where the plume solver stands, written to be picked up cold |
 | `coolingModelState.md` | Where the film, radiative and extension cooling work stands, and what is open |
@@ -27,6 +28,19 @@ contour with no point below the throat and a near-wall Mach number running 0.117
 That does not make it a validated design. Nothing here has been checked against a reference
 sunken nozzle, and the cooling correlations carry no correction for a recessed throat. The module
 docstring says what wiring it back into the package would take.
+
+## Spirally fluted channels
+
+`flutedChannels.py` holds the fluted cooling channel: a circle modulated by helical flutes,
+compressed toward a circle on the hot-wall side, blended to a plain circle at each volute
+interface, and rated with a fifty-fifty blend of Gnielinski and the spirally fluted tube
+correlation of Webb and Kim. It was a second `channelType` in the package until it moved here.
+
+The geometry builds and was checked against the package implementation before removal: identical
+areas and interface blend on a 60 station channel, and flutes that turn at the requested rate.
+The correlation is the reason it is here. No source states the blend or its roughness
+amplification, the documentation and the code disagreed on its weights, and no measurement is
+available to set it against. The module docstring lists what reinstating it would take.
 
 ## STEP export
 

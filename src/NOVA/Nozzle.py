@@ -155,8 +155,8 @@ class Nozzle:
 
     Converging section and combustion chamber, sized from `Lstar` or `chamberLength`.
 
-    Regenerative cooling jacket: channels of circular or fluted cross section, sized station by
-    station against a wall temperature limit, with the coolant marched from inlet to outlet. Film
+    Regenerative cooling jacket: channels of circular cross section, sized station by station
+    against a wall temperature limit, with the coolant marched from inlet to outlet. Film
     cooling and an uncooled radiation-cooled extension attach to the same solve.
 
     Inlet and return volutes, and the keep-out envelope they route around.
@@ -207,11 +207,9 @@ class Nozzle:
     coolantInitialTemperature, coolantInitialPressure, coolantMassFlow : float
         Coolant state at the jacket inlet [K], [Pa], [kg/s].
     channelType : str
-        'circle' or 'fluted'.
+        Cross-section family: 'circle'.
     nChannel : int
         Channels around the circumference [-].
-    numFlutes : int
-        Flutes on one fluted channel [-]. Unrelated to `nChannel`.
     hotWallThickness, shellThickness, infillThickness : float
         Wall between coolant and exhaust, outer shell, and material left between neighboring
         channels [m].
@@ -435,10 +433,6 @@ class Nozzle:
         self.numCSPointsChannel: int | None           = None     # [int]
         self.numCrossSections: int | None             = None     # [int]f
         self.infillThickness                          = None     # [m]
-        self.numFlutes                                = None     # [int]
-        self.fluteAmplitudeCoef: float | None         = None     # [frac of 1]
-        self.fluteHelixAngle: float | None            = None     # [deg]
-        self.interfaceLength                          = None     # [m]
 
         # dynamicChannelRadii
         self.dcrData                                  = {}
@@ -492,8 +486,6 @@ class Nozzle:
         self.yNozzleShellMesh                         = None     # [m]
         self.zNozzleShellMesh                         = None     # [m]
 
-        self.allNozzlePoints                          = None     # [m]
-
         self.yChannel: np.ndarray                     = np.array([]) # [m]
         self.xChannel: np.ndarray                     = np.array([]) # [m]
         self.zChannel: np.ndarray                     = np.array([]) # [m]
@@ -501,10 +493,6 @@ class Nozzle:
         self.yAllChannels                             = None     # [m]
         self.xAllChannels                             = None     # [m]
         self.zAllChannels                             = None     # [m]
-
-        self.xChannelDefeatured: np.ndarray           = np.array([]) # [m]
-        self.yChannelDefeatured: np.ndarray           = np.array([]) # [m]
-        self.zChannelDefeatured: np.ndarray           = np.array([]) # [m]
 
         # Volute Inputs
         self.makeInletVolute                          = None     # 'on' , 'off'
@@ -1401,8 +1389,8 @@ class Nozzle:
 
         The contour, coolant and channel definition the jacket build reads off this object.
 
-        The state carries ninety-six fields, so it is filled by name rather than one line at a
-        time. Every field is seeded from the attribute of the same name, and one this object does
+        The state carries close to a hundred fields, so it is filled by name rather than one line
+        at a time. Every field is seeded from the attribute of the same name, and one this object does
         not carry arrives as None, which is what the build treated an absent attribute as when it
         read them directly.
 
@@ -1452,8 +1440,8 @@ class Nozzle:
         Returns:
         --------
         ChannelGeometryInputs
-            Resolution, channel family, wall thicknesses, flute definition and the nozzle wall
-            point cloud the surrounding run fills in.
+            Resolution, channel family, wall thicknesses and the interface station counts the
+            surrounding run fills in.
 
         '''
 
@@ -1464,13 +1452,8 @@ class Nozzle:
             channelType          = self.channelType,
             hotWallThickness     = self.hotWallThickness,
             infillThickness      = self.infillThickness,
-            numFlutes            = self.numFlutes,
-            fluteAmplitudeCoef   = self.fluteAmplitudeCoef,
-            fluteHelixAngle      = self.fluteHelixAngle,
-            interfaceLength      = self.interfaceLength,
             numInletInterfaceCS  = self.numInletInterfaceCS,
-            numReturnInterfaceCS = self.numReturnInterfaceCS,
-            allNozzlePoints      = self.allNozzlePoints)
+            numReturnInterfaceCS = self.numReturnInterfaceCS)
 
     def regenThermalContext(self):
 

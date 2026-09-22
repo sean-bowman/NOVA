@@ -16,12 +16,9 @@ What is checked instead is everything that can be checked without one:
 Those establish that the implementation is the correlation it claims to be. They do not establish
 that the correlation predicts a real engine, and nothing here should be read as saying so.
 
-**The coolant side is not validated at all.** The circular correlation is Gnielinski, which is
-published and whose range of validity is known, but nothing here checks the implementation
-against a reference case. The fluted correlation is a fifty-fifty blend of Gnielinski with a
-spirally fluted correlation, with a roughness amplification applied to the second term only. No
-source states that blend or its range of validity, and no measurement is available to set it
-against.
+**The coolant side is not validated at all.** The correlation is Gnielinski, which is published
+and whose range of validity is known, but nothing here checks the implementation against a
+reference case.
 
 What closes both gaps is a measurement: a fired engine with instrumented wall temperatures, or a
 published test case with its conditions fully stated.

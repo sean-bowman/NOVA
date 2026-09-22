@@ -63,9 +63,6 @@ from .channelGeometry import generateCrossSections as buildCrossSections
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
-# The quantities the thermal model returns per station and the sizing loop carries through to the
-# comparison figure. Held once because the per-station loop and the full-contour pass both fill
-# the same dictionary, and a key present in one and not the other reads as a silent zero.
 def drivingTemperatureArray(state):
 
     """
@@ -106,6 +103,8 @@ def drivingTemperatureArray(state):
 
     return state.regenSectionNearWallRecoveryTemperatureTrimmed
 
+# The quantities the thermal model returns per station and the sizing loop carries through to the
+# figure, each written into the full-length array at the station it was solved for.
 THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'machNumber',
                    'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
                    'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
@@ -125,7 +124,7 @@ class ChannelSizingState:
     Parameters:
     -----------
     channelType : str
-        'circle' or 'fluted'.
+        Cross-section family: 'circle'.
     nChannel : int
         Channels around the nozzle.
     numCrossSections : int
@@ -152,8 +151,6 @@ class ChannelSizingState:
         Throat radius in real units [m].
     throatInletCurvatureNonDimensional, throatOutletCurvatureNonDimensional : float
         Throat arc radii, as multiples of the throat radius [-].
-    fluteAmplitudeCoef, fluteHelixAngle : float
-        Flute definition, NaN for a circular channel.
     xRegenNozzle, rRegenNozzle : Any
         Regen section wall, full [m].
     xRegenNozzleTrimmed, rRegenNozzleTrimmed : Any
@@ -198,8 +195,6 @@ class ChannelSizingState:
     nozzleScalingFactor:                    float = float('nan')
     throatInletCurvatureNonDimensional:     float = float('nan')
     throatOutletCurvatureNonDimensional:    float = float('nan')
-    fluteAmplitudeCoef:                     float = float('nan')
-    fluteHelixAngle:                        float = float('nan')
     xRegenNozzle:                           Any   = None
     rRegenNozzle:                           Any   = None
     xRegenNozzleTrimmed:                    Any   = None
@@ -307,10 +302,7 @@ def solveChannelRadii(state, geometry, thermal):
             # use current arc slice to solve for max channel radius that fits here
             channelArcLength = nozzleArcSlice
             channelDiameter = 8*rPathline2D[1] * np.sin(channelArcLength / (8*rPathline2D[1]))
-            if state.channelType == 'fluted':
-                channelRadius[i] = channelDiameter / (2 + state.fluteAmplitudeCoef)
-            elif state.channelType == 'circle':
-                channelRadius[i] = channelDiameter / 2
+            channelRadius[i] = channelDiameter / 2
             # recalculate channel 2D centerline point here with new channel radius guess
             xPathline2D, rPathline2D = findChannelCenterline_oneStation(xNozzle, rNozzle, channelRadius, xChannelCenterline2D, rChannelCenterline2D, i)
             # rerun first half of the algo
@@ -343,12 +335,8 @@ def solveChannelRadii(state, geometry, thermal):
         # Calculate the arc length of the nozzle region allocated to each channel.
         nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness
 
-        # Calculate the diameter of each channel perpendicular to the pathline,
-        # including the flute amplitude.
-        if state.channelType == 'fluted':
-            channelDiameter = (2*channelRadius[i] + state.fluteAmplitudeCoef*channelRadius[i])
-        elif state.channelType == 'circle':
-            channelDiameter = 2 * channelRadius[i]
+        # Calculate the diameter of each channel perpendicular to the pathline.
+        channelDiameter = 2 * channelRadius[i]
 
         # Calculate the arc length of the channel.
         channelArcLength = 4* rPathline2D[1] * np.arccos((2 * rPathline2D[1]**2 - (channelDiameter/4)**2) / (2 * rPathline2D[1]**2))
@@ -471,12 +459,8 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i = heatTransferDict_i | heatTransferDict_iUpdate
 
         # run single station regen heat transfer model
-        if channelType == 'fluted':
-            heatTransferOutputs, plotOutputs, _, _ \
-                = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True)
-        elif channelType == 'circle':
-            _, _, heatTransferOutputs, plotOutputs \
-                = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True)
+        _, _, heatTransferOutputs, plotOutputs \
+            = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True)
         # update local heat transfer dictionary
         hotWallTemperature                          = heatTransferOutputs['hotWallTemperature']
         heatTransferDict_i['newCoolantTemperature'] = heatTransferOutputs['coolantTemperature'][0]
@@ -492,8 +476,8 @@ def solveChannelRadii(state, geometry, thermal):
     # ------------------------------------------------------------------------------------------------------------------------------------ #
 
     state.dcrData['projectionAngle'], state.dcrData['helixPath'], state.dcrData['wrapAngles'], \
-    state.dcrData['minorLoss'], state.dcrData['frictionLoss'], state.dcrData['Kfactor'], state.dcrData['isCircle'] = \
-        [np.zeros((state.numCrossSections)) for _ in range(7)]
+    state.dcrData['minorLoss'], state.dcrData['frictionLoss'], state.dcrData['Kfactor'] = \
+        [np.zeros((state.numCrossSections)) for _ in range(6)]
 
     # Locally scope nozzle wall values
     xNozzle, rNozzle = state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed
@@ -584,24 +568,13 @@ def solveChannelRadii(state, geometry, thermal):
             R = throatRadius + offsetHotWallThickness
             r = R*np.sin(theta) / (1 - np.sin(theta))
             circleChannelThroatRadius = r - state.infillThickness / 2
-            flutedChannelThroatRadius = circleChannelThroatRadius / (1 + state.fluteAmplitudeCoef/2)
-            if state.channelType == 'fluted':
-                if flutedChannelThroatRadius < state.minChannelRadius:
-                    print(f'\nnChannel too high; channel radius at throat will be too small.')
-                    flutedChannelThroatRadius = state.minChannelRadius
-                    nChannel = int(np.pi / (np.arcsin((flutedChannelThroatRadius * (1 + state.fluteAmplitudeCoef / 2) + \
-                                    state.infillThickness[0] / 2)/(flutedChannelThroatRadius * (1 + state.fluteAmplitudeCoef / 2) + \
-                                        state.infillThickness[0] / 2 + throatRadius + state.hotWallThickness - state.infillThickness[0]))))
-                    state.nChannel = nChannel
-                    print(f'\nnChannel reduced to {nChannel}.')
-            elif state.channelType == 'circle':
-                if circleChannelThroatRadius < state.minChannelRadius:
-                    print(f'\nnChannel too high; channel radius at throat will be too small.')
-                    circleChannelThroatRadius = state.minChannelRadius
-                    nChannel = int(np.pi / (np.arcsin((circleChannelThroatRadius + state.infillThickness[0]/2) / \
-                                (circleChannelThroatRadius + state.infillThickness[0]/2 + throatRadius + state.hotWallThickness - state.infillThickness[0]))))
-                    state.nChannel = nChannel
-                    print(f'\nnChannel reduced to {nChannel}.')
+            if circleChannelThroatRadius < state.minChannelRadius:
+                print(f'\nnChannel too high; channel radius at throat will be too small.')
+                circleChannelThroatRadius = state.minChannelRadius
+                nChannel = int(np.pi / (np.arcsin((circleChannelThroatRadius + state.infillThickness[0]/2) / \
+                            (circleChannelThroatRadius + state.infillThickness[0]/2 + throatRadius + state.hotWallThickness - state.infillThickness[0]))))
+                state.nChannel = nChannel
+                print(f'\nnChannel reduced to {nChannel}.')
 
         # initialize arrays and values
         channelRadius = np.zeros(state.numCrossSections)
@@ -912,8 +885,6 @@ def solveChannelRadii(state, geometry, thermal):
                                                                      state.throatOutletCurvatureNonDimensional*state.nozzleScalingFactor) / 2
             heatTransferDict_i["throatDiameter"]                  = 2 * min(rNozzle)
             heatTransferDict_i["throatArea"]                      = np.pi * (min(rNozzle)**2)
-            heatTransferDict_i["fluteAmplitudeCoef"]              = state.fluteAmplitudeCoef
-            heatTransferDict_i["fluteHelixAngle"]                 = abs(state.fluteHelixAngle)
             heatTransferDict_i["coolant"]                         = state.coolant
             heatTransferDict_i["mdot"]                            = state.coolantMassFlow / state.nChannel
             heatTransferDict_i["chamberPressure"]                 = state.chamberPressure
@@ -933,12 +904,7 @@ def solveChannelRadii(state, geometry, thermal):
         # find max channel radius at each station
         for i in tqdm(range(state.numCrossSections), desc="Solving for channel radii", colour="#ABD038"):
 
-            if state.channelType == 'fluted':
-                maxFlutedChannelRadius = kineosAlgorithm_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, i, findMaxRadius=True)
-                maxChannelRadius = maxFlutedChannelRadius
-            elif state.channelType == 'circle':
-                maxCircleChannelRadius = kineosAlgorithm_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, i, findMaxRadius=True)
-                maxChannelRadius = maxCircleChannelRadius
+            maxChannelRadius = kineosAlgorithm_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, i, findMaxRadius=True)
 
             # next station will always start at last station's converged radius
             if i == 0:
@@ -986,40 +952,8 @@ def solveChannelRadii(state, geometry, thermal):
     state.channelRadius = channelRadius.copy()
 
     # Heat transfer plots
-    if state.channelType == 'fluted':
-
-        # Get comparison
-        heatTransferDict["numCrossSections"]    = state.numCrossSections
-        heatTransferDict["xHotWall3D"]          = state.xRegenNozzleTrimmed
-        heatTransferDict["rHotWall3D"]          = state.rRegenNozzleTrimmed
-        heatTransferDict["gamma"]               = state.gammaRegenSectionTrimmed
-        heatTransferDict["molecularWeight"]     = state.molecularWeightRegenSectionTrimmed
-        heatTransferDict["gasConstant"]         = state.gasConstantRegenSectionTrimmed
-        heatTransferDict["nearWallMachNumber"]  = state.regenSectionNearWallMachNumberTrimmed
-        heatTransferDict["nearWallTemperature"] = state.regenSectionNearWallTemperatureTrimmed
-        heatTransferDict["drivingTemperature"]  = drivingTemperatureArray(state)
-        heatTransferDict["nearWallPressure"]    = state.regenSectionNearWallPressureTrimmed
-        keysHX = ["gausFlutedCSA","gausFlutedSA","circleCSA","circleSA","differentialPathLength","fluteAmplitudeGauss","flutePitch","turnAngle","radiusOfCurvature","isCircle"]
-        for key in keysHX:
-            heatTransferDict[key] = np.zeros(state.numCrossSections)
-        for i in tqdm(range(state.numCrossSections), desc="Verifying Heat Transfer:", colour="#ABD038"):
-            heatTransferDict_Update = buildCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D,
-                                                            zChannelCenterline3D, channelRadius, 'fluted', i = i)
-            for key in keysHX:
-                heatTransferDict[key][i] = heatTransferDict_Update[key][0]
-
-        # The circular result is solved alongside the fluted one so the two can be drawn
-        # against each other, which is what the fluted channel was adopted on.
-        _, _, _, circleHeatTransferPlots = \
-            solveRegenHeatTransfer(thermal, heatTransferDict,returnDict=True,plots=False)
-
-        drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel,
-                                         flutedResults=heatTransferPlots, circleResults=circleHeatTransferPlots,
-                                         titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
-
-    if state.channelType == 'circle':
-        drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel,
-                                         circleResults=heatTransferPlots,
-                                         titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
+    drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel,
+                                     circleResults=heatTransferPlots,
+                                     titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
 
     return state

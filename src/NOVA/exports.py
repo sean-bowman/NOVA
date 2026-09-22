@@ -93,8 +93,6 @@ def exportData(nozzle, filename: str = 'default'):
         centerlineArray = np.array([nozzle.zChannelCenterline3D, nozzle.yChannelCenterline3D, nozzle.xChannelCenterline3D]).T
         writeFile(filename[:-4] + 'ChannelCenterline3D.txt', centerlineArray*1e3)
         py2cad(filename[:-4] + 'Channel.stl', nozzle.zChannel, nozzle.yChannel, -nozzle.xChannel)
-        if nozzle.channelType == 'fluted':
-            py2cad(filename[:-4] + 'DefeaturedChannel.stl', nozzle.zChannelDefeatured, nozzle.yChannelDefeatured, -nozzle.xChannelDefeatured)
 
     # Volutes
     if nozzle.makeInletVolute == 'on':

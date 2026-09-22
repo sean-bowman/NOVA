@@ -62,7 +62,7 @@ def referenceConfiguration(**overrides):
         'makeCoolingChannels': True, 'material': 'GRCop-42', 'channelType': 'circle',
         'nChannel': 60, 'numCrossSections': 60, 'numCSPointsChannel': 40,
         'hotWallThickness': 0.001, 'shellThickness': 0.002, 'infillThickness': 0.001,
-        'maxWallTemperature': 800.0, 'interfaceLength': 0.02,
+        'maxWallTemperature': 800.0,
         'coolantClass': 'fuel', 'coolant': 'Hydrogen', 'coolantInitialTemperature': 30.0,
         'coolantInitialPressure': 12000000.0, 'coolantMassFlow': 3.4,
         'regenTruncationType': 'none', 'regenTruncationValue': None})

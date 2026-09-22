@@ -11,12 +11,11 @@ centerline in three dimensions, a channel radius at each station, and the family
 channel is drawn from.
 
 A frame is constructed at every station from the local tangent, and the profile is drawn in the
-plane normal to it. A fluted profile is additionally rolled about the tangent as it advances,
-which is what makes the flutes helical. A circular profile is rotationally symmetric, so it is
-not rolled.
+plane normal to it. A circular profile is rotationally symmetric, so it is not rolled.
 
-A fluted channel is drawn circular for a short run at each volute interface and blends into the
-full flute amplitude between them. That blend is what `conditionalGaussian` applies.
+Spirally fluted channels, a profile rolled about the tangent so its flutes run helically and
+compressed toward a circle on the hot-wall side, are kept in `experimental/flutedChannels.py`
+with the correlation they were rated by.
 
 Two things are returned. The swept surface, as (x, y, z) arrays of shape (numCSPointsChannel,
 numCrossSections), is the geometry. The cross-sectional area, wetted surface area, turn angle
@@ -46,16 +45,9 @@ Author: Sean Bowman
 
 '''
 
-import warnings
 from dataclasses import dataclass
-from typing import Any
 
 import numpy as np
-from joblib import Parallel, delayed, cpu_count
-from scipy.spatial import KDTree
-from tqdm import tqdm
-
-from .geometryTools import DCM
 
 @dataclass
 class ChannelGeometryInputs:
@@ -64,9 +56,8 @@ class ChannelGeometryInputs:
 
     Everything the cross-section builder reads that is not passed to it directly.
 
-    These are the channel definition and the resolution it is drawn at, plus two arrays that the
-    surrounding run fills in and this module only reads: the nozzle wall point cloud the
-    compression search queries, and the stations the printability audit marked unsupported.
+    These are the channel definition and the resolution it is drawn at, plus the station counts
+    the surrounding run fills in for each volute interface.
 
     Attributes:
     -----------
@@ -77,25 +68,15 @@ class ChannelGeometryInputs:
     nChannel : int
         Channels around the nozzle, which sets how much of the annulus each one may occupy.
     channelType : str
-        'circle' or 'fluted'.
+        Cross-section family: 'circle'.
     hotWallThickness : float
         Wall between the coolant and the exhaust [m].
     infillThickness : float
         Material left between adjacent channels [m].
-    numFlutes : int
-        Flutes around a fluted cross section.
-    fluteAmplitudeCoef : float
-        Flute amplitude as a fraction of the channel radius [-].
-    fluteHelixAngle : float
-        Helix angle the flutes are rolled through [deg]. NaN for a channel with no flutes.
-    interfaceLength : float
-        Length of the circular run at each volute interface [m].
     numInletInterfaceCS : int
         Stations in the inlet interface.
     numReturnInterfaceCS : int
         Stations in the return interface.
-    allNozzlePoints : Any
-        Nozzle wall point cloud the compression search queries for the nearest wall point.
 
     '''
 
@@ -105,13 +86,8 @@ class ChannelGeometryInputs:
     channelType:          str   = 'circle'
     hotWallThickness:     float = 0.0
     infillThickness:      float = 0.0
-    numFlutes:            float = float('nan')
-    fluteAmplitudeCoef:   float = float('nan')
-    fluteHelixAngle:      float = float('nan')
-    interfaceLength:      float = 0.0
     numInletInterfaceCS:  int   = 0
     numReturnInterfaceCS: int   = 0
-    allNozzlePoints:      Any   = None
 
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                           channelRadius, crossSectionStyle, i: int = None):
@@ -121,13 +97,11 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     (x,y,z)ChannelCenterline3D and channelRadius inputs are expected to be length of numCrossSections even when only
     generating a single station
 
-    If i is specified, one cross section in generated at that station along (x,y,z)ChannelCenterline3D with local channel
-    radius. Gaussian compression of flutes is applied ambiguously i.e. there is no searching for the closest point.
-    Only the heat transfer dictionary is returned.
+    If i is specified, one cross section is generated at that station along (x,y,z)ChannelCenterline3D with the local
+    channel radius, and only the heat transfer dictionary is returned.
 
-    If i is not specified, the entire channel is generated. Nozzle search is used for the gaussian compression index,
-    which expects geometry.allNozzlePoints to exist. The (x,y,z)Channel arrays are returned as well as the heat transfer
-    dictionary.
+    If i is not specified, the entire channel is generated, and the (x,y,z)Channel arrays are returned as well as the
+    heat transfer dictionary.
 
     '''
 
@@ -346,158 +320,36 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
         return sweptPoints
 
-    def conditionalGaussian(iterator: int, gaussianCurve):
-
-        '''
-
-        The flute amplitude at one station: zero at the volute interfaces, blended up to full
-        amplitude between them.
-
-        '''
-
-        numInterfaceCrossSections      = int(np.floor(geometry.interfaceLength / (totalPathLength / geometry.numCrossSections)))
-        numInterfaceBlendCrossSections = max(3, int(np.floor(10e-3 / (totalPathLength / geometry.numCrossSections))))
-        ampInterfaceBlendUp            = np.linspace(0, 1, numInterfaceBlendCrossSections + 1)
-        ampInterfaceBlendDown          = np.linspace(1, 0, numInterfaceBlendCrossSections + 1)
-
-        i = iterator
-
-        # Circlular outlet region
-        if i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections:
-            amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-            isCircle = 1
-        # Blend from end of circular outelt region to beginning of fluted region
-        elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections) and (i <= geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections):
-            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendUp[i - int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
-            isCircle = 1 - ampInterfaceBlendUp[i-int(geometry.numReturnInterfaceCS + numInterfaceCrossSections)]
-        # From beginning to end of fluted region
-        elif (i > geometry.numReturnInterfaceCS + numInterfaceCrossSections + numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections):
-            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve
-            isCircle = 0
-        # Blend from end of fluted region to beginning of circular inlet region
-        elif (i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections) and (i <= geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS):
-            amplitudeGausFluted = fluteAmplitude[i] * gaussianCurve * ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS - numInterfaceBlendCrossSections)]
-            isCircle = 1 - ampInterfaceBlendDown[i - int(geometry.numCrossSections - numInterfaceCrossSections - numInterfaceBlendCrossSections - geometry.numInletInterfaceCS)]
-        # Cirlular inlet region
-        elif i > geometry.numCrossSections - numInterfaceCrossSections - geometry.numInletInterfaceCS:
-                amplitudeGausFluted = np.zeros((geometry.numCSPointsChannel))
-                isCircle = 1
-
-        return amplitudeGausFluted, isCircle
-
-    def flutedCrossSection(i):
-
-        '''
-        Names:
-            > Wave         - Unwrapped cross sections plotted in the (x, y) plane as (theta, r)
-            > Fully Fluted - Polar cross sections that are fluted around the entire circumference
-            > Gaus Fluted  - Polar cross sections that are fluted on one side and flattened on the other side by a Gaussian curve
-        '''
-
-        amplitudeFullyFluted   = np.ones((1,geometry.numCSPointsChannel)) * fluteAmplitude[i]
-        waveFullyFluted        = np.ones((1,geometry.numCSPointsChannel)) * channelRadius[i] \
-                                        + amplitudeFullyFluted * np.sin(geometry.numFlutes * crossSectionAngles)
-        xFullyFluted           = -(waveFullyFluted) * np.sin(crossSectionAngles)
-        yFullyFluted           = -(waveFullyFluted) * np.cos(crossSectionAngles)
-        zAllZeros              = np.zeros_like(xFullyFluted)
-
-        valueMatrix = [zAllZeros[0], yFullyFluted[0], xFullyFluted[0]]
-        eulerAngles = [crossSectionRoll[i], 0, 0]
-        _, yFullyFlutedRolled, zFullyFlutedRolled \
-            = DCM(eulerAngles, valueMatrix, transpose = True, rotationOrder = 'yzx')
-
-        # Define cross sections in polar coordinates
-        polarRadius        = np.sqrt(zFullyFlutedRolled**2 + yFullyFlutedRolled**2)
-        polarAngles        = np.arctan2(zFullyFlutedRolled, yFullyFlutedRolled)
-
-        if compressionSearch == 'on':
-            shiftedPolarAngles = np.roll(gaussianCurveRange, -(geometry.numCSPointsChannel - int(compressianIndex[i]) - 1))
-            gaussianCurve = ((1/np.sqrt(2*np.pi)*np.exp(-(shiftedPolarAngles)**2/(np.pi/2)))/.4)
-        else:
-            gaussianCurve = ((1/np.sqrt(2*np.pi)*np.exp(-(gaussianCurveRange)**2/(np.pi/2)))/.4)
-
-        amplitudeGausFluted    = fluteAmplitude[i] * gaussianCurve
-        waveRadiusScaled       = (polarRadius - channelRadius[i]) / fluteAmplitude[i]
-        waveGausFluted         = waveRadiusScaled * amplitudeGausFluted + channelRadius[i]
-        xGausFluted            = waveGausFluted * np.sin(polarAngles)
-        yGausFluted            = waveGausFluted * np.cos(polarAngles)
-
-        if compressionSearch == 'on':
-            amplitudeGausFluted, isCircle = conditionalGaussian(i,gaussianCurve)
-        else:
-            isCircle = 0
-
-        waveRadiusScaled = (polarRadius - channelRadius[i]) / fluteAmplitude[i]
-        waveGausFluted   = waveRadiusScaled * amplitudeGausFluted + channelRadius[i]
-        xGausFluted      = waveGausFluted * np.sin(polarAngles)
-        yGausFluted      = waveGausFluted * np.cos(polarAngles)
-        gausFlutedCSA    = abs(np.trapz(yGausFluted, xGausFluted))
-
-        differentialCircumference = np.zeros(geometry.numCSPointsChannel)
-        for k in range(geometry.numCSPointsChannel-1):
-            differentialCircumference[k] = np.sqrt((xGausFluted[k+1] - xGausFluted[k])**2 + (yGausFluted[k+1] - yGausFluted[k])**2)
-        gausFlutedCircumference = sum(differentialCircumference)
-        gausFlutedSA = gausFlutedCircumference * differentialPathLength[i]
-
-        return xGausFluted, yGausFluted, gausFlutedCSA, gausFlutedSA, isCircle
-
     # Input validation
-    if crossSectionStyle.lower() != 'fluted' and crossSectionStyle != 'circle':
-        raise Exception("Please specify crossSectionStyle 'circle' or 'fluted'.")
+    if crossSectionStyle != 'circle':
+        raise ValueError(f"Unknown crossSectionStyle '{crossSectionStyle}'; the package builds 'circle'.")
 
-    if crossSectionStyle.lower() == 'fluted':
-        # The flute profile is built by scaling a wave by its amplitude and normalizing by the
-        # same amplitude, which is singular at zero. A section of no amplitude is a circle, so
-        # ask for one rather than for a flute that has none.
-        if not np.isfinite(geometry.fluteAmplitudeCoef) or geometry.fluteAmplitudeCoef <= 0:
-            raise ValueError(
-                f'fluteAmplitudeCoef must be positive for a fluted cross section, got '
-                f'{geometry.fluteAmplitudeCoef}. Use crossSectionStyle "circle" for an unfluted channel.')
-        if not np.isfinite(geometry.numFlutes) or geometry.numFlutes < 3:
-            raise ValueError(
-                f'numFlutes must be at least 3 for a fluted cross section, got {geometry.numFlutes}')
-
-    # Parse input mode
-    if i == None:
-        compressionSearch = 'on'
+    # Parse input mode: the whole channel, or the one station the sizing march asks for
+    if i is None:
+        fullSweep = True
         arrLen = geometry.numCrossSections
     else:
-        compressionSearch = 'off'
+        fullSweep = False
         arrLen = 1
         j = i
 
     # Initialize
-    xCircle, yCircle, xGausFluted, yGausFluted                                                  \
-        = [np.zeros((geometry.numCSPointsChannel, arrLen)) for _ in range(4)]
-    circleCSA, circleSA, gausFlutedCSA, gausFlutedSA,                                           \
-    isCircle, turnAngle, radiusOfCurvature                                                      \
-        = [np.zeros((arrLen))                          for _ in range(7)]
-
-    fluteAmplitude          = geometry.fluteAmplitudeCoef * channelRadius
-    flutePitch              = 2*np.pi * channelRadius / (np.tan(np.deg2rad(geometry.fluteHelixAngle)) * geometry.numFlutes)
+    xCircle, yCircle                                                                            \
+        = [np.zeros((geometry.numCSPointsChannel, arrLen)) for _ in range(2)]
+    circleCSA, circleSA, turnAngle, radiusOfCurvature                                           \
+        = [np.zeros((arrLen))                          for _ in range(4)]
 
     differentialPathLength  = np.sqrt(np.diff(xChannelCenterline3D)**2 + np.diff(yChannelCenterline3D)**2 + np.diff(zChannelCenterline3D)**2)
     differentialPathLength  = np.append(differentialPathLength, differentialPathLength[-1])
-    totalPathLength         = np.sum(differentialPathLength)
 
-    # Roll of the cross section about the path tangent. It is what turns a flute into a
-    # helix, so it is defined only where there is a helix angle to turn it through. A
-    # circular section is rotationally symmetric and a roll leaves it unchanged, and its
-    # configuration carries no helix angle, so the angle arrives as NaN and the roll is
-    # taken as zero rather than propagating that NaN into every oriented point.
+    # A circular section is rotationally symmetric, so it takes no roll about the path tangent.
     crossSectionRoll        = np.zeros(geometry.numCrossSections)
-    if np.isfinite(geometry.fluteHelixAngle):
-        rollTotal               = np.tan(np.deg2rad(geometry.fluteHelixAngle)) * totalPathLength / channelRadius
-        differentialRollPercent = differentialPathLength / totalPathLength
-        differentialRoll        = rollTotal * differentialRollPercent
-        crossSectionRoll[1:]    = np.cumsum(differentialRoll[:-1])
 
     crossSectionAngles      = np.linspace(0,      2*np.pi, geometry.numCSPointsChannel)
-    gaussianCurveRange      = np.linspace(-np.pi, np.pi,   geometry.numCSPointsChannel)
 
     for i in range(arrLen):
 
-        if compressionSearch == 'on':
+        if fullSweep:
 
             j = i
 
@@ -509,7 +361,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
     for i in range(arrLen):
 
-        if compressionSearch == 'on':
+        if fullSweep:
 
             j = i
 
@@ -519,111 +371,30 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         circleCSA[i] = np.pi*channelRadius[j]**2
         circleSA[i]  = np.pi*2*channelRadius[j] * differentialPathLength[j]
 
-    # Create circular cross sections to select nearest channel point to wall
-
+    # Sweep the circular sections along the centerline
     allCircleChannelPoints = orientCrossSections(stations, np.stack((yCircle, xCircle), axis=-1).transpose(1, 0, 2), crossSectionRoll)
-    xChannelCirc = allCircleChannelPoints[:, :, 0].T
-    yChannelCirc = allCircleChannelPoints[:, :, 1].T
-    zChannelCirc = allCircleChannelPoints[:, :, 2].T
-
-    # -- Nozzle Search -- #
-
-    if compressionSearch == 'on':
-
-        # -- find nozzle index -- #
-
-        if geometry.numCrossSections >= 500: # parallelize nozzle search
-
-            def parallelNozzleSearch(pointQuery, allNozzlePoints):
-
-                nozzleIndex = KDTree(allNozzlePoints).query(pointQuery)[1]
-
-                return nozzleIndex
-
-            nozzleIndex = Parallel(n_jobs = int(cpu_count()/2-1))(delayed(parallelNozzleSearch)([zChannelCenterline3D[i],
-                                                                                                 xChannelCenterline3D[i],
-                                                                                                 yChannelCenterline3D[i]],
-                                                                                                 geometry.allNozzlePoints)
-                                    for i in tqdm(range(geometry.numCrossSections), desc="Scanning Nozzle Wall", colour="#ABD038"))
-
-        else:
-
-            nozzleIndex = np.zeros((geometry.numCrossSections))
-            for i in tqdm(range(geometry.numCrossSections), desc="Scanning Nozzle Wall", colour="#ABD038"):
-
-                pointQuery     = [zChannelCenterline3D[i], xChannelCenterline3D[i], yChannelCenterline3D[i]]
-                nozzleIndex[i] = KDTree(geometry.allNozzlePoints).query(pointQuery)[1]
-
-        # -- find compression index -- #
-
-        compressianIndex         = np.zeros((geometry.numCrossSections))
-        circleCrossSectionPoints = np.zeros((geometry.numCSPointsChannel,3))
-        for i in tqdm(range(geometry.numCrossSections), desc="Scanning Cross Sections", colour="#ABD038"):
-
-            pointQuery = [geometry.allNozzlePoints[int(nozzleIndex[i]),0], geometry.allNozzlePoints[int(nozzleIndex[i]),1], geometry.allNozzlePoints[int(nozzleIndex[i]),2]]
-            circleCrossSectionPoints[:,0] = zChannelCirc[:,i]
-            circleCrossSectionPoints[:,1] = xChannelCirc[:,i]
-            circleCrossSectionPoints[:,2] = yChannelCirc[:,i]
-
-            compressianIndex[i] = KDTree(circleCrossSectionPoints).query(pointQuery)[1]
-
-    # -- Fluting and Compression -- #
-
-    if crossSectionStyle.lower() == 'fluted':
-
-        for i in range(arrLen):
-
-            if compressionSearch == 'on':
-
-                j = i
-
-            xGausFluted[:,i],yGausFluted[:,i],gausFlutedCSA[i],gausFlutedSA[i], isCircle[i] = flutedCrossSection(j)
-
-        # -- Create Final Channel Cross Sections and Build Channel Geometry -- #
-
-        allFlutedChannelPoints = orientCrossSections(stations, np.stack((yGausFluted, xGausFluted), axis=-1).transpose(1, 0, 2), crossSectionRoll)
-        xGausFlutedChannel = allFlutedChannelPoints[:, :, 0].T
-        yGausFlutedChannel = allFlutedChannelPoints[:, :, 1].T
-        zGausFlutedChannel = allFlutedChannelPoints[:, :, 2].T
-
-        # identify correct arrays to return
-        xChannel, yChannel, zChannel = xGausFlutedChannel, yGausFlutedChannel, zGausFlutedChannel
-
-    else: # crossSectionStyle.lower() == 'circle':
-
-        # identify correct arrays to return
-        xChannel, yChannel, zChannel = xChannelCirc, yChannelCirc, zChannelCirc
+    xChannel = allCircleChannelPoints[:, :, 0].T
+    yChannel = allCircleChannelPoints[:, :, 1].T
+    zChannel = allCircleChannelPoints[:, :, 2].T
 
     # -- Finish -- #
 
-    heatTransferDict = {}
-
-    if compressionSearch == 'off':
+    if not fullSweep:
         # make arrays length 1
         differentialPathLength = np.array([differentialPathLength[j]])
-        fluteAmplitude         = np.array([fluteAmplitude[j]])
-        flutePitch             = np.array([flutePitch[j]])
 
-    if crossSectionStyle == 'fluted':
-        heatTransferDict["gausFlutedCSA"]      = gausFlutedCSA
-        heatTransferDict["gausFlutedSA"]       = gausFlutedSA
-    else:
-        heatTransferDict["gausFlutedCSA"]      = None
-        heatTransferDict["gausFlutedSA"]       = None
+    heatTransferDict = {}
     heatTransferDict["circleCSA"]              = circleCSA
     heatTransferDict["circleSA"]               = circleSA
     heatTransferDict["differentialPathLength"] = differentialPathLength
-    heatTransferDict["fluteAmplitudeGauss"]    = fluteAmplitude
-    heatTransferDict["flutePitch"]             = abs(flutePitch)
     heatTransferDict["turnAngle"]              = turnAngle
     heatTransferDict["radiusOfCurvature"]      = radiusOfCurvature
-    heatTransferDict["isCircle"]               = isCircle
 
-    if compressionSearch == 'on':
+    if fullSweep:
 
         return xChannel, yChannel, zChannel, heatTransferDict
 
-    else: # compressionSearch == 'off'
+    else:
 
         return heatTransferDict
 
@@ -631,7 +402,7 @@ def getMaxChannelRadius(geometry, rNozzle, i):
 
     '''
 
-    Returns the maximum circular and fluted channel radii at station i along rNozzle
+    Returns the maximum circular channel radius at station i along rNozzle
 
     Author: Isabella Duprey-Churn
     Date:   4/28/2026
@@ -645,10 +416,4 @@ def getMaxChannelRadius(geometry, rNozzle, i):
     r = R*np.sin(theta) / (1 - np.sin(theta))
     maxCircleChannelRadius = r - geometry.infillThickness / 2
 
-    # find the maximum fluted channel radius
-
-    if geometry.channelType == 'fluted':
-        maxFlutedChannelRadius = maxCircleChannelRadius / (1 + 0.5*geometry.fluteAmplitudeCoef)
-        return maxCircleChannelRadius, maxFlutedChannelRadius
-    else:
-        return maxCircleChannelRadius, 0
+    return maxCircleChannelRadius

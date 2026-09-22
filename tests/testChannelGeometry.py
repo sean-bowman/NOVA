@@ -18,7 +18,7 @@ That is a derivation, not a fit, and the implementation is held to it exactly.
 distinguish a parallel transport frame from a Frenet frame, and each is checkable: the frame
 vectors are unit and mutually orthogonal at every station, the triad is right-handed, and for a
 planar curve the frame acquires no rotation about the tangent at all, which is the property that
-keeps flutes from winding up where the curve happens to bend.
+keeps a section from winding up where the curve happens to bend.
 
 **A circular cross section is a circle.** Its points lie at exactly the channel radius from the
 centerline, in the plane normal to the local tangent, and its area is exactly pi r squared.
@@ -35,27 +35,6 @@ import pytest
 
 from NOVA.channelGeometry import ChannelGeometryInputs, generateCrossSections, getMaxChannelRadius
 
-def nozzleWallCloud(numStations, wallRadius = 0.058, length = 0.3, numSlices = 24):
-
-    '''
-
-    A cold-wall point cloud for the compression search to query.
-
-    The full sweep always runs a nearest-wall search, so the caller always has one of these. It
-    is ordered (z, x, y), which is the order the search queries in.
-
-    '''
-
-    z = np.linspace(0.0, length, numStations)
-    angle = np.linspace(0.0, 2 * np.pi, numSlices, endpoint = False)
-
-    points = []
-    for station in z:
-        for theta in angle:
-            points.append([station, wallRadius * np.cos(theta), wallRadius * np.sin(theta)])
-
-    return np.array(points)
-
 def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60):
 
     '''A circular-channel definition with interfaces off.'''
@@ -67,25 +46,8 @@ def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60
         channelType          = 'circle',
         hotWallThickness     = 1.0e-3,
         infillThickness      = 1.0e-3,
-        interfaceLength      = 0.0,
         numInletInterfaceCS  = 0,
-        numReturnInterfaceCS = 0,
-        allNozzlePoints      = nozzleWallCloud(numCrossSections))
-
-def discretisedCircleArea(radius, numCSPointsChannel):
-
-    '''
-
-    Area of the polygon a circle becomes at this resolution.
-
-    The cross section is drawn at numCSPointsChannel points from linspace over a full turn, which
-    repeats the closing point, so the polygon has one fewer segment than it has points.
-
-    '''
-
-    segments = numCSPointsChannel - 1
-
-    return 0.5 * segments * radius**2 * np.sin(2 * np.pi / segments)
+        numReturnInterfaceCS = 0)
 
 def straightCenterline(numStations, length = 0.3, radius = 0.06):
 
@@ -108,7 +70,7 @@ class TestMaxChannelRadius:
         geometry = circularInputs(nChannel = nChannel)
         rNozzle = np.array([wallRadius])
 
-        computed, _ = getMaxChannelRadius(geometry, rNozzle, 0)
+        computed = getMaxChannelRadius(geometry, rNozzle, 0)
 
         # The wall the channel sits against is offset by the hot wall less the infill, and the
         # result is then pulled in by half the infill to leave material between neighbours.
@@ -126,7 +88,7 @@ class TestMaxChannelRadius:
         wallRadius, nChannel = 0.06, 48
         geometry = circularInputs(nChannel = nChannel)
 
-        channelRadius, _ = getMaxChannelRadius(geometry, np.array([wallRadius]), 0)
+        channelRadius = getMaxChannelRadius(geometry, np.array([wallRadius]), 0)
         offsetWall = wallRadius + geometry.hotWallThickness - geometry.infillThickness
 
         # Center distance from the axis follows from tangency to the offset wall.
@@ -140,27 +102,10 @@ class TestMaxChannelRadius:
     def testMoreChannelsMeansSmallerChannels(self):
 
         geometry = circularInputs()
-        radii = [getMaxChannelRadius(circularInputs(nChannel = n), np.array([0.06]), 0)[0]
+        radii = [getMaxChannelRadius(circularInputs(nChannel = n), np.array([0.06]), 0)
                  for n in (20, 40, 80, 160)]
 
         assert all(later < earlier for earlier, later in zip(radii, radii[1:]))
-
-    def testACircularChannelReportsNoFlutedRadius(self):
-
-        geometry = circularInputs()
-        _, fluted = getMaxChannelRadius(geometry, np.array([0.06]), 0)
-
-        assert fluted == 0
-
-    def testAFlutedChannelIsSmallerByTheFluteAmplitude(self):
-
-        geometry = circularInputs()
-        geometry.channelType = 'fluted'
-        geometry.fluteAmplitudeCoef = 0.3
-
-        circle, fluted = getMaxChannelRadius(geometry, np.array([0.06]), 0)
-
-        assert fluted == pytest.approx(circle / (1 + 0.5 * 0.3), rel = 1e-14)
 
 class TestCircularCrossSection:
 
@@ -319,7 +264,7 @@ class TestSingleStation:
 
 class TestChannelTypeAliasing:
 
-    '''Only two cross-section families exist, and anything else is refused rather than guessed.'''
+    '''A cross-section family that does not exist is refused rather than guessed.'''
 
     def testAnUnknownFamilyIsRefused(self):
 
@@ -330,88 +275,6 @@ class TestChannelTypeAliasing:
 
         with pytest.raises(Exception, match = 'crossSectionStyle'):
             generateCrossSections(geometry, x, y, z, radius, 'hexagon')
-
-class TestFlutedCrossSection:
-
-    '''A fluted section is a circle modulated by its flutes.'''
-
-    def flutedGeometry(self, numStations = 30, amplitude = 0.3, flutes = 8, helix = 15.0):
-
-        geometry = circularInputs(numCrossSections = numStations)
-        geometry.channelType = 'fluted'
-        geometry.numFlutes = flutes
-        geometry.fluteAmplitudeCoef = amplitude
-        geometry.fluteHelixAngle = helix
-
-        return geometry
-
-    def testAreaIsFiniteAndPositive(self):
-
-        numStations = 30
-        geometry = self.flutedGeometry(numStations)
-        x, y, z = straightCenterline(numStations)
-        radius = np.full(numStations, 0.002)
-
-        heatTransfer = generateCrossSections(geometry, x, y, z, radius, 'fluted')[3]
-
-        assert np.all(np.isfinite(heatTransfer['gausFlutedCSA']))
-        assert np.all(heatTransfer['gausFlutedCSA'] > 0)
-
-    def testFlutesAddWettedAreaOverACircleOfTheSameRadius(self):
-
-        # Fluting is done to buy surface area, so it must buy some.
-        numStations = 30
-        x, y, z = straightCenterline(numStations)
-        radius = np.full(numStations, 0.002)
-
-        fluted = generateCrossSections(self.flutedGeometry(numStations),
-                                       x, y, z, radius, 'fluted')[3]
-        circle = generateCrossSections(circularInputs(numCrossSections = numStations),
-                                       x, y, z, radius, 'circle')[3]
-
-        interior = slice(1, -1)
-        assert np.all(fluted['gausFlutedSA'][interior] > circle['circleSA'][interior])
-
-    def testASmallAmplitudeApproachesTheDiscretisedCircle(self):
-
-        # The limiting case: as the flute amplitude goes to zero the section must become the
-        # circle it modulates. Checked by convergence rather than at zero, because the flute
-        # profile is built by scaling a wave by its own amplitude and normalizing by the same
-        # amplitude, which is singular there.
-        #
-        # The target is the discretised circle, not pi r squared. The two families report area on
-        # different bases: the circular one returns pi r squared exactly, the fluted one
-        # integrates its own polygon with the trapezoidal rule. See
-        # testTheTwoFamiliesMeasureAreaDifferently below.
-        numStations, numPoints = 30, 60
-        x, y, z = straightCenterline(numStations)
-        radius = np.full(numStations, 0.002)
-        interior = slice(1, -1)
-
-        polygonArea = discretisedCircleArea(0.002, numPoints)
-
-        errors = []
-        for amplitude in (0.4, 0.2, 0.1, 0.05, 0.025):
-            geometry = self.flutedGeometry(numStations, amplitude = amplitude)
-            geometry.numCSPointsChannel = numPoints
-            fluted = generateCrossSections(geometry, x, y, z, radius, 'fluted')[3]
-            errors.append(float(np.max(np.abs(fluted['gausFlutedCSA'][interior] - polygonArea)
-                                       / polygonArea)))
-
-        assert errors[-1] < errors[0], errors
-        assert errors[-1] < 1e-3, f'departure from the discretised circle: {errors[-1]:.2e}'
-
-    def testExactlyZeroAmplitudeIsRefused(self):
-
-        # A flute of no amplitude is not a flute, and the profile construction divides by the
-        # amplitude, so asking for one used to return NaN geometry without saying anything.
-        numStations = 10
-        x, y, z = straightCenterline(numStations)
-        radius = np.full(numStations, 0.002)
-
-        with pytest.raises(Exception, match = 'fluteAmplitudeCoef'):
-            generateCrossSections(self.flutedGeometry(numStations, amplitude = 0.0),
-                                  x, y, z, radius, 'fluted')
 
 class TestTurnAngle:
 
@@ -449,45 +312,3 @@ class TestTurnAngle:
 
         assert np.allclose(reported, bendRadius, rtol = 1e-3), \
             f'reported {reported.min():.6f} to {reported.max():.6f} m against {bendRadius} m'
-
-class TestAreaBasis:
-
-    '''The two channel families do not measure area the same way.'''
-
-    def testTheTwoFamiliesMeasureAreaDifferently(self):
-
-        # The circular family reports pi r squared exactly. The fluted family integrates its own
-        # polygon, which under-reports by the polygon deficit at that resolution. Every fluted
-        # run plots its results against the circular ones at the same radius, so that deficit is
-        # a systematic offset in the comparison, set by numCSPointsChannel rather than by
-        # anything geometric.
-        numStations, channelRadius = 30, 0.002
-        x, y, z = straightCenterline(numStations)
-        radius = np.full(numStations, channelRadius)
-
-        for numPoints, expectedDeficit in ((24, 0.012392), (48, 0.002976), (60, 0.001889)):
-
-            geometry = circularInputs(numCrossSections = numStations, numCSPointsChannel = numPoints)
-            circle = generateCrossSections(geometry, x, y, z, radius, 'circle')[3]
-
-            exact   = np.pi * channelRadius**2
-            polygon = discretisedCircleArea(channelRadius, numPoints)
-
-            # The circular family reports the exact area, whatever the resolution.
-            assert circle['circleCSA'][0] == pytest.approx(exact, rel = 1e-14)
-
-            # The polygon a fluted section is measured on falls short of it by this much.
-            assert (1 - polygon / exact) == pytest.approx(expectedDeficit, rel = 1e-3)
-
-    def testTheDeficitShrinksWithResolution(self):
-
-        deficits = [1 - discretisedCircleArea(0.002, n) / (np.pi * 0.002**2)
-                    for n in (24, 48, 96, 192, 384)]
-
-        # Second order in the point count, which is what a trapezoidal rule on a smooth curve
-        # gives. The ratio approaches four from above because the polygon has one fewer segment
-        # than it has points, so doubling the points slightly more than doubles the segments.
-        ratios = [earlier / later for earlier, later in zip(deficits, deficits[1:])]
-
-        assert all(later < earlier for earlier, later in zip(ratios, ratios[1:])), ratios
-        assert ratios[-1] == pytest.approx(4.0, rel = 0.01), ratios
