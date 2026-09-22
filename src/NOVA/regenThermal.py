@@ -37,6 +37,11 @@ example.
 **Coolant side, not validated.** The correlation is Gnielinski, which is published and whose
 range of validity is known, but nothing here checks the implementation against a reference case.
 
+**Wall conduction, checked in closed form.** Each channel conducts through its own sector of the
+wall, r ln(1 + t/r) / (k A_hw), with A_hw the sector's gas-side area. tests/testRegenThermal.py
+holds it to the whole shell when the sectors are summed in parallel, to the slab t / (k A_hw)
+for a thin wall, and holds the station solve to a wall drop equal to the heat flow times it.
+
 **The gas state the model reads is one dimensional.** Every gas-side property comes from CEA at
 a one-dimensional station, while the near-wall Mach number the method of characteristics
 returns departs from the one-dimensional value by up to 42 percent near the throat. The two are
@@ -186,6 +191,43 @@ def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber:
 
     return (constantBartzPart *             (throatArea / localArea)**0.9 *             boundaryLayerCorrectionFactor)
 
+def wallConductionResistance(hotWallThickness: float, wallRadius: float, wallConductivity: float,
+                             hotWallArea: float) -> float:
+
+    '''
+
+    Conduction resistance of the wall behind one channel [K/W].
+
+    A channel owns a sector of the cylindrical shell between the hot wall radius r and r + t, and
+    `hotWallArea` is the gas-side area of that sector. Radial conduction through it is
+
+        R_k = r ln(1 + t/r) / (k A_hw)
+
+    For a sector of 2 pi / N over a station of length dL that is N ln(1 + t/r) / (2 pi k dL), the
+    whole shell's resistance times the number of channels sharing it, and as t/r goes to zero it
+    tends to the slab t / (k A_hw). The heat flow it carries is the same per-channel flow the two
+    convective resistances carry, so the three are in series on a common basis.
+
+    Parameters:
+    -----------
+    hotWallThickness : float
+        Wall between coolant and exhaust [m].
+    wallRadius : float
+        Hot wall radius from the nozzle axis [m].
+    wallConductivity : float
+        Wall conductivity [W/m K].
+    hotWallArea : float
+        Gas-side area of the sector one channel owns [m^2].
+
+    Returns:
+    --------
+    float
+        Conduction resistance [K/W].
+
+    '''
+
+    return wallRadius * np.log1p(hotWallThickness / wallRadius) / (wallConductivity * hotWallArea)
+
 @dataclass
 class StationWallSolution:
 
@@ -211,6 +253,8 @@ class StationWallSolution:
         Factor a film coolant reduced the convective coefficient by [-]. Exactly one with no film.
     wallConductivity : float
         Wall conductivity sampled at the converged hot wall temperature [W/m K].
+    conductiveResistance : float
+        Conduction resistance of the wall behind this channel [K/W].
     heatTransfer : float
         Heat through the wall at this station, per channel [W]. A power, not a flux: the areas
         are already folded into the three resistances.
@@ -234,6 +278,7 @@ class StationWallSolution:
     radiativeHeatTransfer:        float
     blowingReduction:             float
     wallConductivity:             float
+    conductiveResistance:         float
     heatTransfer:                 float
     hotWallTemperature:           float
     coldWallTemperature:          float
@@ -273,7 +318,10 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
     The conduction resistance is cylindrical about the **nozzle** axis rather than the channel
     axis, because the assumption of cylindrical symmetry is only true about the nozzle: from
     there heat goes outward in every direction and cooling comes inward from every direction,
-    while from a channel axis the heat arrives from one side only.
+    while from a channel axis the heat arrives from one side only. It is the resistance of the
+    sector of that shell one channel owns, the same sector whose gas-side area is `hotWallArea`,
+    so all three resistances carry the one per-channel heat flow. See
+    `wallConductionResistance`.
 
     Parameters:
     -----------
@@ -364,8 +412,8 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
                                        / hydraulicDiameter
         coolantConvectiveResistance = 1 / (coolantConvectiveCoefficient * coolantWettedArea)
 
-        conductiveResistance = np.log(1 + hotWallThickness / wallRadius) / \
-                               (2*np.pi * pathLength * wallConductivity)
+        conductiveResistance = wallConductionResistance(hotWallThickness, wallRadius,
+                                                        wallConductivity, hotWallArea)
 
         exhaustConvectiveCoefficient = bartzHeatTransferCoefficient(
             gasStaticTemperature, gasMachNumber, gasGamma,
@@ -417,6 +465,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
                                        * (gasStaticTemperature - hotWallTemperature),
         blowingReduction             = blowingReduction,
         wallConductivity             = wallConductivity,
+        conductiveResistance         = conductiveResistance,
         heatTransfer                 = heatTransfer,
         hotWallTemperature           = hotWallTemperature,
         coldWallTemperature          = coldWallTemperature,

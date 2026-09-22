@@ -34,7 +34,8 @@ import numpy as np
 import pytest
 
 from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
-                          solveStationWallTemperature, validateRegenHeatTransferInputs)
+                          solveStationWallTemperature, validateRegenHeatTransferInputs,
+                          wallConductionResistance)
 
 class TestBartzViscosityConstant:
 
@@ -442,3 +443,72 @@ class TestStationSolveIdentities:
 
         assert solution.converged
         assert solution.residual < 0.01
+
+class TestWallConduction:
+
+    '''
+
+    The wall behind one channel is a sector of a cylindrical shell.
+
+    A channel owns 2 pi / N of the circumference, so its share of the wall is that sector of the
+    shell between r and r + t over the station. Its conduction resistance is
+
+        R_k = ln(1 + t/r) / (k (2 pi / N) dL) = r ln(1 + t/r) / (k A_hw)
+
+    with A_hw = (2 pi r / N) dL the sector's gas-side area. N sectors in parallel are the whole
+    shell, ln(1 + t/r) / (2 pi k dL), and a wall thin against its radius conducts as a slab,
+    t / (k A_hw). Each is checked in closed form, and the station solve is checked to carry the
+    resistance it reports: the drop across the wall is the heat flow times that resistance.
+
+    '''
+
+    radius, thickness, conductivity, length, count = 0.05, 0.001, 320.0, 0.006, 60
+
+    def sectorArea(self):
+
+        return 2 * np.pi * self.radius / self.count * self.length
+
+    def testTheSectorResistanceIsTheClosedForm(self):
+
+        expected = self.count * np.log(1 + self.thickness / self.radius) \
+                   / (2 * np.pi * self.length * self.conductivity)
+        computed = wallConductionResistance(self.thickness, self.radius, self.conductivity,
+                                            self.sectorArea())
+
+        assert computed == pytest.approx(expected, rel = 1e-14)
+
+    def testTheSectorsInParallelAreTheWholeShell(self):
+
+        sector = wallConductionResistance(self.thickness, self.radius, self.conductivity,
+                                          self.sectorArea())
+        shell  = np.log(1 + self.thickness / self.radius) \
+                 / (2 * np.pi * self.length * self.conductivity)
+
+        assert sector / self.count == pytest.approx(shell, rel = 1e-14)
+
+    @pytest.mark.parametrize('ratio', [1e-2, 1e-3, 1e-4])
+    def testAThinWallConductsAsASlab(self, ratio):
+
+        # ln(1 + x) / x = 1 - x/2 + O(x^2), so the shell falls short of the slab by x/2.
+        thickness = ratio * self.radius
+        slab      = thickness / (self.conductivity * self.sectorArea())
+        shell     = wallConductionResistance(thickness, self.radius, self.conductivity,
+                                             self.sectorArea())
+
+        assert 1 - shell / slab == pytest.approx(ratio / 2, rel = 0.01)
+
+    def testTheStationWallDropIsTheHeatFlowTimesTheResistance(self):
+
+        for solution in (TestStationSolveIdentities().station(),
+                         TestStationSolveIdentities().station(wallEmissivity = 0.85,
+                                                              gasEmissivity = 0.25)):
+            drop = solution.hotWallTemperature - solution.coldWallTemperature
+            assert drop == pytest.approx(solution.heatTransfer * solution.conductiveResistance,
+                                         rel = 1e-9)
+
+    def testTheStationSolveUsesTheSectorResistance(self):
+
+        solution = TestStationSolveIdentities().station()
+        expected = wallConductionResistance(0.001, 0.05, 320.0, 5.0e-5)
+
+        assert solution.conductiveResistance == expected
