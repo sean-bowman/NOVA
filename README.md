@@ -282,7 +282,7 @@ A run writes to `{filename}Outputs/` beside the repository root.
 
 Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML companion. Matplotlib is the required backend for the GUI, since it is the only one that renders into a Tk canvas; plotly is required for the browser-side interactive views. Both are drawn from one description in `src/NOVA/figures.py`, which also holds the styled renderer for each backend, so the two renderings cannot drift. [featureShowcase/](featureShowcase/) calls the same Matplotlib renderer for its documentation figures, so a run's own output looks exactly like the worked example below.
 
-Geometry export is **STL only**; there is no STEP or BREP writer.
+A run's own `export` writes **STL only**. A STEP writer exists in [experimental/stepExport.py](experimental/stepExport.py): it writes each component as the exact surface it is, a surface of revolution for the walls and the keep-out and a B-spline surface for the swept channels and volutes, rather than as triangles. It is not yet wired into `export`, and it does not perform booleans, so a run does not produce an assembled STEP body; see [docs/reports/stepExport_2026-09-20.md](docs/reports/stepExport_2026-09-20.md) for what it covers and what remains.
 
 Generated `*Outputs/` directories are gitignored. The curated figures above are kept in [featureShowcase/](featureShowcase/); `docs/images/` holds only the GUI screenshots below.
 
