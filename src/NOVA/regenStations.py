@@ -354,10 +354,29 @@ def solveRegenStations(state):
 
         case 'temp':
 
-            truncationIndex = np.where(state.nozzleNearWallTemperature[throatIndex:] - truncationTemperature < 0)[0][0] + throatIndex
+            # The value is the near-wall recovery temperature, which is what drives the wall and
+            # what the jacket is sized against, rather than the static temperature of the gas
+            recoveryTemperature = state.nozzleNearWallRecoveryTemperature
 
-            truncationLocation = interp1d(state.nozzleNearWallTemperature[throatIndex:],xNozzle[throatIndex:])(truncationTemperature)
-            truncationRadius   = interp1d(state.nozzleNearWallTemperature[throatIndex:],rNozzle[throatIndex:])(truncationTemperature)
+            # Recovery temperature falls only a few hundred kelvin from the throat to the exit,
+            # so a value taken from the static temperature of the gas cuts nowhere at all
+            belowTarget = np.where(recoveryTemperature[throatIndex:] - truncationTemperature < 0)[0]
+            if belowTarget.size == 0:
+                raise InvalidInputError(
+                    message = (f'The near-wall recovery temperature never falls to '
+                               f'{truncationTemperature:.1f} K downstream of the throat, where it '
+                               f'runs {float(recoveryTemperature[throatIndex]):.1f} K at the throat '
+                               f'and {float(recoveryTemperature[-1]):.1f} K at the exit. Recovery '
+                               f'temperature stays near the stagnation temperature along a nozzle, '
+                               f'so truncate by area ratio to end the jacket further down the bell.'),
+                    parameterName = 'regenTruncationValue', value = truncationTemperature,
+                    validRange = f'{float(recoveryTemperature[-1]):.1f} to '
+                                 f'{float(recoveryTemperature[throatIndex]):.1f} K for this contour')
+
+            truncationIndex = belowTarget[0] + throatIndex
+
+            truncationLocation = interp1d(recoveryTemperature[throatIndex:],xNozzle[throatIndex:])(truncationTemperature)
+            truncationRadius   = interp1d(recoveryTemperature[throatIndex:],rNozzle[throatIndex:])(truncationTemperature)
 
         case 'er':
 

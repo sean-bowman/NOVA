@@ -198,9 +198,16 @@ harnessCases = {
                       'minChannelWidth': 1.0e-3, 'channelCornerRadius': 0.2e-3,
                       'maxChannelDepth': 6.0e-3, 'maxWallTemperature': 650.0},
     },
-    # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
-    # and the physical choice. This case pins the static-temperature model that preceded it, so
-    # it stays reachable and its answer stays recorded rather than only described.
+    # The other truncation rule: the jacket ends where the near-wall recovery temperature falls
+    # to the configured value, which is the temperature the wall is driven by. Recovery
+    # temperature spans only a few hundred kelvin over the whole bell, so 3200 K is what puts
+    # the cut near an area ratio of three on this contour, where the area ratio case cuts.
+    'regenTruncationTemp': {
+        'config': 'NOVANozzle.json',
+        'description': 'Jacket truncated where the near-wall recovery temperature falls to 3200 K',
+        'overrides': {**regenOverrides, 'regenTruncationType': 'temp',
+                      'regenTruncationValue': 3200.0},
+    },
     # A hydrogen film injected at the chamber end of the same jacket. It pins the film path and
     # records what a film that is badly matched in velocity actually buys, which is not much.
     'regenCircleFilm': {

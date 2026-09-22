@@ -877,7 +877,7 @@ def solveRegenChannels(state, thermal):
         state.channelRadius = np.interp(fractionNew, fractionOld, state.channelRadius)
 
         # Interpolated onto new stations, a size held at its limit on either side can pass the
-        # limit at the station between, so a rectangle or a helix is held to it again there
+        # limit at the station between, so every family is held to its limit again there
         if state.channelType in ('rectangular', 'helical'):
             _, rColdWall = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, state.hotWallThickness)
             geometry = _geometryInputs(state)
@@ -888,6 +888,11 @@ def solveRegenChannels(state, thermal):
                 halfLimit = maxHalfExtent('helical', helicalSpacing(rColdWall, state.nChannel, geometry.channelHelixAngle)
                                           - state.infillThickness, geometry.channelAspectRatio, geometry.maxChannelDepth)
             state.channelRadius = np.minimum(state.channelRadius, halfLimit)
+        else:
+            for i in range(len(state.channelRadius)):
+                maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleInterfaced, i)
+                if state.channelRadius[i] > maxChannelRadius:
+                    state.channelRadius[i] = maxChannelRadius
 
         if state.numReturnInterfaceCS > 0:
             wallStart = fractionOld[state.numReturnInterfaceCS]
