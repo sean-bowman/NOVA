@@ -449,8 +449,10 @@ def solveRegenVolutes(state):
         returnVolute.numCrossSections           = state.numCSVolute
         # scroll properties
         returnVolute.scrollDirection            = 'cw'
-        returnVolute.voluteScrollRadius         = state.rChannelCenterline2D[3]
-        returnVolute.axialOffset                = state.xChannelCenterline2D[3] - state.channelRadius[0]
+        # The return flare leaves the injector face as the mirror image of the inlet flare, so
+        # the scroll is placed the inlet's way from the other end of the centerline.
+        returnVolute.voluteScrollRadius         = state.rChannelCenterline2D[2]
+        returnVolute.axialOffset                = state.xChannelCenterline2D[2]
         # area distribution properties
         returnVolute.interfaceHydraulicDiameter = state.channelRadius[0]*2*1.2
         returnVolute.expandedHydraulicDiameter  = units.toSI(state.returnGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter

@@ -112,18 +112,20 @@ strippedToContour = {
     'returnVoluteAlignment'         : None,
     'returnVoluteTilt'              : None,
     'returnGraylocDiameter'         : None,
-    'returnVoluteRadialOffset'      : None,
+    'returnVoluteAxialOffset'       : None,
     'returnVoluteFlareRoverD'       : None,
-    'returnVoluteReturnAngle'       : None,
     'returnVoluteFlareLen'          : None,
 }
 
 # The jacket the regen cases are pinned on, switched back on over the stripped contour. Sixty
 # circular channels in GRCop-42, hydrogen at 3.4 kg/s entering at 12 MPa and 30 K, above the
-# hydrogen critical point. Both volutes are built, the return turnaround located by radial
-# offset. Every number here is pinned by a baseline, so changing one moves that baseline.
+# hydrogen critical point. The chamber is generated at the shipped L* of 1.0 m, so the jacket
+# runs over the barrel from the injector face, where the return volute sits, to the aft end,
+# where the inlet volute sits. Every number here is pinned by a baseline, so changing one moves
+# that baseline.
 regenOverrides = {
     'makeCoolingChannels'      : True,
+    'Lstar'                    : 1.0,
     'numCrossSections'         : 60,
     'numCSPointsChannel'       : 40,
     'hotWallThickness'         : 0.001,
@@ -154,9 +156,8 @@ regenOverrides = {
     'returnVoluteAlignment'    : 'o',
     'returnVoluteTilt'         : 0.0,
     'returnGraylocDiameter'    : 1.0,
-    'returnVoluteRadialOffset' : 0.015,
+    'returnVoluteAxialOffset'  : 0.01,
     'returnVoluteFlareRoverD'  : 1.5,
-    'returnVoluteReturnAngle'  : 45.0,
     'returnVoluteFlareLen'     : 0.03,
 }
 
@@ -209,7 +210,8 @@ harnessCases = {
     'contourEffectiveGamma': {
         'config': 'NOVANozzle.json',
         'description': 'The contour solved at the effective gamma rather than the chamber value',
-        'overrides': {**regenOverrides, 'gammaModel': 'effective', 'makeCoolingChannels': False},
+        'overrides': {**regenOverrides, 'gammaModel': 'effective', 'makeCoolingChannels': False,
+                      'Lstar': None},
     },
     # The prescribed-wall path, which shares the kernel with the truncated ideal contour and
     # nothing else: the wall is drawn before the flow is solved and marched forward rather than

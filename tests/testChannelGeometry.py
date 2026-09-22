@@ -45,9 +45,7 @@ def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60
         nChannel             = nChannel,
         channelType          = 'circle',
         hotWallThickness     = 1.0e-3,
-        infillThickness      = 1.0e-3,
-        numInletInterfaceCS  = 0,
-        numReturnInterfaceCS = 0)
+        infillThickness      = 1.0e-3)
 
 def straightCenterline(numStations, length = 0.3, radius = 0.06):
 

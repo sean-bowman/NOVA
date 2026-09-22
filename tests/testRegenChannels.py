@@ -377,3 +377,95 @@ class TestIncompleteFilmDefinition:
 
         assert state.regenSectionFilmDrivingTemperature is None
         assert state.regenSectionFilmEffectiveness is None
+
+class TestVoluteInterface:
+
+    '''
+
+    The fillet and flare that turn a channel off the wall and out to its volute.
+
+    The construction places a fillet tangent to the wall and to a plane normal to the axis, then a
+    straight flare along the plane. It draws the fillet at 1.0005 of its radius so the circle is
+    certain to cut the wall, which leaves the join 1.8 degrees off tangent, acos(1/1.0005), with
+    the arc dipping 0.0005 of the fillet radius into the wall before it rises, and it finds that
+    cut against a 300 point polygon, which places it within the polygon's sagitta of the wall. The upstream end, where the return volute sits, is the same construction
+    reflected, so on a barrel that is symmetric about its middle the two ends must be mirror
+    images.
+
+    '''
+
+    radius, length, offset, fillet, flare = 0.09, 0.3, 0.01, 0.02, 0.03
+
+    def sagitta(self):
+
+        '''How far the 300 point fillet polygon sits inside its circle [m].'''
+
+        return 1.0005 * self.fillet * (1 - np.cos(np.pi / 299))
+
+    def barrel(self, numPoints = 200):
+
+        return np.linspace(0.0, self.length, numPoints), np.full(numPoints, self.radius)
+
+    def downstream(self, tilt = 0.0):
+
+        from NOVA.regenChannels import voluteInterfaceCurve
+
+        x, r = self.barrel()
+        return voluteInterfaceCurve(x, r, self.offset, self.fillet, -np.deg2rad(tilt), self.flare)
+
+    def upstream(self, tilt = 0.0):
+
+        from NOVA.regenChannels import upstreamVoluteInterfaceCurve
+
+        x, r = self.barrel()
+        return upstreamVoluteInterfaceCurve(x, r, self.offset, self.fillet, -np.deg2rad(tilt),
+                                            self.flare)
+
+    def testTheFilletLeavesFromTheWall(self):
+
+        xInterface, rInterface, _ = self.downstream()
+
+        assert abs(rInterface[0] - self.radius) < self.sagitta()
+
+        # Off tangent by the 1.0005 oversize and no more, and no deeper into the wall than it
+        departure = np.degrees(np.arctan2(rInterface[1] - rInterface[0], xInterface[1] - xInterface[0]))
+        assert abs(departure) < np.degrees(np.arccos(1 / 1.0005))
+        assert self.radius - rInterface.min() < 5e-4 * self.fillet + self.sagitta()
+
+    def testTheFlareLeavesAlongThePlane(self):
+
+        xInterface, rInterface, _ = self.downstream()
+        plane = self.length - self.offset
+
+        # The last 21 points are the flare: radial for zero tilt, flareLength long, and on the
+        # plane to within the 1.0005 oversize the fillet it leaves from is drawn at
+        assert np.max(np.abs(xInterface[-21:] - plane)) <= 5e-4 * self.fillet * (1 + 1e-9)
+        assert rInterface[-1] - rInterface[-22] == pytest.approx(self.flare, rel = 1e-12)
+
+    def testOnlyTheWallBeforeTheFilletIsKept(self):
+
+        xInterface, _, keep = self.downstream()
+        x, _ = self.barrel()
+
+        assert np.all(x[keep] < xInterface[0])
+        assert np.all(x[~keep] >= xInterface[0])
+
+    def testTheUpstreamEndIsTheMirrorImage(self):
+
+        xDown, rDown, keepDown = self.downstream(tilt = 12.0)
+        xUp,   rUp,   keepUp   = self.upstream(tilt = 12.0)
+
+        # Reflected about the middle of the barrel and reversed, one end is the other
+        assert np.allclose(self.length - np.flip(xDown), xUp, rtol = 0, atol = 1e-12)
+        assert np.allclose(np.flip(rDown), rUp, rtol = 0, atol = 1e-12)
+        assert np.array_equal(np.flip(keepDown), keepUp)
+
+    def testTheUpstreamInterfaceRunsFromTheFlareInToTheWall(self):
+
+        xUp, rUp, keep = self.upstream()
+        x, _ = self.barrel()
+
+        # Prepended to the wall, so it starts at the flare end and finishes on the wall
+        assert rUp[0] == pytest.approx(rUp.max())
+        assert abs(rUp[-1] - self.radius) < self.sagitta()
+        assert np.all(x[keep] > xUp[-1])

@@ -56,8 +56,7 @@ class ChannelGeometryInputs:
 
     Everything the cross-section builder reads that is not passed to it directly.
 
-    These are the channel definition and the resolution it is drawn at, plus the station counts
-    the surrounding run fills in for each volute interface.
+    These are the channel definition and the resolution it is drawn at.
 
     Attributes:
     -----------
@@ -73,10 +72,6 @@ class ChannelGeometryInputs:
         Wall between the coolant and the exhaust [m].
     infillThickness : float
         Material left between adjacent channels [m].
-    numInletInterfaceCS : int
-        Stations in the inlet interface.
-    numReturnInterfaceCS : int
-        Stations in the return interface.
 
     '''
 
@@ -86,8 +81,6 @@ class ChannelGeometryInputs:
     channelType:          str   = 'circle'
     hotWallThickness:     float = 0.0
     infillThickness:      float = 0.0
-    numInletInterfaceCS:  int   = 0
-    numReturnInterfaceCS: int   = 0
 
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                           channelRadius, crossSectionStyle, i: int = None):

@@ -908,7 +908,7 @@ def volutesFigure(nozzle):
     shells and print supports, in one 3D assembly.
 
     A representative channel is highlighted in red so the return volute's smallest cross
-    section can be checked by eye against the channel turnaround it has to align with.
+    section can be checked by eye against the channel flare it attaches to.
 
     Returns:
     --------

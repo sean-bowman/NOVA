@@ -12,9 +12,11 @@ solves the heat balance those two are converged against.
 
 What happens here is the sequence, and the sequence matters:
 
-    1. Volute interfaces. The regen section is trimmed back at each end to leave a straight
-       circular run where a volute attaches, and the turnaround geometry the return volute routes
-       around is laid out. Everything downstream works on the trimmed section.
+    1. Volute interfaces. The jacket runs the whole regen section, from the injector face over
+       the chamber barrel to the regen truncation. At each end a fillet turns the channel off the
+       wall into a straight flare the volute attaches to: the inlet at the aft end, the return at
+       the injector face, the one the mirror image of the other. The wall is trimmed back to where
+       each fillet leaves it, and everything downstream works on the trimmed section.
     2. Channel radii. The sizing solve, station by station, which also produces the 2D centerline
        the channel follows and the coolant exit condition.
     3. Channel centerline. The 2D centerline is wrapped into three dimensions around the nozzle,
@@ -66,12 +68,11 @@ import numpy as np
 from tqdm import tqdm
 
 from .geometryTools import DCM, arcSpline, chunkInterpolate, intersection, parallelOffset
-from .errors import GeometricConstraintError, InvalidInputError
 from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
 from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
-from .validation import applyRules, arrayRule, choiceRule, integerRule, numericRule, textRule
+from .validation import applyRules, arrayRule, choiceRule, integerRule, numericRule, read, textRule
 
 @dataclass
 class RegenChannelState:
@@ -91,7 +92,6 @@ class RegenChannelState:
     '''
 
     # -- What the build reads -- #
-    chamberDiameter:                           Any = None
     channelType:                               Any = None
     gammaRegenSection:                         Any = None
     gasConstantRegenSection:                   Any = None
@@ -107,7 +107,6 @@ class RegenChannelState:
     molecularWeightRegenSection:               Any = None
     nChannel:                                  Any = None
     numCSPointsChannel:                        Any = None
-    numContourPoints:                          Any = None
     numCrossSections:                          Any = None
     rRegenNozzle:                              Any = None
     regenSectionNearWallMachNumber:            Any = None
@@ -117,8 +116,8 @@ class RegenChannelState:
     regenSectionFilmDrivingTemperature:        Any = None
     returnVoluteAxialOffset:                   Any = None
     returnVoluteFlareLen:                      Any = None
-    returnVoluteRadialOffset:                  Any = None
-    returnVoluteReturnAngle:                   Any = None
+    returnVoluteFlareRoverD:                   Any = None
+    returnVoluteTilt:                          Any = None
     shellThickness:                            Any = None
     xRegenNozzle:                              Any = None
 
@@ -187,7 +186,6 @@ class RegenChannelState:
     channelSizingSolution:                     Any = None
     rChannelCenterline3D:                      Any = None
     rNozzleShell:                              Any = None
-    returnVoluteFlareRad:                      Any = None
     xNozzleHotWallMesh:                        Any = None
     xNozzleShell:                              Any = None
     xNozzleShellMesh:                          Any = None
@@ -209,7 +207,7 @@ _buildOutputs = (
     'regenSectionNearWallPressureTrimmed', 'regenSectionNearWallTemperatureTrimmed',
     'regenSectionNearWallRecoveryTemperatureTrimmed',
     'regenSectionFilmDrivingTemperatureTrimmed',
-    'returnVoluteFlareRad', 'wrapAngles', 'xAllChannels', 'xChannel', 'xChannelCenterline2D',
+    'wrapAngles', 'xAllChannels', 'xChannel', 'xChannelCenterline2D',
     'xChannelCenterline3D', 'xInletInterface', 'xNozzleColdWallMesh',
     'xNozzleHotWallMesh', 'xNozzleShell', 'xNozzleShellMesh', 'xRegenNozzleInterfaced',
     'xRegenNozzleTrimmed', 'xReturnInterface', 'yAllChannels', 'yChannel', 'yChannelCenterline3D',
@@ -223,7 +221,19 @@ regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs
 # rather than as branches: see validation.py.
 #
 # Checked in order, so the table runs from the contour the channels sit on, through the channel
-# definition itself, to the coolant.
+# definition itself and the coolant, to where the volutes leave the wall.
+
+def _makesInletVolute(source):
+
+    '''True when an inlet volute is asked for.'''
+
+    return read(source, 'makeInletVolute') == 'on'
+
+def _makesReturnVolute(source):
+
+    '''True when a return volute is asked for.'''
+
+    return read(source, 'makeReturnVolute') == 'on'
 
 regenChannelRules = (
 
@@ -248,6 +258,14 @@ regenChannelRules = (
     numericRule('coolantMassFlow', 'Coolant mass flow', units = 'kg/s', minimum = 0),
     numericRule('coolantInitialPressure', 'Coolant inlet pressure', units = 'Pa', minimum = 0),
     numericRule('coolantInitialTemperature', 'Coolant inlet temperature', units = 'K', minimum = 0),
+
+    # -- Where each volute leaves the wall -- #
+    numericRule('inletVoluteAxialOffset', 'Inlet volute axial offset', units = 'm', minimum = 0,
+                when = _makesInletVolute,
+                note = 'Measured upstream from the aft end of the regen section'),
+    numericRule('returnVoluteAxialOffset', 'Return volute axial offset', units = 'm', minimum = 0,
+                when = _makesReturnVolute,
+                note = 'Measured downstream from the injector face'),
 )
 
 def validateRegenChannelInputs(state) -> None:
@@ -272,14 +290,118 @@ def validateRegenChannelInputs(state) -> None:
 
     applyRules(state, regenChannelRules)
 
+def voluteInterfaceCurve(xWall: np.ndarray, rWall: np.ndarray, axialOffset: float,
+                         filletRadius: float, flareAngle: float, flareLength: float,
+                         numFlarePoints: int = 20) -> tuple:
+
+    '''
+
+    The fillet and flare that turn a channel off the wall and out to its volute.
+
+    Built at the downstream end of the wall as given, the last point of `xWall`. A plane is drawn
+    `axialOffset` upstream of that point, normal to the axis, and a fillet of `filletRadius` is
+    placed tangent to both the wall and the plane. The channel follows the wall to the fillet,
+    turns through it, and leaves along a straight flare of `flareLength` at `flareAngle` from the
+    radial, which is where the volute attaches. The wall past the fillet is not jacketed.
+
+    The upstream end is the same construction reflected through a plane normal to the axis; see
+    `upstreamVoluteInterfaceCurve`.
+
+    Parameters:
+    -----------
+    xWall, rWall : np.ndarray
+        Hot wall, increasing in x toward the end being interfaced [m].
+    axialOffset : float
+        Distance from the end of the wall to the plane the flare leaves along [m].
+    filletRadius : float
+        Radius of the turn off the wall [m].
+    flareAngle : float
+        Flare direction measured from the outward radial, positive toward the wall's end [rad].
+    flareLength : float
+        Length of the straight flare [m].
+    numFlarePoints : int
+        Points along the flare, more than one so later resampling keeps it straight.
+
+    Returns:
+    --------
+    tuple
+        (xInterface, rInterface, keep): the fillet and flare from the tangent point outward [m],
+        and a mask selecting the wall points upstream of the tangent point.
+
+    '''
+
+    # Draw the exit plane w/ axial offset
+    xExitPlane = np.array([xWall[-1], xWall[-1]]) - axialOffset
+    rExitPlane = np.array([0, 2*rWall[-1]])
+    xExitPlaneOff = xExitPlane - filletRadius
+    rExitPlaneOff = rExitPlane
+
+    # Draw the centerline
+    xHotWall, rHotWall = parallelOffset(xWall, rWall, filletRadius)
+
+    # Fillet circle
+    filletCenter  = intersection(xHotWall, rHotWall, xExitPlaneOff, rExitPlaneOff)
+    xFilletCenter = filletCenter[0][0][0]
+    rFilletCenter = filletCenter[1][0][0]
+    xFilletCircle = 1.0005*filletRadius * np.cos(np.linspace(0,2*np.pi,300)) + xFilletCenter
+    rFilletCircle = 1.0005*filletRadius * np.sin(np.linspace(0,2*np.pi,300)) + rFilletCenter
+    # Intersect pathline
+    hotWallIntersection  = intersection(xWall, rWall, xFilletCircle, rFilletCircle)
+    xHotWallIntersection = hotWallIntersection[0][0][0]
+    rHotWallIntersection = hotWallIntersection[1][0][0]
+    thetaHotWallIntersection = (3*np.pi/2) + np.arctan((xHotWallIntersection-xFilletCenter)/(rFilletCenter-rHotWallIntersection))
+    # Fillet arc
+    xFillet = 1.0005*filletRadius * np.cos(np.linspace(thetaHotWallIntersection,(2*np.pi)+flareAngle,300)) + xFilletCenter
+    rFillet = 1.0005*filletRadius * np.sin(np.linspace(thetaHotWallIntersection,(2*np.pi)+flareAngle,300)) + rFilletCenter
+
+    # Limit tilt
+    xLimitTilt = filletRadius*np.cos(flareAngle) + xFilletCenter
+    rLimitTilt = filletRadius*np.sin(flareAngle) + rFilletCenter
+    # Find flare end
+    xFlareEnd = xLimitTilt - (flareLength)*np.sin(flareAngle)
+    rFlareEnd = rLimitTilt + (flareLength)*np.cos(flareAngle)
+
+    # Append the linear flare to the filleted centerline
+    # place several points along flare to maintain linearity through later arcSplines
+    xFlare = np.concatenate([xFillet,np.linspace(xFillet[-1],xFlareEnd,numFlarePoints+2)[1:]])
+    rFlare = np.concatenate([rFillet,np.linspace(rFillet[-1],rFlareEnd,numFlarePoints+2)[1:]])
+
+    return xFlare, rFlare, xWall < xHotWallIntersection
+
+def upstreamVoluteInterfaceCurve(xWall: np.ndarray, rWall: np.ndarray, axialOffset: float,
+                                 filletRadius: float, flareAngle: float, flareLength: float,
+                                 numFlarePoints: int = 20) -> tuple:
+
+    '''
+
+    The fillet and flare at the upstream end of the wall, the first point of `xWall`.
+
+    This is `voluteInterfaceCurve` built on the wall reflected through a plane normal to the axis
+    and reversed, so the upstream end becomes the downstream end it works at, then reflected and
+    reversed back. Negation is exact in floating point, so for the same offset, fillet, flare and
+    tilt the two ends are exact mirror images. The plane the flare leaves along sits `axialOffset`
+    downstream of the first wall point.
+
+    Returns:
+    --------
+    tuple
+        (xInterface, rInterface, keep): the flare and fillet from the flare end in to the tangent
+        point [m], the order the interface is prepended to the wall in, and a mask selecting the
+        wall points downstream of the tangent point.
+
+    '''
+
+    xMirror, rMirror, keepMirror = voluteInterfaceCurve(-np.flip(xWall), np.flip(rWall),
+                                                        axialOffset, filletRadius, flareAngle,
+                                                        flareLength, numFlarePoints)
+
+    return -np.flip(xMirror), np.flip(rMirror), np.flip(keepMirror)
+
 def _geometryInputs(state) -> 'ChannelGeometryInputs':
 
     '''
 
     The channel definition the cross-section builder reads, taken from the build state.
-
-    Derived at each call rather than once, because the interface station counts are filled in as
-    the build proceeds.
 
     '''
 
@@ -289,9 +411,7 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
         nChannel             = state.nChannel,
         channelType          = state.channelType,
         hotWallThickness     = state.hotWallThickness,
-        infillThickness      = state.infillThickness,
-        numInletInterfaceCS  = state.numInletInterfaceCS,
-        numReturnInterfaceCS = state.numReturnInterfaceCS)
+        infillThickness      = state.infillThickness)
 
 def _sizingState(state) -> 'ChannelSizingState':
 
@@ -340,12 +460,11 @@ def solveRegenChannels(state, thermal):
 
     '''
 
-    This method generates regenerative cooling jacket geometry for the nozzle. Using the inputs from the nozzle config file,
-    this method uses a stepwise (or marching) convergence algorithm to find the radius of the cooling channels at each discrete
-    point along the length of the nozzle that ensures the nozzle hot wall does not exceed a certain temperature. After this
-    initial channel radius distribution and channel pathline are found, volute turnaround paths are generated to interface the
-    channel with the inlet and return volutes. Then, the 3D geometry of the channels is generated
-    for rendering with plotly, for use in regenHeatTransferModel() to predict performance, and for exporting to .stl for CAD.
+    This method generates the regenerative cooling jacket geometry for the nozzle. The regen section is trimmed at each end
+    where a fillet and flare turn the channel out to its volute. A stepwise (marching) convergence then finds the channel
+    radius at each station that holds the hot wall at its temperature limit. The resulting 2D centerline is wrapped in three
+    dimensions and the channel geometry is swept along it for rendering with plotly, for use in regenHeatTransferModel() to
+    predict performance, and for exporting to .stl for CAD.
 
     Raises:
         InvalidInputError: If input parameters are invalid or missing
@@ -365,9 +484,7 @@ def solveRegenChannels(state, thermal):
     # ------------------------------------------------------------------------------------------------------------------------------------ #
 
     # The cross-section geometry lives in channelGeometry.py, which takes the channel
-    # definition explicitly and knows nothing about a Nozzle. These two wrappers supply it,
-    # rebuilding the inputs on each call because the interface station counts are filled in
-    # as this method runs.
+    # definition explicitly and knows nothing about a Nozzle. These two wrappers supply it.
 
     def generateCrossSections(xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                               channelRadius, crossSectionStyle, i: int = None):
@@ -388,7 +505,12 @@ def solveRegenChannels(state, thermal):
 
         '''
 
-        docustring
+        Trim the regen section at each end and build the fillet and flare to each volute.
+
+        The inlet volute sits at the aft end of the regen section and the return volute at the
+        injector face. The return interface is `upstreamVoluteInterfaceCurve`, the inlet one
+        reflected through a plane normal to the axis, so the return is the mirror image of the
+        inlet for the same offset, fillet, flare and tilt.
 
         Author: Isabella Duprey-Churn
         Date:   4/28/2026
@@ -399,150 +521,54 @@ def solveRegenChannels(state, thermal):
         # -- Helper Methods -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
+        def keepStations(keep):
+
+            '''Trim the wall and the gas state on it to the stations the jacket covers.'''
+
+            state.xRegenNozzleTrimmed                    = state.xRegenNozzleTrimmed[keep]
+            state.rRegenNozzleTrimmed                    = state.rRegenNozzleTrimmed[keep]
+            state.gammaRegenSectionTrimmed               = state.gammaRegenSectionTrimmed[keep]
+            state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSectionTrimmed[keep]
+            state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSectionTrimmed[keep]
+            state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed[keep]
+            state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed[keep]
+            if state.regenSectionFilmDrivingTemperatureTrimmed is not None:
+                state.regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperatureTrimmed[keep]
+            state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed[keep]
+            state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed[keep]
+
+        def filletRadiusAt(flareRoverD, station):
+
+            '''The turn is scaled on the jacket's full radial depth at the station it leaves.'''
+
+            maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleTrimmed, station)
+
+            return flareRoverD * (state.shellThickness + maxChannelRadius*2 + state.hotWallThickness)
+
         def interfaceToInlet():
 
-            # Scope inputs
-            flareAngle     = -np.deg2rad(state.inletVoluteTilt) # enforce perpendicularity by using volute tilt angle as flare angle
-            flareLength    = state.inletVoluteFlareLength # length of linear extension
-            numFlarePoints = 20 # number of points in the linear region, must be >1 to maintain linearity
-            maxChannelRadiusAtInlet = getMaxChannelRadius(state.rRegenNozzleTrimmed,len(state.xRegenNozzleTrimmed)-1)
-            filletRadius = state.inletVoluteFlareRoverD * (state.shellThickness + maxChannelRadiusAtInlet*2 + state.hotWallThickness) # radius of curvature for turn
+            filletRadius = filletRadiusAt(state.inletVoluteFlareRoverD, len(state.xRegenNozzleTrimmed)-1)
 
-            # Draw the exit plane w/ axial offset
-            xExitPlane = np.array([state.xRegenNozzleTrimmed[-1],  state.xRegenNozzleTrimmed[-1]]) - state.inletVoluteAxialOffset
-            rExitPlane = np.array([0,                           2*state.rRegenNozzleTrimmed[-1]])
-            xExitPlaneOff = xExitPlane - filletRadius
-            rExitPlaneOff = rExitPlane
+            # The volute tilt is the flare angle, which keeps the flare normal to the volute face
+            xInterface, rInterface, keep = voluteInterfaceCurve(
+                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, state.inletVoluteAxialOffset,
+                filletRadius, -np.deg2rad(state.inletVoluteTilt), state.inletVoluteFlareLength)
+            keepStations(keep)
 
-            # Draw the centerline
-            xHotWall, rHotWall = parallelOffset(state.xRegenNozzleTrimmed,state.rRegenNozzleTrimmed,filletRadius)
+            return xInterface, rInterface
 
-            # Fillet circle
-            filletCenter  = intersection(xHotWall,rHotWall,xExitPlaneOff,rExitPlaneOff)
-            xFilletCenter = filletCenter[0][0][0]
-            rFilletCenter = filletCenter[1][0][0]
-            xFilletCircle = 1.0005*filletRadius * np.cos(np.linspace(0,2*np.pi,300)) + xFilletCenter
-            rFilletCircle = 1.0005*filletRadius * np.sin(np.linspace(0,2*np.pi,300)) + rFilletCenter
-            # Intersect pathline
-            hotWallIntersection  = intersection(state.xRegenNozzleTrimmed,state.rRegenNozzleTrimmed,xFilletCircle,rFilletCircle)
-            xHotWallIntersection = hotWallIntersection[0][0][0]
-            rHotWallIntersection = hotWallIntersection[1][0][0]
-            thetaHotWallIntersection = (3*np.pi/2) + np.arctan((xHotWallIntersection-xFilletCenter)/(rFilletCenter-rHotWallIntersection))
-            # Fillet arc
-            xFillet = 1.0005*filletRadius * np.cos(np.linspace(thetaHotWallIntersection,(2*np.pi)+flareAngle,300)) + xFilletCenter
-            rFillet = 1.0005*filletRadius * np.sin(np.linspace(thetaHotWallIntersection,(2*np.pi)+flareAngle,300)) + rFilletCenter
+        def interfaceToReturn():
 
-            # Limit tilt
-            xLimitTilt = filletRadius*np.cos(flareAngle) + xFilletCenter
-            rLimitTilt = filletRadius*np.sin(flareAngle) + rFilletCenter
-            # Find flare end
-            xFlareEnd = xLimitTilt - (flareLength)*np.sin(flareAngle)
-            rFlareEnd = rLimitTilt + (flareLength)*np.cos(flareAngle)
+            filletRadius = filletRadiusAt(state.returnVoluteFlareRoverD, 0)
 
-            # Trim pathline
-            trimIndeces = np.where(state.xRegenNozzleTrimmed < xHotWallIntersection)
-            state.xRegenNozzleTrimmed = state.xRegenNozzleTrimmed[trimIndeces]
-            state.rRegenNozzleTrimmed = state.rRegenNozzleTrimmed[trimIndeces]
+            # The mirror image of the inlet construction, at the injector face
+            xInterface, rInterface, keep = upstreamVoluteInterfaceCurve(
+                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, state.returnVoluteAxialOffset,
+                filletRadius, -np.deg2rad(state.returnVoluteTilt), state.returnVoluteFlareLen)
+            keepStations(keep)
 
-            # Append the linear flare to the filleted centerline
-            # place several points along flare to maintain linearity through later arcSplines
-            xFlare = np.concatenate([xFillet,np.linspace(xFillet[-1],xFlareEnd,numFlarePoints+2)[1:]])
-            rFlare = np.concatenate([rFillet,np.linspace(rFillet[-1],rFlareEnd,numFlarePoints+2)[1:]])
+            return xInterface, rInterface
 
-            state.gammaRegenSectionTrimmed               = state.gammaRegenSection[trimIndeces]
-            state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSection[trimIndeces]
-            state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSection[trimIndeces]
-            state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperature[trimIndeces]
-            state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperature[trimIndeces]
-            if state.regenSectionFilmDrivingTemperature is not None:
-                state.regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperature[trimIndeces]
-            state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumber[trimIndeces]
-            state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressure[trimIndeces]
-
-            return xFlare, rFlare
-
-        def interfaceToReturn() -> tuple:
-
-            trimmedThroatIndex = state.rRegenNozzleTrimmed.argmin()
-
-            turnaroundReturnAngle = np.deg2rad(90 - state.returnVoluteReturnAngle)
-
-            ## Locate the turnaround relative to the existing nozzle converging section
-            # The axial and radial offsets are two ways of naming the same station, so
-            # exactly one of them is a well-posed request. Giving both leaves the station
-            # ambiguous and giving neither leaves it undefined.
-            hasAxialOffset  = not np.isnan(state.returnVoluteAxialOffset)
-            hasRadialOffset = not np.isnan(state.returnVoluteRadialOffset)
-
-            if hasAxialOffset == hasRadialOffset:
-                raise InvalidInputError(
-                    message = ('The return volute turnaround is located by exactly one of '
-                               'returnVoluteAxialOffset or returnVoluteRadialOffset; '
-                               f'{"both were" if hasAxialOffset else "neither was"} specified'),
-                    parameterName = 'returnVoluteAxialOffset, returnVoluteRadialOffset',
-                    value = (state.returnVoluteAxialOffset, state.returnVoluteRadialOffset),
-                    validRange = 'Exactly one specified, the other left unset')
-
-            # Axial offset option
-            if hasAxialOffset:
-                xHotWallConverging   = state.xRegenNozzleTrimmed[:trimmedThroatIndex]
-                # Find the point on the contour that aligns most closely with the axial offset requested
-                returnTurnaroundIndex = np.abs(xHotWallConverging - (xHotWallConverging[0] + state.returnVoluteAxialOffset)).argmin()
-
-            # Radial offset option
-            else:
-                returnTurnaroundIndex = np.abs(state.rRegenNozzleTrimmed[:trimmedThroatIndex] - (0.5*state.chamberDiameter-state.returnVoluteRadialOffset)).argmin()
-
-            # The index is reused as the point count of the resampled turnaround curve, so
-            # a station at the very start of the contour leaves nothing to resample onto.
-            if returnTurnaroundIndex < 2:
-                raise GeometricConstraintError(
-                    message = ('The requested return volute turnaround sits at the start of the '
-                               'converging section, leaving no contour to interface to'),
-                    constraintType = 'returnVoluteTurnaroundStation',
-                    value = returnTurnaroundIndex,
-                    limit = 2)
-
-            # Create the turnaround turn
-            maxChannelRadiusAtReturn = getMaxChannelRadius(state.rRegenNozzleTrimmed,0)
-            turnaroundRadius = state.inletVoluteFlareRoverD * (state.shellThickness + maxChannelRadiusAtReturn*2 + state.hotWallThickness)
-            turnaroundLength = state.returnVoluteFlareLen
-            state.returnVoluteFlareRad = turnaroundRadius
-
-            # Calculate angle of the nozzle contour at the interface location between the two curves to guarantee tangency
-            angleAtTurnaroundStart = np.arctan2(abs(state.rRegenNozzleTrimmed[returnTurnaroundIndex] - state.rRegenNozzleTrimmed[returnTurnaroundIndex - 1]),
-                                                abs(state.xRegenNozzleTrimmed[returnTurnaroundIndex] - state.xRegenNozzleTrimmed[returnTurnaroundIndex - 1]))
-            turnaroundAngles       = np.linspace(3*np.pi/2 - angleAtTurnaroundStart, turnaroundReturnAngle, int(np.floor(state.numContourPoints / 4)))
-
-            turnaroundCenterX = state.xRegenNozzleTrimmed[returnTurnaroundIndex] + turnaroundRadius * np.cos(np.pi/2 - angleAtTurnaroundStart)
-            turnaroundCenterR = state.rRegenNozzleTrimmed[returnTurnaroundIndex] + turnaroundRadius * np.sin(np.pi/2 - angleAtTurnaroundStart)
-
-            turnaroundX = turnaroundRadius * np.cos(turnaroundAngles) + turnaroundCenterX
-            turnaroundR = turnaroundRadius * np.sin(turnaroundAngles) + turnaroundCenterR
-
-            fluidReturnX = turnaroundX[-1] + turnaroundLength * np.sin(turnaroundReturnAngle)
-            fluidReturnR = turnaroundR[-1] - turnaroundLength * np.cos(turnaroundReturnAngle)
-
-            fullReturnX = np.concatenate([turnaroundX, np.linspace(turnaroundX[-1], fluidReturnX,100)[1:]])
-            fullReturnR = np.concatenate([turnaroundR, np.linspace(turnaroundR[-1], fluidReturnR,100)[1:]])
-
-            state.xRegenNozzleTrimmed    = state.xRegenNozzleTrimmed[returnTurnaroundIndex:]
-            state.rRegenNozzleTrimmed    = state.rRegenNozzleTrimmed[returnTurnaroundIndex:]
-
-            xReturnTurnaround, rReturnTurnaround = fullReturnX[1:-1], fullReturnR[1:-1]
-            xReturnTurnaround, rReturnTurnaround = arcSpline(xReturnTurnaround, rReturnTurnaround, newNumPoints = returnTurnaroundIndex)
-
-            state.gammaRegenSectionTrimmed               = state.gammaRegenSectionTrimmed[returnTurnaroundIndex:]
-            state.molecularWeightRegenSectionTrimmed     = state.molecularWeightRegenSectionTrimmed[returnTurnaroundIndex:]
-            state.gasConstantRegenSectionTrimmed         = state.gasConstantRegenSectionTrimmed[returnTurnaroundIndex:]
-            state.regenSectionNearWallTemperatureTrimmed = state.regenSectionNearWallTemperatureTrimmed[returnTurnaroundIndex:]
-            state.regenSectionNearWallRecoveryTemperatureTrimmed = state.regenSectionNearWallRecoveryTemperatureTrimmed[returnTurnaroundIndex:]
-            if state.regenSectionFilmDrivingTemperatureTrimmed is not None:
-                state.regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperatureTrimmed[returnTurnaroundIndex:]
-            state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed[returnTurnaroundIndex:]
-            state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed[returnTurnaroundIndex:]
-
-            return np.flip(xReturnTurnaround), np.flip(rReturnTurnaround)
         # ------------------------------------------------------------------------------------------------------------------------------------ #
         # -- Generate interfaces -- #
         # ------------------------------------------------------------------------------------------------------------------------------------ #
@@ -755,10 +781,26 @@ def solveRegenChannels(state, thermal):
             maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleInterfaced,i)
             if state.channelRadius[i] > maxChannelRadius:
                 state.channelRadius[i] = maxChannelRadius
-        xOld = state.xRegenNozzleInterfaced
-        state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced = arcSpline(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced,
-                                                                            newNumPoints=state.numCrossSections)
-        state.channelRadius = chunkInterpolate(xOld,state.channelRadius,state.xRegenNozzleInterfaced)
+
+        # The interfaced line is resampled evenly in arc length, so a station's arc length
+        # fraction is its index over the station count. The radius and the two interface
+        # boundaries are carried across by that fraction rather than by x, which is not monotonic
+        # through a flare.
+        xOld, rOld = state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced
+        segmentOld  = np.hypot(np.diff(xOld), np.diff(rOld))
+        fractionOld = np.insert(np.cumsum(segmentOld), 0, 0.0) / segmentOld.sum()
+        fractionNew = np.linspace(0.0, 1.0, state.numCrossSections)
+
+        state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced = arcSpline(xOld, rOld, newNumPoints=state.numCrossSections)
+        state.channelRadius = np.interp(fractionNew, fractionOld, state.channelRadius)
+
+        if state.numReturnInterfaceCS > 0:
+            wallStart = fractionOld[state.numReturnInterfaceCS]
+            state.numReturnInterfaceCS = int(np.sum(fractionNew < wallStart))
+        if state.numInletInterfaceCS > 0:
+            wallEnd = fractionOld[len(xOld) - state.numInletInterfaceCS - 1]
+            state.numInletInterfaceCS = int(np.sum(fractionNew > wallEnd))
+
         offset = np.ones(state.numCrossSections)*state.hotWallThickness + state.channelRadius
         state.xChannelCenterline2D,state.rChannelCenterline2D = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, offset)
 
@@ -791,30 +833,6 @@ def solveRegenChannels(state, thermal):
         state.xNozzleColdWallMesh = xNozzleColdWallMesh
         state.yNozzleColdWallMesh = yNozzleColdWallMesh
         state.zNozzleColdWallMesh = zNozzleColdWallMesh
-
-        # Get update interface lengths
-        xInletTrim  = state.xRegenNozzleTrimmed[-1]
-        xReturnTrim = state.xRegenNozzleTrimmed[ 0]
-
-        PoI = np.where(np.diff(np.sign(np.diff(state.xRegenNozzleInterfaced))) != 0)[0]
-
-        if state.makeInletVolute == 'on':
-            try:
-                inletValidRange = range(PoI[-2],PoI[-1])
-                state.numInletInterfaceCS   = state.numCrossSections - np.argmin(np.abs(state.xRegenNozzleInterfaced[inletValidRange]  - xInletTrim))
-                state.numInletInterfaceCS  -= PoI[-2]
-            except:
-                inletValidRange = range(0,PoI[0])
-                state.numInletInterfaceCS   = state.numCrossSections - np.argmin(np.abs(state.xRegenNozzleInterfaced[inletValidRange]  - xInletTrim))
-        if state.makeReturnVolute == 'on':
-            try:
-                returnValidRange = range(PoI[0],PoI[1])
-                state.numReturnInterfaceCS  = np.argmin(np.abs(state.xRegenNozzleInterfaced[returnValidRange] - xReturnTrim))
-                state.numReturnInterfaceCS += PoI[0]
-            except:
-                returnValidRange = range(PoI[0],state.numCrossSections)
-                state.numReturnInterfaceCS  = np.argmin(np.abs(state.xRegenNozzleInterfaced[returnValidRange] - xReturnTrim))
-                state.numReturnInterfaceCS += PoI[0]
 
         # Sweep the channel
         state.xChannel, state.yChannel, state.zChannel, _ = \

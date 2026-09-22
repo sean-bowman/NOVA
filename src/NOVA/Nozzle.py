@@ -159,7 +159,8 @@ class Nozzle:
     against a wall temperature limit, with the coolant marched from inlet to outlet. Film
     cooling and an uncooled radiation-cooled extension attach to the same solve.
 
-    Inlet and return volutes, and the keep-out envelope they route around.
+    Inlet and return volutes, the inlet at the aft end of the jacket and the return at the
+    injector face, and the keep-out envelope.
 
     Exhaust plume, either from correlations or by continuing the characteristics march past the
     lip.
@@ -523,8 +524,7 @@ class Nozzle:
         self.returnVoluteTilt                         = None     # [deg]
         self.returnGraylocDiameter: float | None      = None     # [in]
         self.returnVoluteAxialOffset                  = None     # [m]
-        self.returnVoluteRadialOffset: float | None   = None     # [m]
-        self.returnVoluteFlareRad                     = None     # [m]
+        self.returnVoluteFlareRoverD                  = None     # [-]
         self.returnVoluteFlareLen                     = None     # [m]
 
         # Volute Outputs
@@ -1440,8 +1440,7 @@ class Nozzle:
         Returns:
         --------
         ChannelGeometryInputs
-            Resolution, channel family, wall thicknesses and the interface station counts the
-            surrounding run fills in.
+            Resolution, channel family and wall thicknesses.
 
         '''
 
@@ -1451,9 +1450,7 @@ class Nozzle:
             nChannel             = self.nChannel,
             channelType          = self.channelType,
             hotWallThickness     = self.hotWallThickness,
-            infillThickness      = self.infillThickness,
-            numInletInterfaceCS  = self.numInletInterfaceCS,
-            numReturnInterfaceCS = self.numReturnInterfaceCS)
+            infillThickness      = self.infillThickness)
 
     def regenThermalContext(self):
 

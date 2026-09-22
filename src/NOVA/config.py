@@ -286,9 +286,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.returnVoluteTilt               = inputsPath['returnVoluteTilt']
         nozzle.returnGraylocDiameter          = inputsPath['returnGraylocDiameter']
         nozzle.returnVoluteAxialOffset        = inputsPath['returnVoluteAxialOffset']
-        nozzle.returnVoluteRadialOffset       = inputsPath['returnVoluteRadialOffset']
         nozzle.returnVoluteFlareRoverD        = inputsPath['returnVoluteFlareRoverD']
-        nozzle.returnVoluteReturnAngle        = inputsPath['returnVoluteReturnAngle']
         nozzle.returnVoluteFlareLen           = inputsPath['returnVoluteFlareLen']
 
         # -- Program Options -- #

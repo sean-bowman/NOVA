@@ -332,8 +332,8 @@ def arcSpline(xPoints: ArrayLike, yPoints: ArrayLike, zPoints: ArrayLike | None 
     A C2 cubic through a curve with a corner in it must overshoot: continuity of curvature across
     a point where the curvature is genuinely discontinuous can only be bought by bending the
     curve out past the data on both sides. NOVA hands this function stitched curves routinely,
-    where a converging section meets a throat arc, or a channel interface meets a turnaround, and
-    those joins are corners.
+    where a converging section meets a throat arc, or a channel meets the fillet into its volute
+    flare, and those joins are corners.
 
     Measured on the shipped regenerative example, a natural cubic through the interfaced regen
     contour left the data by 6.36 mm at a station whose radius is 83.42 mm, which is 7.6 percent
