@@ -163,7 +163,6 @@ class RegenChannelState:
     regenSectionFilmDrivingTemperatureTrimmed: Any = None
     regenSectionNearWallTemperatureTrimmed:    Any = None
     wrapAngles:                                Any = None
-    xAllChannels:                              Any = None
     xChannel:                                  Any = None
     xChannelCenterline2D:                      Any = None
     xChannelCenterline3D:                      Any = None
@@ -172,11 +171,9 @@ class RegenChannelState:
     xRegenNozzleInterfaced:                    Any = None
     xRegenNozzleTrimmed:                       Any = None
     xReturnInterface:                          Any = None
-    yAllChannels:                              Any = None
     yChannel:                                  Any = None
     yChannelCenterline3D:                      Any = None
     yNozzleColdWallMesh:                       Any = None
-    zAllChannels:                              Any = None
     zChannel:                                  Any = None
     zChannelCenterline3D:                      Any = None
     zNozzleColdWallMesh:                       Any = None
@@ -218,12 +215,12 @@ _buildOutputs = (
     'regenSectionNearWallPressureTrimmed', 'regenSectionNearWallTemperatureTrimmed',
     'regenSectionNearWallRecoveryTemperatureTrimmed',
     'regenSectionFilmDrivingTemperatureTrimmed',
-    'wrapAngles', 'xAllChannels', 'xChannel', 'xChannelCenterline2D',
+    'wrapAngles', 'xChannel', 'xChannelCenterline2D',
     'xChannelCenterline3D', 'xInletInterface', 'xNozzleColdWallMesh',
     'xNozzleHotWallMesh', 'xNozzleShell', 'xNozzleShellMesh', 'xRegenNozzleInterfaced',
-    'xRegenNozzleTrimmed', 'xReturnInterface', 'yAllChannels', 'yChannel', 'yChannelCenterline3D',
+    'xRegenNozzleTrimmed', 'xReturnInterface', 'yChannel', 'yChannelCenterline3D',
     'yNozzleColdWallMesh', 'yNozzleHotWallMesh', 'yNozzleShellMesh',
-    'zAllChannels', 'zChannel', 'zChannelCenterline3D',
+    'zChannel', 'zChannelCenterline3D',
     'zNozzleColdWallMesh', 'zNozzleHotWallMesh', 'zNozzleShellMesh')
 
 regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs)))
@@ -962,39 +959,5 @@ def solveRegenChannels(state, thermal):
                                   channelWidth = state.channelWidth, ribThickness = state.channelRibThickness)
 
     generate3DChannels()
-
-    # ------------------------------------------------------------------------------------------------------------------------------------ #
-    # -- Generate cooling jacket -- #
-    # ------------------------------------------------------------------------------------------------------------------------------------ #
-
-    # Rotate copies of channel around nozzle to generate full jacket
-    def generateCoolingJacket(xChannel,yChannel,zChannel):
-
-        '''
-
-        Private method to wrap the code that generates the cooling jacket.
-
-        '''
-
-        xAllChannels,  yAllChannels, zAllChannels = \
-        [np.zeros((state.numCSPointsChannel,state.numCrossSections,state.nChannel)) for _ in range(3)]
-
-        for m in tqdm(range(state.nChannel), desc="Generating Jacket Geometry", colour="#ABD038"):
-
-            for p in range(state.numCrossSections):
-
-                valueMatrix = [xChannel[:,p], yChannel[:,p], zChannel[:,p]]
-                eulerAngles = [2*m*np.pi/state.nChannel, 0, 0]
-                xAllChannels[:,p,m], yAllChannels[:,p,m], zAllChannels[:,p,m] \
-                = DCM(eulerAngles, valueMatrix, transpose = False, rotationOrder = 'xyz')
-                xAllChannels[:,p,m] = xAllChannels[:,p,m].T
-                yAllChannels[:,p,m] = yAllChannels[:,p,m].T
-                zAllChannels[:,p,m] = zAllChannels[:,p,m].T
-
-        return xAllChannels, yAllChannels, zAllChannels
-
-    if  state.makeCoolingChannels == 'jacket':
-
-        state.xAllChannels, state.yAllChannels, state.zAllChannels = generateCoolingJacket(state.xChannel, state.yChannel, state.zChannel)
 
     return state

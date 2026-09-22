@@ -192,23 +192,12 @@ class ConvergingSectionState:
     chamberPressure:                         Any = None
     chamberRGasConstant:                     Any = None
     chamberStagnationTemperature:            Any = None
-    conicDepthModifier:                      Any = None
-    conicPinchModifier:                      Any = None
     convergingSectionAngle:                  Any = None
     divergingSectionType:                    Any = None
-    hotWallThickness:                        Any = None
-    infillThickness:                         Any = None
     makeInletVolute:                         Any = None
     makeReturnVolute:                        Any = None
-    nChannel:                                Any = None
     nozzleScalingFactor:                     Any = None
     numContourPoints:                        Any = None
-    numCrossSections:                        Any = None
-    shellThickness:                          Any = None
-    throatBackWallPitch:                     Any = None
-    throatEccentricity:                      Any = None
-    throatEntryLength:                       Any = None
-    throatGapThickness:                      Any = None
     throatInletCurvatureNonDimensional:      Any = None
     throatRadiusNonDimensional:              Any = None
 

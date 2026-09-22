@@ -170,11 +170,9 @@ class AnalysisTab(ttk.Frame):
             row(cooling, 'Number of channels', getattr(nozzle, 'nChannel', None), '{:.0f}')
             row(cooling, 'Max hot wall temperature', getattr(nozzle, 'maxWallTemperature', None), '{:.1f}', 'K')
             row(cooling, 'Coolant exit temperature',
-                getattr(nozzle, 'coolantFinalTemperature', None) or getattr(nozzle, 'coolantExitTemperature', None),
-                '{:.1f}', 'K')
+                getattr(nozzle, 'coolantExitTemperature', None), '{:.1f}', 'K')
             row(cooling, 'Coolant exit pressure',
-                getattr(nozzle, 'coolantFinalPressure', None) or getattr(nozzle, 'coolantExitPressure', None),
-                '{:.0f}', 'Pa')
+                getattr(nozzle, 'coolantExitPressure', None), '{:.0f}', 'Pa')
             row(cooling, 'Coolant mass flow', getattr(nozzle, 'coolantMassFlow', None), '{:.3f}', 'kg/s')
 
         thrust = _num(getattr(nozzle, 'thrust', None))

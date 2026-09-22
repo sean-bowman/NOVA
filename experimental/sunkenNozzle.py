@@ -53,6 +53,10 @@ assigns. A caller reinstating the feature needs to:
     branch on,
   - carry `xSunkTurnaround2D` and `rSunkTurnaround2D` on `ConvergingSectionState` and
     `RegenChannelState` again, since the return volute interface reads them,
+  - put back the `ConvergingSectionState` fields this module is the only reader of:
+    `conicDepthModifier`, `conicPinchModifier`, `hotWallThickness`, `infillThickness`,
+    `nChannel`, `numCrossSections`, `shellThickness`, `throatBackWallPitch`,
+    `throatEccentricity`, `throatEntryLength` and `throatGapThickness`,
   - bring `keepOut.py` back into the package with it, since the closure is wrapped around that
     envelope; it sits beside this module and is imported from there.
 

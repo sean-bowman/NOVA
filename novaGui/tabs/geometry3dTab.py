@@ -4,7 +4,7 @@
 '''
 
 Three-dimensional views of the nozzle. A revolved surface of the wall contour is
-drawn inline and always available; the channel-mesh, jacket and volute views are
+drawn inline and always available; the channel-mesh and volute views are
 the interactive plotly HTML files NOVA writes, rendered in an embedded browser
 frame with a system-browser fallback.
 
@@ -39,7 +39,6 @@ class Geometry3DTab(ttk.Frame):
 
     _htmlViews = {
         'Channel mesh (interactive)': 'channelMesh',
-        'Regen jacket (interactive)': 'jacket',
         'Volute (interactive)': 'volute',
     }
 

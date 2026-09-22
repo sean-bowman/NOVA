@@ -56,6 +56,7 @@ import numpy as np
 
 from .channelSections import (SECTIONFAMILIES, helicalSpacing, maxHalfExtent, rectangularWidth,
                               sectionProperties)
+from .errors import GeometricConstraintError
 
 @dataclass
 class ChannelGeometryInputs:
@@ -105,6 +106,54 @@ class ChannelGeometryInputs:
     maxChannelDepth:      float = float('inf')
     channelHelixAngle:    float = 0.0
     channelAspectRatio:   float = 1.0
+
+def normalizeTangents(vectors: np.ndarray, quantity: str = 'channel tangent') -> np.ndarray:
+
+    '''
+
+    Unit vectors, with a zero-length one taking the direction of the nearest station that has one.
+
+    Two stations that land on the same point leave a zero difference between them. The sizing
+    march produces exactly that whenever it rebuilds one station's section from a two-point
+    slice of the centerline, and dividing by that length gives a frame of NaN that carries into
+    the section points. Taking the direction from the nearest station that has one keeps the
+    frame finite and leaves every other station's direction untouched.
+
+    Parameters:
+    -----------
+    vectors : numpy.ndarray
+        Station directions, (N, k), before normalization.
+    quantity : str
+        What the vectors are, for the message if none of them has a length.
+
+    Returns:
+    --------
+    numpy.ndarray
+        Unit vectors, (N, k).
+
+    Raises:
+    -------
+    GeometricConstraintError
+        If every station sits on the same point, which leaves no direction to take.
+
+    '''
+
+    vectors = np.asarray(vectors, dtype = float).copy()
+    lengths = np.linalg.norm(vectors, axis = 1)
+    degenerate = np.flatnonzero(lengths == 0)
+
+    if degenerate.size:
+        valid = np.flatnonzero(lengths > 0)
+        if valid.size == 0:
+            raise GeometricConstraintError(
+                message = f'Every station sits on the same point, so the {quantity} has no '
+                          f'direction to take.',
+                constraintType = 'degenerateCenterline', value = 0.0, limit = 0.0)
+        nearest = valid[np.argmin(np.abs(valid[None, :] - degenerate[:, None]), axis = 1)]
+        vectors[degenerate] = vectors[nearest]
+        lengths = np.linalg.norm(vectors, axis = 1)
+
+    return vectors / lengths[:, None]
 
 def rectangularProfile(width: float, depth: float, cornerRadius: float, numPoints: int) -> tuple:
 
@@ -209,17 +258,16 @@ def wallNormalFrames(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple:
     '''
 
     stations = np.column_stack((x, y, z))
-    tangent  = np.gradient(stations, axis = 0)
-    tangent /= np.linalg.norm(tangent, axis = 1)[:, None]
+    tangent  = normalizeTangents(np.gradient(stations, axis = 0))
 
     radius  = np.hypot(y, z)
     azimuth = np.arctan2(z, y)
-    dx, dr  = np.gradient(x), np.gradient(radius)
-    scale   = np.hypot(dx, dr)
+    meridian = normalizeTangents(np.column_stack((np.gradient(x), np.gradient(radius))),
+                                 quantity = 'wall meridian')
 
     # The left normal of the meridian as it is traversed, which is the side the centerline was
     # offset to from the wall, rotated to the station's azimuth
-    normalAxial, normalRadial = -dr/scale, dx/scale
+    normalAxial, normalRadial = -meridian[:, 1], meridian[:, 0]
     normal = np.column_stack((normalAxial, normalRadial*np.cos(azimuth), normalRadial*np.sin(azimuth)))
 
     normal  -= np.sum(normal*tangent, axis = 1)[:, None]*tangent
@@ -348,7 +396,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         # Create tangent vectors for all stations
         stations    = np.column_stack((xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D))
         tangent     = np.gradient(stations, axis=0)
-        tangent    /= np.linalg.norm(tangent, axis=1)[:, None]
+        tangent     = normalizeTangents(tangent)
         t0          = tangent[0]
 
         # Initialize parallel transport frame

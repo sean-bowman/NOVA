@@ -507,9 +507,6 @@ class Nozzle:
         self.xChannel: np.ndarray                     = np.array([]) # [m]
         self.zChannel: np.ndarray                     = np.array([]) # [m]
 
-        self.yAllChannels                             = None     # [m]
-        self.xAllChannels                             = None     # [m]
-        self.zAllChannels                             = None     # [m]
 
         # Volute Inputs
         self.makeInletVolute                          = None     # 'on' , 'off'
@@ -621,10 +618,6 @@ class Nozzle:
         self.coolantInitialPressure: float | None     = None     # [Pa]
         self.coolantMassFlow: float | None            = None     # [kg/s]
         self.swirlPercent                             = None     # [-]
-
-        # Outputs
-        self.coolantFinalTemperature                  = None     # [K]
-        self.coolantFinalPressure                     = None     # [Pa]
 
         # -- Plume -- #
 

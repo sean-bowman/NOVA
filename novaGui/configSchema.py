@@ -164,6 +164,9 @@ def _entrainmentModelOn(config: dict) -> bool:
 def _truncationNeedsValue(config: dict) -> bool:
     return config.get('regenTruncationType') in ('temp', 'er')
 
+def _searchedContour(config: dict) -> bool:
+    return config.get('divergingSectionType') in ('top', 'toc')
+
 # -- Propellant choices -- #
 
 # Canonical rocketcea keys, mapped from friendly labels. The field stays
@@ -211,6 +214,11 @@ groups = [
               help = 'tic and top are method-of-characteristics contours evaluated directly; toc '
                      'searches over them for the shortest length at the requested performance. '
                      'cone is a straight 15 degree half-angle cone.'),
+        Field('divergingSectionDesignVariables', 'Design vector', 'text', default = None,
+              showWhen = _searchedContour,
+              help = 'Pins a thrust-optimized wall instead of searching for one: four numbers, '
+                     'the inflection and exit wall angles in degrees then the inflection and '
+                     'exit tensions, separated by commas. Blank runs the search.'),
         Field('chamberDiameter', 'Chamber outer diameter', 'float', default = 0.18, unit = 'm',
               help = 'Outer diameter of the chamber wall at the converging inlet. Sets the contraction ratio.'),
         Field('convergingSectionAngle', 'Converging wall angle at throat', 'float', default = 30.0, unit = 'deg',
@@ -252,8 +260,10 @@ groups = [
                      'the method is none.'),
         Field('regenTruncationValue', 'Truncation value', 'float', default = None,
               showWhen = _truncationNeedsValue,
-              help = 'Near-wall gas temperature [K] where the regen section ends if the method is '
-                     'wall temperature, or the local area ratio if the method is area ratio.'),
+              help = 'Near-wall recovery temperature [K] where the regen section ends if the '
+                     'method is temperature, or the local area ratio if the method is area '
+                     'ratio. Recovery temperature stays near the stagnation temperature along a '
+                     'nozzle, so it spans only a few hundred kelvin over the whole bell.'),
     ]),
 
     Group('Combustion', [

@@ -19,6 +19,68 @@ from .. import configSchema
 from .. import theme
 from ..widgets import ScrollableFrame, CollapsibleSection, FieldRow, MaterialInfoPanel
 
+def _designVector(entry) -> list | None:
+
+    '''
+
+    The thrust-optimized design vector as the backend reads it, from what the form holds.
+
+    The form carries the four numbers as one comma-separated text entry, since the rest of the
+    form is one widget per number. Blank means unset, which is what runs the search.
+
+    Parameters:
+    -----------
+    entry : str or list or None
+        Form text, or a value already in backend form.
+
+    Returns:
+    --------
+    list or None
+        The numbers in order, or None when the entry is blank.
+
+    Raises:
+    -------
+    ValueError
+        If the entry is not a list of numbers. The count and the bounds are the backend's to
+        check, so that the GUI and a JSON run refuse the same vectors for the same reasons.
+
+    '''
+
+    if entry is None or isinstance(entry, (list, tuple)):
+        return list(entry) if entry else None
+
+    text = str(entry).replace(',', ' ').split()
+    if not text:
+        return None
+
+    try:
+        return [float(value) for value in text]
+    except ValueError:
+        raise ValueError("'Design vector' takes numbers separated by commas.")
+
+def _designVectorText(value) -> str:
+
+    '''
+
+    The design vector as the form holds it, from what a config carries.
+
+    Parameters:
+    -----------
+    value : list or None
+        The numbers in order, or None.
+
+    Returns:
+    --------
+    str
+        Comma-separated numbers, empty when unset.
+
+    '''
+
+    if value is None or isinstance(value, str):
+        return value or ''
+
+    return ', '.join(f'{float(number):g}' for number in value)
+
 class ConfigTab(ttk.Frame):
 
     '''
@@ -171,6 +233,8 @@ class ConfigTab(ttk.Frame):
         for fieldSpec in configSchema.allFields():
             if fieldSpec.synthetic:
                 raw.pop(fieldSpec.key, None)
+        # The design vector is one text entry in the form and a list of numbers in the config
+        raw['divergingSectionDesignVariables'] = _designVector(raw.get('divergingSectionDesignVariables'))
         return raw
 
     def setConfig(self, config: dict) -> None:
@@ -183,6 +247,9 @@ class ConfigTab(ttk.Frame):
         '''
 
         config = dict(config)
+        if 'divergingSectionDesignVariables' in config:
+            config['divergingSectionDesignVariables'] = _designVectorText(
+                config['divergingSectionDesignVariables'])
 
         defaults = configSchema.defaultConfig()
         self._suspendDynamics = True

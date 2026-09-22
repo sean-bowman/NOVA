@@ -676,28 +676,26 @@ def solveRegenStations(state):
     state.inletContractionRatio                   = areaRatios[0]
     state.areaRatioArray                          = areaRatios
 
-    if state.divergingSectionType.lower != 'conical':
+    state.regenSectionNearWallTemperature         = temperatureNearWallRegen
+    state.regenSectionNearWallPressure            = pressureNearWallRegen
+    state.regenSectionNearWallVelocity            = velocityNearWallRegen
+    state.regenSectionNearWallMachNumber          = machNumberNearWallRegen
+    state.regenSectionNearWallRecoveryTemperature = recoveryTemperatureNearWallRegen
 
-        state.regenSectionNearWallTemperature         = temperatureNearWallRegen
-        state.regenSectionNearWallPressure            = pressureNearWallRegen
-        state.regenSectionNearWallVelocity            = velocityNearWallRegen
-        state.regenSectionNearWallMachNumber          = machNumberNearWallRegen
-        state.regenSectionNearWallRecoveryTemperature = recoveryTemperatureNearWallRegen
+    state.thermalConductivityRegenSection         = thermalCondRegen
+    state.viscosityRegenSection                   = viscosityRegen
+    state.prandtlNumberRegenSection               = prandtlRegen
+    state.gammaRegenSection                       = gammaRegen
+    state.gasConstantRegenSection                 = gasConstantRegen
+    state.specificHeatRegenSection                = specificHeatRegen
+    state.densityRegenSection                     = densityRegen
+    state.reynoldsNumberRegenSection              = reynoldsRegen
+    state.molecularWeightRegenSection             = molecularWeightRegen
 
-        state.thermalConductivityRegenSection         = thermalCondRegen
-        state.viscosityRegenSection                   = viscosityRegen
-        state.prandtlNumberRegenSection               = prandtlRegen
-        state.gammaRegenSection                       = gammaRegen
-        state.gasConstantRegenSection                 = gasConstantRegen
-        state.specificHeatRegenSection                = specificHeatRegen
-        state.densityRegenSection                     = densityRegen
-        state.reynoldsNumberRegenSection              = reynoldsRegen
-        state.molecularWeightRegenSection             = molecularWeightRegen
-
-        # The film is solved here rather than in the jacket because it marches the other way:
-        # forward from its slot with the gas, while the jacket marches back from the coolant
-        # inlet. Everything it needs is in the station properties just assigned.
-        solveRegenSectionFilm(state)
+    # The film is solved here rather than in the jacket because it marches the other way:
+    # forward from its slot with the gas, while the jacket marches back from the coolant
+    # inlet. Everything it needs is in the station properties just assigned.
+    solveRegenSectionFilm(state)
 
     if state.regenTruncationType != 'none':
 

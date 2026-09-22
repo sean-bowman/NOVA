@@ -973,14 +973,12 @@ def channelMeshFigure(nozzle):
 
     '''
 
-    The swept channel surface against the nozzle wall, with the centerline and every
-    cross-section wireframe called out.
+    Three adjacent channels swept against the nozzle wall, with the centerline and every
+    cross-section wireframe called out on the middle one.
 
-    `makeCoolingChannels` is 'on' or 'off' by the time a config is read, so the interfaced,
-    three-channel rendering this checks for under 'jacket' cannot currently be reached; what a
-    run actually gets is the single-channel rendering in the else branch below. Recorded as
-    found rather than silently corrected, since which of the two is meant to run is a design
-    question and not this function's to decide.
+    The neighbors are the middle channel rotated by plus and minus one channel pitch about the
+    nozzle axis, which is what the jacket pattern does, so the rib between them is drawn to
+    scale without an array of every channel being built to draw it.
 
     Returns:
     --------
@@ -1000,38 +998,23 @@ def channelMeshFigure(nozzle):
                                 colorscale = [[0, 'darkgrey'], [1, 'darkgrey']], opacity = 0.8,
                                 showscale = False))
 
-    if nozzle.makeCoolingChannels == 'jacket':
-        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, 2], y = nozzle.xAllChannels[:, :, 2],
-                                    z = nozzle.yAllChannels[:, :, 2],
-                                    colorscale = [[0, 'yellow'], [1, 'yellow']], opacity = 0.999,
+    pitch = 2*np.pi / nozzle.nChannel
+    for rollAngle, color in ((-pitch, 'cyan'), (pitch, 'magenta')):
+        yNeighbor = nozzle.yChannel*np.cos(rollAngle) - nozzle.zChannel*np.sin(rollAngle)
+        zNeighbor = nozzle.yChannel*np.sin(rollAngle) + nozzle.zChannel*np.cos(rollAngle)
+        figure.add_trace(go.Surface(x = zNeighbor, y = nozzle.xChannel, z = yNeighbor,
+                                    colorscale = [[0, color], [1, color]], opacity = 1,
                                     showscale = False))
-        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, 1], y = nozzle.xAllChannels[:, :, 1],
-                                    z = nozzle.yAllChannels[:, :, 1],
-                                    colorscale = [[0, 'cyan'], [1, 'cyan']], opacity = 1,
-                                    showscale = False))
-        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, 3], y = nozzle.xAllChannels[:, :, 3],
-                                    z = nozzle.yAllChannels[:, :, 3],
-                                    colorscale = [[0, 'magenta'], [1, 'magenta']], opacity = 1,
-                                    showscale = False))
-        figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
-                                      z = nozzle.yChannelCenterline3D, mode = 'lines',
-                                      line = dict(color = 'red', width = 10)))
-        for i in range(nozzle.numCrossSections):
-            figure.add_trace(go.Scatter3d(x = nozzle.zAllChannels[:, i, 2], y = nozzle.xAllChannels[:, i, 2],
-                                          z = nozzle.yAllChannels[:, i, 2], mode = 'lines',
-                                          opacity = 0.8, line = dict(color = colors[i], width = 10),
-                                          name = f'CS {i}'))
-    else:
-        figure.add_trace(go.Surface(x = nozzle.zChannel, y = nozzle.xChannel, z = nozzle.yChannel,
-                                    colorscale = [[0, 'yellow'], [1, 'yellow']], opacity = 0.975,
-                                    showscale = False))
-        figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
-                                      z = nozzle.yChannelCenterline3D, mode = 'lines',
-                                      line = dict(color = 'red', width = 10)))
-        for i in range(nozzle.numCrossSections):
-            figure.add_trace(go.Scatter3d(x = nozzle.zChannel[:, i], y = nozzle.xChannel[:, i],
-                                          z = nozzle.yChannel[:, i], mode = 'lines', opacity = 0.8,
-                                          line = dict(color = colors[i], width = 10), name = f'CS {i}'))
+    figure.add_trace(go.Surface(x = nozzle.zChannel, y = nozzle.xChannel, z = nozzle.yChannel,
+                                colorscale = [[0, 'yellow'], [1, 'yellow']], opacity = 0.975,
+                                showscale = False))
+    figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
+                                  z = nozzle.yChannelCenterline3D, mode = 'lines',
+                                  line = dict(color = 'red', width = 10)))
+    for i in range(nozzle.numCrossSections):
+        figure.add_trace(go.Scatter3d(x = nozzle.zChannel[:, i], y = nozzle.xChannel[:, i],
+                                      z = nozzle.yChannel[:, i], mode = 'lines', opacity = 0.8,
+                                      line = dict(color = colors[i], width = 10), name = f'CS {i}'))
 
     figure.update_layout(
         scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',
@@ -1039,44 +1022,6 @@ def channelMeshFigure(nozzle):
         title = {'text': 'Channel Mesh View', 'x': 0.5, 'xanchor': 'center', 'y': 0.9,
                 'yanchor': 'top'},
         scene_aspectmode = 'data', template = 'plotly_dark', showlegend = False)
-    return figure
-
-def regenJacketFigure(nozzle):
-
-    '''
-
-    Every channel in the jacket array, one color each.
-
-    Reachable only when `makeCoolingChannels` is 'jacket', which the config normalization never
-    produces today; see `channelMeshFigure`. Kept so the array-of-channels rendering exists if
-    that mode is reintroduced, rather than being lost along with the branch that built it.
-
-    Returns:
-    --------
-    plotly.graph_objects.Figure or None
-        None unless the jacket array was built.
-
-    '''
-
-    if nozzle.makeCoolingChannels != 'jacket' or getattr(nozzle, 'xAllChannels', None) is None:
-        return None
-
-    colors = sample_colorscale(plotly.colors.cyclical.HSV, list(np.linspace(0, 1, nozzle.nChannel)))
-    figure = go.Figure()
-    figure.add_trace(go.Surface(x = nozzle.zNozzleColdWallMesh, y = nozzle.xNozzleColdWallMesh,
-                                z = nozzle.yNozzleColdWallMesh,
-                                colorscale = [[0, 'cyan'], [1, 'cyan']], opacity = 0.5,
-                                showscale = False))
-    for i in range(nozzle.nChannel):
-        figure.add_trace(go.Surface(x = nozzle.zAllChannels[:, :, i], y = nozzle.xAllChannels[:, :, i],
-                                    z = nozzle.yAllChannels[:, :, i],
-                                    colorscale = [[0, colors[i]], [1, colors[i]]], opacity = 1,
-                                    showscale = False))
-    figure.update_layout(
-        scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',
-                    zaxis_title = 'Nozzle Radius [m]'),
-        title = {'text': 'Regen Jacket', 'x': 0.5, 'xanchor': 'center', 'y': 0.9, 'yanchor': 'top'},
-        scene_aspectmode = 'data', template = 'plotly_dark')
     return figure
 
 def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None,
@@ -1375,7 +1320,6 @@ interactiveFigureBuilders = {
     'plumeStructureInteractive.html': lambda nozzle: plotlyPlume(plumeFigure(nozzle)),
     'VoluteView.html':               lambda nozzle: volutesFigure(nozzle),
     'threeChannelMeshViewInterfaced.html': lambda nozzle: channelMeshFigure(nozzle),
-    'regenJacketView.html':          lambda nozzle: regenJacketFigure(nozzle),
 }
 
 def exportInteractiveFigures(nozzle, folder: str) -> list:
