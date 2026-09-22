@@ -52,7 +52,9 @@ assigns. A caller reinstating the feature needs to:
     one traditional shape unconditionally now, with no `contourType` field or choice rule left to
     branch on,
   - carry `xSunkTurnaround2D` and `rSunkTurnaround2D` on `ConvergingSectionState` and
-    `RegenChannelState` again, since the return volute interface reads them.
+    `RegenChannelState` again, since the return volute interface reads them,
+  - bring `keepOut.py` back into the package with it, since the closure is wrapped around that
+    envelope; it sits beside this module and is imported from there.
 
 '''
 
@@ -63,7 +65,7 @@ from scipy.optimize import brentq
 from NOVA.errors import GeometricConstraintError
 from NOVA.gasDynamics import isentropicValues
 from NOVA.geometryTools import arcSpline, parallelOffset
-from NOVA.keepOut import keepOutEnvelope
+from keepOut import keepOutEnvelope
 from NOVA.validation import integerRule, numericRule
 
 # The configuration keys that exist only for this contour. They were removed from Nozzle and from

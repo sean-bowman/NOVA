@@ -1,5 +1,4 @@
-
-# -- NOVA: Keep-Out Envelope -- #
+# -- NOVA (experimental): Keep-Out Envelope -- #
 
 '''
 
@@ -22,6 +21,38 @@ and index -1 is the innermost.
 
 Nothing here is a model of a real closure. It is a packaging boundary, and its only claim is
 that geometry outside it does not intersect it.
+
+----------------------------------------------------------------------
+                        Status
+----------------------------------------------------------------------
+
+The envelope was drawn for a hybrid nozzle, where the jacket's return turned around on the
+converging section and routed behind a chamber closure NOVA did not generate. NOVA generates its
+own chamber and jackets it to the injector face, where the return volute sits, so the volume
+this described is the injector's. The package drew it and exported it, and nothing checked any
+geometry against it: `packingClearance` has no caller outside its own tests.
+
+`experimental/sunkenNozzle.py` is the one geometric consumer. The sunken throat wraps the
+converging wall around the envelope, and it imports it from here.
+
+The default placement is wrong. The package placed the shoulder at `keepOutAxialOffset` plus
+the upstream end of the regen section, and a null offset turns that sum into NaN, which
+`keepOutEnvelope` reads as unset and replaces with zero. Zero is the throat plane, so an
+envelope asked for without an offset sat at the throat rather than at the injector face.
+
+----------------------------------------------------------------------
+                        Wiring it back in
+----------------------------------------------------------------------
+
+A caller reinstating it needs to:
+
+  - restore `keepOutAxialOffset`, `keepOutRadius`, `keepOutDepth` and `keepOutHubRadius` on the
+    Nozzle, in `config.py`, the GUI schema and `assets/NOVANozzle.json`,
+  - build it in `nozzleVolutes.solveRegenVolutes` with `keepOutEnvelope` and `revolveKeepOut`,
+    and place an unset offset at the injector face rather than letting NaN fall through to zero,
+  - restore the `KeepOut.txt` export in `exports.py` and the envelope and winder ramp in
+    `figures.volutesFigure`,
+  - call `packingClearance` on the volutes if the envelope is meant to constrain anything.
 
 All units are mass-base SI:
     - Length [m]

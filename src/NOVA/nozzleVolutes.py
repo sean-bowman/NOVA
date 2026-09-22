@@ -15,8 +15,7 @@ channels, roughly even.
 The scroll geometry itself lives in Volute.py, which draws one from a scroll radius, a cross
 section family and an area distribution. What happens here is everything around it: reading the
 channel ends the volute has to attach to, sizing its wall against the pressure and temperature
-the coolant is at, growing the print supports an unsupported scroll needs, and checking the
-result clears the keep-out envelope behind the chamber.
+the coolant is at, and growing the print supports an unsupported scroll needs.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -65,7 +64,6 @@ from . import units
 from .geometryTools import DCM
 from .errors import InvalidInputError, VoluteGenerationError, createErrorContext
 from .Volute import Volute
-from .keepOut import keepOutEnvelope, revolveKeepOut
 from .validation import applyRules, arrayRule, presentRule
 
 # What a volute needs from the channel build it attaches to. The volute is grown onto the ends of
@@ -107,8 +105,7 @@ class RegenVoluteState:
     Everything the volute build reads, and everything it produces.
 
     The fields are grouped by how the build uses them: the channel ends and the volute definition
-    it works from, the keep-out envelope it is checked against and may build, and the scroll,
-    shell and support surfaces it produces.
+    it works from, and the scroll, shell and support surfaces it produces.
 
     Every field starts as None. One still None after a build is a volute that was not asked for,
     which is worth keeping rather than hiding behind an empty array.
@@ -116,7 +113,6 @@ class RegenVoluteState:
     '''
 
     # -- What the volute build reads -- #
-    chamberDiameter:                       Any = None
     channelRadius:                         Any = None
     coolantExitPressure:                   Any = None
     coolantExitTemperature:                Any = None
@@ -129,10 +125,6 @@ class RegenVoluteState:
     inletVoluteCrossSection:               Any = None
     inletVolutePrintability:               Any = None
     inletVoluteTilt:                       Any = None
-    keepOutAxialOffset:                    Any = None
-    keepOutDepth:                          Any = None
-    keepOutHubRadius:                      Any = None
-    keepOutRadius:                         Any = None
     makeInletVolute:                       Any = None
     makeReturnVolute:                      Any = None
     numCSPointsVolute:                     Any = None
@@ -146,18 +138,15 @@ class RegenVoluteState:
     voluteFOS:                             Any = None
     voluteRelativeRoll:                    Any = None
     xChannelCenterline2D:                  Any = None
-    xRegenNozzle:                          Any = None
 
     # -- Read and written as the volutes are grown -- #
     inletVolute:                           Any = None
-    nozzleKeepOut:                         Any = None
     returnVolute:                          Any = None
     xInletVolute:                          Any = None
     xInletVoluteShell:                     Any = None
     xInletVoluteSupportLower:              Any = None
     xInletVoluteSupportUpper:              Any = None
     xInletVoluteSupportWall:               Any = None
-    xKeepOut3D:                            Any = None
     xReturnVolute:                         Any = None
     xReturnVoluteShell:                    Any = None
     xReturnVoluteSupportLower:             Any = None
@@ -168,7 +157,6 @@ class RegenVoluteState:
     yInletVoluteSupportLower:              Any = None
     yInletVoluteSupportUpper:              Any = None
     yInletVoluteSupportWall:               Any = None
-    yKeepOut3D:                            Any = None
     yReturnVolute:                         Any = None
     yReturnVoluteShell:                    Any = None
     yReturnVoluteSupportLower:             Any = None
@@ -179,7 +167,6 @@ class RegenVoluteState:
     zInletVoluteSupportLower:              Any = None
     zInletVoluteSupportUpper:              Any = None
     zInletVoluteSupportWall:               Any = None
-    zKeepOut3D:                            Any = None
     zReturnVolute:                         Any = None
     zReturnVoluteShell:                    Any = None
     zReturnVoluteSupportLower:             Any = None
@@ -191,15 +178,15 @@ class RegenVoluteState:
 # The fields a build hands back to a Nozzle. Kept beside the class so that adding a field
 # and forgetting to surface it is a one-line fix rather than a silent drop.
 regenVoluteOutputs = (
-    'inletVolute', 'nozzleKeepOut', 'returnVolute', 'xInletVolute', 'xInletVoluteShell',
+    'inletVolute', 'returnVolute', 'xInletVolute', 'xInletVoluteShell',
     'xInletVoluteSupportLower', 'xInletVoluteSupportUpper', 'xInletVoluteSupportWall',
-    'xKeepOut3D', 'xReturnVolute', 'xReturnVoluteShell', 'xReturnVoluteSupportLower',
+    'xReturnVolute', 'xReturnVoluteShell', 'xReturnVoluteSupportLower',
     'xReturnVoluteSupportUpper', 'xReturnVoluteSupportWall', 'yInletVolute', 'yInletVoluteShell',
     'yInletVoluteSupportLower', 'yInletVoluteSupportUpper', 'yInletVoluteSupportWall',
-    'yKeepOut3D', 'yReturnVolute', 'yReturnVoluteShell', 'yReturnVoluteSupportLower',
+    'yReturnVolute', 'yReturnVoluteShell', 'yReturnVoluteSupportLower',
     'yReturnVoluteSupportUpper', 'yReturnVoluteSupportWall', 'zInletVolute', 'zInletVoluteShell',
     'zInletVoluteSupportLower', 'zInletVoluteSupportUpper', 'zInletVoluteSupportWall',
-    'zKeepOut3D', 'zReturnVolute', 'zReturnVoluteShell', 'zReturnVoluteSupportLower',
+    'zReturnVolute', 'zReturnVoluteShell', 'zReturnVoluteSupportLower',
     'zReturnVoluteSupportUpper', 'zReturnVoluteSupportWall')
 
 def solveRegenVolutes(state):
@@ -512,18 +499,5 @@ def solveRegenVolutes(state):
     if state.makeReturnVolute == 'on':
 
         generateRegenReturnVolute()
-
-    # The volume behind the chamber that the volutes have to route around. The converging
-    # section has no turnaround wrapping it, so the envelope is placed relative to the chamber
-    # end here rather than falling out of the wall construction. Generated whenever a volute is
-    # built, since routing and the keep-out export both need it whether or not the run also
-    # draws a figure for it.
-    state.nozzleKeepOut = keepOutEnvelope(chamberRadius = 0.5*state.chamberDiameter,
-                                         axialOffset   = state.keepOutAxialOffset + min(state.xRegenNozzle),
-                                         radius        = state.keepOutRadius,
-                                         depth         = state.keepOutDepth,
-                                         hubRadius     = state.keepOutHubRadius,
-                                         numPoints     = state.numCSVolute)
-    state.xKeepOut3D, state.yKeepOut3D, state.zKeepOut3D = revolveKeepOut(state.nozzleKeepOut)
 
     return state

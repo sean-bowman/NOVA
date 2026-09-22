@@ -36,7 +36,7 @@ packageDirectory = os.path.join(repositoryRoot, 'src', 'NOVA')
 decomposedModules = (
     'ablative', 'chamber', 'channelGeometry', 'channelSizing', 'characteristics',
     'ceaInterface', 'config',
-    'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'keepOut', 'materials',
+    'contour', 'contourKernel', 'exports', 'figures', 'gasDynamics', 'materials',
     'filmCooling', 'plume', 'radiativeCooling', 'regenChannels', 'regenStations',
     'regenThermal', 'units',
     'validation',

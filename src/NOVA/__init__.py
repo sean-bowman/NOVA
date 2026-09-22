@@ -41,7 +41,7 @@ __version__ = '0.1.0'
 
 from . import (ablative, ceaInterface, chamber, channelGeometry, channelSizing,
                characteristics, config, contour, contourKernel, errors, exports, figures,
-               filmCooling, fluidProperties, gasDynamics, geometryTools, keepOut, materials,
+               filmCooling, fluidProperties, gasDynamics, geometryTools, materials,
                nozzleVolutes, plume, radiativeCooling,
                regenChannels, regenStations, regenThermal, units, validation)
 
@@ -100,7 +100,6 @@ from .fluidProperties import fluidProps, fluidView
 # -- Geometry -- #
 
 from .Volute import Volute
-from .keepOut import KeepOutEnvelope, keepOutEnvelope, packingClearance, revolveKeepOut
 
 # -- Plume -- #
 
@@ -129,9 +128,9 @@ __all__ = [
     # Submodules
     'ablative', 'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing',
     'characteristics', 'config', 'contour', 'contourKernel', 'exports', 'figures',
-    'filmCooling', 'gasDynamics', 'keepOut', 'materials', 'nozzleVolutes', 'plume',
+    'filmCooling', 'gasDynamics', 'materials', 'nozzleVolutes', 'plume',
     'radiativeCooling',
-    'regenChannels', 'regenStations', 'regenThermal', 'units', 'utils', 'validation',
+    'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation',
     # Gas dynamics
     'areaMachRelation', 'conicalLength', 'divergenceLossFactor', 'machAngle', 'machFromAreaRatio',
     'machFromPrandtlMeyerAngle', 'machFromPressureRatio', 'prandtlMeyerAngle', 'radiusMachRelation',
@@ -166,7 +165,7 @@ __all__ = [
     'convertAltitudeToPressure', 'convertPressureToAltitude', 'fluidProps', 'fluidView',
     'isentropicValues', 'Quantity', 'ureg', 'convert', 'toSI', 'fromSI',
     # Geometry
-    'Volute', 'KeepOutEnvelope', 'keepOutEnvelope', 'packingClearance', 'revolveKeepOut',
+    'Volute',
     # Plume
     'PlumeField', 'PlumeStructure', 'machDiskDiameter', 'machDiskLocation',
     'obliqueShockDeflection', 'shockCellLength',

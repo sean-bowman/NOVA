@@ -79,14 +79,6 @@ def exportData(nozzle, filename: str = 'default'):
         shellRegenArray = np.array([-nozzle.xNozzleShell,np.zeros((len(nozzle.xNozzleShell))),nozzle.rNozzleShell]).T
         writeFile(filename[:-4] + 'ShellRegenContour.txt', shellRegenArray*1e3)
 
-    # Chamber closure keep-out. Exported whenever it was built, the same rule every other
-    # geometry here follows: what exists is written, regardless of what was drawn.
-    if nozzle.nozzleKeepOut is not None:
-        keepOutArray = np.array([-nozzle.nozzleKeepOut.x,
-                                 np.zeros(len(nozzle.nozzleKeepOut.x)),
-                                 nozzle.nozzleKeepOut.r]).T
-        writeFile(filename[:-4] + 'KeepOut.txt', keepOutArray*1e3)
-
     # Channels
     if cooledGeometry:
         print(f'Writing Channel Centerline to .txt and Surfaces to .stl')

@@ -160,7 +160,7 @@ class Nozzle:
     cooling and an uncooled radiation-cooled extension attach to the same solve.
 
     Inlet and return volutes, the inlet at the aft end of the jacket and the return at the
-    injector face, and the keep-out envelope.
+    injector face.
 
     Exhaust plume, either from correlations or by continuing the characteristics march past the
     lip.
@@ -502,14 +502,6 @@ class Nozzle:
         self.voluteRelativeRoll                       = None     # [deg]
         self.voluteFOS                                = 1        # []
 
-        self.keepOutAxialOffset                       = None     # [m]
-        self.keepOutRadius                            = None     # [m], None takes the chamber radius
-        self.keepOutDepth                             = None     # [m], None takes half the keep-out radius
-        self.keepOutHubRadius                         = None     # [m], None takes a quarter of the keep-out radius
-        self.nozzleKeepOut: Any                       = None     # KeepOutEnvelope; built when a volute needs it
-        self.xKeepOut3D                               = None     # [m]
-        self.yKeepOut3D                               = None     # [m]
-        self.zKeepOut3D                               = None     # [m]
 
         self.inletVoluteCrossSection                  = None     # 'circle' , 'egg' , 'squarc'
         self.inletVoluteAlignment                     = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'

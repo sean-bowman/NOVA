@@ -904,8 +904,8 @@ def volutesFigure(nozzle):
 
     '''
 
-    The nozzle wall, the chamber and winder keep-out envelopes, and both volutes with their
-    shells and print supports, in one 3D assembly.
+    The nozzle wall and shell, the print bed, and both volutes with their shells and print
+    supports, in one 3D assembly.
 
     A representative channel is highlighted in red so the return volute's smallest cross
     section can be checked by eye against the channel flare it attaches to.
@@ -934,23 +934,10 @@ def volutesFigure(nozzle):
         [min(nozzle.xRegenNozzle), max(nozzle.xRegenNozzle)],
         [0.5 * nozzle.chamberDiameter, 0.5 * nozzle.chamberDiameter])
 
-    # The winder keep-out: the envelope closed back out to the chamber wall along a 35 degree
-    # ramp, which is the shallowest a winder can approach it. Display only, like the print bed.
-    hubX, hubR = nozzle.nozzleKeepOut.hub
-    winderX2D = [hubX, hubX + 0.02,
-                hubX + 0.02 + (0.5 * nozzle.chamberDiameter - hubR) * np.tan(np.deg2rad(35)),
-                nozzle.xRegenNozzle[-1]]
-    winderR2D = [hubR, hubR, nozzle.chamberDiameter * 0.5, nozzle.chamberDiameter * 0.5]
-    winderX, winderY, winderZ = revolveContour(winderX2D, winderR2D)
-
     figure = go.Figure()
     grey = [[0, 'darkgrey'], [1, 'darkgrey']]
     figure.add_trace(go.Surface(x = printZ, y = printX, z = printY, colorscale = grey,
                                 opacity = 0.15, showscale = False))
-    figure.add_trace(go.Surface(x = winderZ, y = winderX, z = winderY, colorscale = grey,
-                                opacity = 0.3, showscale = False))
-    figure.add_trace(go.Surface(x = nozzle.zKeepOut3D, y = nozzle.xKeepOut3D, z = nozzle.yKeepOut3D,
-                                colorscale = grey, opacity = 0.3, showscale = False))
     figure.add_trace(go.Surface(x = nozzle.xNozzleHotWallMesh, y = nozzle.yNozzleHotWallMesh,
                                 z = nozzle.zNozzleHotWallMesh, colorscale = grey, opacity = 0.7,
                                 showscale = False))

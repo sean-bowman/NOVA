@@ -15,7 +15,7 @@ surfaces themselves.
 Two kinds of geometry cover every component NOVA builds, and each has a STEP form that states
 it exactly:
 
-    revolved    The walls and the keep-out are a 2D profile swept about the nozzle axis, which
+    revolved    The walls are a 2D profile swept about the nozzle axis, which
                 is SURFACE_OF_REVOLUTION over a B_SPLINE_CURVE_WITH_KNOTS. The whole component
                 reduces to one spline and one sweep.
     swept       The channels and volutes are a cross section carried along a path, held as a
@@ -659,12 +659,6 @@ def exportNozzleStep(nozzle, folder: str, filename: str = 'nozzle') -> list:
     # -- Revolved walls, which share the contour .txt convention of axial in X -- #
     revolved('HotWall', 'xNozzleWall', 'rNozzleWall')
     revolved('ShellWall', 'xNozzleShell', 'rNozzleShell')
-
-    if getattr(nozzle, 'nozzleKeepOut', None) is not None:
-        keepOut = nozzle.nozzleKeepOut
-        path = os.path.join(folder, f'{filename}KeepOut.step')
-        writeRevolvedContour(path, keepOut.x, keepOut.r, name = f'{filename}KeepOut')
-        written.append(path)
 
     # -- Swept components, each in the axis order py2cad already writes it in -- #
     swept('Channel', ('zChannel', 'yChannel', 'xChannel'), flipAxial = True)

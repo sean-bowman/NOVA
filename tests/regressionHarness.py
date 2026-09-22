@@ -53,7 +53,7 @@ ABSENT = object()
 
 # NOVANozzle.json is the reference nozzle with every feature that composes switched on, which is
 # more than any one baseline pins. This strips it back to a bare contour: no jacket, no film, no
-# volutes, no extension, no keep-out. Every case starts here and switches back on only what it is
+# volutes, no extension. Every case starts here and switches back on only what it is
 # there to record, so a case is a statement about one path rather than about everything the
 # reference nozzle happens to carry.
 strippedToContour = {

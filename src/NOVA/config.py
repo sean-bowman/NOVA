@@ -104,7 +104,6 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
     Regen Volutes:
         - Inlet volute (makeInletVolute, inletVoluteCrossSection, inletVoluteAlignment, etc.)
         - Return volute (makeReturnVolute, returnVoluteCrossSection, returnVoluteAlignment, etc.)
-        - Keep-out envelope (keepOutAxialOffset, keepOutRadius, keepOutDepth, keepOutHubRadius)
         - Grayloc fittings (inletGraylocDiameter, returnGraylocDiameter)
 
     Program Options:
@@ -268,10 +267,6 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.numCSVolute                    = inputsPath['numCSVolute']
         nozzle.numCSPointsVolute              = inputsPath['numCSPointsVolute']
         nozzle.voluteRelativeRoll             = inputsPath['voluteRelativeRoll']
-        nozzle.keepOutAxialOffset             = inputsPath['keepOutAxialOffset']
-        nozzle.keepOutRadius                  = inputsPath['keepOutRadius']
-        nozzle.keepOutDepth                   = inputsPath['keepOutDepth']
-        nozzle.keepOutHubRadius               = inputsPath['keepOutHubRadius']
         nozzle.inletVoluteCrossSection        = inputsPath['inletVoluteCrossSection']
         nozzle.inletVoluteAlignment           = inputsPath['inletVoluteAlignment']
         nozzle.inletVolutePrintability        = inputsPath['inletVolutePrintability']
@@ -292,7 +287,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # -- Program Options -- #
         #
         # One switch for every plot: the contour PNGs, the interactive HTML companions, the
-        # advanced 3D channel and jacket views, and the keep-out envelope trace. A run either
+        # advanced 3D channel and jacket views, and the volute assembly. A run either
         # wants to look at what it built or does not; there was never a real reason to want the
         # jacket view without the contour PNG.
         nozzle.plotsEnabled                   = inputsPath['plotsEnabled']

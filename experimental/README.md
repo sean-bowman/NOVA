@@ -8,6 +8,7 @@ and features taken out of the package that are worth keeping the source of.
 | `tnd2327.py`, `convergeMarch.py`, `convergeRun.py`, `jetNetPrototype.py` | The MOC free-jet plume interior study, described below |
 | `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
 | `flutedChannels.py` | Spirally fluted cooling channels and their blended correlation, removed from the package |
+| `keepOut.py` | The keep-out envelope behind the chamber, which the sunken throat wraps around, removed from the package |
 | `stepExport.py` | STEP export of every nozzle component as exact surfaces, described below |
 | `plumeDevelopmentState.md` | Where the plume solver stands, written to be picked up cold |
 | `coolingModelState.md` | Where the film, radiative and extension cooling work stands, and what is open |
@@ -42,11 +43,23 @@ The correlation is the reason it is here. No source states the blend or its roug
 amplification, the documentation and the code disagreed on its weights, and no measurement is
 available to set it against. The module docstring lists what reinstating it would take.
 
+## Keep-out envelope
+
+`keepOut.py` holds the quarter ellipse of revolution that described the volume behind a chamber
+closure, drawn when the jacket's return turned around on the converging section of a hybrid
+nozzle and routed behind a closure NOVA did not generate. NOVA jackets its own chamber to the
+injector face, where the return volute sits, so the package does not build, draw or export it.
+
+`sunkenNozzle.py` is its one geometric consumer and imports it from beside itself. Nothing ever
+checked geometry against it: `packingClearance` had no caller. The module docstring records a
+default-placement defect, a null axial offset landing the envelope on the throat plane, and what
+reinstating it would take.
+
 ## STEP export
 
 `stepExport.py` writes every component of a finished nozzle to STEP as the exact surfaces it is
-made of, rather than as the triangles `py2cad` produces. The walls and the keep-out become
-surfaces of revolution, 151 entities for a wall that takes 9,702 facets as STL; the channels and
+made of, rather than as the triangles `py2cad` produces. The walls become surfaces of
+revolution, 151 entities for a wall that takes 9,702 facets as STL; the channels and
 volutes become tensor-product B-spline surfaces interpolating the point grids NOVA already holds.
 
 It writes ISO 10303-21 text directly and imports no CAD kernel. Every component is a tube, so

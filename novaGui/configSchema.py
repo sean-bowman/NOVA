@@ -449,14 +449,6 @@ groups = [
               help = 'Number of points defining each volute cross section.'),
         Field('voluteRelativeRoll', 'Volute relative roll', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
               help = 'Roll offset between the inlet and return volutes.'),
-        Field('keepOutAxialOffset', 'Keep-out axial offset', 'float', default = None, unit = 'm', showWhen = _anyVolute,
-              help = 'Axial station of the keep-out shoulder, relative to the chamber end.'),
-        Field('keepOutRadius', 'Keep-out radius', 'float', default = None, unit = 'm', showWhen = _anyVolute,
-              help = 'Widest radius of the keep-out envelope. Blank takes the chamber radius.'),
-        Field('keepOutDepth', 'Keep-out depth', 'float', default = None, unit = 'm', showWhen = _anyVolute,
-              help = 'Axial depth from the keep-out shoulder to its hub. Blank takes half the keep-out radius.'),
-        Field('keepOutHubRadius', 'Keep-out hub radius', 'float', default = None, unit = 'm', showWhen = _anyVolute,
-              help = 'Radius the keep-out is truncated at. Blank takes a quarter of the keep-out radius.'),
         Field('inletVoluteCrossSection', 'Inlet cross section', 'choice',
               choices = [('Circle', 'circle'), ('Egg', 'egg'), ('Squircle', 'squarc')], default = 'circle',
               showWhen = _anyVolute, help = 'Cross-section shape of the inlet volute.'),
@@ -505,7 +497,7 @@ groups = [
         Field('plotsEnabled', 'Plots', 'bool', default = True,
               help = 'Write every figure the run generates: contour, Mach, pressure, temperature '
                      'and near-wall views, the channel-mesh and jacket HTML views, and the volute '
-                     'keep-out view. Forced on by the GUI.'),
+                     'assembly. Forced on by the GUI.'),
         Field('export', 'Export data files', 'bool', default = True,
               help = 'Write contour text files, STL geometry and the pickled nozzle. Forced on by the GUI.'),
     ]),

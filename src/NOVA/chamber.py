@@ -73,7 +73,6 @@ from .geometryTools import arcSpline, parallelOffset
 from .errors import GeometricConstraintError, InvalidInputError
 from .contour import divergingSectionFamily
 from .gasDynamics import isentropicValues, machFromAreaRatio
-from .keepOut import keepOutEnvelope
 from .validation import (Overlay, applyRules, arrayRule, choiceRule, integerRule,
                          numericRule, presentRule, read)
 
@@ -199,8 +198,6 @@ class ConvergingSectionState:
     divergingSectionType:                    Any = None
     hotWallThickness:                        Any = None
     infillThickness:                         Any = None
-    keepOutDepth:                            Any = None
-    keepOutRadius:                           Any = None
     makeInletVolute:                         Any = None
     makeReturnVolute:                        Any = None
     nChannel:                                Any = None
@@ -219,9 +216,6 @@ class ConvergingSectionState:
     chamberContractionRatio:                 Any = None
     chamberLstarActual:                      Any = None
     chamberVolume:                           Any = None
-    keepOutAxialOffset:                      Any = None
-    keepOutHubRadius:                        Any = None
-    nozzleKeepOut:                           Any = None
     nozzleNearWallMachNumber:                Any = None
     rNozzleWall:                             Any = None
     xNozzleWall:                             Any = None
@@ -237,7 +231,7 @@ class ConvergingSectionState:
 # and forgetting to surface it is a one-line fix rather than a silent drop.
 convergingSectionOutputs = (
     'chamberBarrelLength', 'chamberContractionRatio', 'chamberLstarActual', 'chamberVolume',
-    'keepOutAxialOffset', 'keepOutHubRadius', 'nozzleKeepOut', 'nozzleNearWallMachNumber',
+    'nozzleNearWallMachNumber',
     'nozzleNearWallPressure', 'nozzleNearWallRecoveryTemperature', 'nozzleNearWallTemperature',
     'nozzleNearWallVelocity', 'rNozzleWall', 'xNozzleWall')
 
