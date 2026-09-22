@@ -609,8 +609,6 @@ class Nozzle:
         # Outputs
         self.coolantFinalTemperature                  = None     # [K]
         self.coolantFinalPressure                     = None     # [Pa]
-        self.flutedHeatTransferOutputs                = None     # [dict]
-        self.circleHeatTransferOutputs                = None     # [dict]
 
         # -- Plume -- #
 
@@ -1494,8 +1492,8 @@ class Nozzle:
         Returns:
         --------
         tuple
-            Fluted, circular and data-map results, each as an outputs dictionary and a plotting
-            dictionary. A family that was not solved returns empty dictionaries.
+            (heatTransferOutputs, plotOutputs) when `returnDict` is set: the coolant and wall
+            states, and every per-station quantity the figure draws.
 
         '''
 
@@ -1505,15 +1503,13 @@ class Nozzle:
                                       plots = plots, titleFlare = titleFlare,
                                       xReference = xReference, rReference = rReference)
 
-    def regenHeatTransferModelPlots(self, coolant, nChannel, adiabatic = False,
-                                    flutedResults: dict = None, circleResults: dict = None,
-                                    titleFlare: str = '',
+    def regenHeatTransferModelPlots(self, coolant, nChannel, results: dict = None,
+                                    adiabatic = False, titleFlare: str = '',
                                     xReference = [], rReference = []):
 
         '''
 
-        Draw the thermal results, one panel per quantity, with as many channel families overlaid
-        as were solved.
+        Draw the thermal results, one panel per quantity, for this nozzle's channel family.
 
         The figure itself is `regenThermal.regenHeatTransferModelPlots`. This method supplies
         where it is written and whether it is written at all.
@@ -1521,13 +1517,13 @@ class Nozzle:
         Parameters:
         -----------
         coolant : str
-            Coolant species, used for the critical temperature the plot marks.
+            Coolant species.
         nChannel : int
             Channel count, reported in the titles.
+        results : dict
+            Plotting dictionary from the model.
         adiabatic : bool
             Draw the adiabatic cold wall comparison rather than the solved case.
-        flutedResults, circleResults : dict
-            Plotting dictionaries from the model. A family left as None is not drawn.
         titleFlare : str
             Appended to figure titles.
         xReference, rReference : array_like
@@ -1536,9 +1532,10 @@ class Nozzle:
         '''
 
         return drawRegenHeatTransfer(self.regenThermalContext(), coolant, nChannel,
-                                     adiabatic = adiabatic, flutedResults = flutedResults,
-                                     circleResults = circleResults, titleFlare = titleFlare,
-                                     xReference = xReference, rReference = rReference)
+                                     results = results, family = self.channelType,
+                                     adiabatic = adiabatic, titleFlare = titleFlare,
+                                     xReference = xReference, rReference = rReference,
+                                     wallTemperatureLimit = self.maxWallTemperature)
 
     # -- Data Exporting Methods -- #
 

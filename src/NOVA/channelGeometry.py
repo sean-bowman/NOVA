@@ -18,9 +18,10 @@ compressed toward a circle on the hot-wall side, are kept in `experimental/flute
 with the correlation they were rated by.
 
 Two things are returned. The swept surface, as (x, y, z) arrays of shape (numCSPointsChannel,
-numCrossSections), is the geometry. The cross-sectional area, wetted surface area, turn angle
-and radius of curvature at each station are what the thermal model needs. They are returned as
-a dictionary keyed the way that model reads them.
+numCrossSections), is the geometry. The section properties from `channelSections`, the areas
+they make over each station's path length, and the turn angle and radius of curvature at each
+station are what the thermal model needs. They are returned as a dictionary keyed the way that
+model reads them.
 
 ----------------------------------------------------------------------
                         Geometry conventions
@@ -48,6 +49,8 @@ Author: Sean Bowman
 from dataclasses import dataclass
 
 import numpy as np
+
+from .channelSections import SECTIONFAMILIES, sectionProperties
 
 @dataclass
 class ChannelGeometryInputs:
@@ -314,8 +317,9 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         return sweptPoints
 
     # Input validation
-    if crossSectionStyle != 'circle':
-        raise ValueError(f"Unknown crossSectionStyle '{crossSectionStyle}'; the package builds 'circle'.")
+    if crossSectionStyle not in SECTIONFAMILIES:
+        raise ValueError(f"Unknown crossSectionStyle '{crossSectionStyle}'; the package builds "
+                         f"{SECTIONFAMILIES}.")
 
     # Parse input mode: the whole channel, or the one station the sizing march asks for
     if i is None:
@@ -329,8 +333,8 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     # Initialize
     xCircle, yCircle                                                                            \
         = [np.zeros((geometry.numCSPointsChannel, arrLen)) for _ in range(2)]
-    circleCSA, circleSA, turnAngle, radiusOfCurvature                                           \
-        = [np.zeros((arrLen))                          for _ in range(4)]
+    turnAngle, radiusOfCurvature                                                                \
+        = [np.zeros((arrLen))                          for _ in range(2)]
 
     differentialPathLength  = np.sqrt(np.diff(xChannelCenterline3D)**2 + np.diff(yChannelCenterline3D)**2 + np.diff(zChannelCenterline3D)**2)
     differentialPathLength  = np.append(differentialPathLength, differentialPathLength[-1])
@@ -361,9 +365,6 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
         xCircle[:,i] = channelRadius[j] * np.sin(crossSectionAngles) # z coords in 3d
         yCircle[:,i] = channelRadius[j] * np.cos(crossSectionAngles) # y coords in 3d
 
-        circleCSA[i] = np.pi*channelRadius[j]**2
-        circleSA[i]  = np.pi*2*channelRadius[j] * differentialPathLength[j]
-
     # Sweep the circular sections along the centerline
     allCircleChannelPoints = orientCrossSections(stations, np.stack((yCircle, xCircle), axis=-1).transpose(1, 0, 2), crossSectionRoll)
     xChannel = allCircleChannelPoints[:, :, 0].T
@@ -372,14 +373,19 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
     # -- Finish -- #
 
-    if not fullSweep:
-        # make arrays length 1
-        differentialPathLength = np.array([differentialPathLength[j]])
+    # The section at the stations drawn, and the areas it makes over each station's path
+    stationIndex = np.arange(arrLen) if fullSweep else np.array([j])
+    section      = sectionProperties(crossSectionStyle, channelRadius[stationIndex])
+    pathLength   = differentialPathLength[stationIndex]
 
     heatTransferDict = {}
-    heatTransferDict["circleCSA"]              = circleCSA
-    heatTransferDict["circleSA"]               = circleSA
-    heatTransferDict["differentialPathLength"] = differentialPathLength
+    heatTransferDict["flowArea"]               = section.flowArea
+    heatTransferDict["wettedArea"]             = section.wettedPerimeter * pathLength
+    heatTransferDict["heatedArea"]             = section.heatedPerimeter * pathLength
+    heatTransferDict["hydraulicDiameter"]      = section.hydraulicDiameter
+    heatTransferDict["finHeight"]              = section.finHeight
+    heatTransferDict["finThickness"]           = section.finThickness
+    heatTransferDict["differentialPathLength"] = pathLength
     heatTransferDict["turnAngle"]              = turnAngle
     heatTransferDict["radiusOfCurvature"]      = radiusOfCurvature
 

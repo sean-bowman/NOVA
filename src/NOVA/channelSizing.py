@@ -460,8 +460,7 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i = heatTransferDict_i | heatTransferDict_iUpdate
 
         # run single station regen heat transfer model
-        _, _, heatTransferOutputs, plotOutputs \
-            = solveRegenHeatTransfer(thermal, heatTransferDict_i,returnDict=True)
+        heatTransferOutputs, plotOutputs = solveRegenHeatTransfer(thermal, heatTransferDict_i, returnDict=True)
         # update local heat transfer dictionary
         hotWallTemperature                          = heatTransferOutputs['hotWallTemperature']
         heatTransferDict_i['newCoolantTemperature'] = heatTransferOutputs['coolantTemperature'][0]
@@ -887,6 +886,7 @@ def solveChannelRadii(state, geometry, thermal):
             heatTransferDict_i = {}
             # the local dictionary constains scalars and arrays of length 1
             heatTransferDict_i["numCrossSections"]                = 1
+            heatTransferDict_i["channelType"]                     = state.channelType
             heatTransferDict_i["nChannel"]                        = state.nChannel
             heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness
             heatTransferDict_i["throatRadiusOfCurvature"]         = (state.throatInletCurvatureNonDimensional*state.nozzleScalingFactor + \
@@ -960,8 +960,9 @@ def solveChannelRadii(state, geometry, thermal):
     state.channelRadius = channelRadius.copy()
 
     # Heat transfer plots
-    drawRegenHeatTransfer(thermal, coolant=state.coolant,nChannel=state.nChannel,
-                                     circleResults=heatTransferPlots,
-                                     titleFlare=', dcr( ) results',xReference = state.xRegenNozzle, rReference = state.rRegenNozzle)
+    drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
+                          results=heatTransferPlots, family=state.channelType,
+                          titleFlare=', dcr( ) results', xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
+                          wallTemperatureLimit=state.maxWallTemperature)
 
     return state

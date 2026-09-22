@@ -15,9 +15,13 @@ The model takes its geometry and its gas state through one dictionary and reads 
 Nozzle, so it can be driven directly. What it does need from the run around it -- where to
 write figures, which wall alloy, whether to draw anything -- arrives as a RegenThermalContext.
 
-The channels are circular, and the coolant side is Gnielinski with a roughness-corrected
-friction factor. Spirally fluted channels, with the blended correlation they were rated by, are
-kept in experimental/flutedChannels.py.
+One section family is solved per run, named by `channelType` in the input dictionary. The
+family's flow area, heated area, hydraulic diameter and rib are computed by `channelSections`
+before the model sees them, so the model itself does not branch on geometry. The coolant side
+is Gnielinski with a Swamee-Jain friction factor on the hydraulic diameter for every family, and
+a rib between channels, where the family has one, is a straight fin cooled on both faces.
+Spirally fluted channels, with the blended correlation they were rated by, are kept in
+experimental/flutedChannels.py.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -73,12 +77,13 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 from .fluidProperties import fluidProps
-from .errors import ConvergenceFailureError, InvalidInputError
+from .errors import ConvergenceFailureError
 from .ablative import blowingCorrection
+from .channelSections import SECTIONFAMILIES, finEfficiency
 from .figures import regenHeatTransferModelPlots
 from .materials import wallMaterialCurves
 from .radiativeCooling import effectiveGasSideDriving, wallRadiationCoefficient
-from .validation import applyRules, arrayRule, integerRule, numericRule, read, textRule
+from .validation import applyRules, arrayRule, choiceRule, integerRule, numericRule, read, textRule
 
 @dataclass
 class RegenThermalContext:
@@ -287,6 +292,8 @@ class StationWallSolution:
         Wall conductivity sampled at the converged hot wall temperature [W/m K].
     conductiveResistance : float
         Conduction resistance of the wall behind this channel [K/W].
+    finEfficiency : float
+        Efficiency of the rib as a fin [-]. Exactly one where there is no rib.
     heatTransfer : float
         Heat through the wall at this station, per channel [W]. A power, not a flux: the areas
         are already folded into the three resistances.
@@ -311,6 +318,7 @@ class StationWallSolution:
     blowingReduction:             float
     wallConductivity:             float
     conductiveResistance:         float
+    finEfficiency:                float
     heatTransfer:                 float
     hotWallTemperature:           float
     coldWallTemperature:          float
@@ -330,6 +338,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
                                 throatRadiusOfCurvature, throatArea, localArea,
                                 filmMassFlux: float = 0.0, blowingFactor: float = 0.5,
                                 wallEmissivity: float = 0.0, gasEmissivity: float = 0.0,
+                                finHeight: float = 0.0, finThickness: float = 0.0,
                                 tolerance: float = 0.01,
                                 maximumIterations: int = 50) -> StationWallSolution:
 
@@ -380,7 +389,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
     hydraulicDiameter : float
         Channel hydraulic diameter [m].
     coolantWettedArea : float
-        Coolant-side area of this station, per channel [m^2].
+        Coolant-side area the heat enters through directly, before any fin, per channel [m^2].
     hotWallArea : float
         Gas-side area of this station, per channel [m^2].
     hotWallThickness : float
@@ -388,7 +397,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
     wallRadius : float
         Hot wall radius from the nozzle axis [m].
     pathLength : float
-        Length of this station along the channel [m].
+        Length of this station along the channel, the length the fin faces run [m].
     conductivityInterpolator : callable
         Wall conductivity against temperature.
     chamberPressure, characteristicVelocity : float
@@ -407,6 +416,11 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
     gasEmissivity : float
         Total emissivity of the combustion gas over its mean beam length [-]. Zero switches
         radiation off exactly.
+    finHeight, finThickness : float
+        The rib between channels, treated as a straight fin cooled on both faces with an
+        adiabatic tip [m]. It adds 2 eta H of perimeter to the coolant side, with eta taken at
+        the conductivity of the previous pass's cold wall. A height of zero leaves the coolant
+        side exactly as `coolantWettedArea` gives it.
     tolerance : float
         Convergence tolerance on the hot wall temperature [K].
     maximumIterations : int
@@ -424,7 +438,8 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
 
     """
 
-    hotWallTemperatureGuess = drivingTemperature
+    hotWallTemperatureGuess  = drivingTemperature
+    coldWallTemperatureGuess = coolantTemperature
     converged = False
     convergenceIteration = 0
     residual = float('nan')
@@ -442,7 +457,17 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
 
         coolantConvectiveCoefficient = coolantThermalConductivity * coolantNusseltNumber \
                                        / hydraulicDiameter
-        coolantConvectiveResistance = 1 / (coolantConvectiveCoefficient * coolantWettedArea)
+
+        # The rib conducts heat into the coolant through both of its faces, less effectively
+        # the further they reach from the wall. Without a rib the area is the one given.
+        ribEfficiency = 1.0
+        coolantArea   = coolantWettedArea
+        if finHeight > 0:
+            ribEfficiency = finEfficiency(coolantConvectiveCoefficient,
+                                          float(conductivityInterpolator(coldWallTemperatureGuess)),
+                                          finThickness, finHeight)
+            coolantArea   = coolantWettedArea + 2*ribEfficiency*finHeight*pathLength
+        coolantConvectiveResistance = 1 / (coolantConvectiveCoefficient * coolantArea)
 
         conductiveResistance = wallConductionResistance(hotWallThickness, wallRadius,
                                                         wallConductivity, hotWallArea)
@@ -487,7 +512,8 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         if residual < tolerance:
             converged = True
         else:
-            hotWallTemperatureGuess = hotWallTemperature
+            hotWallTemperatureGuess  = hotWallTemperature
+            coldWallTemperatureGuess = coldWallTemperature
 
     return StationWallSolution(
         coolantConvectiveCoefficient = coolantConvectiveCoefficient,
@@ -498,6 +524,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         blowingReduction             = blowingReduction,
         wallConductivity             = wallConductivity,
         conductiveResistance         = conductiveResistance,
+        finEfficiency                = ribEfficiency,
         heatTransfer                 = heatTransfer,
         hotWallTemperature           = hotWallTemperature,
         coldWallTemperature          = coldWallTemperature,
@@ -510,14 +537,14 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
 # rather than as branches: see validation.py.
 #
 # The dictionary carries one entry per station for the distributed quantities and a scalar for the
-# rest. A run must carry the circular cross section, which is the one rule the table cannot
-# express and that is checked alongside it.
+# rest. The section arrays are the family's, computed by channelSections, so the table checks
+# them the same way whatever the family is.
 
-def _hasCircularSection(inputs):
+def _hasFin(inputs):
 
-    '''True when the dictionary carries a circular cross section to solve.'''
+    '''True when the dictionary carries a rib to treat as a fin.'''
 
-    return read(inputs, 'circleCSA') is not None and read(inputs, 'circleSA') is not None
+    return read(inputs, 'finHeight') is not None
 
 def _hasDrivingTemperature(inputs):
 
@@ -576,10 +603,16 @@ regenThermalRules = (
     arrayRule('nearWallMachNumber', 'Near wall Mach number'),
 
     # -- The cross section being solved -- #
-    arrayRule('circleCSA', 'Circular cross-sectional area', units = 'm^2',
-              positive = True, sameLengthAs = 'xHotWall3D', when = _hasCircularSection),
-    arrayRule('circleSA', 'Circular wetted area', units = 'm^2',
-              positive = True, sameLengthAs = 'xHotWall3D', when = _hasCircularSection),
+    choiceRule('channelType', 'Channel cross section', choices = SECTIONFAMILIES),
+    arrayRule('flowArea', 'Channel flow area', units = 'm^2',
+              positive = True, sameLengthAs = 'xHotWall3D'),
+    arrayRule('heatedArea', 'Coolant-side heated area per station', units = 'm^2',
+              positive = True, sameLengthAs = 'xHotWall3D'),
+    arrayRule('hydraulicDiameter', 'Channel hydraulic diameter', units = 'm',
+              positive = True, sameLengthAs = 'xHotWall3D'),
+    arrayRule('finHeight', 'Rib height', units = 'm', sameLengthAs = 'xHotWall3D', when = _hasFin),
+    arrayRule('finThickness', 'Rib thickness', units = 'm', sameLengthAs = 'xHotWall3D',
+              when = _hasFin),
 
     # -- What the solve can be given, and runs without -- #
     #
@@ -602,8 +635,7 @@ def validateRegenHeatTransferInputs(inputsDict: dict) -> None:
 
     Check that the thermal model has what it needs before it starts marching.
 
-    The rules are the table above, checked by `validation.applyRules`, plus the one thing a table
-    cannot say: a run has to carry a cross section, or there is nothing to solve.
+    The rules are the table above, checked by `validation.applyRules`.
 
     Parameters:
     -----------
@@ -617,126 +649,46 @@ def validateRegenHeatTransferInputs(inputsDict: dict) -> None:
 
     """
 
-    if not _hasCircularSection(inputsDict):
-        raise InvalidInputError(
-            message = ('No channel cross section was supplied, so there is nothing to solve. '
-                       'Provide circleCSA and circleSA'),
-            parameterName = 'circleCSA, circleSA',
-            value = None,
-            validRange = 'A circular cross section')
-
     applyRules(inputsDict, regenThermalRules)
 
 def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperature: float = None,
                            returnDict: bool = False, plots: bool = True, titleFlare: str = '',
                            xReference = [], rReference = []):
 
-    r'''
+    '''
 
-    -- Regenerative Cooling Channels Heat Transfer Model (Version 2) --
+    Solve the coolant and wall along one channel, marching from the coolant inlet.
 
-    This function structures the heat transfer model for the regenerative
-    cooling jacket: the heat transfer into the coolant, the hot wall
-    temperature it holds, and the resultant fluid properties.
+    At each station the coolant properties are taken at the local state, the friction factor and
+    Nusselt number from Swamee-Jain and Gnielinski on the section's hydraulic diameter, the
+    pressure drop from friction and the bend loss, and the hot wall temperature from
+    `solveStationWallTemperature`. The heat the station passes raises the coolant for the next.
 
-    ---------------------------------------------------------------------------
-    # Inputs (Editing Config_File.csv)
-    ---------------------------------------------------------------------------
-    Interfacing with the Regeneratively Cooled Nozzle Design Module is done through editing Config_File.csv
+    Parameters:
+    -----------
+    context : RegenThermalContext
+        Where figures go and which wall alloy the conductivity is read for.
+    inputsDict : dict
+        Geometry, gas state and coolant state. `regenThermalRules` lists the keys. The station
+        arrays are indexed along the nozzle, and the march runs from the last index to the first.
+        One station is solved on its own, for the sizing march, when `numCrossSections` is one.
+    constantColdWallTemperature : float
+        Fixes the cold wall rather than solving for it, which runs the adiabatic comparison [K].
+    returnDict : bool
+        Return the results rather than only drawing them. Always true for a single station.
+    plots : bool
+        Draw the result, subject to the context. Always false for a single station.
+    titleFlare : str
+        Appended to the figure title.
+    xReference, rReference : array_like
+        Wall contour drawn under the results [m].
 
-    From the Matlab folder structure, right click the Config_File_RND.csv and select "Open Outside MATLAB".
-    Make any changes to the configuration as necessary and, if applicable, change the configuration name to
-    make distinct the current function run from other configurations. The configuration name (specified in the
-    top right of the config file) names the top directory under the Outputs folder of the current project, and
-    all subsequent runs of the function's outputs are stored in a datetime'd folder under the top directory
-    specified by the configuration name given in the config file.
-
-    If navigating to the repository through the Windows File Explorer, simply open the Config_File.csv in an
-    appropriate .csv editor (such as Microsoft Excel) to make the required configuration changes before a run.
-
-    ---------------------------------------------------------------------------
-    ## Geometry Parameters
-    ---------------------------------------------------------------------------
-    Certain geometric properties of the channels are editable by the user:
-
-    | Variable Description                   |  Units |
-    |:--------------------------------------:|-------:|
-    | Hot Wall Thickness                     |    [m] |
-    | Channel Radius at Regen Inlet          |    [m] |
-    | Channel Radius at Regen Throat         |    [m] |
-    | Channel Radius at Nozzle Throat Inlet  |    [m] |
-    | Channel Radius at Chamber Interface      |    [m] |
-    | Channel Radius at Regen Return         |    [m] |
-    | Infill Thickness                       |    [m] |
-    | Channel Number Modifier                | [double, % reduction from 1] |
-
-    ---------------------------------------------------------------------------
-    ## Fluid Properties
-    ---------------------------------------------------------------------------
-    Parameters pertaining to the heat transfer model may also be supplied by
-    the user:
-
-    | Variable Description | Units  |
-    |:--------------------:|-------:|
-    | Coolant Species      | [Case Insensitive String] |
-    | Initial Temperature  |    [K] |
-    | Initial Pressure     |   [Pa] |
-    | Total Mass Flow      | [kg/s] |
-
-    ---------------------------------------------------------------------------
-    ## Options
-    ---------------------------------------------------------------------------
-    Certain functionality of the code can be disabled/enabled by entering either a 0 or a 1
-    respectively for the presented options in the config file.
-
-    | Option Functionality                                                                 |   Input Options  |
-    |:------------------------------------------------------------------------------------:|-----------------:|
-    | Enable/disable gaussian cross section compression                                    | $\epsilon$ [0,1] |
-    | Declaring the half compression to be over the entire channel length                  | $\epsilon$ [0,1] |
-    | Enable/disable circular inlet and outlet regions of pipe for CAD volute intersection | $\epsilon$ [0,1] |
-    | Enable/disable rectangular single-channel cutout generation for CAD                  | $\epsilon$ [0,1] |
-    | Enable/disable plotted outputs                                                       | $\epsilon$ [0,1] |
-    | Enable/disable command window progress bar                                           | $\epsilon$ [0,1] |
-    | Enable/disable exporting geometry of the generated mesh                              | $\epsilon$ [0,1] |
-    | Declare export type for geometry exporter                                            | case insensitive string |
-    | Integer subdivision of arrays to increase final .stl fidelity (linear increase in array length) | [int] |
-
-    ---------------------------------------------------------------------------
-    # Outputs
-    ---------------------------------------------------------------------------
-    The geometry generator function creates two output arrays, one for the channel geometry and
-    one for the nozzle geometry. All outputs are in Mass Base SI Units [m,Pa,K,etc.]:
-
-    - Channel Geometric Parameters (14 x n Array):
-        + X coordinates of channel pathline
-        + Channel Radius Array
-        + Channel Cross Sectional Area Array
-        + Channel Surface Area Array
-        + Channel Circumference Array
-        + Segmented Length of Pathline Array
-        + Total Channel Length
-        + Channel Helix Angle
-        + Number of Channels
-
-    - Nozzle Geometric Parameters (4 x n Array):
-        + Nozzle axial coordinates (Inner Nozzle Wall)
-        + Nozzle radial coordinates (Inner Nozzle Wall)
-        + Nozzle wall offset (parallel offset by wall thickness)
-        + Nozzle inner wall circumference
-
-    The heat transfer model outputs only two parameters:
-
-    - Total Pressure Drop
-    - Fluid Temperature at Nozzle/Chamber Interface
-
-    # Required code(s):
-    All codes required to run the design code are present in the project. When the project file (RegenNozzleDesignModule.prj)
-    is opened (initialized) all subfolders in the project are added to the current path, so no additional
-    effort is required on behalf of the user. The relevant functions that live in the project subfolders
-    that are needed to run this design code are as follows:
-
-    - refWrap.m
-    - intersections.m
+    Returns:
+    --------
+    tuple
+        (heatTransferOutputs, plotOutputs) when `returnDict` is set: the coolant pressure and
+        temperature and the two wall temperatures, and every per-station quantity the figure
+        draws.
 
     Author: Sean Bowman
     Date:   01/17/2023
@@ -912,9 +864,11 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     throatRadiusOfCurvature   = inputsDict["throatRadiusOfCurvature"]
     throatDiameter            = inputsDict["throatDiameter"]
     throatArea                = inputsDict["throatArea"]
-    # Cross section and centerline geometric properties
-    circleCSA                 = inputsDict["circleCSA"]
-    circleSA                  = inputsDict["circleSA"]
+    # Cross section and centerline geometric properties, computed for the family by channelSections
+    channelType               = inputsDict["channelType"]
+    flowArea                  = inputsDict["flowArea"]
+    heatedArea                = inputsDict["heatedArea"]
+    hydraulicDiameter         = inputsDict["hydraulicDiameter"]
     differentialPathLength    = inputsDict["differentialPathLength"]
     turnAngle                 = inputsDict["turnAngle"]
     radiusOfCurvature         = inputsDict["radiusOfCurvature"]
@@ -972,7 +926,10 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     blowingFactor  = optionalScalar('blowingFactor', 0.5)
     gasEmissivity  = optionalInput('gasEmissivity', 0.0)
     filmMassFlux   = optionalInput('filmMassFlux', 0.0)
-    circleHydraulicDiameter = np.sqrt(4 * circleCSA / np.pi)
+
+    # A family without a rib carries none, and zero height leaves the coolant side untouched.
+    finHeight      = optionalInput('finHeight', 0.0)
+    finThickness   = optionalInput('finThickness', 0.0)
 
     # Temperature-dependent wall thermal conductivity for the selected alloy, sampled from
     # materials.wallMaterialCurves. Legacy 'cu' / 'al' / 'in' keys still resolve.
@@ -994,32 +951,32 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # Collapse array initializations
     if True:
 
-        # Circular Cooling Channel Geometry and Flow Properties
-        circleCoolantTemperature, circleCoolantPressure, circleCoolantVelocity, \
-        circleCoolantMachNumber, circleCoolantReynoldsNumber, circleCoolantNusseltNumber, \
-        circleCoolantConvectiveHeatTransferCoef, circleExhaustConvectiveHeatTransferCoef, circleHeatTransfer, circleWallConductivity, \
-        circleHotWallTemperature, circleColdWallTemperature \
+        # Cooling Channel Flow Properties
+        coolantTemperature, coolantPressure, coolantVelocity, \
+        coolantMachNumber, coolantReynoldsNumber, coolantNusseltNumber, \
+        coolantConvectiveHeatTransferCoef, exhaustConvectiveHeatTransferCoef, heatTransfer, wallConductivity, \
+        hotWallTemperature, coldWallTemperature \
         = [np.zeros(numCrossSections) for _ in range(12)]
 
-        circleCoolantTemperature[-1] = coolantInitialTemperature
-        circleCoolantPressure[-1]    = coolantInitialPressure
+        coolantTemperature[-1] = coolantInitialTemperature
+        coolantPressure[-1]    = coolantInitialPressure
 
-        # Circle Cooling Channel Thermophysical Properties
-        circleCoolantDensity, circleCoolantViscosity, circleCoolantSpecificHeat, \
-        circleCoolantGamma, circleCoolantThermalConductivity, circleCoolantSpeedOfSound, \
-        circleCoolantEnthalpy, circleCoolantPrandtlNumber \
+        # Cooling Channel Thermophysical Properties
+        coolantDensity, coolantViscosity, coolantSpecificHeat, \
+        coolantGamma, coolantThermalConductivity, coolantSpeedOfSound, \
+        coolantEnthalpy, coolantPrandtlNumber \
         = [np.zeros(numCrossSections) for _ in range(8)]
 
-        circleCoolantThermalConductivity[-1] = np.mean(wallThermalConductivityData)
+        coolantThermalConductivity[-1] = np.mean(wallThermalConductivityData)
 
         # Radiation is reported separately from the total so a reader can see how
         # much of the flux it actually is, and the blowing factor so a film-cooled run
         # shows how much of the coefficient it removed. Inert values unless asked for.
-        circleRadiativeHeatTransfer = np.zeros(numCrossSections)
-        circleBlowingReduction      = np.ones(numCrossSections)
+        radiativeHeatTransfer = np.zeros(numCrossSections)
+        blowingReduction      = np.ones(numCrossSections)
 
         # Adiabatic Cold Wall Properties
-        circleAdiabaticConvectiveHeatTransferCoef, circleAdiabaticHeatTransfer, \
+        adiabaticConvectiveHeatTransferCoef, adiabaticHeatTransfer, \
         = [np.zeros(numCrossSections) for _ in range(2)]
 
     # -- Loop over channel sections and calculate heat transfer properties -- #
@@ -1070,37 +1027,37 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
             return K_bend
 
-        # Circular Channel Properties
+        # Channel Properties
 
         # Pull thermophysical properties at the current (T, P) with RefProp
-        circleCoolantDensity[i], circleCoolantViscosity[i], circleCoolantSpecificHeat[i], \
-        circleCoolantGamma[i], circleCoolantThermalConductivity[i], circleCoolantSpeedOfSound[i], \
-        circleCoolantEnthalpy[i], circleCoolantPrandtlNumber[i] \
-        = fluidProps(coolant, 'TP', 'D VIS Cp Cp/Cv TCX W H PRANDTL', circleCoolantTemperature[i], circleCoolantPressure[i])
+        coolantDensity[i], coolantViscosity[i], coolantSpecificHeat[i], \
+        coolantGamma[i], coolantThermalConductivity[i], coolantSpeedOfSound[i], \
+        coolantEnthalpy[i], coolantPrandtlNumber[i] \
+        = fluidProps(coolant, 'TP', 'D VIS Cp Cp/Cv TCX W H PRANDTL', coolantTemperature[i], coolantPressure[i])
 
         # Calculate dependept flow properties
-        circleCoolantVelocity[i]       = mdot / (circleCoolantDensity[i] * circleCSA[i])
-        circleCoolantMachNumber[i]     = circleCoolantVelocity[i] / circleCoolantSpeedOfSound[i]
-        circleCoolantReynoldsNumber[i] = circleCoolantDensity[i] * circleHydraulicDiameter[i] * circleCoolantVelocity[i] / circleCoolantViscosity[i]
+        coolantVelocity[i]       = mdot / (coolantDensity[i] * flowArea[i])
+        coolantMachNumber[i]     = coolantVelocity[i] / coolantSpeedOfSound[i]
+        coolantReynoldsNumber[i] = coolantDensity[i] * hydraulicDiameter[i] * coolantVelocity[i] / coolantViscosity[i]
 
         # Calculate Nusselt Number
-        # Petukhov friction factor for Gnielinski Nusselt Number for turbulent internal flows for circle channels
+        # Swamee-Jain friction factor for the Gnielinski Nusselt number, on the hydraulic diameter
         surfaceRoughness       = 35e-6 # Velo3D GRCop-42 material datasheet
-        circleFrictionFactor          = 0.25 / (np.log10((surfaceRoughness / circleHydraulicDiameter[i])/3.7 + 5.74/circleCoolantReynoldsNumber[i]**0.9))**2
-        circleCoolantNusseltNumber[i] = ((circleFrictionFactor / 8) * (circleCoolantReynoldsNumber[i] - 1000) * circleCoolantPrandtlNumber[i]) / \
-                                        (1 + 12.7 * (circleFrictionFactor / 8)**(1/2) * (circleCoolantPrandtlNumber[i]**(2/3) - 1))
+        frictionFactor          = 0.25 / (np.log10((surfaceRoughness / hydraulicDiameter[i])/3.7 + 5.74/coolantReynoldsNumber[i]**0.9))**2
+        coolantNusseltNumber[i] = ((frictionFactor / 8) * (coolantReynoldsNumber[i] - 1000) * coolantPrandtlNumber[i]) / \
+                                        (1 + 12.7 * (frictionFactor / 8)**(1/2) * (coolantPrandtlNumber[i]**(2/3) - 1))
 
         # Calculate pressure drop and update downstream pressure for each channel section
-        momentumLossCoef = findKFactor(turnAngle[i], radiusOfCurvature[i], circleHydraulicDiameter[i])
+        momentumLossCoef = findKFactor(turnAngle[i], radiusOfCurvature[i], hydraulicDiameter[i])
 
-        frictionPressureDrop = differentialPathLength[i] * circleFrictionFactor * circleCoolantDensity[i] * circleCoolantVelocity[i]**2 / (2 * circleHydraulicDiameter[i])
-        momentumPressureDrop = momentumLossCoef * circleCoolantDensity[i] * circleCoolantVelocity[i]**2 / 2
+        frictionPressureDrop = differentialPathLength[i] * frictionFactor * coolantDensity[i] * coolantVelocity[i]**2 / (2 * hydraulicDiameter[i])
+        momentumPressureDrop = momentumLossCoef * coolantDensity[i] * coolantVelocity[i]**2 / 2
         totalPressureDrop    = frictionPressureDrop + momentumPressureDrop
 
         if i > 0:
-            circleCoolantPressure[i-1] = circleCoolantPressure[i] - totalPressureDrop
+            coolantPressure[i-1] = coolantPressure[i] - totalPressureDrop
         if iterationMode == 'single':
-            circleCoolantPressure[i] = circleCoolantPressure[i] - totalPressureDrop
+            coolantPressure[i] = coolantPressure[i] - totalPressureDrop
 
         # Check if there are any nans anywhere in here
         if True:
@@ -1125,7 +1082,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
             def hotWallConvergenceLoops(throatRadiusOfCurvature):
 
-                # Circle Hot Wall Temperature Convergence
+                # Hot Wall Temperature Convergence
 
                 # The solve raises on a NaN wall temperature rather than letting one propagate
                 # a hundred stations downstream. Catching it here is what lets the local state
@@ -1138,13 +1095,13 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                         gasGamma                   = exhaustGamma[i],
                         gasConstant                = exhaustGasConstant[i],
                         gasMolecularWeight         = exhaustMolecularWeight[i],
-                        coolantTemperature         = circleCoolantTemperature[i],
-                        coolantThermalConductivity = circleCoolantThermalConductivity[i],
-                        coolantNusseltNumber       = circleCoolantNusseltNumber[i],
-                        coolantSpecificHeat        = circleCoolantSpecificHeat[i],
+                        coolantTemperature         = coolantTemperature[i],
+                        coolantThermalConductivity = coolantThermalConductivity[i],
+                        coolantNusseltNumber       = coolantNusseltNumber[i],
+                        coolantSpecificHeat        = coolantSpecificHeat[i],
                         coolantMassFlow            = mdot,
-                        hydraulicDiameter          = circleHydraulicDiameter[i],
-                        coolantWettedArea          = circleSA[i]/2,
+                        hydraulicDiameter          = hydraulicDiameter[i],
+                        coolantWettedArea          = heatedArea[i],
                         hotWallArea                = hotWallArea[i],
                         hotWallThickness           = hotWallThickness,
                         wallRadius                 = rHotWall3D[i],
@@ -1160,43 +1117,45 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                         blowingFactor              = blowingFactor,
                         wallEmissivity             = wallEmissivity,
                         gasEmissivity              = gasEmissivity[i],
+                        finHeight                  = finHeight[i],
+                        finThickness               = finThickness[i],
                         tolerance                  = 0.01)
                 except ValueError as error:
                     debugFile = dumpDebugInfo(locals(), i, time.time() - start_time)
-                    raise ValueError('{} Station {}, circle channel.{}'.format(
-                        error, i, ' Local state written to {}.'.format(debugFile)
+                    raise ValueError('{} Station {}, {} channel.{}'.format(
+                        error, i, channelType, ' Local state written to {}.'.format(debugFile)
                         if debugFile else '')) from error
 
-                circleWallConductivity[i]                  = solution.wallConductivity
-                circleCoolantConvectiveHeatTransferCoef[i] = solution.coolantConvectiveCoefficient
-                circleExhaustConvectiveHeatTransferCoef[i] = solution.exhaustConvectiveCoefficient
-                circleHeatTransfer[i]                      = solution.heatTransfer
-                circleHotWallTemperature[i]                = solution.hotWallTemperature
-                circleColdWallTemperature[i]               = solution.coldWallTemperature
-                circleRadiativeHeatTransfer[i]             = solution.radiativeHeatTransfer
-                circleBlowingReduction[i]                  = solution.blowingReduction
+                wallConductivity[i]                  = solution.wallConductivity
+                coolantConvectiveHeatTransferCoef[i] = solution.coolantConvectiveCoefficient
+                exhaustConvectiveHeatTransferCoef[i] = solution.exhaustConvectiveCoefficient
+                heatTransfer[i]                      = solution.heatTransfer
+                hotWallTemperature[i]                = solution.hotWallTemperature
+                coldWallTemperature[i]               = solution.coldWallTemperature
+                radiativeHeatTransfer[i]             = solution.radiativeHeatTransfer
+                blowingReduction[i]                  = solution.blowingReduction
 
                 # The march runs from the coolant inlet toward the chamber, so the heat picked
                 # up here raises the coolant at the next station down the index. A single
                 # station has no next one, so it takes the rise itself.
                 if i > 0:
-                    circleCoolantTemperature[i-1] = circleCoolantTemperature[i] + solution.coolantTemperatureRise
+                    coolantTemperature[i-1] = coolantTemperature[i] + solution.coolantTemperatureRise
                 if solution.converged and iterationMode == 'single':
-                    circleCoolantTemperature[i] = circleCoolantTemperature[i] + solution.coolantTemperatureRise
+                    coolantTemperature[i] = coolantTemperature[i] + solution.coolantTemperatureRise
 
                 if not solution.converged:
                     raise ConvergenceFailureError(
-                        message = 'Circle hot wall temperature convergence failed at station '
+                        message = 'Hot wall temperature convergence failed at station '
                                   '{} after {} iterations'.format(i, solution.iterations),
                         context = {
                             'stationIndex': i,
                             'iterationCount': solution.iterations,
                             'residual': solution.residual,
                             'tolerance': 0.01,
-                            'circleHotWallTemperature': solution.hotWallTemperature,
-                            'circleHeatTransfer': solution.heatTransfer,
+                            'hotWallTemperature': solution.hotWallTemperature,
+                            'heatTransfer': solution.heatTransfer,
                             'regenSectionNearWallTemperature': nearWallTemperature[i],
-                            'circleCoolantTemperature': circleCoolantTemperature[i]
+                            'coolantTemperature': coolantTemperature[i]
                         },
                         iterations = solution.iterations,
                         tolerance = 0.01,
@@ -1207,16 +1166,16 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         # Adiabatic cold wall
         else:
 
-            circleAdiabaticConvectiveHeatTransferCoef[i] = circleCoolantThermalConductivity[i] * circleCoolantNusseltNumber[i] / \
-                                                     circleHydraulicDiameter[i]
-            adiabaticConvectiveResistance = 1 / (circleAdiabaticConvectiveHeatTransferCoef[i] * circleCSA[i])
+            adiabaticConvectiveHeatTransferCoef[i] = coolantThermalConductivity[i] * coolantNusseltNumber[i] / \
+                                                     hydraulicDiameter[i]
+            adiabaticConvectiveResistance = 1 / (adiabaticConvectiveHeatTransferCoef[i] * flowArea[i])
 
-            circleAdiabaticHeatTransfer[i] = (constantColdWallTemperature - circleCoolantTemperature[i]) / (adiabaticConvectiveResistance)
+            adiabaticHeatTransfer[i] = (constantColdWallTemperature - coolantTemperature[i]) / (adiabaticConvectiveResistance)
 
             if i > 0:
-                circleCoolantTemperature[i-1] = circleCoolantTemperature[i] + (circleAdiabaticHeatTransfer[i] / (mdot * circleCoolantSpecificHeat[i]))
+                coolantTemperature[i-1] = coolantTemperature[i] + (adiabaticHeatTransfer[i] / (mdot * coolantSpecificHeat[i]))
             if iterationMode == 'single':
-                circleCoolantTemperature[i] = circleCoolantTemperature[i] + (circleAdiabaticHeatTransfer[i] / (mdot * circleCoolantSpecificHeat[i]))
+                coolantTemperature[i] = coolantTemperature[i] + (adiabaticHeatTransfer[i] / (mdot * coolantSpecificHeat[i]))
 
     if iterationMode == 'loop':
 
@@ -1239,64 +1198,59 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
     # Collect outputs
     if not runAdiabaticColdWall:
-        flutedHeatTransferOutputs = {}
-        flutedPlotOutputs = {}
-        circleHeatTransferOutputs = {
-            'coolantPressure':     circleCoolantPressure,
-            'coolantTemperature':  circleCoolantTemperature,
-            'hotWallTemperature':  circleHotWallTemperature,
-            'coldWallTemperature': circleColdWallTemperature
+        heatTransferOutputs = {
+            'coolantPressure':     coolantPressure,
+            'coolantTemperature':  coolantTemperature,
+            'hotWallTemperature':  hotWallTemperature,
+            'coldWallTemperature': coldWallTemperature
         }
-        circlePlotOutputs = {
+        plotOutputs = {
             'xHotWall3D'                        : xHotWall3D,
             'rHotWall3D'                        : rHotWall3D,
-            'temperature'                       : circleCoolantTemperature,
-            'pressure'                          : circleCoolantPressure,
-            'wallTemperature'                   : circleHotWallTemperature,
-            'velocity'                          : circleCoolantVelocity,
-            'machNumber'                        : circleCoolantMachNumber,
-            'heatTransfer'                      : circleHeatTransfer,
-            'density'                           : circleCoolantDensity,
-            'viscosity'                         : circleCoolantViscosity,
-            'specificHeat'                      : circleCoolantSpecificHeat,
-            'nusseltNumber'                     : circleCoolantNusseltNumber,
-            'exhaustConvectiveHeatTransferCoef' : circleExhaustConvectiveHeatTransferCoef,
-            'coolantConvectiveHeatTransferCoef' : circleCoolantConvectiveHeatTransferCoef,
-            'reynoldsNumber'                    : circleCoolantReynoldsNumber,
-            'radiativeHeatTransfer'             : circleRadiativeHeatTransfer,
+            'temperature'                       : coolantTemperature,
+            'pressure'                          : coolantPressure,
+            'wallTemperature'                   : hotWallTemperature,
+            'velocity'                          : coolantVelocity,
+            'machNumber'                        : coolantMachNumber,
+            'heatTransfer'                      : heatTransfer,
+            'density'                           : coolantDensity,
+            'viscosity'                         : coolantViscosity,
+            'specificHeat'                      : coolantSpecificHeat,
+            'nusseltNumber'                     : coolantNusseltNumber,
+            'exhaustConvectiveHeatTransferCoef' : exhaustConvectiveHeatTransferCoef,
+            'coolantConvectiveHeatTransferCoef' : coolantConvectiveHeatTransferCoef,
+            'reynoldsNumber'                    : coolantReynoldsNumber,
+            'radiativeHeatTransfer'             : radiativeHeatTransfer,
             'drivingTemperature'                : drivingTemperature
         }
 
     else:
-        flutedHeatTransferOutputs = {}
-        flutedPlotOutputs = {}
-        circleHeatTransferOutputs = {
-            'coolantPressure':     circleCoolantPressure,
-            'coolantTemperature':  circleCoolantTemperature,
-            'hotWallTemperature':  circleHotWallTemperature,
-            'coldWallTemperature': circleColdWallTemperature
+        heatTransferOutputs = {
+            'coolantPressure':     coolantPressure,
+            'coolantTemperature':  coolantTemperature,
+            'hotWallTemperature':  hotWallTemperature,
+            'coldWallTemperature': coldWallTemperature
         }
-        circlePlotOutputs = {
+        plotOutputs = {
             'xHotWall3D'                          : xHotWall3D,
             'rHotWall3D'                          : rHotWall3D,
-            'temperature'                         : circleCoolantTemperature,
-            'pressure'                            : circleCoolantPressure,
-            'specificHeat'                        : circleCoolantSpecificHeat,
-            'adiabaticConvectiveHeatTransferCoef' : circleAdiabaticConvectiveHeatTransferCoef
+            'temperature'                         : coolantTemperature,
+            'pressure'                            : coolantPressure,
+            'specificHeat'                        : coolantSpecificHeat,
+            'adiabaticConvectiveHeatTransferCoef' : adiabaticConvectiveHeatTransferCoef
         }
 
     # Plots
     if plots and context.plotsEnabled == 'on':
         if not runAdiabaticColdWall:
-            regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel,\
-                                             flutedResults=flutedPlotOutputs, circleResults=circlePlotOutputs, titleFlare=titleFlare,
-                                             xReference=xReference, rReference=rReference)
+            regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel,
+                                        results=plotOutputs, family=channelType, titleFlare=titleFlare,
+                                        xReference=xReference, rReference=rReference)
         else:
-            regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel, adiabatic=True,\
-                                             flutedResults=flutedPlotOutputs, circleResults=circlePlotOutputs, titleFlare=titleFlare,
-                                             xReference=xReference, rReference=rReference)
+            regenHeatTransferModelPlots(context, coolant=coolant, nChannel=nChannel, adiabatic=True,
+                                        results=plotOutputs, family=channelType, titleFlare=titleFlare,
+                                        xReference=xReference, rReference=rReference)
 
     # Return
     if returnDict:
-        return flutedHeatTransferOutputs, flutedPlotOutputs, \
-                circleHeatTransferOutputs, circlePlotOutputs
+        return heatTransferOutputs, plotOutputs

@@ -21,7 +21,7 @@ planar curve the frame acquires no rotation about the tangent at all, which is t
 keeps a section from winding up where the curve happens to bend.
 
 **A circular cross section is a circle.** Its points lie at exactly the channel radius from the
-centerline, in the plane normal to the local tangent, and its area is exactly pi r squared.
+centerline, in the plane normal to the local tangent, and its flow area is exactly pi r squared.
 
 Author: Sean Bowman
 
@@ -147,12 +147,12 @@ class TestCircularCrossSection:
 
         _, _, heatTransfer, channelRadius = self.sweep()
 
-        assert np.allclose(heatTransfer['circleCSA'], np.pi * channelRadius**2, rtol = 1e-14)
+        assert np.allclose(heatTransfer['flowArea'], np.pi * channelRadius**2, rtol = 1e-14)
 
     def testTheAreaScalesWithTheSquareOfTheRadius(self):
 
-        small = self.sweep(channelRadius = 0.001)[2]['circleCSA'][0]
-        large = self.sweep(channelRadius = 0.002)[2]['circleCSA'][0]
+        small = self.sweep(channelRadius = 0.001)[2]['flowArea'][0]
+        large = self.sweep(channelRadius = 0.002)[2]['flowArea'][0]
 
         assert large / small == pytest.approx(4.0, rel = 1e-12)
 
@@ -257,8 +257,8 @@ class TestSingleStation:
 
         for station in (0, 7, numStations - 1):
             single = generateCrossSections(geometry, x, y, z, radius, 'circle', i = station)
-            assert single['circleCSA'][0] == pytest.approx(full['circleCSA'][station], rel = 1e-12)
-            assert single['circleSA'][0]  == pytest.approx(full['circleSA'][station],  rel = 1e-12)
+            assert single['flowArea'][0] == pytest.approx(full['flowArea'][station], rel = 1e-12)
+            assert single['wettedArea'][0]  == pytest.approx(full['wettedArea'][station],  rel = 1e-12)
 
 class TestChannelTypeAliasing:
 

@@ -319,8 +319,10 @@ class TestInputValidation:
             'gasConstant'              : np.full(stations, 378.0),
             'nearWallTemperature'      : np.full(stations, 2000.0),
             'nearWallMachNumber'       : np.linspace(0.2, 3.0, stations),
-            'circleCSA'                : np.full(stations, 1.0e-5),
-            'circleSA'                 : np.full(stations, 1.0e-4),
+            'channelType'              : 'circle',
+            'flowArea'                 : np.full(stations, 1.0e-5),
+            'heatedArea'               : np.full(stations, 5.0e-5),
+            'hydraulicDiameter'        : np.full(stations, np.sqrt(4 * 1.0e-5 / np.pi)),
         }
 
     def testAValidSetPasses(self):
@@ -549,11 +551,12 @@ class TestHotWallArea:
             'nearWallMachNumber'    : np.array([1.0]),
             'hotWallSegmentLength'  : np.array([0.004]),
             'differentialPathLength': np.array([pathLength]),
-            'circleCSA'             : np.array([np.pi * 0.002**2]),
-            'circleSA'              : np.array([2 * np.pi * 0.002 * 0.004]),
+            'flowArea'              : np.array([np.pi * 0.002**2]),
+            'heatedArea'            : np.array([np.pi * 0.002 * 0.004]),
+            'hydraulicDiameter'     : np.array([0.004]),
         })
 
-        _, _, outputs, plots = regenHeatTransferModel(RegenThermalContext(), inputs)
+        outputs, plots = regenHeatTransferModel(RegenThermalContext(), inputs)
 
         return outputs, plots
 
