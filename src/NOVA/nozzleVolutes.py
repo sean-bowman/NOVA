@@ -64,6 +64,7 @@ from . import units
 from .geometryTools import DCM
 from .errors import InvalidInputError, VoluteGenerationError, createErrorContext
 from .Volute import Volute
+from .channelSections import equivalentDiameter
 from .validation import applyRules, arrayRule, presentRule
 
 # What a volute needs from the channel build it attaches to. The volute is grown onto the ends of
@@ -113,7 +114,10 @@ class RegenVoluteState:
     '''
 
     # -- What the volute build reads -- #
+    channelCornerRadius:                   Any = None
     channelRadius:                         Any = None
+    channelType:                           Any = None
+    channelWidth:                          Any = None
     coolantExitPressure:                   Any = None
     coolantExitTemperature:                Any = None
     coolantInitialPressure:                Any = None
@@ -294,6 +298,16 @@ def solveRegenVolutes(state):
                 validRange='yield or ultimate'
             )
 
+    def portDiameter(station: int) -> float:
+
+        '''The diameter of the round port matching the channel at one end [m].'''
+
+        corner = state.channelCornerRadius
+        corner = 0.0 if corner is None or not np.isfinite(corner) else corner
+
+        return float(equivalentDiameter(state.channelType, state.channelRadius[station],
+                                        width = state.channelWidth[station], cornerRadius = corner))
+
     # ------------- #
     # -- METHODS -- #
     # ------------- #
@@ -334,9 +348,9 @@ def solveRegenVolutes(state):
             inletVolute.axialOffset                = state.xChannelCenterline2D[-3]
         # area distribution properties
         if state.inletVoluteCrossSection == 'squarc':
-            inletVolute.interfaceCharLen           = state.channelRadius[-1]*2*1.1
+            inletVolute.interfaceCharLen           = portDiameter(-1)*1.1
         else:
-            inletVolute.interfaceHydraulicDiameter = state.channelRadius[-1]*2*1.1
+            inletVolute.interfaceHydraulicDiameter = portDiameter(-1)*1.1
         inletVolute.expandedHydraulicDiameter      = units.toSI(state.inletGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter
         # wall properties
         inletVolute.wallHoopStress                 = hoopStressTarget
@@ -441,7 +455,7 @@ def solveRegenVolutes(state):
         returnVolute.voluteScrollRadius         = state.rChannelCenterline2D[2]
         returnVolute.axialOffset                = state.xChannelCenterline2D[2]
         # area distribution properties
-        returnVolute.interfaceHydraulicDiameter = state.channelRadius[0]*2*1.2
+        returnVolute.interfaceHydraulicDiameter = portDiameter(0)*1.2
         returnVolute.expandedHydraulicDiameter  = units.toSI(state.returnGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter
         # wall properties
         returnVolute.wallHoopStress             = hoopStressTarget

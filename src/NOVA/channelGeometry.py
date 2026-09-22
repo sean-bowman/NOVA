@@ -11,7 +11,11 @@ centerline in three dimensions, a channel radius at each station, and the family
 channel is drawn from.
 
 A frame is constructed at every station from the local tangent, and the profile is drawn in the
-plane normal to it. A circular profile is rotationally symmetric, so it is not rolled.
+plane normal to it. A circular profile is rotationally symmetric, so it rides a parallel transport
+frame and is not rolled. A rectangular profile is not symmetric: its depth has to point along the
+wall normal and its width across the wall, at every station, so it rides a frame built from the
+wall normal instead (`wallNormalFrames`). A parallel transport frame drifts off the wall normal
+wherever the centerline wraps.
 
 Spirally fluted channels, a profile rolled about the tangent so its flutes run helically and
 compressed toward a circle on the hot-wall side, are kept in `experimental/flutedChannels.py`
@@ -50,7 +54,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .channelSections import SECTIONFAMILIES, sectionProperties
+from .channelSections import SECTIONFAMILIES, maxHalfExtent, rectangularWidth, sectionProperties
 
 @dataclass
 class ChannelGeometryInputs:
@@ -70,11 +74,17 @@ class ChannelGeometryInputs:
     nChannel : int
         Channels around the nozzle, which sets how much of the annulus each one may occupy.
     channelType : str
-        Cross-section family: 'circle'.
+        Cross-section family, one of channelSections.SECTIONFAMILIES.
     hotWallThickness : float
         Wall between the coolant and the exhaust [m].
     infillThickness : float
-        Material left between adjacent channels [m].
+        Material left between adjacent channels [m]: the rib.
+    channelCornerRadius : float
+        Corner radius of a rectangular section [m]. Zero is a sharp corner.
+    maxChannelAspectRatio : float
+        Depth a rectangular section may reach, as a multiple of its width [-].
+    maxChannelDepth : float
+        Depth a rectangular section may reach [m]. Infinite leaves the aspect ratio to limit it.
 
     '''
 
@@ -84,14 +94,140 @@ class ChannelGeometryInputs:
     channelType:          str   = 'circle'
     hotWallThickness:     float = 0.0
     infillThickness:      float = 0.0
+    channelCornerRadius:  float = 0.0
+    maxChannelAspectRatio: float = 8.0
+    maxChannelDepth:      float = float('inf')
 
-def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
-                          channelRadius, crossSectionStyle, i: int = None):
+def rectangularProfile(width: float, depth: float, cornerRadius: float, numPoints: int) -> tuple:
 
     '''
 
-    (x,y,z)ChannelCenterline3D and channelRadius inputs are expected to be length of numCrossSections even when only
-    generating a single station
+    Closed outline of a rectangle with rounded corners, centered on the origin.
+
+    `u` runs across the depth, positive away from the hot wall, and `v` across the width. The
+    outline starts and ends at the middle of the floor, u = -d/2, and runs counterclockwise with
+    v to the right and u up. Points are spread over the perimeter in proportion to length, and
+    every join between a straight run and a corner is a vertex, so a sharp corner is drawn exactly.
+
+    Parameters:
+    -----------
+    width, depth : float
+        Circumferential and radial extent [m].
+    cornerRadius : float
+        Corner radius [m], clamped to half the smaller side.
+    numPoints : int
+        Points in the outline, counting the repeated closing point.
+
+    Returns:
+    --------
+    tuple
+        (u, v) arrays of length numPoints [m].
+
+    '''
+
+    corner = min(float(cornerRadius), 0.5*min(width, depth))
+    hw, hd = 0.5*width, 0.5*depth
+
+    # Straight runs as (start, end) and corners as (center, first angle, last angle), in (v, u)
+    pieces = [
+        ('line', (0.0, -hd),               (hw - corner, -hd)),
+        ('arc',  (hw - corner, -hd + corner), -0.5*np.pi, 0.0),
+        ('line', (hw, -hd + corner),       (hw, hd - corner)),
+        ('arc',  (hw - corner, hd - corner),  0.0, 0.5*np.pi),
+        ('line', (hw - corner, hd),        (-hw + corner, hd)),
+        ('arc',  (-hw + corner, hd - corner), 0.5*np.pi, np.pi),
+        ('line', (-hw, hd - corner),       (-hw, -hd + corner)),
+        ('arc',  (-hw + corner, -hd + corner), np.pi, 1.5*np.pi),
+        ('line', (-hw + corner, -hd),      (0.0, -hd)),
+    ]
+
+    def length(piece):
+        if piece[0] == 'line':
+            return float(np.hypot(piece[2][0] - piece[1][0], piece[2][1] - piece[1][1]))
+        return corner*(piece[3] - piece[2])
+
+    pieces = [piece for piece in pieces if length(piece) > 0.0]
+    lengths = np.array([length(piece) for piece in pieces])
+
+    intervals = numPoints - 1
+    if intervals < len(pieces):
+        raise ValueError(f'A rectangular outline needs at least {len(pieces) + 1} points, got {numPoints}.')
+
+    # One interval per piece, then the rest by largest remainder in proportion to length
+    share = 1 + (intervals - len(pieces))*lengths/lengths.sum()
+    counts = np.floor(share).astype(int)
+    for k in np.argsort(counts - share)[:intervals - counts.sum()]:
+        counts[k] += 1
+
+    v, u = [], []
+    for piece, count in zip(pieces, counts):
+        fractions = np.arange(count)/count
+        if piece[0] == 'line':
+            (v0, u0), (v1, u1) = piece[1], piece[2]
+            v.extend(v0 + (v1 - v0)*fractions)
+            u.extend(u0 + (u1 - u0)*fractions)
+        else:
+            (vc, uc), first, last = piece[1], piece[2], piece[3]
+            angles = first + (last - first)*fractions
+            v.extend(vc + corner*np.cos(angles))
+            u.extend(uc + corner*np.sin(angles))
+    v.append(v[0])
+    u.append(u[0])
+
+    return np.array(u), np.array(v)
+
+def wallNormalFrames(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple:
+
+    '''
+
+    Frames whose normal is the wall normal, along a centerline riding a surface of revolution.
+
+    The centerline is taken with x along the nozzle axis and (y, z) across it, as the channel
+    build lays it out. The meridian it traces, (x, r) with r the distance from the axis, gives
+    the wall normal in its own plane; rotated to the station's azimuth it is the wall normal in
+    three dimensions. It is made orthogonal to the path tangent, which it already is for a
+    centerline on a surface parallel to the wall, and the binormal completes the right-handed set.
+
+    Parameters:
+    -----------
+    x, y, z : np.ndarray
+        Centerline [m].
+
+    Returns:
+    --------
+    tuple
+        (tangent, normal, binormal), each (N, 3), unit length.
+
+    '''
+
+    stations = np.column_stack((x, y, z))
+    tangent  = np.gradient(stations, axis = 0)
+    tangent /= np.linalg.norm(tangent, axis = 1)[:, None]
+
+    radius  = np.hypot(y, z)
+    azimuth = np.arctan2(z, y)
+    dx, dr  = np.gradient(x), np.gradient(radius)
+    scale   = np.hypot(dx, dr)
+
+    # The left normal of the meridian as it is traversed, which is the side the centerline was
+    # offset to from the wall, rotated to the station's azimuth
+    normalAxial, normalRadial = -dr/scale, dx/scale
+    normal = np.column_stack((normalAxial, normalRadial*np.cos(azimuth), normalRadial*np.sin(azimuth)))
+
+    normal  -= np.sum(normal*tangent, axis = 1)[:, None]*tangent
+    normal  /= np.linalg.norm(normal, axis = 1)[:, None]
+    binormal = np.cross(tangent, normal)
+
+    return tangent, normal, binormal
+
+def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
+                          channelRadius, crossSectionStyle, i: int = None, channelWidth = None):
+
+    '''
+
+    (x,y,z)ChannelCenterline3D, channelRadius and channelWidth inputs are expected to be length of numCrossSections even
+    when only generating a single station. channelRadius is the section's radial half-extent: a circle's radius, half a
+    rectangle's depth. channelWidth is a rectangle's width and is not read for a circle.
 
     If i is specified, one cross section is generated at that station along (x,y,z)ChannelCenterline3D with the local
     channel radius, and only the heat transfer dictionary is returned.
@@ -375,8 +511,28 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
     # The section at the stations drawn, and the areas it makes over each station's path
     stationIndex = np.arange(arrLen) if fullSweep else np.array([j])
-    section      = sectionProperties(crossSectionStyle, channelRadius[stationIndex])
+    if crossSectionStyle == 'circle':
+        section = sectionProperties(crossSectionStyle, channelRadius[stationIndex])
+    else:
+        if channelWidth is None:
+            raise ValueError(f"A '{crossSectionStyle}' section needs channelWidth at every station.")
+        section = sectionProperties(crossSectionStyle, channelRadius[stationIndex],
+                                    width = np.asarray(channelWidth)[stationIndex],
+                                    cornerRadius = geometry.channelCornerRadius,
+                                    ribThickness = geometry.infillThickness)
     pathLength   = differentialPathLength[stationIndex]
+
+    # A rectangle is drawn on the wall normal, depth outward and width across the wall
+    if fullSweep and crossSectionStyle != 'circle':
+        _, wallNormal, wallBinormal = wallNormalFrames(xChannelCenterline3D, yChannelCenterline3D,
+                                                       zChannelCenterline3D)
+        xChannel, yChannel, zChannel = [np.zeros((geometry.numCSPointsChannel, arrLen)) for _ in range(3)]
+        for k in range(arrLen):
+            u, v = rectangularProfile(section.width[k], section.depth[k], section.cornerRadius[k],
+                                      geometry.numCSPointsChannel)
+            xChannel[:, k] = xChannelCenterline3D[k] + u*wallNormal[k, 0] + v*wallBinormal[k, 0]
+            yChannel[:, k] = yChannelCenterline3D[k] + u*wallNormal[k, 1] + v*wallBinormal[k, 1]
+            zChannel[:, k] = zChannelCenterline3D[k] + u*wallNormal[k, 2] + v*wallBinormal[k, 2]
 
     heatTransferDict = {}
     heatTransferDict["flowArea"]               = section.flowArea
@@ -401,12 +557,22 @@ def getMaxChannelRadius(geometry, rNozzle, i):
 
     '''
 
-    Returns the maximum circular channel radius at station i along rNozzle
+    Returns the largest radial half-extent a channel may take at station i along rNozzle: the
+    radius of the largest circle that packs between its neighbors, or half the deepest rectangle
+    the aspect ratio and depth limits allow. A rectangle's width is taken here at the hot wall
+    radius plus the wall thickness, which is within t(1 - cos a) of the offset cold wall on a wall
+    at angle a; the sizing solve itself takes it at the offset cold wall.
 
     Author: Isabella Duprey-Churn
     Date:   4/28/2026
 
     '''
+
+    if geometry.channelType == 'rectangular':
+        width = rectangularWidth(rNozzle[i] + geometry.hotWallThickness, geometry.nChannel,
+                                 geometry.infillThickness)
+        return float(maxHalfExtent('rectangular', width, geometry.maxChannelAspectRatio,
+                                   geometry.maxChannelDepth))
 
     offsetHotWallThickness = geometry.hotWallThickness - geometry.infillThickness
     arcAngle = 2*np.pi / geometry.nChannel

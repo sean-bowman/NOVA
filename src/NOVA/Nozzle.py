@@ -73,7 +73,7 @@ import numpy as np
 try:
     from .figures import exportInteractiveFigures
     from .channelSizing import ChannelSizingState
-    from .regenChannels import RegenChannelState, regenChannelOutputs, solveRegenChannels
+    from .regenChannels import RegenChannelState, regenChannelOutputs, solveRegenChannels, valueOrDefault
     from .nozzleVolutes import RegenVoluteState, regenVoluteOutputs, solveRegenVolutes
     from .chamber import (ConvergingSectionState, convergingSectionOutputs,
                           solveConvergingSection)
@@ -155,8 +155,8 @@ class Nozzle:
 
     Converging section and combustion chamber, sized from `Lstar` or `chamberLength`.
 
-    Regenerative cooling jacket: channels of circular cross section, sized station by station
-    against a wall temperature limit, with the coolant marched from inlet to outlet. Film
+    Regenerative cooling jacket: channels of circular or rectangular cross section, sized station
+    by station against a wall temperature limit, with the coolant marched from inlet to outlet. Film
     cooling and an uncooled radiation-cooled extension attach to the same solve.
 
     Inlet and return volutes, the inlet at the aft end of the jacket and the return at the
@@ -208,7 +208,11 @@ class Nozzle:
     coolantInitialTemperature, coolantInitialPressure, coolantMassFlow : float
         Coolant state at the jacket inlet [K], [Pa], [kg/s].
     channelType : str
-        Cross-section family: 'circle'.
+        Cross-section family: 'circle' or 'rectangular'. A rectangle's width fills the pitch at
+        the cold wall less the rib, and its depth is sized.
+    minChannelWidth, channelCornerRadius, maxChannelAspectRatio, maxChannelDepth : float
+        A rectangle's narrowest width [m], corner radius [m], and the depth it may reach as a
+        multiple of its width [-] and outright [m].
     nChannel : int
         Channels around the circumference [-].
     hotWallThickness, shellThickness, infillThickness : float
@@ -438,7 +442,13 @@ class Nozzle:
         # dynamicChannelRadii
         self.dcrData                                  = {}
         self.channelType                              = None     # [str]
-        self.minChannelRadius                         = 0.00075  # [m]
+        self.minChannelRadius                         = 0.00075  # [m], half the depth of a rectangle
+        self.minChannelWidth: float | None            = None     # [m], rectangles
+        self.channelCornerRadius: float | None        = None     # [m], rectangles
+        self.maxChannelAspectRatio: float | None      = None     # [-], rectangles
+        self.maxChannelDepth: float | None            = None     # [m], rectangles
+        self.channelWidth: np.ndarray | None          = None     # [m]
+        self.channelDepth: np.ndarray | None          = None     # [m]
         self.maxChannelRadius                         = None     # [m]
         self.coolantExitPressure                      = None     # Pa
         self.coolantExitTemperature                   = None     # K
@@ -1440,7 +1450,10 @@ class Nozzle:
             nChannel             = self.nChannel,
             channelType          = self.channelType,
             hotWallThickness     = self.hotWallThickness,
-            infillThickness      = self.infillThickness)
+            infillThickness      = self.infillThickness,
+            channelCornerRadius  = valueOrDefault(self.channelCornerRadius, 0.0),
+            maxChannelAspectRatio = valueOrDefault(self.maxChannelAspectRatio, 8.0),
+            maxChannelDepth      = valueOrDefault(self.maxChannelDepth, float('inf')))
 
     def regenThermalContext(self):
 

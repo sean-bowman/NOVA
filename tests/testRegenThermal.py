@@ -623,3 +623,48 @@ class TestModelSafeguards:
 
         with pytest.raises(NumericalInstabilityError, match = 'NaN'):
             regenHeatTransferModel(RegenThermalContext(), self.inputs())
+
+class TestRectangularDepth:
+
+    '''
+
+    A deeper rectangle runs its wall hotter, at every station, which is what the sizing solve's
+    secant search needs to be a root find.
+
+    At a fixed coolant flow a deeper channel carries it slower, so the coolant coefficient
+    falls; the rib grows with the depth and adds area, but less effectively the taller it is.
+    The first wins everywhere checked here, from a throat-like station to a barrel-like one.
+
+    '''
+
+    def wallTemperature(self, depth, width, machNumber, radius):
+
+        from NOVA.channelSections import sectionProperties
+
+        section = sectionProperties('rectangular', np.array([depth / 2]), width = np.array([width]),
+                                    cornerRadius = 0.2e-3, ribThickness = 1.0e-3)
+        inputs = TestModelSafeguards().inputs()
+        inputs.update({
+            'channelType'       : 'rectangular',
+            'mdot'              : 3.4 / 160,
+            'nChannel'          : 160,
+            'rHotWall3D'        : np.array([radius]),
+            'nearWallMachNumber': np.array([machNumber]),
+            'flowArea'          : section.flowArea,
+            'heatedArea'        : section.heatedPerimeter * 0.004,
+            'hydraulicDiameter' : section.hydraulicDiameter,
+            'finHeight'         : section.finHeight,
+            'finThickness'      : section.finThickness,
+        })
+
+        outputs, _ = regenHeatTransferModel(RegenThermalContext(), inputs)
+
+        return outputs['hotWallTemperature'][0]
+
+    @pytest.mark.parametrize('width, machNumber, radius', [(1.0e-3, 1.0, 0.0503), (2.5e-3, 0.2, 0.09)])
+    def testTheWallRunsHotterAsTheChannelDeepens(self, width, machNumber, radius):
+
+        depths = [1.5e-3, 2.5e-3, 4.0e-3, 6.0e-3, 8.0e-3]
+        temperatures = [self.wallTemperature(depth, width, machNumber, radius) for depth in depths]
+
+        assert all(later > earlier for earlier, later in zip(temperatures, temperatures[1:])), temperatures

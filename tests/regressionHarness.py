@@ -175,6 +175,17 @@ harnessCases = {
         'description': 'Full jacket with circular channels and both volutes',
         'overrides': dict(regenOverrides),
     },
+    # High aspect ratio rectangular channels on the same jacket. The width fills the pitch at the
+    # cold wall less the 1 mm rib and the depth is sized; 160 channels put the throat width at
+    # 1.01 mm. The corners are rounded at 0.2 mm, which the STEP writer needs.
+    'regenRectangular': {
+        'config': 'NOVANozzle.json',
+        'description': 'Full jacket with rectangular channels and both volutes',
+        'overrides': {**regenOverrides, 'channelType': 'rectangular', 'nChannel': 160,
+                      'minChannelWidth': 1.0e-3, 'channelCornerRadius': 0.2e-3,
+                      'maxChannelAspectRatio': 8.0, 'maxChannelDepth': 6.0e-3,
+                      'maxWallTemperature': 600.0},
+    },
     # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
     # and the physical choice. This case pins the static-temperature model that preceded it, so
     # it stays reachable and its answer stays recorded rather than only described.

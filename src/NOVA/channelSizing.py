@@ -5,16 +5,20 @@
 
 Sizing a cooling channel so the wall it protects runs at the temperature it is allowed to.
 
-The channel radius at a station is not a free choice. Too small and the coolant chokes, the
-pressure drop runs away and the wall overheats; too large and the channel will not fit between
-its neighbors, or will not print. What sets it is the hot wall temperature, which is not known
-until the channel is drawn, the coolant marched through it and the heat balance solved. So the
-radius is solved for, station by station, marching from the coolant inlet.
+The size solved for is the section's radial half-extent: a circle's radius, half a rectangle's
+depth. It is not a free choice. At a fixed coolant flow a smaller channel carries the coolant
+faster, which cools the wall harder and costs pressure; a larger one costs less pressure and runs
+the wall hotter, until it no longer fits between its neighbors or will not print. What sets it
+is the hot wall temperature, which is not known until the channel is drawn, the coolant marched
+through it and the heat balance solved. So the size is solved for, station by station, marching
+from the coolant inlet: the largest channel that holds the wall at its limit, which is also the
+one with the least pressure drop.
 
-At each station the loop proposes a radius, rebuilds the cross section, runs the thermal model,
+At each station the loop proposes a size, rebuilds the cross section, runs the thermal model,
 reads the hot wall temperature back, and steps again. It is a one-dimensional root find on a
-monotone function: a wider channel runs cooler. It is written as an adaptive secant with
-backtracking, overshoot damping and a step fraction that ramps with the distance from target.
+monotone function: a larger channel runs its wall hotter, which tests/testRegenThermal.py holds a
+rectangle's depth to. It is written as an adaptive secant with backtracking, overshoot damping
+and a step fraction that ramps with the distance from target.
 
 Three things bound the answer. The channel may not exceed the largest that fits between its
 neighbors at that station, it may not fall below the minimum the process can build, and where
@@ -60,7 +64,7 @@ from .geometryTools import DCM, parallelOffset
 from .errors import ConvergenceFailureError, createErrorContext, InvalidInputError
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
-from .channelSections import throatChannelCount
+from .channelSections import maxHalfExtent, rectangularWidth, throatChannelCount
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
@@ -125,13 +129,20 @@ class ChannelSizingState:
     Parameters:
     -----------
     channelType : str
-        Cross-section family: 'circle'.
+        Cross-section family, one of channelSections.SECTIONFAMILIES. The sized quantity is the
+        section's radial half-extent: a circle's radius, half a rectangle's depth.
     nChannel : int
         Channels around the nozzle.
     numCrossSections : int
         Stations along the channel.
     minChannelRadius : float
-        Smallest channel the process can build [m].
+        Smallest half-extent the process can build [m].
+    minChannelWidth : float
+        Narrowest rectangle the process can build [m]. The channel count is reduced to hold it
+        at the throat.
+    channelCornerRadius, maxChannelAspectRatio, maxChannelDepth : float
+        A rectangle's corner radius [m], the depth it may reach as a multiple of its width [-],
+        and the depth it may reach outright [m].
     maxWallTemperature : float
         Hot wall temperature the loop converges to [K].
     hotWallThickness, infillThickness : float
@@ -183,6 +194,10 @@ class ChannelSizingState:
     nChannel:                               int   = 0
     numCrossSections:                       int   = 0
     minChannelRadius:                       float = 0.0
+    minChannelWidth:                        float = 1.0e-3
+    channelCornerRadius:                    float = 0.0
+    maxChannelAspectRatio:                  float = 8.0
+    maxChannelDepth:                        float = float('inf')
     maxWallTemperature:                     float = float('nan')
     hotWallThickness:                       float = 0.0
     infillThickness:                        float = 0.0
@@ -212,6 +227,7 @@ class ChannelSizingState:
 
     # -- What the solve produces -- #
     channelRadius:                          Any   = None   # [m], one per station
+    channelWidth:                           Any   = None   # [m], one per station, rectangles only
     coolantExitPressure:                    Any   = None   # [Pa]
     coolantExitTemperature:                 Any   = None   # [K]
     wallMaterialResolved:                   Any   = None   # the alloy actually used
@@ -225,7 +241,7 @@ class ChannelSizingState:
 # The outputs a solve hands back. Kept beside the class so that adding a field and forgetting to
 # surface it is a one-line fix rather than a silent drop.
 channelSizingOutputs = (
-    'channelRadius', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
+    'channelRadius', 'channelWidth', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
     'wallMaterialResolved', 'tempRangeKelvin', 'wallThermalConductivityData',
     'wallThermalConductivityInterpolator', 'wallCTEInterpolator',
     'wallYieldStrengthInterpolator', 'wallFractureStrainInterpolator')
@@ -297,7 +313,18 @@ def solveChannelRadii(state, geometry, thermal):
         larger than the maximum radius of the channel that would fit, the radius is reduced so that it fits perfectly with no
         projection angle (straight channel).
 
+        A rectangle fills its pitch by construction, so it runs straight: no projection and no
+        wrap, and the largest it may be is set by its aspect ratio and depth limits.
+
         '''
+
+        if state.channelType == 'rectangular':
+            if findMaxRadius:
+                return float(maxHalfExtent('rectangular', state.dcrData['channelWidth'][i],
+                                           state.maxChannelAspectRatio, state.maxChannelDepth))
+            state.dcrData['projectionAngle'][i] = 0.0
+            state.dcrData['helixPath'][i]       = helixPath[i]
+            return helixPath, channelRadius
 
         def tryMakeFit(xNozzle, rNozzle, channelRadius, xChannelCenterline2D, rChannelCenterline2D, xPathline2D, rPathline2D, i, nozzleArcSlice):
             # use current arc slice to solve for max channel radius that fits here
@@ -455,7 +482,7 @@ def solveChannelRadii(state, geometry, thermal):
         # get geometry properties for heat transfer
         heatTransferDict_iUpdate = \
             buildCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
-                                       channelRadius, channelType, i)
+                                       channelRadius, channelType, i, channelWidth = state.dcrData.get('channelWidth'))
 
         # update local heat transfer dictionary
         heatTransferDict_i = heatTransferDict_i | heatTransferDict_iUpdate
@@ -568,7 +595,22 @@ def solveChannelRadii(state, geometry, thermal):
         '''
 
         # first check if nChannel is too high and reduce if so
-        if True:
+        if state.channelType == 'rectangular':
+            throatRadius = min(rNozzle)
+            throatWidth  = rectangularWidth(throatRadius + state.hotWallThickness, nChannel, state.infillThickness)
+            if throatWidth < state.minChannelWidth:
+                print(f'\nnChannel too high; channel width at throat will be too small.')
+                nChannel = throatChannelCount('rectangular', throatRadius, state.hotWallThickness,
+                                              state.infillThickness, state.minChannelWidth)
+                state.nChannel = nChannel
+                print(f'\nnChannel reduced to {nChannel}.')
+
+            # The width at every station fills the pitch at the cold wall, which is the hot wall
+            # offset by its thickness, so the rib at its root is the infill thickness. Held in
+            # march order, which is the order every station array in the solve is written in.
+            _, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
+            state.dcrData['channelWidth'] = np.flip(rectangularWidth(rColdWall, nChannel, state.infillThickness))
+        else:
             throatRadius = min(rNozzle)
             offsetHotWallThickness = state.hotWallThickness - state.infillThickness
             arcAngle = 2*np.pi / nChannel
@@ -958,6 +1000,8 @@ def solveChannelRadii(state, geometry, thermal):
         = dynamicChannelRadii(state.maxWallTemperature, state.nChannel)
 
     state.channelRadius = channelRadius.copy()
+    if state.channelType == 'rectangular':
+        state.channelWidth = np.flip(state.dcrData['channelWidth'])
 
     # Heat transfer plots
     drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,

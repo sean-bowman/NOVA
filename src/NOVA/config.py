@@ -57,6 +57,7 @@ import warnings
 import numpy as np
 
 from .errors import InvalidInputError
+from .channelSections import SECTIONFAMILIES
 from .ceaInterface import CEA
 from .contour import divergingSectionFamily
 from .contourKernel import transonicModels
@@ -196,6 +197,18 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.material                       = inputsPath['material']
         nozzle.nChannel                       = inputsPath['nChannel']
         nozzle.channelType                    = inputsPath['channelType']
+
+        # A rectangle's width and depth limits. Read with defaults, so a configuration written for
+        # circular channels needs none of them; a null reads as unset like everywhere else here.
+        def valueOr(name, default):
+            value = inputsPath.get(name)
+            unset = value is None or (isinstance(value, float) and np.isnan(value))
+            return default if unset else float(value)
+
+        nozzle.minChannelWidth                = valueOr('minChannelWidth', 1.0e-3)
+        nozzle.channelCornerRadius            = valueOr('channelCornerRadius', 0.0)
+        nozzle.maxChannelAspectRatio          = valueOr('maxChannelAspectRatio', 8.0)
+        nozzle.maxChannelDepth                = valueOr('maxChannelDepth', None)
         nozzle.minCoolantExitPressure         = inputsPath['minCoolantExitPressure']
         nozzle.minCoolantExitTemperature      = inputsPath['minCoolantExitTemperature']
         nozzle.maxWallTempUpperBound          = inputsPath['maxWallTempUpperBound']
@@ -371,14 +384,14 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
 
     # Which cross section the jacket is built from. Checked only when there is a jacket, because a
     # contour-only configuration has no reason to name one.
-    if nozzle.makeCoolingChannels == 'on' and nozzle.channelType != 'circle':
+    if nozzle.makeCoolingChannels == 'on' and nozzle.channelType not in SECTIONFAMILIES:
         parked = (' Spirally fluted channels are kept in experimental/flutedChannels.py.'
                   if nozzle.channelType == 'fluted' else '')
         raise InvalidInputError(
-            message = f"channelType must be 'circle'.{parked}",
+            message = f"channelType must be one of {', '.join(SECTIONFAMILIES)}.{parked}",
             parameterName = 'channelType',
             value = nozzle.channelType,
-            validRange = "'circle'")
+            validRange = ', '.join(SECTIONFAMILIES))
 
     # Which diverging section family was asked for. Resolved here, once, so a spelling that names
     # nothing is rejected while the configuration is still being read rather than reaching the

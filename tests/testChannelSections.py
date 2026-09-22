@@ -7,6 +7,11 @@ Every quantity here has a closed form, and each is held to it.
 **A circle is a circle.** Its flow area is pi r^2, its hydraulic diameter 2r, and the perimeter
 the heat enters through is the half that faces the wall, pi r. It has no fin.
 
+**A rectangle is a rounded rectangle.** Its flow area is w d - (4 - pi) r_c^2 and its perimeter
+2(w + d) - (8 - 2 pi) r_c, exact for a sharp corner and a stadium when r_c is half the width. Its
+hydraulic diameter is the side of a square and tends to twice the width of a thin slot. Its
+floor, sides and roof tile the perimeter, and its width leaves exactly the rib at the cold wall.
+
 **The throat channel count is the packing inverted.** The count it returns is the largest at
 which the channel that fits at the throat is still no smaller than the process minimum, checked
 against the packing formula in channelGeometry at that count and the next.
@@ -23,7 +28,8 @@ import numpy as np
 import pytest
 
 from NOVA.channelSections import (SECTIONFAMILIES, SECTIONLABELS, equivalentDiameter,
-                                  finEfficiency, sectionProperties, throatChannelCount)
+                                  finEfficiency, maxHalfExtent, rectangularWidth,
+                                  sectionProperties, throatChannelCount)
 
 class TestCircle:
 
@@ -158,3 +164,91 @@ class TestThroatChannelCount:
 
         assert largestAt(count) >= minimum * (1 - 1e-12)
         assert largestAt(count + 1) < minimum
+
+class TestRectangle:
+
+    '''The rounded rectangle in closed form, and the width that fills its pitch.'''
+
+    width, depth = 1.2e-3, 4.8e-3
+
+    def section(self, corner = 0.0, width = None, depth = None):
+
+        width = self.width if width is None else width
+        depth = self.depth if depth is None else depth
+
+        return sectionProperties('rectangular', np.array([depth / 2]), width = np.array([width]),
+                                 cornerRadius = corner, ribThickness = 1.0e-3)
+
+    def testASharpRectangleIsExact(self):
+
+        section = self.section()
+
+        assert section.flowArea[0] == pytest.approx(self.width * self.depth, rel = 1e-15)
+        assert section.wettedPerimeter[0] == pytest.approx(2 * (self.width + self.depth), rel = 1e-15)
+
+    @pytest.mark.parametrize('corner', [0.1e-3, 0.3e-3, 0.6e-3])
+    def testRoundedCornersRemoveTheirSquares(self, corner):
+
+        section = self.section(corner)
+
+        assert section.flowArea[0] == pytest.approx(
+            self.width * self.depth - (4 - np.pi) * corner**2, rel = 1e-15)
+        assert section.wettedPerimeter[0] == pytest.approx(
+            2 * (self.width + self.depth) - (8 - 2 * np.pi) * corner, rel = 1e-15)
+
+    def testAFullyRoundedEndIsAStadium(self):
+
+        # A corner radius of half the width, or anything larger, clamps to it: a stadium of two
+        # semicircles of diameter w closing a rectangle of w by d - w
+        for corner in (self.width / 2, self.width):
+            section = self.section(corner)
+            straight = self.depth - self.width
+            assert section.flowArea[0] == pytest.approx(straight * self.width + np.pi * self.width**2 / 4, rel = 1e-14)
+            assert section.wettedPerimeter[0] == pytest.approx(2 * straight + np.pi * self.width, rel = 1e-14)
+
+    def testASquareHasItsSideAsHydraulicDiameter(self):
+
+        assert self.section(width = 2e-3, depth = 2e-3).hydraulicDiameter[0] == pytest.approx(2e-3, rel = 1e-15)
+
+    def testAThinSlotTendsToTwiceItsWidth(self):
+
+        # D_h = 2 w d / (w + d), so 2w / (1 + w/d)
+        for ratio in (1e2, 1e4):
+            section = self.section(width = 1e-3, depth = ratio * 1e-3)
+            assert section.hydraulicDiameter[0] == pytest.approx(2e-3 / (1 + 1 / ratio), rel = 1e-14)
+
+    def testTheFloorSidesAndRoofTileThePerimeter(self):
+
+        for corner in (0.0, 0.2e-3, 0.6e-3):
+            section = self.section(corner)
+            assert 2 * section.heatedPerimeter[0] + 2 * section.finHeight[0] == \
+                   pytest.approx(section.wettedPerimeter[0], rel = 1e-14)
+
+    def testTheRibIsTheInfillAtTheColdWall(self):
+
+        radius, count, rib = 0.0513, 160, 1.0e-3
+        width = rectangularWidth(radius, count, rib)
+
+        assert 2 * np.pi * radius / count - width == pytest.approx(rib, rel = 1e-12)
+
+    def testTheDepthLimitIsTheSmallerOfItsTwo(self):
+
+        width = np.array([1e-3, 2e-3, 4e-3])
+
+        assert np.allclose(maxHalfExtent('rectangular', width, 8.0), 4 * width)
+        assert np.allclose(maxHalfExtent('rectangular', width, 8.0, 10e-3), [4e-3, 5e-3, 5e-3])
+
+    def testTheEquivalentPortCarriesTheFlowArea(self):
+
+        diameter = equivalentDiameter('rectangular', self.depth / 2, width = self.width, cornerRadius = 0.2e-3)
+
+        assert np.pi * diameter**2 / 4 == pytest.approx(self.section(0.2e-3).flowArea[0], rel = 1e-14)
+
+    @pytest.mark.parametrize('throatRadius', [0.02, 0.05, 0.12])
+    def testTheThroatCountIsTheMostThatHoldTheMinimumWidth(self, throatRadius):
+
+        count = throatChannelCount('rectangular', throatRadius, 1.0e-3, 1.0e-3, 1.0e-3)
+        coldWall = throatRadius + 1.0e-3
+
+        assert rectangularWidth(coldWall, count, 1.0e-3) >= 1.0e-3
+        assert rectangularWidth(coldWall, count + 1, 1.0e-3) < 1.0e-3

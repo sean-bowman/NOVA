@@ -20,6 +20,10 @@ vectors are unit and mutually orthogonal at every station, the triad is right-ha
 planar curve the frame acquires no rotation about the tangent at all, which is the property that
 keeps a section from winding up where the curve happens to bend.
 
+**A rectangle is drawn on the wall.** Its outline is closed with its corners exact, its depth lies
+along the wall normal and its width across the wall, and the frame it rides has the wall normal
+as its normal on a cone whether or not the centerline wraps.
+
 **A circular cross section is a circle.** Its points lie at exactly the channel radius from the
 centerline, in the plane normal to the local tangent, and its flow area is exactly pi r squared.
 
@@ -33,7 +37,8 @@ import sys
 import numpy as np
 import pytest
 
-from NOVA.channelGeometry import ChannelGeometryInputs, generateCrossSections, getMaxChannelRadius
+from NOVA.channelGeometry import (ChannelGeometryInputs, generateCrossSections, getMaxChannelRadius,
+                                  rectangularProfile, wallNormalFrames)
 
 def circularInputs(numCrossSections = 40, numCSPointsChannel = 60, nChannel = 60):
 
@@ -310,3 +315,140 @@ class TestTurnAngle:
 
         assert np.allclose(reported, bendRadius, rtol = 1e-3), \
             f'reported {reported.min():.6f} to {reported.max():.6f} m against {bendRadius} m'
+
+class TestRectangularProfile:
+
+    '''The outline is closed, its corners exact, and its area the rounded rectangle's.'''
+
+    def polygonArea(self, u, v):
+
+        return 0.5 * abs(np.dot(v[:-1], u[1:]) - np.dot(u[:-1], v[1:]))
+
+    def testItIsClosedWithTheRequestedPointCount(self):
+
+        u, v = rectangularProfile(1e-3, 4e-3, 0.2e-3, 40)
+
+        assert len(u) == len(v) == 40
+        assert (u[0], v[0]) == (u[-1], v[-1])
+
+    def testASharpOutlineEnclosesTheRectangleExactly(self):
+
+        u, v = rectangularProfile(1e-3, 4e-3, 0.0, 40)
+
+        assert self.polygonArea(u, v) == pytest.approx(4e-6, rel = 1e-13)
+        for corner in ((-2e-3, -0.5e-3), (-2e-3, 0.5e-3), (2e-3, -0.5e-3), (2e-3, 0.5e-3)):
+            assert np.min(np.hypot(u - corner[0], v - corner[1])) < 1e-15
+
+    def testARoundedOutlineConvergesOnItsArea(self):
+
+        exact = 1e-3 * 4e-3 - (4 - np.pi) * (0.3e-3)**2
+        errors = [abs(self.polygonArea(*rectangularProfile(1e-3, 4e-3, 0.3e-3, count)) - exact) / exact
+                  for count in (40, 160, 640)]
+
+        assert all(later < earlier for earlier, later in zip(errors, errors[1:]))
+        assert errors[-1] < 1e-4
+
+    def testTheDepthRunsAlongUAndTheWidthAlongV(self):
+
+        u, v = rectangularProfile(1e-3, 4e-3, 0.0, 40)
+
+        assert np.ptp(u) == pytest.approx(4e-3, rel = 1e-14)
+        assert np.ptp(v) == pytest.approx(1e-3, rel = 1e-14)
+        assert u[0] == pytest.approx(-2e-3) and v[0] == 0.0
+
+class TestWallNormalFrames:
+
+    '''On a surface of revolution the frame normal is the wall normal, wrapped or not.'''
+
+    def cone(self, wrapRate = 0.0, numStations = 80, halfAngle = np.deg2rad(20)):
+
+        # A straight meridian at the half angle, offset from the axis; the wall normal is the
+        # meridian's left normal, (-sin a, cos a) in (x, r)
+        s = np.linspace(0.0, 0.2, numStations)
+        x = s * np.cos(halfAngle)
+        r = 0.05 + s * np.sin(halfAngle)
+        azimuth = wrapRate * s
+        return x, r * np.cos(azimuth), r * np.sin(azimuth), azimuth, halfAngle
+
+    @pytest.mark.parametrize('wrapRate', [0.0, 3.0, 12.0])
+    def testTheNormalIsTheWallNormal(self, wrapRate):
+
+        x, y, z, azimuth, halfAngle = self.cone(wrapRate)
+        tangent, normal, binormal = wallNormalFrames(x, y, z)
+
+        expected = np.column_stack((-np.sin(halfAngle) * np.ones_like(x),
+                                    np.cos(halfAngle) * np.cos(azimuth),
+                                    np.cos(halfAngle) * np.sin(azimuth)))
+
+        # Central differences inside, one-sided at the two ends
+        alignment = np.abs(np.sum(normal * expected, axis = 1) - 1)
+        assert np.max(alignment[1:-1]) < 1e-7
+        assert np.max(alignment[[0, -1]]) < 1e-4
+
+    def testTheFrameIsOrthonormalAndRightHanded(self):
+
+        x, y, z, _, _ = self.cone(6.0)
+        tangent, normal, binormal = wallNormalFrames(x, y, z)
+
+        for a, b in ((tangent, normal), (tangent, binormal), (normal, binormal)):
+            assert np.max(np.abs(np.sum(a * b, axis = 1))) < 1e-12
+        assert np.allclose(np.cross(tangent, normal), binormal, atol = 1e-12)
+
+class TestRectangularSweep:
+
+    '''A rectangle is drawn with its depth on the wall normal and its width across the wall.'''
+
+    def axialCenterline(self, numStations):
+
+        '''A straight centerline along the nozzle axis, x, at a fixed radius, as the build lays one out.'''
+
+        return np.linspace(0.0, 0.3, numStations), np.full(numStations, 0.06), np.zeros(numStations)
+
+    def sweep(self, numStations = 30):
+
+        geometry = circularInputs(numCrossSections = numStations, numCSPointsChannel = 40)
+        geometry.channelType = 'rectangular'
+        geometry.channelCornerRadius = 0.2e-3
+        x, y, z = self.axialCenterline(numStations)
+        depth, width = 3.0e-3, 1.2e-3
+
+        xChannel, yChannel, zChannel, heatTransfer = generateCrossSections(
+            geometry, x, y, z, np.full(numStations, depth / 2), 'rectangular',
+            channelWidth = np.full(numStations, width))
+
+        return (x, y, z), (xChannel, yChannel, zChannel), heatTransfer, depth, width
+
+    def testTheExtentsLieOnTheWallNormalAndAcrossIt(self):
+
+        # The centerline runs along x at y = 0.06, so the wall normal is +y and the width runs
+        # along z, and every section lies in its own plane of constant x
+        (x, y, z), (xChannel, yChannel, zChannel), _, depth, width = self.sweep()
+
+        assert np.allclose(np.ptp(yChannel, axis = 0), depth, rtol = 1e-12)
+        assert np.allclose(np.ptp(zChannel, axis = 0), width, rtol = 1e-12)
+        assert np.max(np.abs(xChannel - x[None, :])) < 1e-15
+        assert np.min(yChannel) == pytest.approx(0.06 - depth / 2, rel = 1e-14)
+
+    def testOneStationMatchesTheFullSweep(self):
+
+        numStations = 30
+        _, _, full, depth, width = self.sweep(numStations)
+        geometry = circularInputs(numCrossSections = numStations, numCSPointsChannel = 40)
+        geometry.channelType, geometry.channelCornerRadius = 'rectangular', 0.2e-3
+        x, y, z = self.axialCenterline(numStations)
+
+        single = generateCrossSections(geometry, x, y, z, np.full(numStations, depth / 2), 'rectangular',
+                                       i = 7, channelWidth = np.full(numStations, width))
+
+        for key in ('flowArea', 'heatedArea', 'hydraulicDiameter', 'finHeight', 'finThickness'):
+            assert single[key][0] == pytest.approx(full[key][7], rel = 1e-14), key
+
+    def testARectangleWithoutAWidthIsRefused(self):
+
+        numStations = 10
+        geometry = circularInputs(numCrossSections = numStations)
+        geometry.channelType = 'rectangular'
+        x, y, z = straightCenterline(numStations)
+
+        with pytest.raises(ValueError, match = 'channelWidth'):
+            generateCrossSections(geometry, x, y, z, np.full(numStations, 1e-3), 'rectangular')

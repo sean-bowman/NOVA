@@ -12,9 +12,26 @@ through, and, where the section has one, the rib between channels treated as a f
 turns the sized quantity at each station into those numbers and holds nothing else: no geometry
 module and no thermal module is imported here, so both can import it.
 
-    circle   A circular channel of radius r. The flow area is pi r^2 and the hydraulic diameter
-             sqrt(4 A / pi), which is 2r. Heat enters the coolant through the half of the
-             perimeter that faces the hot wall, pi r, and no fin is modeled.
+    circle        A circular channel of radius r. The flow area is pi r^2 and the hydraulic
+                  diameter sqrt(4 A / pi), which is 2r. Heat enters the coolant through the half
+                  of the perimeter that faces the hot wall, pi r, and no fin is modeled.
+
+    rectangular   A rectangle of width w across the circumference and depth d = 2h out from
+                  the wall, corners rounded at r_c. The width fills the pitch at the cold wall
+                  less the rib, w = 2 pi r_cw / N - t_rib, so the rib at its root is exactly the
+                  infill thickness, and the depth is what the sizing solve converges. The flow
+                  area is w d - (4 - pi) r_c^2 and the wetted perimeter 2(w + d) - (8 - 2 pi)
+                  r_c, and the hydraulic diameter is 4 A / P. Heat enters through the floor,
+                  w - 2 r_c plus half of each floor corner, and through the two side walls as the
+                  faces of the ribs, each a fin of height d - 2 r_c plus half of each of its
+                  corners and thickness t_rib.
+
+The perimeter of a rounded rectangle is split so the floor, the two sides and the roof each carry
+their straight run and half of each corner they touch; the four parts sum to the perimeter. The
+roof is the closeout, and the fin model's adiabatic tip is what leaves it out of the heated area.
+
+The cold-wall radius a width is taken at is the hot wall offset by the wall thickness along its
+normal, which is where the ribs stand.
 
 ----------------------------------------------------------------------
                         Fin efficiency
@@ -44,8 +61,8 @@ from dataclasses import dataclass
 import numpy as np
 
 # The families the package builds, and how a figure names them.
-SECTIONFAMILIES = ('circle',)
-SECTIONLABELS   = {'circle': 'Circular'}
+SECTIONFAMILIES = ('circle', 'rectangular')
+SECTIONLABELS   = {'circle': 'Circular', 'rectangular': 'Rectangular'}
 
 @dataclass(frozen = True)
 class SectionProperties:
@@ -89,7 +106,43 @@ class SectionProperties:
     finHeight:         np.ndarray
     finThickness:      np.ndarray
 
-def sectionProperties(family: str, halfExtent) -> SectionProperties:
+def rectangularWidth(coldWallRadius, nChannel: int, infillThickness: float):
+
+    '''
+
+    Width of a rectangular channel that fills its pitch at the cold wall less the rib [m].
+
+        w = 2 pi r_cw / N - t_rib
+
+    '''
+
+    return 2*np.pi*np.asarray(coldWallRadius, dtype = float)/nChannel - infillThickness
+
+def roundedRectangle(width, depth, cornerRadius) -> tuple:
+
+    '''
+
+    Flow area and perimeter of a rectangle with rounded corners.
+
+        A = w d - (4 - pi) r_c^2
+        P = 2 (w + d) - (8 - 2 pi) r_c
+
+    The corner radius is clamped to half the smaller side, where the section becomes a stadium.
+
+    Returns:
+    --------
+    tuple
+        (clamped corner radius [m], area [m^2], perimeter [m])
+
+    '''
+
+    width, depth = np.asarray(width, dtype = float), np.asarray(depth, dtype = float)
+    corner       = np.minimum(np.asarray(cornerRadius, dtype = float), 0.5*np.minimum(width, depth))
+
+    return corner, width*depth - (4 - np.pi)*corner**2, 2*(width + depth) - (8 - 2*np.pi)*corner
+
+def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
+                      ribThickness = 0.0) -> SectionProperties:
 
     '''
 
@@ -100,7 +153,13 @@ def sectionProperties(family: str, halfExtent) -> SectionProperties:
     family : str
         One of SECTIONFAMILIES.
     halfExtent : array_like
-        Radial half-extent at each station [m]; a circle's radius.
+        Radial half-extent at each station [m]; a circle's radius, half a rectangle's depth.
+    width : array_like
+        Circumferential width at each station [m]. Required for a rectangle.
+    cornerRadius : float
+        Corner radius of a rectangle [m].
+    ribThickness : array_like
+        Rib between neighboring channels, at its root [m]. Used by a rectangle.
 
     Returns:
     --------
@@ -136,20 +195,68 @@ def sectionProperties(family: str, halfExtent) -> SectionProperties:
             finHeight         = zeros,
             finThickness      = zeros)
 
+    if family == 'rectangular':
+
+        if width is None:
+            raise ValueError('A rectangular section needs its width at every station.')
+
+        width  = np.asarray(width, dtype = float)
+        depth  = 2*halfExtent
+        corner, flowArea, wettedPerimeter = roundedRectangle(width, depth, cornerRadius)
+
+        # Floor, sides and roof each take their straight run and half of each corner they touch
+        cornerShare = 0.5*np.pi*corner
+
+        return SectionProperties(
+            halfExtent        = halfExtent,
+            width             = width,
+            depth             = depth,
+            cornerRadius      = corner,
+            flowArea          = flowArea,
+            wettedPerimeter   = wettedPerimeter,
+            hydraulicDiameter = 4*flowArea/wettedPerimeter,
+            heatedPerimeter   = width - 2*corner + cornerShare,
+            finHeight         = depth - 2*corner + cornerShare,
+            finThickness      = np.broadcast_to(np.asarray(ribThickness, dtype = float),
+                                                halfExtent.shape).copy())
+
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 
-def equivalentDiameter(family: str, halfExtent) -> np.ndarray:
+def maxHalfExtent(family: str, width, maxAspectRatio: float, maxDepth: float = None):
+
+    '''
+
+    Largest radial half-extent a rectangle may be sized to at each station [m].
+
+    The depth is held to maxAspectRatio times the width, and to maxDepth where one is given.
+
+    '''
+
+    if family == 'rectangular':
+        depthLimit = maxAspectRatio*np.asarray(width, dtype = float)
+        if maxDepth is not None and np.isfinite(maxDepth):
+            depthLimit = np.minimum(depthLimit, maxDepth)
+        return 0.5*depthLimit
+
+    raise ValueError(f"No width-based half-extent limit for channel family '{family}'.")
+
+def equivalentDiameter(family: str, halfExtent, width = None, cornerRadius = 0.0) -> np.ndarray:
 
     '''
 
     The diameter a round port matching this section would have [m].
 
-    What a volute interface is sized from. A circle returns its own diameter.
+    What a volute interface is sized from. A circle returns its own diameter; a rectangle
+    returns the diameter of the circle of the same flow area.
 
     '''
 
     if family == 'circle':
         return np.asarray(halfExtent, dtype = float)*2
+
+    if family == 'rectangular':
+        _, flowArea, _ = roundedRectangle(width, 2*np.asarray(halfExtent, dtype = float), cornerRadius)
+        return np.sqrt(4*flowArea/np.pi)
 
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 
@@ -162,7 +269,9 @@ def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float
 
     A circle of radius r packs tangent to its neighbors and to the wall offset by the hot wall
     less the infill, R = r_t + t - t_inf, when sin(pi / N) = (r + t_inf/2) / (R + r + t_inf/2).
-    Solving at r = minHalfExtent and rounding down gives the channel count.
+    Solving at r = minHalfExtent and rounding down gives the channel count. A rectangle's width
+    is fixed by the count, so it is the count at which the throat width is minChannelWidth:
+    N = floor(2 pi (r_t + t) / (w_min + t_inf)).
 
     Parameters:
     -----------
@@ -173,7 +282,8 @@ def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float
     hotWallThickness, infillThickness : float
         Wall between coolant and exhaust, and material left between channels [m].
     minHalfExtent : float
-        Smallest half-extent the process can build [m].
+        Smallest half-extent the process can build [m] for a circle; the smallest width for a
+        rectangle.
 
     Returns:
     --------
@@ -184,6 +294,9 @@ def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float
     if family == 'circle':
         reach = minHalfExtent + infillThickness/2
         return int(np.pi / (np.arcsin(reach / (reach + throatRadius + hotWallThickness - infillThickness))))
+
+    if family == 'rectangular':
+        return int(np.floor(2*np.pi*(throatRadius + hotWallThickness) / (minHalfExtent + infillThickness)))
 
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 

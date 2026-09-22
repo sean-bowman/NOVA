@@ -43,6 +43,7 @@ def workingInputs():
         nChannel                  = 60,
         minChannelRadius          = 0.75e-3,
         hotWallThickness          = 1.0e-3,
+        infillThickness           = 1.0e-3,
         channelType               = 'circle',
         coolant                   = 'Hydrogen',
         coolantMassFlow           = 3.4,
@@ -189,6 +190,35 @@ class TestValidator:
         state.rRegenNozzle = state.rRegenNozzle[:-5]
 
         with pytest.raises(Exception):
+            validateRegenChannelInputs(state)
+
+    def testARibThinnerThanTheProcessCanBuildIsRejected(self):
+
+        state = workingInputs()
+        state.infillThickness = 0.2e-3
+
+        with pytest.raises(Exception, match = 'infillThickness'):
+            validateRegenChannelInputs(state)
+
+    def testARectangleNeedsItsWidthAndAspectLimits(self):
+
+        state = workingInputs()
+        state.channelType = 'rectangular'
+
+        with pytest.raises(Exception, match = 'minChannelWidth'):
+            validateRegenChannelInputs(state)
+
+        state.minChannelWidth, state.maxChannelAspectRatio = 1.0e-3, 8.0
+        validateRegenChannelInputs(state)
+
+    @pytest.mark.parametrize('aspectRatio', [0.0, 25.0])
+    def testAnAspectRatioOutsideItsRangeIsRejected(self, aspectRatio):
+
+        state = workingInputs()
+        state.channelType = 'rectangular'
+        state.minChannelWidth, state.maxChannelAspectRatio = 1.0e-3, aspectRatio
+
+        with pytest.raises(Exception, match = 'maxChannelAspectRatio'):
             validateRegenChannelInputs(state)
 
     @pytest.mark.parametrize('channelType', ['fluted', 'hexagon'])
