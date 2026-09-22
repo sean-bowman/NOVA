@@ -106,18 +106,19 @@ def intersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCu
     
     '''
 
-    # Helper functions to calculate moving minimum and maximum for passed in curves
+    # Helper functions to calculate moving minimum and maximum for passed in curves: the bounding
+    # box of each of the n - 1 segments of an n point curve, the last one included
     def movingMin(array):
         if len(array) == 2:
             movingMinimum = np.minimum(array[0],array[1])
         else:
-            movingMinimum = np.minimum(array[0:-2],array[1:-1])
+            movingMinimum = np.minimum(array[:-1],array[1:])
         return movingMinimum
     def movingMax(array):
         if len(array) == 2:
             movingMaximum = np.maximum(array[0],array[1])
         else:
-            movingMaximum = np.maximum(array[0:-2],array[1:-1])
+            movingMaximum = np.maximum(array[:-1],array[1:])
         return movingMaximum
 
     # If passed in arrays are lists, make them numpy arrays
@@ -155,8 +156,10 @@ def intersection(xCurve1: ArrayLike, yCurve1: ArrayLike, xCurve2: ArrayLike, yCu
         foundIndex_int = np.zeros((1,2), dtype = int)
         foundIndex_int[0,0] = foundIndex_int[0,1] = foundIndex[0][0]
         foundIndex = foundIndex_int
-    # Special case for when there is no intersection (return an empty element for x and y)
-    elif not foundIndex.any():
+    # Special case for when there is no intersection (return an empty element for x and y). The
+    # test is on the count of candidates, not their values: a crossing in the first segment of
+    # both curves is the candidate (0, 0).
+    elif foundIndex.size == 0:
         xIntersect, yIntersect = [], []
         return xIntersect, yIntersect
 

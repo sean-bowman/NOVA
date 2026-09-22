@@ -800,7 +800,11 @@ def solveChannelRadii(state, geometry, thermal):
                     newError = newWallTemp - maxWallTemperature
                     backtrackCounter += 1
 
-                    if minMaxed:
+                    # A bound is the answer only when the wall is still on the far side of the
+                    # target there: cold at the largest channel, hot at the smallest. Otherwise
+                    # the root lies inside the bounds and the search goes on.
+                    atLargest = proposedRadius >= maxChannelRadius
+                    if minMaxed and ((atLargest and newError < 0) or (not atLargest and newError > 0)):
                         newError = 0
 
                 # Overshoot / jitter damping: if error sign flipped, shrink next step size
