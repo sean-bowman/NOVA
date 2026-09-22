@@ -26,6 +26,14 @@ module and no thermal module is imported here, so both can import it.
                   faces of the ribs, each a fin of height d - 2 r_c plus half of each of its
                   corners and thickness t_rib.
 
+    helical       The same rounded rectangle, run as a helix of N starts at a constant angle phi
+                  to the meridian: a loxodrome on the cold wall, d(theta)/ds_m = tan(phi)/r_cw.
+                  The passes then sit 2 pi r_cw cos(phi) / N apart measured across the channel.
+                  The width is what the sizing solve converges, the depth is the configured
+                  aspect ratio times it, and the rib is what is left of the pass spacing, so it
+                  varies along the nozzle with the radius. It may not fall below the infill
+                  thickness, which caps the width, and the depth may not pass maxChannelDepth.
+
 The perimeter of a rounded rectangle is split so the floor, the two sides and the roof each carry
 their straight run and half of each corner they touch; the four parts sum to the perimeter. The
 roof is the closeout, and the fin model's adiabatic tip is what leaves it out of the heated area.
@@ -61,8 +69,11 @@ from dataclasses import dataclass
 import numpy as np
 
 # The families the package builds, and how a figure names them.
-SECTIONFAMILIES = ('circle', 'rectangular')
-SECTIONLABELS   = {'circle': 'Circular', 'rectangular': 'Rectangular'}
+SECTIONFAMILIES = ('circle', 'rectangular', 'helical')
+SECTIONLABELS   = {'circle': 'Circular', 'rectangular': 'Rectangular', 'helical': 'Helical'}
+
+# The families drawn as a rounded rectangle on the wall normal
+RECTANGULARFAMILIES = ('rectangular', 'helical')
 
 @dataclass(frozen = True)
 class SectionProperties:
@@ -118,6 +129,57 @@ def rectangularWidth(coldWallRadius, nChannel: int, infillThickness: float):
 
     return 2*np.pi*np.asarray(coldWallRadius, dtype = float)/nChannel - infillThickness
 
+def helicalSpacing(coldWallRadius, nChannel: int, helixAngle: float):
+
+    '''
+
+    Distance between neighboring helical passes, measured across the channel [m].
+
+        s = 2 pi r_cw cos(phi) / N
+
+    with phi the helix angle from the meridian [deg on the interface].
+
+    '''
+
+    return 2*np.pi*np.asarray(coldWallRadius, dtype = float)*np.cos(np.deg2rad(helixAngle))/nChannel
+
+def loxodromeWrap(meridionalLength, coldWallRadius, helixAngle: float, active = None) -> np.ndarray:
+
+    '''
+
+    Azimuth of a curve that crosses every meridian of the cold wall at the helix angle [rad].
+
+        d(theta)/d(s_m) = tan(phi) / r_cw
+
+    integrated along the meridian with the trapezoid rule from zero at the first station. Where
+    `active` is false the rate is zero, which holds the azimuth through a stretch the channel
+    runs straight across, such as a volute interface.
+
+    Parameters:
+    -----------
+    meridionalLength : array_like
+        Arc length along the cold-wall meridian at each station [m].
+    coldWallRadius : array_like
+        Cold-wall radius at each station [m].
+    helixAngle : float
+        Angle between the channel and the meridian [deg].
+    active : array_like of bool, optional
+        Stations the helix applies at.
+
+    Returns:
+    --------
+    np.ndarray
+        Wrap angle at each station [rad].
+
+    '''
+
+    length = np.asarray(meridionalLength, dtype = float)
+    rate   = np.tan(np.deg2rad(helixAngle))/np.asarray(coldWallRadius, dtype = float)
+    if active is not None:
+        rate = np.where(np.asarray(active, dtype = bool), rate, 0.0)
+
+    return np.concatenate([[0.0], np.cumsum(0.5*(rate[1:] + rate[:-1])*np.diff(length))])
+
 def roundedRectangle(width, depth, cornerRadius) -> tuple:
 
     '''
@@ -155,11 +217,11 @@ def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
     halfExtent : array_like
         Radial half-extent at each station [m]; a circle's radius, half a rectangle's depth.
     width : array_like
-        Circumferential width at each station [m]. Required for a rectangle.
+        Width across the channel at each station [m]. Required for a rectangle or a helix.
     cornerRadius : float
-        Corner radius of a rectangle [m].
+        Corner radius of a rectangle or a helix [m].
     ribThickness : array_like
-        Rib between neighboring channels, at its root [m]. Used by a rectangle.
+        Rib between neighboring channels, at its root [m]. Used by a rectangle or a helix.
 
     Returns:
     --------
@@ -195,10 +257,10 @@ def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
             finHeight         = zeros,
             finThickness      = zeros)
 
-    if family == 'rectangular':
+    if family in RECTANGULARFAMILIES:
 
         if width is None:
-            raise ValueError('A rectangular section needs its width at every station.')
+            raise ValueError(f'A {family} section needs its width at every station.')
 
         width  = np.asarray(width, dtype = float)
         depth  = 2*halfExtent
@@ -228,11 +290,13 @@ def maxHalfExtent(family: str, width, maxAspectRatio: float, maxDepth: float = N
 
     Largest radial half-extent a rectangle may be sized to at each station [m].
 
-    The depth is held to maxAspectRatio times the width, and to maxDepth where one is given.
+    The depth is held to maxAspectRatio times the width, and to maxDepth where one is given. A
+    helix passes the widest channel its pass spacing allows, the spacing less the minimum rib,
+    as the width and its fixed aspect ratio as the ratio, so the same product bounds it.
 
     '''
 
-    if family == 'rectangular':
+    if family in RECTANGULARFAMILIES:
         depthLimit = maxAspectRatio*np.asarray(width, dtype = float)
         if maxDepth is not None and np.isfinite(maxDepth):
             depthLimit = np.minimum(depthLimit, maxDepth)
@@ -254,14 +318,14 @@ def equivalentDiameter(family: str, halfExtent, width = None, cornerRadius = 0.0
     if family == 'circle':
         return np.asarray(halfExtent, dtype = float)*2
 
-    if family == 'rectangular':
+    if family in RECTANGULARFAMILIES:
         _, flowArea, _ = roundedRectangle(width, 2*np.asarray(halfExtent, dtype = float), cornerRadius)
         return np.sqrt(4*flowArea/np.pi)
 
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 
 def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float,
-                       infillThickness: float, minHalfExtent: float) -> int:
+                       infillThickness: float, minHalfExtent: float, helixAngle: float = 0.0) -> int:
 
     '''
 
@@ -271,7 +335,8 @@ def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float
     less the infill, R = r_t + t - t_inf, when sin(pi / N) = (r + t_inf/2) / (R + r + t_inf/2).
     Solving at r = minHalfExtent and rounding down gives the channel count. A rectangle's width
     is fixed by the count, so it is the count at which the throat width is minChannelWidth:
-    N = floor(2 pi (r_t + t) / (w_min + t_inf)).
+    N = floor(2 pi (r_t + t) / (w_min + t_inf)). A helix's passes are closer by cos(phi), so its
+    count of starts is N = floor(2 pi (r_t + t) cos(phi) / (w_min + t_inf)).
 
     Parameters:
     -----------
@@ -297,6 +362,10 @@ def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float
 
     if family == 'rectangular':
         return int(np.floor(2*np.pi*(throatRadius + hotWallThickness) / (minHalfExtent + infillThickness)))
+
+    if family == 'helical':
+        return int(np.floor(2*np.pi*(throatRadius + hotWallThickness)*np.cos(np.deg2rad(helixAngle))
+                            / (minHalfExtent + infillThickness)))
 
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 

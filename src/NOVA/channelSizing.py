@@ -64,7 +64,8 @@ from .geometryTools import DCM, parallelOffset
 from .errors import ConvergenceFailureError, createErrorContext, InvalidInputError
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
-from .channelSections import maxHalfExtent, rectangularWidth, throatChannelCount
+from .channelSections import (helicalSpacing, loxodromeWrap, maxHalfExtent, rectangularWidth,
+                              throatChannelCount)
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
@@ -143,6 +144,8 @@ class ChannelSizingState:
     channelCornerRadius, maxChannelAspectRatio, maxChannelDepth : float
         A rectangle's corner radius [m], the depth it may reach as a multiple of its width [-],
         and the depth it may reach outright [m].
+    channelHelixAngle, channelAspectRatio : float
+        A helix's angle from the meridian [deg] and its depth as a multiple of its width [-].
     maxWallTemperature : float
         Hot wall temperature the loop converges to [K].
     hotWallThickness, infillThickness : float
@@ -198,6 +201,8 @@ class ChannelSizingState:
     channelCornerRadius:                    float = 0.0
     maxChannelAspectRatio:                  float = 8.0
     maxChannelDepth:                        float = float('inf')
+    channelHelixAngle:                      float = float('nan')
+    channelAspectRatio:                     float = 1.0
     maxWallTemperature:                     float = float('nan')
     hotWallThickness:                       float = 0.0
     infillThickness:                        float = 0.0
@@ -227,7 +232,8 @@ class ChannelSizingState:
 
     # -- What the solve produces -- #
     channelRadius:                          Any   = None   # [m], one per station
-    channelWidth:                           Any   = None   # [m], one per station, rectangles only
+    channelWidth:                           Any   = None   # [m], one per station, rectangles and helices
+    channelRibThickness:                    Any   = None   # [m], one per station, helices only
     coolantExitPressure:                    Any   = None   # [Pa]
     coolantExitTemperature:                 Any   = None   # [K]
     wallMaterialResolved:                   Any   = None   # the alloy actually used
@@ -241,7 +247,7 @@ class ChannelSizingState:
 # The outputs a solve hands back. Kept beside the class so that adding a field and forgetting to
 # surface it is a one-line fix rather than a silent drop.
 channelSizingOutputs = (
-    'channelRadius', 'channelWidth', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
+    'channelRadius', 'channelRibThickness', 'channelWidth', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
     'wallMaterialResolved', 'tempRangeKelvin', 'wallThermalConductivityData',
     'wallThermalConductivityInterpolator', 'wallCTEInterpolator',
     'wallYieldStrengthInterpolator', 'wallFractureStrainInterpolator')
@@ -314,9 +320,22 @@ def solveChannelRadii(state, geometry, thermal):
         projection angle (straight channel).
 
         A rectangle fills its pitch by construction, so it runs straight: no projection and no
-        wrap, and the largest it may be is set by its aspect ratio and depth limits.
+        wrap, and the largest it may be is set by its aspect ratio and depth limits. A helix
+        follows the loxodrome laid out before the march, and the largest it may be is the widest
+        that leaves the minimum rib in its pass spacing, within the depth limit.
 
         '''
+
+        if state.channelType == 'helical':
+            if findMaxRadius:
+                return float(maxHalfExtent('helical', state.dcrData['passSpacing'][i] - state.infillThickness,
+                                           state.channelAspectRatio, state.maxChannelDepth))
+            state.dcrData['projectionAngle'][i] = np.deg2rad(state.channelHelixAngle)
+            helixPath[i] = state.dcrData['helicalWrap'][i]
+            if i < state.numCrossSections - 1:
+                helixPath[i+1] = state.dcrData['helicalWrap'][i+1]
+            state.dcrData['helixPath'][i] = helixPath[i]
+            return helixPath, channelRadius
 
         if state.channelType == 'rectangular':
             if findMaxRadius:
@@ -480,9 +499,16 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["nearWallPressure"]    = np.array([state.regenSectionNearWallPressureTrimmed    [state.numCrossSections - 1 - i]])
 
         # get geometry properties for heat transfer
+        # A helix's width follows the depth being tried, and its rib is what the pass spacing leaves
+        channelWidth, ribThickness = state.dcrData.get('channelWidth'), None
+        if channelType == 'helical':
+            channelWidth = 2*channelRadius/state.channelAspectRatio
+            ribThickness = state.dcrData['passSpacing'] - channelWidth
+
         heatTransferDict_iUpdate = \
             buildCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
-                                       channelRadius, channelType, i, channelWidth = state.dcrData.get('channelWidth'))
+                                       channelRadius, channelType, i, channelWidth = channelWidth,
+                                       ribThickness = ribThickness)
 
         # update local heat transfer dictionary
         heatTransferDict_i = heatTransferDict_i | heatTransferDict_iUpdate
@@ -594,8 +620,30 @@ def solveChannelRadii(state, geometry, thermal):
 
         '''
 
+        # The smallest half-extent the process can build. A helix is bounded by its width
+        minHalfExtent = state.minChannelRadius
+        if state.channelType == 'helical':
+            minHalfExtent = 0.5*state.channelAspectRatio*state.minChannelWidth
+
         # first check if nChannel is too high and reduce if so
-        if state.channelType == 'rectangular':
+        if state.channelType == 'helical':
+            throatRadius   = min(rNozzle)
+            throatSpacing  = helicalSpacing(throatRadius + state.hotWallThickness, nChannel, state.channelHelixAngle)
+            if throatSpacing - state.infillThickness < state.minChannelWidth:
+                print(f'\nnChannel too high; helical passes at the throat will be too narrow.')
+                nChannel = throatChannelCount('helical', throatRadius, state.hotWallThickness,
+                                              state.infillThickness, state.minChannelWidth,
+                                              helixAngle = state.channelHelixAngle)
+                state.nChannel = nChannel
+                print(f'\nnChannel reduced to {nChannel}.')
+
+            # The loxodrome and the pass spacing along the cold wall, in march order
+            xColdWall, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
+            xColdWall, rColdWall = np.flip(xColdWall), np.flip(rColdWall)
+            meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
+            state.dcrData['helicalWrap'] = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle)
+            state.dcrData['passSpacing'] = helicalSpacing(rColdWall, nChannel, state.channelHelixAngle)
+        elif state.channelType == 'rectangular':
             throatRadius = min(rNozzle)
             throatWidth  = rectangularWidth(throatRadius + state.hotWallThickness, nChannel, state.infillThickness)
             if throatWidth < state.minChannelWidth:
@@ -967,8 +1015,8 @@ def solveChannelRadii(state, geometry, thermal):
                 channelRadius[i] = channelRadius[i-1]
             if channelRadius[i] > maxChannelRadius:
                 channelRadius[i] = maxChannelRadius
-            if channelRadius[i] < state.minChannelRadius:
-                channelRadius[i] = state.minChannelRadius
+            if channelRadius[i] < minHalfExtent:
+                channelRadius[i] = minHalfExtent
 
             # Wrap
             if i < state.numCrossSections - 1:
@@ -984,7 +1032,7 @@ def solveChannelRadii(state, geometry, thermal):
                 dcrGambit(heatTransferDict_i, heatTransferPlots, \
                         xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D, channelRadius, state.channelType, i)
 
-            heatTransferDict_i = dynamicConvergenceLoop_channelRadius(channelRadius, nChannel, state.minChannelRadius, maxChannelRadius, i, heatTransferDict_i, heatTransferPlots, hotWallTemperature)
+            heatTransferDict_i = dynamicConvergenceLoop_channelRadius(channelRadius, nChannel, minHalfExtent, maxChannelRadius, i, heatTransferDict_i, heatTransferPlots, hotWallTemperature)
 
         # The station loop marches from the coolant inlet, and each station is written
         # into heatTransferPlots reversed, at N - 1 - i. That puts the inlet at the last
@@ -1006,6 +1054,9 @@ def solveChannelRadii(state, geometry, thermal):
     state.channelRadius = channelRadius.copy()
     if state.channelType == 'rectangular':
         state.channelWidth = np.flip(state.dcrData['channelWidth'])
+    elif state.channelType == 'helical':
+        state.channelWidth        = 2*channelRadius/state.channelAspectRatio
+        state.channelRibThickness = np.flip(state.dcrData['passSpacing']) - state.channelWidth
 
     # Heat transfer plots
     drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,

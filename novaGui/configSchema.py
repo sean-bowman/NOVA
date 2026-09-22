@@ -141,6 +141,12 @@ def _coolingOn(config: dict) -> bool:
 def _rectangularChannels(config: dict) -> bool:
     return _coolingOn(config) and config.get('channelType') == 'rectangular'
 
+def _helicalChannels(config: dict) -> bool:
+    return _coolingOn(config) and config.get('channelType') == 'helical'
+
+def _rectangularOrHelicalChannels(config: dict) -> bool:
+    return _rectangularChannels(config) or _helicalChannels(config)
+
 def _anyVolute(config: dict) -> bool:
     return (config.get('makeInletVolute') in (True, 'on')
             or config.get('makeReturnVolute') in (True, 'on'))
@@ -285,29 +291,38 @@ groups = [
               help = 'Hot wall alloy. Drives the temperature-dependent thermal conductivity in the '
                      'heat transfer model; sampled properties are shown below.'),
         Field('channelType', 'Channel type', 'choice',
-              choices = [('Circular', 'circle'), ('Rectangular', 'rectangular')],
+              choices = [('Circular', 'circle'), ('Rectangular', 'rectangular'), ('Helical', 'helical')],
               default = 'circle', showWhen = _coolingOn,
               help = 'Cooling channel cross-section family. Circular channels are sized by radius; '
-                     'rectangular channels fill the pitch less the rib and are sized by depth.'),
+                     'rectangular channels fill the pitch less the rib and are sized by depth; '
+                     'helical channels run at a fixed angle and aspect ratio and are sized by width.'),
+        Field('channelHelixAngle', 'Channel helix angle', 'float', default = None, unit = 'deg',
+              showWhen = _helicalChannels,
+              help = 'Angle the helical channels run at from the meridian, 0 to 85 degrees. nChannel is the number of starts.'),
+        Field('channelAspectRatio', 'Channel aspect ratio', 'float', default = 1.0,
+              showWhen = _helicalChannels,
+              help = 'Depth of a helical channel as a multiple of its width.'),
         Field('minChannelWidth', 'Minimum channel width', 'float', default = 1.0e-3, unit = 'm',
-              showWhen = _rectangularChannels,
-              help = 'Narrowest rectangle the process can build. The channel count is reduced to hold it at the throat.'),
+              showWhen = _rectangularOrHelicalChannels,
+              help = 'Narrowest channel the process can build. The channel count is reduced to hold it at the throat.'),
         Field('channelCornerRadius', 'Channel corner radius', 'float', default = None, unit = 'm',
-              showWhen = _rectangularChannels,
+              showWhen = _rectangularOrHelicalChannels,
               help = 'Corner radius of a rectangular channel. Blank is a sharp corner; the STEP writer needs it above zero.'),
         Field('maxChannelAspectRatio', 'Maximum aspect ratio', 'float', default = 8.0,
               showWhen = _rectangularChannels,
               help = 'Depth a rectangular channel may reach, as a multiple of its width.'),
         Field('maxChannelDepth', 'Maximum channel depth', 'float', default = None, unit = 'm',
-              showWhen = _rectangularChannels,
-              help = 'Depth a rectangular channel may reach outright. Blank leaves the aspect ratio to limit it.'),
+              showWhen = _rectangularOrHelicalChannels,
+              help = 'Depth a rectangular or helical channel may reach outright. Blank leaves the aspect ratio, '
+                     'or for a helix the rib, to limit it.'),
         Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
         Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Outer structural shell thickness.'),
         Field('infillThickness', 'Rib thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn,
-              help = 'Rib between neighboring channels. A rectangular channel\'s rib is exactly this at the wall.'),
+              help = 'Rib between neighboring channels. A rectangular channel\'s rib is exactly this at the wall; '
+                     'a helical channel\'s rib varies and never falls below it.'),
         Field('nChannel', 'Number of channels', 'int', default = None, showWhen = _coolingOn,
               help = 'Fixed channel count. Leave blank to let the optimizer choose within the bounds below.'),
         Field('numCrossSections', 'Channel cross sections', 'int', default = 100, showWhen = _coolingOn,

@@ -221,6 +221,36 @@ class TestValidator:
         with pytest.raises(Exception, match = 'maxChannelAspectRatio'):
             validateRegenChannelInputs(state)
 
+    def helical(self, **overrides):
+
+        state = workingInputs()
+        state.channelType, state.minChannelWidth = 'helical', 1.0e-3
+        state.channelHelixAngle, state.channelAspectRatio = 45.0, 1.0
+        for name, value in overrides.items():
+            setattr(state, name, value)
+        return state
+
+    def testAHelixMayHaveFewStarts(self):
+
+        # The ten-channel process minimum is for straight channels; a helix of one start is one
+        # continuous passage around the whole chamber
+        validateRegenChannelInputs(self.helical(nChannel = 1))
+
+        with pytest.raises(Exception, match = 'nChannel'):
+            validateRegenChannelInputs(self.helical(nChannel = 0))
+
+    @pytest.mark.parametrize('helixAngle', [0.0, 86.0, None])
+    def testAHelixAngleOutsideItsRangeIsRejected(self, helixAngle):
+
+        with pytest.raises(Exception, match = 'channelHelixAngle'):
+            validateRegenChannelInputs(self.helical(channelHelixAngle = helixAngle))
+
+    @pytest.mark.parametrize('aspectRatio', [0.0, 21.0])
+    def testAHelicalAspectRatioOutsideItsRangeIsRejected(self, aspectRatio):
+
+        with pytest.raises(Exception, match = 'channelAspectRatio'):
+            validateRegenChannelInputs(self.helical(channelAspectRatio = aspectRatio))
+
     @pytest.mark.parametrize('channelType', ['fluted', 'hexagon'])
     def testAFamilyThePackageDoesNotBuildIsRejected(self, channelType):
 

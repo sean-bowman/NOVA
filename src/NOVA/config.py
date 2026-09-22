@@ -198,8 +198,9 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.nChannel                       = inputsPath['nChannel']
         nozzle.channelType                    = inputsPath['channelType']
 
-        # A rectangle's width and depth limits. Read with defaults, so a configuration written for
-        # circular channels needs none of them; a null reads as unset like everywhere else here.
+        # A rectangle's width and depth limits and a helix's angle and aspect ratio. Read with
+        # defaults, so a configuration written for circular channels needs none of them; a null
+        # reads as unset like everywhere else here.
         def valueOr(name, default):
             value = inputsPath.get(name)
             unset = value is None or (isinstance(value, float) and np.isnan(value))
@@ -209,6 +210,8 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.channelCornerRadius            = valueOr('channelCornerRadius', 0.0)
         nozzle.maxChannelAspectRatio          = valueOr('maxChannelAspectRatio', 8.0)
         nozzle.maxChannelDepth                = valueOr('maxChannelDepth', None)
+        nozzle.channelHelixAngle              = valueOr('channelHelixAngle', None)
+        nozzle.channelAspectRatio             = valueOr('channelAspectRatio', 1.0)
         nozzle.minCoolantExitPressure         = inputsPath['minCoolantExitPressure']
         nozzle.minCoolantExitTemperature      = inputsPath['minCoolantExitTemperature']
         nozzle.maxWallTempUpperBound          = inputsPath['maxWallTempUpperBound']

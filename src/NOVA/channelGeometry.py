@@ -54,7 +54,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .channelSections import SECTIONFAMILIES, maxHalfExtent, rectangularWidth, sectionProperties
+from .channelSections import (SECTIONFAMILIES, helicalSpacing, maxHalfExtent, rectangularWidth,
+                              sectionProperties)
 
 @dataclass
 class ChannelGeometryInputs:
@@ -84,7 +85,12 @@ class ChannelGeometryInputs:
     maxChannelAspectRatio : float
         Depth a rectangular section may reach, as a multiple of its width [-].
     maxChannelDepth : float
-        Depth a rectangular section may reach [m]. Infinite leaves the aspect ratio to limit it.
+        Depth a rectangular or helical section may reach [m]. Infinite leaves the aspect ratio,
+        or for a helix the rib, to limit it.
+    channelHelixAngle : float
+        Angle a helical channel runs at from the meridian [deg].
+    channelAspectRatio : float
+        Depth of a helical section as a multiple of its width [-].
 
     '''
 
@@ -97,6 +103,8 @@ class ChannelGeometryInputs:
     channelCornerRadius:  float = 0.0
     maxChannelAspectRatio: float = 8.0
     maxChannelDepth:      float = float('inf')
+    channelHelixAngle:    float = 0.0
+    channelAspectRatio:   float = 1.0
 
 def rectangularProfile(width: float, depth: float, cornerRadius: float, numPoints: int) -> tuple:
 
@@ -221,13 +229,15 @@ def wallNormalFrames(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple:
     return tangent, normal, binormal
 
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
-                          channelRadius, crossSectionStyle, i: int = None, channelWidth = None):
+                          channelRadius, crossSectionStyle, i: int = None, channelWidth = None,
+                          ribThickness = None):
 
     '''
 
     (x,y,z)ChannelCenterline3D, channelRadius and channelWidth inputs are expected to be length of numCrossSections even
     when only generating a single station. channelRadius is the section's radial half-extent: a circle's radius, half a
-    rectangle's depth. channelWidth is a rectangle's width and is not read for a circle.
+    rectangle's depth. channelWidth is a rectangle's width and is not read for a circle. ribThickness is the rib at each
+    station where it varies, as a helix's does; left out, the rib is the infill thickness.
 
     If i is specified, one cross section is generated at that station along (x,y,z)ChannelCenterline3D with the local
     channel radius, and only the heat transfer dictionary is returned.
@@ -516,13 +526,14 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     else:
         if channelWidth is None:
             raise ValueError(f"A '{crossSectionStyle}' section needs channelWidth at every station.")
+        rib = geometry.infillThickness if ribThickness is None else np.asarray(ribThickness)[stationIndex]
         section = sectionProperties(crossSectionStyle, channelRadius[stationIndex],
                                     width = np.asarray(channelWidth)[stationIndex],
                                     cornerRadius = geometry.channelCornerRadius,
-                                    ribThickness = geometry.infillThickness)
+                                    ribThickness = rib)
     pathLength   = differentialPathLength[stationIndex]
 
-    # A rectangle is drawn on the wall normal, depth outward and width across the wall
+    # A rectangle or a helix is drawn on the wall normal, depth outward and width across the wall
     if fullSweep and crossSectionStyle != 'circle':
         _, wallNormal, wallBinormal = wallNormalFrames(xChannelCenterline3D, yChannelCenterline3D,
                                                        zChannelCenterline3D)
@@ -558,8 +569,9 @@ def getMaxChannelRadius(geometry, rNozzle, i):
     '''
 
     Returns the largest radial half-extent a channel may take at station i along rNozzle: the
-    radius of the largest circle that packs between its neighbors, or half the deepest rectangle
-    the aspect ratio and depth limits allow. A rectangle's width is taken here at the hot wall
+    radius of the largest circle that packs between its neighbors, half the deepest rectangle the
+    aspect ratio and depth limits allow, or half the depth of the widest helical channel that
+    leaves the minimum rib. A rectangle's width is taken here at the hot wall
     radius plus the wall thickness, which is within t(1 - cos a) of the offset cold wall on a wall
     at angle a; the sizing solve itself takes it at the offset cold wall.
 
@@ -573,6 +585,12 @@ def getMaxChannelRadius(geometry, rNozzle, i):
                                  geometry.infillThickness)
         return float(maxHalfExtent('rectangular', width, geometry.maxChannelAspectRatio,
                                    geometry.maxChannelDepth))
+
+    if geometry.channelType == 'helical':
+        spacing = helicalSpacing(rNozzle[i] + geometry.hotWallThickness, geometry.nChannel,
+                                 geometry.channelHelixAngle)
+        return float(maxHalfExtent('helical', spacing - geometry.infillThickness,
+                                   geometry.channelAspectRatio, geometry.maxChannelDepth))
 
     offsetHotWallThickness = geometry.hotWallThickness - geometry.infillThickness
     arcAngle = 2*np.pi / geometry.nChannel

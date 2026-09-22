@@ -452,3 +452,39 @@ class TestRectangularSweep:
 
         with pytest.raises(ValueError, match = 'channelWidth'):
             generateCrossSections(geometry, x, y, z, np.full(numStations, 1e-3), 'rectangular')
+
+class TestHelicalPath:
+
+    '''A helix at angle phi on a cylinder travels 1/cos(phi) times the axial length.'''
+
+    @pytest.mark.parametrize('helixAngle', [15.0, 45.0, 70.0])
+    def testThePathIsTheMeridianOverCosPhi(self, helixAngle):
+
+        from NOVA.channelSections import loxodromeWrap
+
+        numStations, radius, length = 400, 0.06, 0.3
+        x = np.linspace(0.0, length, numStations)
+        wrap = loxodromeWrap(x, np.full(numStations, radius), helixAngle)
+        y, z = radius * np.cos(wrap), radius * np.sin(wrap)
+
+        geometry = circularInputs(numCrossSections = numStations, numCSPointsChannel = 40)
+        geometry.channelType, geometry.channelHelixAngle = 'helical', helixAngle
+        _, _, _, heatTransfer = generateCrossSections(
+            geometry, x, y, z, np.full(numStations, 1.0e-3), 'helical',
+            channelWidth = np.full(numStations, 2.0e-3), ribThickness = np.full(numStations, 1.0e-3))
+
+        # The last station repeats the segment before it, so the path is the first N - 1
+        path = np.sum(heatTransfer['differentialPathLength'][:-1])
+
+        assert path == pytest.approx(length / np.cos(np.deg2rad(helixAngle)), rel = 1e-4)
+
+    def testTheLargestHelixLeavesTheMinimumRib(self):
+
+        from NOVA.channelSections import helicalSpacing
+
+        geometry = circularInputs(nChannel = 40)
+        geometry.channelType, geometry.channelHelixAngle, geometry.channelAspectRatio = 'helical', 45.0, 1.5
+        largest = getMaxChannelRadius(geometry, np.array([0.05]), 0)
+        spacing = helicalSpacing(0.05 + geometry.hotWallThickness, 40, 45.0)
+
+        assert largest == pytest.approx(1.5 * (spacing - geometry.infillThickness) / 2, rel = 1e-14)

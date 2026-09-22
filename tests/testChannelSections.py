@@ -12,6 +12,10 @@ the heat enters through is the half that faces the wall, pi r. It has no fin.
 hydraulic diameter is the side of a square and tends to twice the width of a thin slot. Its
 floor, sides and roof tile the perimeter, and its width leaves exactly the rib at the cold wall.
 
+**A helix is a loxodrome.** Its wrap is s tan(phi) / r on a cylinder and tan(phi) / sin(a) ln(r / r0)
+on a cone, it holds still where it is switched off, its passes sit 2 pi r cos(phi) / N apart, and
+its rib is what the spacing leaves the width.
+
 **The throat channel count is the packing inverted.** The count it returns is the largest at
 which the channel that fits at the throat is still no smaller than the process minimum, checked
 against the packing formula in channelGeometry at that count and the next.
@@ -28,8 +32,8 @@ import numpy as np
 import pytest
 
 from NOVA.channelSections import (SECTIONFAMILIES, SECTIONLABELS, equivalentDiameter,
-                                  finEfficiency, maxHalfExtent, rectangularWidth,
-                                  sectionProperties, throatChannelCount)
+                                  finEfficiency, helicalSpacing, loxodromeWrap, maxHalfExtent,
+                                  rectangularWidth, sectionProperties, throatChannelCount)
 
 class TestCircle:
 
@@ -252,3 +256,71 @@ class TestRectangle:
 
         assert rectangularWidth(coldWall, count, 1.0e-3) >= 1.0e-3
         assert rectangularWidth(coldWall, count + 1, 1.0e-3) < 1.0e-3
+
+class TestHelix:
+
+    '''The loxodrome, the pass spacing and the rib in closed form.'''
+
+    def testTheWrapOnACylinderIsLinear(self):
+
+        # r fixed, so d(theta)/ds is the constant tan(phi) / r
+        length = np.linspace(0.0, 0.3, 50)
+        wrap = loxodromeWrap(length, np.full(50, 0.06), 30.0)
+
+        assert np.allclose(wrap, length * np.tan(np.deg2rad(30.0)) / 0.06, rtol = 1e-14, atol = 0)
+
+    @pytest.mark.parametrize('helixAngle', [15.0, 45.0, 70.0])
+    def testTheWrapOnAConeIsLogarithmicInRadius(self, helixAngle):
+
+        # r = r0 + s sin(a), so theta = tan(phi) / sin(a) ln(r / r0)
+        halfAngle, start = np.deg2rad(20.0), 0.05
+        length = np.linspace(0.0, 0.2, 2001)
+        radius = start + length * np.sin(halfAngle)
+
+        wrap = loxodromeWrap(length, radius, helixAngle)
+        exact = np.tan(np.deg2rad(helixAngle)) / np.sin(halfAngle) * np.log(radius / start)
+
+        assert np.allclose(wrap[1:], exact[1:], rtol = 1e-6, atol = 0)
+
+    def testAnInactiveStretchHoldsTheAngle(self):
+
+        length = np.linspace(0.0, 0.3, 31)
+        active = np.ones(31, dtype = bool)
+        active[:5] = active[-5:] = False
+        wrap = loxodromeWrap(length, np.full(31, 0.06), 45.0, active = active)
+
+        assert np.all(wrap[:5] == 0.0)
+        assert np.all(np.diff(wrap[-5:]) == 0.0)
+        assert np.all(np.diff(wrap[5:26]) > 0.0)
+
+    def testThePassSpacingNarrowsWithTheAngle(self):
+
+        radius, count = 0.0513, 40
+        for helixAngle in (0.0, 30.0, 60.0):
+            assert helicalSpacing(radius, count, helixAngle) == pytest.approx(
+                2 * np.pi * radius * np.cos(np.deg2rad(helixAngle)) / count, rel = 1e-14)
+
+    def testTheRibIsWhatTheSpacingLeaves(self):
+
+        spacing = helicalSpacing(np.array([0.0513, 0.091]), 40, 45.0)
+        width   = np.array([4.0e-3, 5.0e-3])
+        section = sectionProperties('helical', width / 2, width = width, ribThickness = spacing - width)
+
+        assert np.allclose(section.finThickness, spacing - width, rtol = 1e-14)
+        assert np.allclose(section.depth, width, rtol = 1e-14)
+
+    def testTheLargestHelixLeavesTheMinimumRib(self):
+
+        spacing = helicalSpacing(0.0513, 40, 45.0)
+        largest = maxHalfExtent('helical', spacing - 1.0e-3, 1.5)
+
+        assert largest == pytest.approx(1.5 * (spacing - 1.0e-3) / 2, rel = 1e-14)
+
+    @pytest.mark.parametrize('helixAngle', [0.0, 45.0, 70.0])
+    def testTheThroatStartsAreTheMostThatHoldTheMinimumWidth(self, helixAngle):
+
+        count = throatChannelCount('helical', 0.0503, 1.0e-3, 1.0e-3, 1.0e-3, helixAngle = helixAngle)
+        coldWall = 0.0503 + 1.0e-3
+
+        assert helicalSpacing(coldWall, count, helixAngle) - 1.0e-3 >= 1.0e-3
+        assert helicalSpacing(coldWall, count + 1, helixAngle) - 1.0e-3 < 1.0e-3

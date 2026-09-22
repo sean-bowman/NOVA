@@ -186,6 +186,18 @@ harnessCases = {
                       'maxChannelAspectRatio': 8.0, 'maxChannelDepth': 6.0e-3,
                       'maxWallTemperature': 600.0},
     },
+    # Square helical channels on the same jacket: 40 starts at 45 degrees to the meridian, the
+    # width sized, the depth equal to it and capped at 6 mm, and a rib that grows with the radius
+    # from the infill thickness up. The 650 K target sizes the two throat stations; the rest sit
+    # at the depth cap or the rib limit.
+    'regenHelical': {
+        'config': 'NOVANozzle.json',
+        'description': 'Full jacket with square helical channels and both volutes',
+        'overrides': {**regenOverrides, 'channelType': 'helical', 'nChannel': 40,
+                      'channelHelixAngle': 45.0, 'channelAspectRatio': 1.0,
+                      'minChannelWidth': 1.0e-3, 'channelCornerRadius': 0.2e-3,
+                      'maxChannelDepth': 6.0e-3, 'maxWallTemperature': 650.0},
+    },
     # The jacket is driven by the recovery temperature, which is the adiabatic wall temperature
     # and the physical choice. This case pins the static-temperature model that preceded it, so
     # it stays reachable and its answer stays recorded rather than only described.

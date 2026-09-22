@@ -155,8 +155,8 @@ class Nozzle:
 
     Converging section and combustion chamber, sized from `Lstar` or `chamberLength`.
 
-    Regenerative cooling jacket: channels of circular or rectangular cross section, sized station
-    by station against a wall temperature limit, with the coolant marched from inlet to outlet. Film
+    Regenerative cooling jacket: circular, rectangular or helical channels, sized station by
+    station against a wall temperature limit, with the coolant marched from inlet to outlet. Film
     cooling and an uncooled radiation-cooled extension attach to the same solve.
 
     Inlet and return volutes, the inlet at the aft end of the jacket and the return at the
@@ -208,8 +208,11 @@ class Nozzle:
     coolantInitialTemperature, coolantInitialPressure, coolantMassFlow : float
         Coolant state at the jacket inlet [K], [Pa], [kg/s].
     channelType : str
-        Cross-section family: 'circle' or 'rectangular'. A rectangle's width fills the pitch at
-        the cold wall less the rib, and its depth is sized.
+        Cross-section family: 'circle', 'rectangular' or 'helical'. A rectangle's width fills the
+        pitch at the cold wall less the rib, and its depth is sized. A helix runs at a constant
+        angle to the meridian with a fixed aspect ratio, its size is sized, and its rib varies.
+    channelHelixAngle, channelAspectRatio : float
+        A helix's angle from the meridian [deg] and its depth as a multiple of its width [-].
     minChannelWidth, channelCornerRadius, maxChannelAspectRatio, maxChannelDepth : float
         A rectangle's narrowest width [m], corner radius [m], and the depth it may reach as a
         multiple of its width [-] and outright [m].
@@ -447,6 +450,9 @@ class Nozzle:
         self.channelCornerRadius: float | None        = None     # [m], rectangles
         self.maxChannelAspectRatio: float | None      = None     # [-], rectangles
         self.maxChannelDepth: float | None            = None     # [m], rectangles
+        self.channelHelixAngle: float | None          = None     # [deg], helices
+        self.channelAspectRatio: float | None         = None     # [-], helices
+        self.channelRibThickness: np.ndarray | None   = None     # [m]
         self.channelWidth: np.ndarray | None          = None     # [m]
         self.channelDepth: np.ndarray | None          = None     # [m]
         self.maxChannelRadius                         = None     # [m]
@@ -1453,7 +1459,9 @@ class Nozzle:
             infillThickness      = self.infillThickness,
             channelCornerRadius  = valueOrDefault(self.channelCornerRadius, 0.0),
             maxChannelAspectRatio = valueOrDefault(self.maxChannelAspectRatio, 8.0),
-            maxChannelDepth      = valueOrDefault(self.maxChannelDepth, float('inf')))
+            maxChannelDepth      = valueOrDefault(self.maxChannelDepth, float('inf')),
+            channelHelixAngle    = valueOrDefault(self.channelHelixAngle, 0.0),
+            channelAspectRatio   = valueOrDefault(self.channelAspectRatio, 1.0))
 
     def regenThermalContext(self):
 

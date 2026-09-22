@@ -68,7 +68,8 @@ import numpy as np
 from tqdm import tqdm
 
 from .geometryTools import DCM, arcSpline, chunkInterpolate, intersection, parallelOffset
-from .channelSections import SECTIONFAMILIES, maxHalfExtent, rectangularWidth
+from .channelSections import (SECTIONFAMILIES, helicalSpacing, loxodromeWrap, maxHalfExtent,
+                              rectangularWidth)
 from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
@@ -94,7 +95,9 @@ class RegenChannelState:
 
     # -- What the build reads -- #
     channelType:                               Any = None
+    channelAspectRatio:                        Any = None
     channelCornerRadius:                       Any = None
+    channelHelixAngle:                         Any = None
     maxChannelAspectRatio:                     Any = None
     maxChannelDepth:                           Any = None
     minChannelWidth:                           Any = None
@@ -142,6 +145,7 @@ class RegenChannelState:
 
     # -- Read and written as the build proceeds -- #
     channelRadius:                             Any = None
+    channelRibThickness:                       Any = None
     channelWidth:                              Any = None
     gammaRegenSectionTrimmed:                  Any = None
     gasConstantRegenSectionTrimmed:            Any = None
@@ -206,7 +210,7 @@ class RegenChannelState:
 # outputs are appended rather than restated, because the build copies them onto its state by name
 # and a static read of this module cannot see that it does.
 _buildOutputs = (
-    'channelDepth', 'channelRadius', 'channelWidth', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
+    'channelDepth', 'channelRadius', 'channelRibThickness', 'channelWidth', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
     'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed',
     'numInletInterfaceCS', 'numReturnInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
     'rInletInterface', 'rNozzleShell', 'rRegenNozzleInterfaced', 'rRegenNozzleTrimmed',
@@ -236,6 +240,18 @@ def _isRectangular(source):
 
     return read(source, 'channelType') == 'rectangular'
 
+def _isHelical(source):
+
+    '''True for a helical channel.'''
+
+    return read(source, 'channelType') == 'helical'
+
+def _isRectangularFamily(source):
+
+    '''True for a channel drawn as a rounded rectangle: rectangular or helical.'''
+
+    return read(source, 'channelType') in ('rectangular', 'helical')
+
 def _makesInletVolute(source):
 
     '''True when an inlet volute is asked for.'''
@@ -259,7 +275,10 @@ regenChannelRules = (
     # -- The channels themselves -- #
     choiceRule('channelType', 'Channel cross section', choices = SECTIONFAMILIES,
                note = 'Spirally fluted channels are kept in experimental/flutedChannels.py'),
-    integerRule('nChannel', 'Number of channels', minimum = 10, exclusiveMinimum = False),
+    integerRule('nChannel', 'Number of channels', minimum = 10, exclusiveMinimum = False,
+                when = lambda source: not _isHelical(source)),
+    integerRule('nChannel', 'Number of helical starts', minimum = 1, exclusiveMinimum = False,
+                when = _isHelical),
     numericRule('minChannelRadius', 'Minimum channel radius', units = 'm',
                 minimum = 0.5e-3, exclusiveMinimum = False),
     numericRule('hotWallThickness', 'Hot wall thickness', units = 'm',
@@ -267,15 +286,20 @@ regenChannelRules = (
     numericRule('infillThickness', 'Rib thickness between channels', units = 'm',
                 minimum = 0.5e-3, exclusiveMinimum = False),
 
-    # -- A rectangle's width, aspect ratio and depth limits -- #
+    # -- A rectangle's and a helix's width, aspect ratio and depth limits -- #
     numericRule('minChannelWidth', 'Minimum channel width', units = 'm',
-                minimum = 0.5e-3, exclusiveMinimum = False, when = _isRectangular),
+                minimum = 0.5e-3, exclusiveMinimum = False, when = _isRectangularFamily),
+    numericRule('channelHelixAngle', 'Channel helix angle', units = 'deg',
+                minimum = 0, maximum = 85, exclusiveMaximum = False, when = _isHelical,
+                note = 'Measured from the meridian'),
+    numericRule('channelAspectRatio', 'Channel aspect ratio',
+                minimum = 0, maximum = 20, exclusiveMaximum = False, when = _isHelical),
     numericRule('maxChannelAspectRatio', 'Maximum channel aspect ratio',
                 minimum = 0, maximum = 20, exclusiveMaximum = False, when = _isRectangular),
     numericRule('maxChannelDepth', 'Maximum channel depth', units = 'm', minimum = 0,
-                when = _isRectangular, required = False),
+                when = _isRectangularFamily, required = False),
     numericRule('channelCornerRadius', 'Channel corner radius', units = 'm', minimum = 0,
-                exclusiveMinimum = False, when = _isRectangular, required = False),
+                exclusiveMinimum = False, when = _isRectangularFamily, required = False),
 
     # -- The coolant they carry -- #
     textRule('coolant', 'Coolant species',
@@ -439,7 +463,9 @@ def _geometryInputs(state) -> 'ChannelGeometryInputs':
         infillThickness      = state.infillThickness,
         channelCornerRadius  = valueOrDefault(state.channelCornerRadius, 0.0),
         maxChannelAspectRatio = valueOrDefault(state.maxChannelAspectRatio, 8.0),
-        maxChannelDepth      = valueOrDefault(state.maxChannelDepth, float('inf')))
+        maxChannelDepth      = valueOrDefault(state.maxChannelDepth, float('inf')),
+        channelHelixAngle    = valueOrDefault(state.channelHelixAngle, 0.0),
+        channelAspectRatio   = valueOrDefault(state.channelAspectRatio, 1.0))
 
 def valueOrDefault(value, default: float) -> float:
 
@@ -470,6 +496,8 @@ def _sizingState(state) -> 'ChannelSizingState':
         channelCornerRadius                = valueOrDefault(state.channelCornerRadius, 0.0),
         maxChannelAspectRatio              = valueOrDefault(state.maxChannelAspectRatio, 8.0),
         maxChannelDepth                    = valueOrDefault(state.maxChannelDepth, float('inf')),
+        channelHelixAngle                  = valueOrDefault(state.channelHelixAngle, float('nan')),
+        channelAspectRatio                 = valueOrDefault(state.channelAspectRatio, 1.0),
         maxWallTemperature                 = state.maxWallTemperature,
         hotWallThickness                   = state.hotWallThickness,
         infillThickness                    = state.infillThickness,
@@ -528,11 +556,13 @@ def solveRegenChannels(state, thermal):
     # definition explicitly and knows nothing about a Nozzle. These two wrappers supply it.
 
     def generateCrossSections(xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
-                              channelRadius, crossSectionStyle, i: int = None, channelWidth = None):
+                              channelRadius, crossSectionStyle, i: int = None, channelWidth = None,
+                              ribThickness = None):
 
         return buildCrossSections(_geometryInputs(state),
                                   xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
-                                  channelRadius, crossSectionStyle, i = i, channelWidth = channelWidth)
+                                  channelRadius, crossSectionStyle, i = i, channelWidth = channelWidth,
+                                  ribThickness = ribThickness)
 
     def getMaxChannelRadius(rNozzle, i):
 
@@ -818,13 +848,18 @@ def solveRegenChannels(state, thermal):
         state.channelRadius = np.concatenate([np.ones(state.numReturnInterfaceCS)*state.channelRadius[0],
                                              state.channelRadius,
                                              np.ones(state.numInletInterfaceCS)*state.channelRadius[-1]])
-        if state.channelType == 'rectangular':
-            # The width is set by the pitch at the cold wall along the whole interfaced line,
-            # flares included, and the depth may not pass its limits there.
+        if state.channelType in ('rectangular', 'helical'):
+            # The width, or for a helix the pass spacing, is set at the cold wall along the whole
+            # interfaced line, flares included, and the depth may not pass its limits there.
             _, rColdWall = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, state.hotWallThickness)
             geometry  = _geometryInputs(state)
-            halfLimit = maxHalfExtent('rectangular', rectangularWidth(rColdWall, state.nChannel, state.infillThickness),
-                                      geometry.maxChannelAspectRatio, geometry.maxChannelDepth)
+            if state.channelType == 'rectangular':
+                halfLimit = maxHalfExtent('rectangular', rectangularWidth(rColdWall, state.nChannel, state.infillThickness),
+                                          geometry.maxChannelAspectRatio, geometry.maxChannelDepth)
+            else:
+                spacing   = helicalSpacing(rColdWall, state.nChannel, geometry.channelHelixAngle)
+                halfLimit = maxHalfExtent('helical', spacing - state.infillThickness, geometry.channelAspectRatio,
+                                          geometry.maxChannelDepth)
             state.channelRadius = np.minimum(state.channelRadius, halfLimit)
         else:
             for i in range(len(state.channelRadius)):
@@ -844,6 +879,19 @@ def solveRegenChannels(state, thermal):
         state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced = arcSpline(xOld, rOld, newNumPoints=state.numCrossSections)
         state.channelRadius = np.interp(fractionNew, fractionOld, state.channelRadius)
 
+        # Interpolated onto new stations, a size held at its limit on either side can pass the
+        # limit at the station between, so a rectangle or a helix is held to it again there
+        if state.channelType in ('rectangular', 'helical'):
+            _, rColdWall = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, state.hotWallThickness)
+            geometry = _geometryInputs(state)
+            if state.channelType == 'rectangular':
+                halfLimit = maxHalfExtent('rectangular', rectangularWidth(rColdWall, state.nChannel, state.infillThickness),
+                                          geometry.maxChannelAspectRatio, geometry.maxChannelDepth)
+            else:
+                halfLimit = maxHalfExtent('helical', helicalSpacing(rColdWall, state.nChannel, geometry.channelHelixAngle)
+                                          - state.infillThickness, geometry.channelAspectRatio, geometry.maxChannelDepth)
+            state.channelRadius = np.minimum(state.channelRadius, halfLimit)
+
         if state.numReturnInterfaceCS > 0:
             wallStart = fractionOld[state.numReturnInterfaceCS]
             state.numReturnInterfaceCS = int(np.sum(fractionNew < wallStart))
@@ -854,18 +902,30 @@ def solveRegenChannels(state, thermal):
         offset = np.ones(state.numCrossSections)*state.hotWallThickness + state.channelRadius
         state.xChannelCenterline2D,state.rChannelCenterline2D = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, offset)
 
-        # The width and depth along the whole line. A circle's width and depth are its diameter.
+        # The width, depth and rib along the whole line. A circle's width and depth are its
+        # diameter; a helix's rib is what its pass spacing leaves.
+        xColdWall, rColdWall = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, state.hotWallThickness)
         if state.channelType == 'rectangular':
-            _, rColdWall = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, state.hotWallThickness)
-            state.channelWidth = rectangularWidth(rColdWall, state.nChannel, state.infillThickness)
+            state.channelWidth        = rectangularWidth(rColdWall, state.nChannel, state.infillThickness)
+            state.channelRibThickness = np.full(state.numCrossSections, float(state.infillThickness))
+        elif state.channelType == 'helical':
+            state.channelWidth        = 2*state.channelRadius/valueOrDefault(state.channelAspectRatio, 1.0)
+            state.channelRibThickness = helicalSpacing(rColdWall, state.nChannel, state.channelHelixAngle) - state.channelWidth
         else:
             state.channelWidth = 2*state.channelRadius
         state.channelDepth = 2*state.channelRadius
 
         # -- Get wrap angles -- #
-        # A rectangle fills its pitch, so it runs straight
+        # A rectangle fills its pitch, so it runs straight. A helix follows its loxodrome over the
+        # jacketed wall and runs straight through the volute interfaces.
         if state.channelType == 'rectangular':
             state.wrapAngles = np.zeros(state.numCrossSections)
+        elif state.channelType == 'helical':
+            meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
+            onWall = np.ones(state.numCrossSections, dtype = bool)
+            onWall[:state.numReturnInterfaceCS] = False
+            onWall[state.numCrossSections - state.numInletInterfaceCS:] = False
+            state.wrapAngles = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle, active = onWall)
         else:
             state.wrapAngles = kineosAlgorithm(state.xChannelCenterline2D,state.rChannelCenterline2D,state.channelRadius)
 
@@ -899,7 +959,7 @@ def solveRegenChannels(state, thermal):
         # Sweep the channel
         state.xChannel, state.yChannel, state.zChannel, _ = \
             generateCrossSections(state.xChannelCenterline3D,state.yChannelCenterline3D,state.zChannelCenterline3D,state.channelRadius,state.channelType,
-                                  channelWidth = state.channelWidth)
+                                  channelWidth = state.channelWidth, ribThickness = state.channelRibThickness)
 
     generate3DChannels()
 
