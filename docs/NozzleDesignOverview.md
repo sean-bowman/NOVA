@@ -1066,7 +1066,7 @@ $$
 A_{coolant} = \left(w_{floor} + 2\eta H\right) ds, \qquad \eta = {\tanh(mH) \over mH}, \qquad m = \sqrt{2 h_c \over k \, t_{rib}}
 $$
 
-The coolant then carries the heat it picked up to the next station, and loses pressure to friction and to the bends in its path.
+The coolant then carries the heat it picked up to the next station, added to its enthalpy rather than taken as a rise at the station's own $c_p$, which conserves the heat the wall gave up even where $c_p$ swings across the station. It loses pressure to friction and to the bends in its path.
 
 The heat transfer model outputs plots of the coolant properties, both heat transfer coefficients and the hot wall temperature along the nozzle axis. These are a first pass: a design worth building should still go through three-dimensional conduction and CFD.
 

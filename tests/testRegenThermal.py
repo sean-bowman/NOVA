@@ -33,6 +33,7 @@ import sys
 import numpy as np
 import pytest
 
+from NOVA.fluidProperties import fluidProps
 from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
                           coolantFrictionAndNusselt, hotWallSectorArea, regenHeatTransferModel,
                           solveStationWallTemperature, validateRegenHeatTransferInputs,
@@ -571,6 +572,53 @@ class TestHotWallArea:
         assert wrappedPlots['heatTransfer'][0] == straightPlots['heatTransfer'][0]
         assert wrapped['coolantPressure'][0] < straight['coolantPressure'][0]
 
+class TestCoolantEnergyBalance:
+
+    '''
+
+    The coolant carries the heat it takes on as enthalpy, station by station.
+
+    A rise taken as Q / (mdot cp) does not conserve energy where cp varies across the station,
+    which for hydrogen near its pseudo-critical line is a factor of several over a few kelvin.
+    The march adds the heat to the enthalpy and reads back the temperature that carries it, so
+    the enthalpy the coolant gains is the heat the wall gave up, to the backend's own inversion.
+
+    '''
+
+    def inputs(self):
+
+        return TestInputValidation().validInputs()
+
+    def testEachStationGainsTheEnthalpyTheWallGaveUp(self):
+
+        inputs = self.inputs()
+        outputs, plots = regenHeatTransferModel(RegenThermalContext(), inputs, returnDict = True)
+
+        temperature, pressure = plots['temperature'], plots['pressure']
+        enthalpy = np.array([float(fluidProps(inputs['coolant'], 'TP', 'H', t, p))
+                             for t, p in zip(temperature, pressure)])
+        heat = plots['heatTransfer']
+
+        # The march runs from the coolant inlet at the last index toward the chamber at the first.
+        # The bound is the property backend's own inversion, which returns the temperature
+        # carrying a given enthalpy to about 1e-9 relative.
+        for i in range(len(heat) - 1, 0, -1):
+            assert enthalpy[i-1] - enthalpy[i] == pytest.approx(heat[i]/inputs['mdot'], rel = 1e-8)
+
+    def testTheJacketConservesWhatItPutIn(self):
+
+        inputs = self.inputs()
+        outputs, plots = regenHeatTransferModel(RegenThermalContext(), inputs, returnDict = True)
+
+        temperature, pressure = plots['temperature'], plots['pressure']
+        inletEnthalpy = float(fluidProps(inputs['coolant'], 'TP', 'H', temperature[-1], pressure[-1]))
+        exitEnthalpy  = float(fluidProps(inputs['coolant'], 'TP', 'H', temperature[0], pressure[0]))
+
+        # Every station's heat except the one at the chamber end, which lands on no station below it
+        heatIntoTheCoolant = float(np.sum(plots['heatTransfer'][1:]))
+
+        assert exitEnthalpy - inletEnthalpy == pytest.approx(heatIntoTheCoolant/inputs['mdot'], rel = 1e-9)
+
 class TestModelSafeguards:
 
     '''The adiabatic comparison balances its own heat, and a NaN stops the march where it appears.'''
@@ -601,11 +649,16 @@ class TestModelSafeguards:
                                                 constantColdWallTemperature = coldWall)
 
         coefficient = plots['adiabaticConvectiveHeatTransferCoef'][0]
-        rise = coefficient * inputs['heatedArea'][0] * (coldWall - inputs['coolantInitialTemperature']) \
-               / (inputs['mdot'] * plots['specificHeat'][0])
+        heat = coefficient * inputs['heatedArea'][0] * (coldWall - inputs['coolantInitialTemperature'])
 
-        assert outputs['coolantTemperature'][0] - inputs['coolantInitialTemperature'] == \
-               pytest.approx(rise, rel = 1e-12)
+        # The coolant takes the heat on as enthalpy, so the temperature it reaches is the one
+        # that carries the raised enthalpy at the pressure it reaches
+        inletEnthalpy = fluidProps(inputs['coolant'], 'TP', 'H', inputs['coolantInitialTemperature'],
+                                   inputs['coolantInitialPressure'])
+        expected = fluidProps(inputs['coolant'], 'PH', 'T', plots['pressure'][0],
+                              inletEnthalpy + heat/inputs['mdot'])
+
+        assert outputs['coolantTemperature'][0] == pytest.approx(float(expected), rel = 1e-12)
 
     def testANaNInTheCoolantStateStopsTheMarch(self, monkeypatch):
 

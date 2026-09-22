@@ -54,6 +54,15 @@ Quentmeyer's baseline wall-to-coolant difference 39 percent low, so where the cr
 wall runs hotter than the model reports. No wall-to-bulk property ratio correction is applied, and
 the coolant is taken as mixed across a tall channel.
 
+**The coolant energy balance is exact in enthalpy.** The heat a station passes into the coolant
+is added to its specific enthalpy, and the temperature carrying that enthalpy at the downstream
+pressure is read back from the property backend. What the wall gives up and what the coolant
+takes on therefore agree to the backend's own inversion, about 1e-9 relative, which
+tests/testRegenThermal.py holds station by station and over the jacket. A rise taken as
+Q / (mdot cp) does not conserve it where cp varies across the station: for hydrogen entering at
+30 K and 12 MPa the two differ by 0.7 percent at the first station and by under 0.1 percent once
+the coolant is past 60 K.
+
 **Wall conduction, checked in closed form.** Each channel conducts through its own sector of the
 wall, r ln(1 + t/r) / (k A_hw), with A_hw the sector's gas-side area. tests/testRegenThermal.py
 holds it to the whole shell when the sectors are summed in parallel, to the slab t / (k A_hw)
@@ -361,9 +370,6 @@ class StationWallSolution:
         are already folded into the three resistances.
     hotWallTemperature, coldWallTemperature : float
         The two faces of the wall [K].
-    coolantTemperatureRise : float
-        Temperature the coolant gains crossing this station [K]. The caller decides which
-        station it lands on, because that depends on which way the march runs.
     iterations : int
         Passes the fixed point took.
     residual : float
@@ -384,7 +390,6 @@ class StationWallSolution:
     heatTransfer:                 float
     hotWallTemperature:           float
     coldWallTemperature:          float
-    coolantTemperatureRise:       float
     iterations:                   int
     residual:                     float
     converged:                    bool
@@ -598,7 +603,6 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         heatTransfer                 = heatTransfer,
         hotWallTemperature           = hotWallTemperature,
         coldWallTemperature          = coldWallTemperature,
-        coolantTemperatureRise       = heatTransfer / (coolantMassFlow * coolantSpecificHeat),
         iterations                   = convergenceIteration,
         residual                     = residual,
         converged                    = converged)
@@ -1097,6 +1101,37 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
             return K_bend
 
+        def downstreamTemperature(stationEnthalpy, heat, downstreamPressure):
+
+            '''
+
+            Temperature the coolant reaches once the station's heat has gone into it.
+
+            The step is taken on enthalpy rather than as heat / (mdot cp), because cp is not
+            constant across a station: near hydrogen's pseudo-critical line it swings by a
+            factor of several over a few kelvin, and a rise taken at the station's own cp would
+            not conserve the heat the wall put in. Enthalpy conserves it by construction, and
+            the property backend inverts to the temperature that carries it.
+
+            Parameters:
+            -----------
+            stationEnthalpy : float
+                Specific enthalpy of the coolant entering the station [J/kg].
+            heat : float
+                Heat into this channel at this station [W].
+            downstreamPressure : float
+                Coolant pressure at the station the temperature lands on [Pa].
+
+            Returns:
+            --------
+            float
+                Coolant temperature at that station [K].
+
+            '''
+
+            return float(fluidProps(coolant, 'PH', 'T', downstreamPressure,
+                                    stationEnthalpy + heat/mdot))
+
         # Channel Properties
 
         # Pull thermophysical properties at the current (T, P) with RefProp
@@ -1208,9 +1243,13 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 # up here raises the coolant at the next station down the index. A single
                 # station has no next one, so it takes the rise itself.
                 if i > 0:
-                    coolantTemperature[i-1] = coolantTemperature[i] + solution.coolantTemperatureRise
+                    coolantTemperature[i-1] = downstreamTemperature(coolantEnthalpy[i],
+                                                                    solution.heatTransfer,
+                                                                    coolantPressure[i-1])
                 if solution.converged and iterationMode == 'single':
-                    coolantTemperature[i] = coolantTemperature[i] + solution.coolantTemperatureRise
+                    coolantTemperature[i] = downstreamTemperature(coolantEnthalpy[i],
+                                                                  solution.heatTransfer,
+                                                                  coolantPressure[i])
 
                 if not solution.converged:
                     raise ConvergenceFailureError(
@@ -1242,9 +1281,13 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             adiabaticHeatTransfer[i] = (constantColdWallTemperature - coolantTemperature[i]) / (adiabaticConvectiveResistance)
 
             if i > 0:
-                coolantTemperature[i-1] = coolantTemperature[i] + (adiabaticHeatTransfer[i] / (mdot * coolantSpecificHeat[i]))
+                coolantTemperature[i-1] = downstreamTemperature(coolantEnthalpy[i],
+                                                                adiabaticHeatTransfer[i],
+                                                                coolantPressure[i-1])
             if iterationMode == 'single':
-                coolantTemperature[i] = coolantTemperature[i] + (adiabaticHeatTransfer[i] / (mdot * coolantSpecificHeat[i]))
+                coolantTemperature[i] = downstreamTemperature(coolantEnthalpy[i],
+                                                              adiabaticHeatTransfer[i],
+                                                              coolantPressure[i])
 
     if iterationMode == 'loop':
 

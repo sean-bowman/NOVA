@@ -1058,10 +1058,11 @@ def solveChannelRadii(state, geometry, thermal):
         state.channelWidth        = 2*channelRadius/state.channelAspectRatio
         state.channelRibThickness = np.flip(state.dcrData['passSpacing']) - state.channelWidth
 
-    # Heat transfer plots
-    drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
-                          results=heatTransferPlots, family=state.channelType,
-                          titleFlare=', dcr( ) results', xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
-                          wallTemperatureLimit=state.maxWallTemperature)
+    # Heat transfer plots, on the same switch the thermal model's own figures answer to
+    if thermal.plotsEnabled == 'on' or thermal.export == 'on':
+        drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
+                              results=heatTransferPlots, family=state.channelType,
+                              titleFlare=', dcr( ) results', xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
+                              wallTemperatureLimit=state.maxWallTemperature)
 
     return state
