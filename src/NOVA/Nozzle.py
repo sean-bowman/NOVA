@@ -1488,8 +1488,8 @@ class Nozzle:
         Parameters:
         -----------
         inputsDict : dict
-            Geometry, gas state and coolant state, one entry per station. See the module for the
-            keys each channel family requires.
+            Geometry, gas state and coolant state, one entry per station. See
+            `regenThermal.regenThermalRules` for the keys it requires.
         constantColdWallTemperature : float
             Fixes the cold wall temperature rather than solving for it, which runs the adiabatic
             comparison case [K].

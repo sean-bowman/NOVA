@@ -41,6 +41,9 @@ range of validity is known, but nothing here checks the implementation against a
 wall, r ln(1 + t/r) / (k A_hw), with A_hw the sector's gas-side area. tests/testRegenThermal.py
 holds it to the whole shell when the sectors are summed in parallel, to the slab t / (k A_hw)
 for a thin wall, and holds the station solve to a wall drop equal to the heat flow times it.
+The gas-side area is the wall's, (2 pi r / N) ds_m over the wall's meridional length, so the
+sectors tile the wall at any wrap angle and lengthening the channel path leaves it unchanged;
+both are tested.
 
 **The gas state the model reads is one dimensional.** Every gas-side property comes from CEA at
 a one-dimensional station, while the near-wall Mach number the method of characteristics
@@ -190,6 +193,35 @@ def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber:
     constantBartzPart                    = (0.026 / (throatDiameter**0.2)) *                                         (stagnationViscosity**0.2 * stagnationHeatCapacity / (stagnationPrandtl**0.6)) *                                         (chamberPressure / characteristicVelocity)**0.8 *                                         (throatDiameter / throatRadiusOfCurvature)**0.1
 
     return (constantBartzPart *             (throatArea / localArea)**0.9 *             boundaryLayerCorrectionFactor)
+
+def hotWallSectorArea(wallRadius, nChannel: int, wallSegmentLength):
+
+    '''
+
+    Gas-side area of the wall one channel owns at a station [m^2].
+
+    A channel owns 2 pi r / N of the circumference and the wall's own meridional length of the
+    station, so N sectors tile the wall exactly. The channel's path is longer than the wall
+    segment wherever it wraps, by 1/cos of its wrap angle, but the exhaust sees the wall rather
+    than the path, so the path length does not enter.
+
+    Parameters:
+    -----------
+    wallRadius : float or np.ndarray
+        Hot wall radius from the nozzle axis [m].
+    nChannel : int
+        Channels around the circumference [-].
+    wallSegmentLength : float or np.ndarray
+        Meridional length of hot wall the station covers [m].
+
+    Returns:
+    --------
+    float or np.ndarray
+        Gas-side area per channel [m^2].
+
+    '''
+
+    return (2 * np.pi * wallRadius / nChannel) * wallSegmentLength
 
 def wallConductionResistance(hotWallThickness: float, wallRadius: float, wallConductivity: float,
                              hotWallArea: float) -> float:
@@ -520,7 +552,10 @@ regenThermalRules = (
     numericRule('throatDiameter', 'Throat diameter', units = 'm', minimum = 0),
     numericRule('throatArea', 'Throat area', units = 'm^2', minimum = 0),
 
-    # -- The path the coolant takes -- #
+    # -- The wall each station covers, and the path the coolant takes across it -- #
+    arrayRule('hotWallSegmentLength', 'Hot wall meridional length per station', units = 'm',
+              positive = True, sameLengthAs = 'xHotWall3D',
+              note = 'The wall the station covers, not the channel path across it'),
     arrayRule('differentialPathLength', 'Path length per station', units = 'm', positive = True),
     arrayRule('turnAngle', 'Turn angle per station', units = 'rad'),
     arrayRule('radiusOfCurvature', 'Bend radius per station', units = 'm', positive = True),
@@ -872,6 +907,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     nChannel                  = inputsDict["nChannel"]
     xHotWall3D                = inputsDict["xHotWall3D"]
     rHotWall3D                = inputsDict["rHotWall3D"]
+    hotWallSegmentLength      = inputsDict["hotWallSegmentLength"]
     hotWallThickness          = inputsDict["hotWallThickness"]
     throatRadiusOfCurvature   = inputsDict["throatRadiusOfCurvature"]
     throatDiameter            = inputsDict["throatDiameter"]
@@ -897,8 +933,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
     # Calculated properties
     nozzleAreas             = np.pi * rHotWall3D**2
-    nozzleCircumference     = 2 * np.pi * rHotWall3D
-    hotWallArea             = (nozzleCircumference / nChannel) * abs(differentialPathLength)
+    hotWallArea             = hotWallSectorArea(rHotWall3D, nChannel, hotWallSegmentLength)
 
     # -- What the solve is driven by, and the two terms that are absent unless asked for -- #
 

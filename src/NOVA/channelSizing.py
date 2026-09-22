@@ -442,6 +442,7 @@ def solveChannelRadii(state, geometry, thermal):
         # get local combustion properties
         heatTransferDict_i["xHotWall3D"]          = np.array([xNozzle                                     [state.numCrossSections - 1 - i]])
         heatTransferDict_i["rHotWall3D"]          = np.array([rNozzle                                     [state.numCrossSections - 1 - i]])
+        heatTransferDict_i["hotWallSegmentLength"] = np.array([wallSegmentLength[i]])
         heatTransferDict_i["gamma"]               = np.array([state.gammaRegenSectionTrimmed               [state.numCrossSections - 1 - i]])
         heatTransferDict_i["molecularWeight"]     = np.array([state.molecularWeightRegenSectionTrimmed     [state.numCrossSections - 1 - i]])
         heatTransferDict_i["gasConstant"]         = np.array([state.gasConstantRegenSectionTrimmed         [state.numCrossSections - 1 - i]])
@@ -481,6 +482,13 @@ def solveChannelRadii(state, geometry, thermal):
 
     # Locally scope nozzle wall values
     xNozzle, rNozzle = state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed
+
+    # Meridional length of hot wall each station covers, in march order and on the convention
+    # the channel path length uses: the segment to the next station, the last one repeated. The
+    # gas-side area is taken from this rather than from the channel path, which is longer
+    # wherever the channel wraps.
+    wallSegmentLength = np.hypot(np.diff(np.flip(xNozzle)), np.diff(np.flip(rNozzle)))
+    wallSegmentLength = np.append(wallSegmentLength, wallSegmentLength[-1])
 
     # Temperature-dependent wall alloy properties, sampled from
     # materials.wallMaterialCurves so the model is not tied to one alloy. The legacy

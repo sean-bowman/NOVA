@@ -34,6 +34,7 @@ import numpy as np
 import pytest
 
 from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
+                          hotWallSectorArea, regenHeatTransferModel,
                           solveStationWallTemperature, validateRegenHeatTransferInputs,
                           wallConductionResistance)
 
@@ -304,6 +305,7 @@ class TestInputValidation:
             'throatDiameter'           : 0.1,
             'throatArea'               : np.pi * 0.05 ** 2,
             'differentialPathLength'   : np.full(stations, 0.03),
+            'hotWallSegmentLength'     : np.full(stations, 0.03),
             'turnAngle'                : np.zeros(stations),
             'radiusOfCurvature'        : np.full(stations, 1.0),
             'coolant'                  : 'Hydrogen',
@@ -512,3 +514,56 @@ class TestWallConduction:
         expected = wallConductionResistance(0.001, 0.05, 320.0, 5.0e-5)
 
         assert solution.conductiveResistance == expected
+
+class TestHotWallArea:
+
+    '''
+
+    The gas side of one channel is its share of the wall, not of the channel.
+
+    A channel owns 2 pi r / N of the circumference and the wall's own meridional length ds_m of
+    the station, so its gas-side area is (2 pi r / N) ds_m and the N channels tile the wall
+    exactly. A wrapped channel's path is longer than ds_m by 1/cos of its wrap angle, 2.9 times
+    at 70 degrees, but the exhaust sees the wall rather than the path, so lengthening the path
+    must leave the gas side alone.
+
+    '''
+
+    def testTheSectorsTileTheWall(self):
+
+        radius, segment = 0.05, 0.004
+        for count in (1, 7, 60, 240):
+            assert count * hotWallSectorArea(radius, count, segment) == \
+                   pytest.approx(2 * np.pi * radius * segment, rel = 1e-14)
+
+    def station(self, pathLength):
+
+        '''One throat station through the whole model, with the channel path set independently.'''
+
+        inputs = {key: (value[:1] if isinstance(value, np.ndarray) else value)
+                  for key, value in TestInputValidation().validInputs().items()}
+        inputs.update({
+            'numCrossSections'      : 1,
+            'rHotWall3D'            : np.array([0.05]),
+            'nearWallTemperature'   : np.array([3000.0]),
+            'nearWallMachNumber'    : np.array([1.0]),
+            'hotWallSegmentLength'  : np.array([0.004]),
+            'differentialPathLength': np.array([pathLength]),
+            'circleCSA'             : np.array([np.pi * 0.002**2]),
+            'circleSA'              : np.array([2 * np.pi * 0.002 * 0.004]),
+        })
+
+        _, _, outputs, plots = regenHeatTransferModel(RegenThermalContext(), inputs)
+
+        return outputs, plots
+
+    def testLengtheningThePathLeavesTheGasSideAlone(self):
+
+        # A 70 degree wrap stretches the path by 1/cos(70 deg). The coolant-side area is held
+        # fixed here, so only the friction length changes, and the wall must not notice.
+        straight, straightPlots = self.station(0.004)
+        wrapped,  wrappedPlots  = self.station(0.004 / np.cos(np.deg2rad(70.0)))
+
+        assert wrapped['hotWallTemperature'][0] == straight['hotWallTemperature'][0]
+        assert wrappedPlots['heatTransfer'][0] == straightPlots['heatTransfer'][0]
+        assert wrapped['coolantPressure'][0] < straight['coolantPressure'][0]
