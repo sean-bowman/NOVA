@@ -753,7 +753,12 @@ def solveRegenChannels(state, thermal):
         zNozzleHotWallMesh, yNozzleHotWallMesh, xNozzleHotWallMesh      \
             = [np.zeros((state.numCrossSections, state.numCrossSections)) for _ in range(3)]
 
-        shellOffset = state.hotWallThickness + 2.*state.channelRadius + state.fluteAmplitudeCoef*state.channelRadius + state.shellThickness
+        # A flute reaches past the channel radius by its amplitude, so only a fluted channel adds
+        # it. A circular configuration carries a null amplitude, which reads as NaN.
+        if state.channelType == 'fluted':
+            shellOffset = state.hotWallThickness + 2.*state.channelRadius + state.fluteAmplitudeCoef*state.channelRadius + state.shellThickness
+        else:
+            shellOffset = state.hotWallThickness + 2.*state.channelRadius + state.shellThickness
         xNozzleShell, rNozzleShell          = parallelOffset(state.xRegenNozzleTrimmed,state.rRegenNozzleTrimmed,shellOffset)
         zNozzleShellMesh, yNozzleShellMesh, xNozzleShellMesh            \
             = [np.zeros((state.numCrossSections, state.numCrossSections)) for _ in range(3)]
