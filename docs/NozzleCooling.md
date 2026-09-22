@@ -3,7 +3,7 @@
 
 # NOVA: Regeneratively Cooled Nozzle Design
 
-This document describes the theory, code backend, process flow, and user interfacing of the propulsionDesign Nozzle module's regeneratively cooled nozzle design section.
+This document describes the theory, code backend, process flow, and user interfacing of NOVA's regeneratively cooled chamber and nozzle design.
 
 - Nozzle
 - Optimization for
@@ -108,27 +108,27 @@ There are other forms of active cooling, such as *film cooling*, where a thin sh
 
 The dark band before the bright orange of the plume is the unburnt gas film leaving the nozzle, which eventually reacts with the oxygen in the air and burns where the plume turns all orange!
 
-A hybrid engine has no gaseous fuel on hand, so a film on a hybrid nozzle means carrying a separate coolant for it, and most of what follows is about the regenerative jacket. NOVA does model a film where one exists: `filmCooling.py` lowers the temperature the wall is driven by over the length the film survives, rather than removing heat the way a jacket does. Switch it on with `filmCooling` and give it a coolant, a flow, a temperature, a slot position and a slot height. Two closures are available through `filmCoolingModel`. The Hatch and Papell correlation from NASA TN D-130 is the default and the only one that states its own accuracy, but it was fitted in a constant-area duct and cannot see acceleration or flow turning. The entrainment model of NASA SP-8124 Appendix A accounts for both, through an empirical multiplier read off a design chart, so it is calibrated rather than validated. On a hydrogen film the two disagree by hundreds of kelvin, which is a fair measure of how well film cooling is known at rocket conditions.
+A film on a hybrid nozzle means carrying a separate coolant for it, since a hybrid has no gaseous fuel on hand. NOVA models a film where one exists: `filmCooling.py` lowers the temperature the wall is driven by over the length the film survives, rather than removing heat the way a jacket does. Switch it on with `filmCooling` and give it a coolant, a flow, a temperature, a slot position and a slot height. Two closures are available through `filmCoolingModel`. The Hatch and Papell correlation from NASA TN D-130 is the default and the only one that states its own accuracy, but it was fitted in a constant-area duct and cannot see acceleration or flow turning. The entrainment model of NASA SP-8124 Appendix A accounts for both, through an empirical multiplier read off a design chart, so it is calibrated rather than validated. On a hydrogen film the two disagree by hundreds of kelvin, which is a fair measure of how well film cooling is known at rocket conditions.
 
 The third method is to remove the coolant entirely and let the wall radiate. Past some area ratio the flux has fallen far enough that an uncooled shell settles below its own temperature limit, and carrying a jacket further costs mass and pressure drop for nothing. `radiativeCooling.py` solves that balance along the extension beyond the jacket and reports the margin against the material limit, which is the only question worth asking about an uncooled shell. Switch it on with `makeRadiativeExtension`, and note that it needs a non-`none` `regenTruncationType`, because with none the jacket runs the whole contour and there is no extension to solve.
 
 Both combine with a jacket rather than replacing it, which is why they are described here alongside it rather than as alternatives to it.
 
-## Hybrid Supercritical Oxygen Expander Cycle
+## Expander Cycles and Supercritical Coolants
 
-At the time of writing, the main engine cycle employed for orbital-class hybrid engines covered by this codebase is the Expander Cycle.
+The regenerative jacket matters most in the expander cycle, where the heat the coolant picks up in the jacket is what drives the turbine.
 
 *[Figure: Expander Cycle]*
 
 *Liquid Bi-Prop Expander Cycle Example*
 
-The expander cycle operates on the premise that a single fluid (typically the fuel) can be *expanded* from its compressed liquid form to a more useable high-energy form (gas/supercritical fluid) to then drive a turbine which perpetuates the engine cycle. This is the general baseline premise of the expander cycle, however for a hybrid engine application there are some niche details that distinguish the design practices used here from traditional liquid bi-prop expander cycle practices.
+The expander cycle operates on the premise that a single fluid (typically the fuel) can be *expanded* from its compressed liquid form to a more useable high-energy form (gas/supercritical fluid) to then drive a turbine which perpetuates the engine cycle. A hybrid runs the same cycle on its oxidizer, since its solid fuel cannot flow through a jacket.
 
 *[Figure: Hybrid Expander Cycle]*
 
 *Hybrid Expander Cycle*
 
-The first and most obvious deviation from standard practices is the use of Oxygen as the working fluid in the cooling architecture. This is not entirely unheard of, however the aforementioned disadvantageous heat capacity make Oxygen a secondary choice for other designers. With a solid-fuel hybrid, however, there is no alternative and one must make due with what is available. The second is the system pressure. The orbital-class engines being modeled here operate at a relatively high chamber pressure (~15 MPa or ~2000 psi) which leads to an interesting distinction in the fluid physics of the engine fluid system. In order to make the most accurate predictive models and design tools, it is pertinent to model the fluids in the fluid system in the most physically accurate way, and when fluids exceed what is known as their *critical* state they behave differently than fluids at more familiar temperatures and pressures. To be more clear about what this means and why it matters, the following sections briefly go over the physics of supercritical fluids and how that distinction impacts the design of a rocket fluid system. The reference design used throughout this document (chamber pressure ~15 MPa, LOX coolant, HDPE solid fuel) is one specific reduction to practice of the methods described here.
+Oxygen as the working fluid is not unheard of, but the heat capacity discussed above makes it a secondary choice wherever a liquid fuel is on hand; with a solid-fuel hybrid there is no alternative, and one must make do with what is available. What every expander shares is a high system pressure. Orbital-class engines run their chambers at around 15 MPa (~2000 psi), well above the critical pressures of oxygen (5.04 MPa), methane (4.60 MPa) and hydrogen (1.30 MPa), and fluids past their *critical* state behave differently than fluids at more familiar temperatures and pressures. The configuration in `assets/NOVANozzle.json`, for one, cools with hydrogen entering the jacket at 12 MPa and 30 K, supercritical from the start. The following sections briefly go over the physics of supercritical fluids and how that distinction impacts the design of a rocket fluid system.
 
 ### Aside: Supercritical Fluids
 
@@ -152,7 +152,7 @@ What this means for rocket engines is that propellant that begins the engine cyc
 
 *Oxygen Properties in Engine*
 
-## Great, Now Let's Make a Regeneratively Cooled Nozzle Using Oxygen
+## Great, Now Let's Make a Regeneratively Cooled Nozzle
 
 To tie this all together, let's apply this knowledge to the design of a regeneratively cooled nozzle from first principles. So far we have not been speaking about legacy design practices, but rather the fundamental physics of the problem, which is a core tenant of the design philosophy used in this codebase. When you take a first-principles approach, there is often something natural hiding in the physics of the problem that can be taken advantage of. If you are thoughtful enough, you may find it easier to swim with the river rather than against it.
 
@@ -162,7 +162,7 @@ With that in mind we have a physics problem, so let's lay that out and begin to 
 
 Let's list out some of the fundamental physics challenges that we are facing that are relevant to the design of regenerative cooling architecture:
 
-- Sub-optimal cooling fluid (Oxygen)
+- Limited coolant capacity (oxygen in a hybrid worst of all)
 - Extreme temperature gradient from exhaust to wall and coolant
 - Extreme pressure gradient from internal to external volumes
 - Achieving adequate propellant conditioning to drive engine cycle
@@ -201,11 +201,11 @@ Copper is a common material that has a high thermal conductivity, but there's a 
 
 To keep the discussion brief, we have entirely neglected other printable metals that simply don't even make it out of the gate from a heat transfer perspective. However, it is the onus of the designer to properly trade study the material of any given design.
 
-#### Problem Solving: Extreme Physics Conditions with a Sub-Optimal Cooling Fluid
+#### Problem Solving: Extreme Physics Conditions with a Limited Coolant
 
-One of the most distinct physics challenges to solve is the use of Oxygen as the sole cooling fluid for a nozzle. The use of Oxygen in cooling architecture is not unheard of, however it has only really been used in lab settings as opposed to flight-grade vehicle systems. We also are limited to relatively small nozzles, which at first might sound like a good thing but there is a sneaky problem that must be contended with:
+The hardest version of this problem is a hybrid, where oxygen is the only fluid on board that can cool the nozzle, and oxygen has been used as a coolant in lab settings rather than in flight systems. Small engines have it hard too, which at first might sound backwards, but there is a sneaky problem that must be contended with:
 
-In a regeneratively cooled nozzle, the volume of a cooling jacket increases cubically (to the 3rd power) while the nozzle surface area that needs to be cooled increases quadratically (to the second power). This means that as nozzles grow, the conventional wisdom is that the volume of propellant cooling the wall grows exponentially faster than the wall that needs to be cooled, so the ability to condition (heat) a propellant to drive an engine cycle gets harder the larger a nozzle becomes (Fans of pop-science may be familiar with the square-cube law problem). This problem happens in reverse for small nozzles, where lower coolant flowrates (due to smaller engines) are responsible for cooling more wall, which is further complicated by using Oxygen as a coolant.
+In a regeneratively cooled nozzle, the volume of a cooling jacket increases cubically (to the 3rd power) while the nozzle surface area that needs to be cooled increases quadratically (to the second power). This means that as nozzles grow, the conventional wisdom is that the volume of propellant cooling the wall grows faster than the wall that needs to be cooled, so the ability to condition (heat) a propellant to drive an engine cycle gets harder the larger a nozzle becomes (Fans of pop-science may be familiar with the square-cube law problem). This problem happens in reverse for small nozzles, where lower coolant flowrates (due to smaller engines) are responsible for cooling more wall, which is further complicated by using Oxygen as a coolant.
 
 In the days of old there were two common approaches to manufacturing the cooling architecture that were inevitable based on manufacturing constraints: brazed tubes and milled rectilinear channels. In the former case, long circular tubes were bent into the shape of a nozzle contour and welded together, and in the latter case rectangular slots were milled along the outside of a nozzle block and later capped with some sleeve to hold the fluid in.
 
@@ -219,347 +219,161 @@ In the days of old there were two common approaches to manufacturing the cooling
 
 The geometry of cooling architectures were largely fixed at that point, which was fine for those cases because the fuel material was sufficient to cool the walls and drive the engine cycle.
 
-With a more adept cooling fluid we may have been able to just place some straight tubes from one end of the nozzle to the other, or rely on legacy rectangular channel designs, but doing so with Oxygen-filled channels would leave us with one melty nozzle. We need a way to both increase the amount of heat transfer into the Oxygen, and increase the amount of time it is able to perform heat transfer.
+With a generous coolant and a large engine we may have been able to just place some straight tubes from one end of the nozzle to the other and call it done, but a small engine, or one cooled by oxygen, would be left with one melty nozzle. We need a way to both increase the amount of heat transfer into the coolant, and increase the amount of time it is able to perform heat transfer.
 
 There are competing problems at play that we must contend with: heat transfer and pressure drop. The longer and smaller we make the channels the greater the heat transfer, but the larger the pressure drop. This is because fluid moving faster through a smaller channel has a larger heat transfer coefficient, but also experiences more viscous pressure losses. That pressure is needed downstream to spin a turbine and maintain chamber pressure, so we can't be selfish and eat it all while cooling the nozzle down. We need a way to determine, ideally quickly and at a glance, how small variations in cooling geometry impact the heat transfer and pressure drop performance.
 
 ### Problem Solving: Listening to Physics
 
-Rectangular shaped cooling channels were a consequence of manufacturing constraints, but engineers still retroactively justified their performance by tweaking the parameters of the channels that were able to be manipulated and determining what made the best version of the limited geometry scope. The biggest improvement came from realizing that high aspect-ratio rectangular cross section channels (skinny and tall) created natural convective vortices due to the temperature gradient from the hot side of the rectangle to the colder side, which improved coolant mixing and overall performance. If we lean further into the idea of improved mixing to improve heat transfer, we might imagine a way to induce vorticity in the flow without relying on the natural convective vortices that arise due to the temperature gradient in the cooling passages. If the fluid wants to spin regardless then let's not get in the way! If we want to get more involved in the vorticity, why don't we nudge the Oxygen into a vortex ourselves? We could make a tube that has grooves of some kind so that when you twist it you end up with a helical shape similar to the inside of a gun barrel (or a churro for my foodies).
+Every lever we have on the coolant side comes down to two things: how fast the coolant moves past the wall, which is set by the channel's flow area, and how much surface it moves past, which is set by the channel's shape. Faster coolant draws more heat and costs pressure. More surface draws more heat too, and it is the cheaper of the two in pressure.
 
-*[Figure: Gun Barrel Rifling]*
+The brazed tube and the milled slot were both manufacturing answers; the milled slot turned out to be the better physics. A rectangular channel shares each side wall with its neighbor, and that wall, the *rib*, is a fin: heat conducts up it from the hot wall and into the coolant on both faces. Make the channels tall, narrow and many, and the ribs reach deep into the coolant, adding surface at about the same flow area. Carlile and Quentmeyer measured this at NASA Lewis in 1992 [10]: three copper chambers differing only in channel shape, where at the same coolant pressure drop the chamber with an aspect ratio of 5 ran its hot wall at 539 K against the 765 K of the baseline's 0.75, 30 percent cooler, and showed no fatigue damage after 440 thermal cycles.
 
-*Internal Rifling of a 105mm Royal Ordinance L7 Tank Gun*
+Printing adds one more freedom: a channel does not have to run straight. Printed copper chambers wind many square-ish passages around the wall as a helix, so a coolant particle can make several laps of the chamber before it leaves. Held at a constant angle to the wall's meridian, the passages all fit side by side, and the rib between them grows wherever the wall's radius does.
 
-*[Figure: Churro]*
+NOVA builds three channel families from these ideas, one per run, set by `channelType`:
 
-*Churros*
+| `channelType` | Section | Held | Sized | Falls out |
+|---|---|---|---|---|
+| `circle` | Circle | Rib | Radius | Wrap angle |
+| `rectangular` | Rounded rectangle, depth along the wall normal | Rib, and the channel runs straight | Depth | Width and aspect ratio |
+| `helical` | Rounded rectangle on a helix of $N$ starts | Helix angle and aspect ratio | Width | Rib |
 
-This will cause the Oxygen inside of the cooling channels to spin, which will disrupt thermal boundary layer development and increase variable density fluid mixing, improving overall heat transfer into the fluid and thereby increasing heat transfer to the hot wall.
-
-We're not fighting the current, but we still have some things to keep in mind. Fluids don't *love* sharp corners from a pressure drop perspective, and both the square rifling in the tank barrel and the sharp pointy curro peaks are a bit aggressive for our purposes. We would be better off smoothening the rifling out a bit, more like a cartoon flower:
-
-*[Figure: Spongebob Flowers]*
-
-*Unrelated Cartoon Flowers*
-
-Cartoon flowers are a bit exaggerated, I want something a bit more tame:
-
-*[Figure: Single Fluted Cross Section]*
-
-*Fluted Cross Section*
-
-There we go. We've been calling this fluted, which is how I will refer to it from now on. This is a step in the right direction, lets extrude this and spin it about and see how it looks:
-
-*[Figure: Straight fully-fluted channel 1]*
-*[Figure: Straight fully-fluted channel 2]*
-
-*Straight Fully-Fluted Helical Channel*
-
-This is looking good, but we have a problem. Right now, the channels have a non-uniform hot-wall thickness because of the flutes:
-
-*[Figure: We have a problem]*
-
-*Variable hot wall thickness due to flutes*
-
-This will inevitably lead to temperature variation on the hot wall, which is not ideal for us. What if we could smush all of the flutes on the side near the hot wall flat, so that on the hot wall side the cross section was a circle but it still had the flutes on the top side?
-
-*[Figure: We have solved the probelm]*
-
-*Fluted cross sections flattened along the hot wall*
-
-The helix is maintained as the flutes are rolled about the channel centerline, but the flattened side is always held adjacent to the nozzle hot wall. See the above sketch of three adjactent channels. As a result, the flutes would appear to poke in and out of existance as they spun around if you looked down the length of a channel.
-
-The heat transfer at each point along the channel is related to the velocity of the coolant. Since the massflow of coolant through the nozzle is driven by the system thrust requirement, the velocity of the coolant at any point of the channel is manipulated by varying the cross sectional area. In a stationary nozzle reference frame, when the velocity of the coolant is high, it can be thought of like an ice pack that is constantly being refreshed. The nozzle wall stays cool but the coolant does not experience adequate conditioning. The cooling architecture radius variation is designed to balance the channel outlet conditions with the nozzle wall conditions, transfering as much energy into the coolant as possible without melting critical hardware.
-
-With this methodology of designing the channel radius distribution, it is inevitable that there would be large gaps between the channels if you were to simply align them axially along the nozzle wall. To make effecient use of the space and  maximize energy exchange, the channels, which are themselves helical, are wrapped around the nozzle wall.
-
-![Jacket](.\regenDesignImages\jacket.png)
-
-*A completed regen jacket*
+Spirally *fluted* channels are kept in `experimental/flutedChannels.py`: a circle with helical grooves, like the rifling in a gun barrel or the ridges of a churro, rolled so the coolant spins and the thermal boundary layer never settles. Their appeal is to a coolant short on capacity, oxygen in a hybrid above all. The geometry builds, but no source supports the heat transfer correlation they were rated with, so they are not one of the families NOVA offers.
 
 ## The Algorithm
 
-Think long and hard about how you would make the previously described cooling channels in a CAD software like NX. Now throw those thoughts away because we did it in Python.
+Think long and hard about how you would make these cooling channels in a CAD package. Now throw those thoughts away, because the physics is going to draw them for us. NOVA solves the channel station by station against the wall temperature it is allowed, and the geometry is whatever falls out of that solve.
 
-The Nozzle class not only handles the contour generation but also the cooling architecture. With this tool in our design suite, we can rapidly interate through regen designs, generating geometry and doing the first pass of performance analysis in a matter of minutes.
+### Where does the jacket run?
 
-### Generating the pathline
+The jacket covers the whole regen section: from the injector face, over the chamber barrel and through the throat, to wherever the regen section is truncated. The coolant enters through the *inlet volute* at the aft end and runs forward against the exhaust, so it meets the lowest heat flux first and arrives at the throat already warmed, and leaves through the *return volute* at the injector face.
 
-The pathline is the centerline of one cooling channel. The inner nozzle wall is defined by method of characteristics, so the 2D pathline is offset by one channel radius plus the desired hot wall thickness. Thus, the channel radius distibution must be calculated first with the private method ``distributeChannelRadii()``, which creates a smooth transition between the 5 channel radius control points. The inlet and outlet control points refer to the flow of the coolant, so the "inlet" is located where we would normally consider the exit plane of the nozzle and vice versa. The throat control point is automatically placed where the nozzle contour radius is smallest. The grain control point is located where the inner surface of the fuel grain intersects the nozzle contour. Finally, the "throat inlet" control point is an additional point between the throat and the grain interface. This control point is loacted at a point of inflection of a sunken contour.
+At each end the channel has to turn off the wall and out to its volute. A plane is drawn normal to the axis, `inletVoluteAxialOffset` upstream of the aft end (or `returnVoluteAxialOffset` downstream of the injector face), and a fillet is placed tangent to both the wall and that plane. The channel follows the wall into the fillet, turns through it, and leaves along a straight flare of `inletVoluteFlareLength`, tilted `inletVoluteTilt` from the radial, where the volute attaches. The fillet's radius is `inletVoluteFlareRoverD` times the jacket's full radial depth at that station: hot wall, the largest channel that fits there, and shell. The return end is the same construction reflected through a plane normal to the axis, ``upstreamVoluteInterfaceCurve()``, so for the same settings the two ends are exact mirror images.
 
-The channel distribution function first validates the user inputs to ensure that
+### Sizing the channel
 
-$$
-channel Outlet Radius < channel Grain Radius
-$$
+The quantity solved for is the section's *radial half-extent*, `channelRadius`: a circle's radius, or half a rectangle's depth. Measuring every family by how far it reaches from its centerline toward the wall and away from it means the centerline offset, the shell and the volute placement are the same for all three.
 
-$$
-channel Grain Radius < channel Throat Inlet Radius
-$$
+At a fixed coolant flow, a smaller channel carries the coolant faster, which cools the wall harder and costs pressure; a larger one costs less pressure and runs the wall hotter. So at each station the answer we want is *the largest channel that holds the hot wall at* `maxWallTemperature`, which is also the channel with the least pressure drop. The sizing march in ``solveChannelRadii()`` starts at the coolant inlet, proposes a size, rebuilds the section, runs the thermal model at that station, reads the wall temperature back, and adjusts with an adaptive secant search until the two agree to one part in ten thousand. The search relies on the wall temperature rising monotonically with channel size, which the tests hold a rectangle's depth to.
 
-$$
-channel Throat Inlet Radius < channel Throat Radius
-$$
+Each family caps the size differently:
+
+- **Circle:** the largest circle that packs between its neighbors with the rib left over, tangent to the wall offset by the hot wall:
 
 $$
-channel Throat Radius > channel Inlet Radius
+r = {R \sin(\pi/N) \over 1 - \sin(\pi/N)} - {t_{infill} \over 2}, \qquad R = r_{wall} + t_{wall} - t_{infill}
 $$
 
-This check ensures that there will be no backwards roll or overlapping channels. The distribution function then uses a combination of cubic and bezier splines to enforce appropriate tangencies and extrema for both traditional and sunken contours.
+- **Rectangular:** the depth may reach `maxChannelAspectRatio` times the width, and `maxChannelDepth` where one is given.
+- **Helical:** the width may reach the pass spacing less the minimum rib, and the depth follows it through `channelAspectRatio`, again within `maxChannelDepth`.
 
-*[Figure: Channel Radius Control Points]*
+Below, every family is held to the smallest the process can build: `minChannelRadius` for a circle or a rectangle's half-depth, `minChannelWidth` for a helix. Before the march starts, the throat is checked: if the channel that fits there is smaller than the minimum, `nChannel` is reduced until it is not.
 
-With the channel radius distribution defined, the 2D channel centerline can be constructed with a simple call to our in house ``parallelOffset()`` tool. Simulataneously, a few other offset curves are generated for later reference. The "cold wall" is offset from the hot wall by one hot wall thickness. The 3D channels will eventually rest against this imaginary wall, therefor all the heat transfer that we care about happens between the hot and cold walls. The "shell" is also generated by offsetting one hot wall thickness, one channel diameter, and one shell thickenss from the hot wall. The shell is the outermost wall that you see when you look at a completed nozzle in the real, physical world. The shell ultimately gives the nozzle wall finite depth for the channels to live within.
+### Wrapping the channel
 
-*[Figure: Nozzle]*
+A circle does not fill its share of the circumference, so it is wrapped around the wall: Kineo's Algorithm (named for Kineo, who wrote it and is the only person who really knows how it works) turns each station through the angle that makes the channel's projection fill its pitch, so there are no gaps between channels.
 
-The 2D channel pathline must then be wrapped around the nozzle. Channel wrapping allows for the most efficient use of space for heat transfer. The algorithm that detwermines the wrap angles is called Kineo's Algorithm because Kineo wrote it and is the only person who really knows how it works. This author is not Kineo.
+A rectangle fills its pitch by construction, so it runs straight.
 
-As an aside, this author did write the smartRadii option for Kineo's Algorithm. When smartRadii is set to True (which it is by default), the method will calculate the maximum number of channels, N, that can fit at any point along the nozzle based on the local channel radius:
-
-$$
-\begin{align}
-    N = floor(w{2 \pi R\over{t_{infill} + r(2+2f)}})
-\end{align}
-$$
-
-where $w$ is the channel wrap modifier, $R$ is the nozzle radius, $t$ is the infill thickness, $r$ is the channel radius, and $f$ is the flute amplitude coefficient. The check is triggered if any $N$ is less than $N$ based on the throat, inidcating that the channel radius is too large at that point. If the check is triggered at any point, the equation is solved in reverse for the maximum allowable radius at that point:
+A helix runs at a constant angle $\phi$ to the meridian of the cold wall, which makes it a *loxodrome*, the path a ship holding one compass heading traces on a globe:
 
 $$
-\begin{align}
-    r = {w 2 \pi R + N_{throat} t_{infill} \over 2N_{throat}(1+f)} 
-\end{align}
+{d\theta \over ds_m} = {\tan\phi \over r_{cw}}
 $$
 
-The offset curves are then recalculated with this new channel radius distribution. This check is intended to keep channels from overlapping, however a visual check by the engineer is always necessary for all things. smartRadii runs inside Kineo's Algorithm and prints to the terminal when triggered.
+where $\theta$ is the wrap angle, $s_m$ the arc length along the cold wall's meridian, and $r_{cw}$ the cold wall's radius. On a cylinder it winds at a constant rate; on a cone it winds as the logarithm of the radius, tighter where the wall is narrow. The helix holds its azimuth through the volute interfaces, so it winds only where it lies on the jacketed wall.
 
-So anyway, trust and beleive you now have wrap angles. The wrap angles are used in a DCM roll operation about the nozzle azis to create the 3D channel centerline.
+With the wrap angles in hand, the 2D centerline is rolled about the nozzle axis into three dimensions.
 
-### Generating the cross sections
+### The cross sections
 
-A fluted cross section starts in an "unwrapped" state in the form of a sine wave. The sine wave takes in the arguments of $n_f$ (the number of flutes) and $f$ (the flute amplitude coefficient). The wave is shifted vertically based on the local channel radius and closed by converting from polar to cartesian. The result is a set of flower shaped cross sections which vary only with the local channel radius.
+A circle is drawn in the plane normal to the centerline, on a parallel transport frame: a frame that follows the curve without twisting about it. A circle is the same shape at any roll, so that is all it needs.
 
-$$
-\begin{align}
-    r_{fluted} = r_{i} + fr_{i}sin(\theta n_{f})
-\end{align}
-$$
+A rectangle is not, and its depth has to point along the wall normal at every station. It is drawn on frames built from the wall normal instead, ``wallNormalFrames()``: the normal of the wall's meridian, rotated to the station's azimuth, with the binormal completing the set. A parallel transport frame would drift off the wall normal wherever the centerline wraps, which is everywhere on a helix.
+
+The rectangle's corners may be rounded at `channelCornerRadius`, and its flow area and wetted perimeter are
 
 $$
-0<\theta<2\pi
+A = w d - (4 - \pi) r_c^2, \qquad P = 2(w + d) - (8 - 2\pi) r_c
 $$
 
-![Unwrapped Fully Fluted Cross Section](.\regenDesignImages\unwrappedFlutes2.png)
+with $w$ the width across the wall, $d$ the depth outward from it, and $r_c$ the corner radius, clamped to half the smaller side. Each family sets $w$ and $d$ its own way:
 
-$$
-\begin{align} 
-    x_{fluted,i} = r_{fluted}sin(\theta) \\
-    y_{fluted,i} = r_{fluted}cos(\theta) \\
-\end{align}
-$$
+- **Rectangular:** the width fills the pitch at the cold wall less the rib, $w = 2\pi r_{cw} / N - t_{infill}$, so the rib at its root is exactly `infillThickness`, and the depth $d = 2 \cdot$ `channelRadius` is sized.
+- **Helical:** the passes sit $s = 2\pi r_{cw} \cos\phi / N$ apart measured across the channel. The width is sized, the depth is `channelAspectRatio` times it, and the rib is what the spacing leaves, $t_{rib} = s - w$, never less than `infillThickness`.
 
-*[Figure: Wrapped Fully Fluted Cross Sections]*
+### The jacket
 
-### Generating the channel
+With one channel defined, the jacket is that channel patterned about the nozzle axis `nChannel` times. EZPZ lemon squeezy.
 
-To create the helical pattern, each cross section must be rolled about its center. The amount each cross section is rolled is dependent on the user input the helix angle, the local channel radius $r_c$, and the emergent total path length. The differential path length $\Delta L$ is the length of path between one cross section and the next and $L$ is the total path length of the channel.
-
-$$
-\Delta L = \sqrt{\Delta x_{3Dpath}^{2} + \Delta y_{3Dpath}^{2} + \Delta z_{3Dpath}^{2}}
-$$
-
-$$
-L = \Sigma (\Delta L)
-$$
-
-The differential roll $\phi_i$ of each cross section is a percentage of the total roll $\Phi$ of the path equivalent to the percentage of the total path length represented by that cross section:
-
-$$
-\Phi = tan(H_f) * L/r_c
-$$
-
-$$
-\bar{\phi_i} = dL/L
-$$
-
-$$
-\phi_i = \bar{\phi_i} * \Phi
-$$
-
-Each cross section is then rolled with a simple DCM operation:
-
-$$
-{\begin{bmatrix}
-    x\\
-    y\\
-    0\\
-\end{bmatrix}}_{rolled,i} 
-= 
-\begin{bmatrix}
-    1 & 0     & 0     \\
-    0 & cos(\phi_{i}) & -sin(\phi_{i})\\
-    0 & sin(\phi_{i}) &  cos(\phi_{i})\\
-\end{bmatrix}
-{\begin{bmatrix}
-    x\\
-    y\\
-    0\\
-\end{bmatrix}}_{fluted,i}
-$$
-
-*[Figure: Wrapped and Rolled Fully Fluted Cross Sections]*
-
-The fully fluted and rolled cross sections are then placed along the pathline. They are "flown" along the pathline with a DCM operation to maintain each face locally perpendicular to the pathline. In this operation, the "roll" has already been achieved by Kineo's wrapping algorithm. The pitch and yaw are calculated as such by the 3D centerline:
-
-$$
-\begin{align}
-    Yaw:\psi = -arctan({\Delta z_{3Dpath}\over \Delta x_{3Dpath}})
-\end{align}
-$$
-
-$$
-\begin{align}
-    Pitch:\theta = -arctan({\Delta y_{3Dpath}\over \sqrt{\Delta x_{3Dpath}^2 + \Delta z_{3Dpath}^2}})
-\end{align}
-$$
-
-Finally, each cross section must be flattened along the cold wall. This is acheived by identifying the index of the cross section which is closest to the hot wall with a searching algorithm and superimposing a gausian curve over the unwrapped cross section at this index. The process to find the "gaussian compression index" is split into two searches for efficiency. Instead of searching the whole cross section, the pathline location of the cross section is compared to the nozzle wall to yeild the "nozzle index," then the nozzle index is compared to the corresponding circular cross section to yeild the final compression index.
-
-The compressed sin wave is then converted back to polar to yeild the final cross section.
-
-*[Figure: Compression Process, Unwrapped]*
-*[Figure: Compression Process, Wrapped]*
-
-### Generating the jacket
-
-Now that one gaussian fluted channel has been created, the jacket is made by simply patterning the channel about the nozzle axis the correct number of times. EZPZ lemon squeezy.
-
-![Jacket](.\regenDesignImages\jacket.png)
+![Jacket](./regenDesignImages/jacket.png)
 
 *A completed regen jacket*
 
 ### Modeling the performance
 
-To fascilitate rapid iterative design, the heat transfer properties of the generated architecture are estimated by a 1 dimensional (along the nozzle wall) heat transfer model.
-
-The heat transfer of the system is estimated using a thermal resistance model. Thermal resistance models imagine heat flux like current  and temperature like voltage in an electric circuit. The different heat transfer modes are modeled as resistances to the flow of energy.
-
-*[Figure: Thermal Resistance]*
-
-*A thermal resistance circuit*
-
-The heat transfer through a circuit is
+To keep design iteration quick, the heat transfer is estimated by a one-dimensional thermal resistance model along the wall. Heat flow plays the part of current and temperature the part of voltage, so at each station
 
 $$
-\begin{align}
-    \dot{Q} = \Delta T / R_{equivalent}
-\end{align}
+\dot{Q} = {T_{aw} - T_{coolant} \over R_{gas} + R_{wall} + R_{coolant}}
 $$
 
-where $\dot{Q}$ is constant throughout the circuit. The thermal resistances of conduction across a circular pipe wall and convection respectively are
+with $\dot{Q}$ the heat through one channel's share of the wall.
+
+**The gas side** is the Bartz correlation [8], with the boundary layer correction $\sigma$ carrying the whole dependence on the wall temperature:
 
 $$
-\begin{align}
-    R_{COND} = {ln(r_{outer} / r_{inner}) \over 2\pi L k}
-\end{align}
+h_{g} = \left({0.026 \over D_{t}^{0.2}}\right)\left({\mu^{0.2}c_P \over Pr^{0.6}}\right)\left({P_{c} \over c^*}\right)^{0.8}\left({D_{t} \over R_c}\right)^{0.1}\left({A_{t} \over A}\right)^{0.9}\sigma
 $$
 
 $$
-\begin{align}
-    R_{CONV} ={1 \over hA}
-\end{align}
+\sigma = {1 \over \left({1 \over 2}{T_{wall} \over T_{c}}\left(1 + {\gamma - 1 \over 2}M^2\right) + {1 \over 2}\right)^{0.68}\left(1 + {\gamma - 1 \over 2}M^2\right)^{0.12}}
 $$
 
-where $r_{outer}$ and $r_{inner}$ are the outer and inner radii of the conducting wall, $L$ is the differential path length, $k$ is the thermal conductivity of the conducting material, $h$ is the heat transfer coefficient of the convecting flow, and $A$ is the surface area. The equivalent resistance for three resistors in series is
+with $R_c$ the throat's radius of curvature, the stagnation Prandtl number $4\gamma / (9\gamma - 5)$ and the stagnation viscosity $1.184 \times 10^{-7} MW^{0.5} T_0^{0.6}$. Because $\sigma$ depends on the unknown wall temperature, each station is converged. The gas-side area is each channel's share of the wall, $A_{hw} = (2\pi r / N) \, ds_m$ over the wall's own meridional length, so the channels tile the wall exactly at any wrap angle.
+
+**The wall** conducts through the sector of the cylindrical shell each channel owns:
 
 $$
-\begin{align}
-    R_{equivalent} = R_{CONV,HOT} + R_{COND} + R_{CONV,COLD}
-\end{align}
+R_{wall} = {r \ln(1 + t/r) \over k A_{hw}}
 $$
 
-The material properties of GR-Cop42 are well characterized, however determining convective heat transfer coefficients is very tricky and usually requires an empirical correlation. For the exhaust side we use the Bartz equations [8]:
+which tends to the slab $t / (k A_{hw})$ for a wall thin against its radius.
+
+**The coolant side** uses Gnielinski's Nusselt number [9] on the hydraulic diameter $d_H = 4A/P$ (a circle's $2r$), with the Swamee-Jain friction factor [11]:
 
 $$
-\begin{align}
-    h_{Hot} = ({0.026 \over D_{throat}^{0.2}}) 
-        ({\mu^{0.2}c_P \over Pr^{0.6}})
-        ({P_{chamber} \over c^*})^{0.8}
-        ({D_{throat} \over r_c})^{0.1}
-        ({A_{throat} \over A})^{0.9}
-        \sigma
-\end{align}
+Nu = {(f/8)(Re - 1000)Pr \over 1 + 12.7(f/8)^{1/2}(Pr^{2/3} - 1)}, \qquad f = {0.25 \over \log_{10}^2\left({e \over 3.7 d_H} + {5.74 \over Re^{0.9}}\right)}
 $$
 
-$$
-\begin{align}
-    \sigma = {1 \over ({1 \over 2}{T_{wall} \over T_{chamber}}(1 + {\gamma - 1 \over 2}M^2) + {1 \over 2})^{0.68}
-        (1 + {\gamma - 1 \over 2}M^2)^{0.12}}
-\end{align}
-$$
-
-where $r_c$ is the radius of curvature of the throat ans the Prandtl number, viscosity, and heat capacity are stagnation values.
+and $h_c = k_{fluid} Nu / d_H$, with the coolant properties at the local state from REFPROP or CoolProp. A circle takes its heat through the half of its perimeter facing the wall. A rectangle or a helix takes it through its floor and through its two side walls as the faces of the ribs, each a straight fin of height $H$ and thickness $t_{rib}$ cooled on both faces with an adiabatic tip:
 
 $$
-\begin{align}
-    Pr = {4\gamma  \over 9\gamma - 5}
-\end{align}
+A_{coolant} = \left(w_{floor} + 2\eta H\right) ds, \qquad \eta = {\tanh(mH) \over mH}, \qquad m = \sqrt{2 h_c \over k \, t_{rib}}
 $$
 
-$$
-\begin{align}
-    \mu = 1.184 \times 10^7MW^{0.5}T_{total}^{0.6}
-\end{align}
-$$
+The coolant then carries the heat it picked up to the next station, and loses pressure to friction and to the bends in its path.
 
-$$
-\begin{align}
-    c_P = R{\gamma \over \gamma - 1}
-\end{align}
-$$
+The heat transfer model outputs plots of the coolant properties, both heat transfer coefficients and the hot wall temperature along the nozzle axis. These are a first pass: a design worth building should still go through three-dimensional conduction and CFD.
 
-The molecular weight, gas constant, and ratio of specific heats are caclulated with NASA's CEA.
+![Heat Transfer Model Outputs](./regenDesignImages/heatTransferModel.png)
 
-Because the Bartz heat transfer coefficient equation is dependent on the yet unkown hot wall temperature, it must be run in a convergence loop.
+*Sample heat transfer model outputs*
 
-This correlation is well chracterized for the regen nozzles of old, but it has been shown in our simulations to unable to account for two important effects in our nozzle design. First, the $\sigma$ term in is a boundary layer correction term. This holds up well for showerhead injection, however our boundary layer is appreciably effected by swirling flow. Secondly, there is no term which captures the impingement and recirculation effects of a sunken converging section. As of [07/16/2025], we are developing our own correction terms for both of these factors with a CFD study.
+### How far can we trust it?
 
-For the coolant flow, we use the definition of Nusselt number to calculate the convective heat transfer coefficient:
+The gas side is checked against a worked example of the correlation as NASA SP-125 gives it, but not against a measurement.
 
-$$
-\begin{align}
-    h_{COLD} = {k_{fluid} * Nu \over d_H}
-\end{align}
-$$
+The coolant side was put against Carlile and Quentmeyer's three chambers [10], at one station with the gas side fixed from their stated operating point. Every one of their 13 measured throat wall temperatures lies inside the band NOVA predicts once the coolant state and the channel roughness, neither of which the paper reports, are bracketed. The bands are wider than the tolerances set before the comparison, so it is a comparison, not a validation.
 
-where $d_H$ is the hydraulic diameter of the channel. Thermofluid properties like thermal conductivity are calculated with refWrap, and we leverage two empirical correlations for the Nusselt number itself. We consider the Nusselt number to be in bewtween the Gnielinski correlation for circular channels [9] and the fully fluted correlation from Principles of Enhanced Heat Transfer [6].
+The comparison also exposed a limit of the coolant correlation. It uses the rough-wall friction factor inside Gnielinski's smooth-tube form, so it credits roughness with heat transfer in proportion to the friction it adds, and measured rough tubes do not deliver that [12]. At the 35 um roughness NOVA assumes for a printed channel, the model puts Carlile and Quentmeyer's baseline wall-to-coolant temperature difference 39 percent below what they measured. Read NOVA's wall temperatures as optimistic until a rough-wall correction and printed-channel data close that gap; the full account is in [carlileQuentmeyer_2026-09-22.md](./reports/carlileQuentmeyer_2026-09-22.md).
 
-$$
-\begin{align}
-    Nu_{Semi Fluted} =( 0.25*Nu_{Fluted}) + (0.75*Nu_{Gnielinski})
-\end{align}
-$$
+Three more things the model does not see, and it is the onus of the designer to allow for them:
 
-$$
-\begin{align}
-    Nu_{Gnielinski} = {({f/8})(Re_D-1000)Pr \over 1 + 12.7(f/8)^{1/2}(Pr^{2/3}-1)}
-\end{align}
-$$
-
-$$
-\begin{align}
-    Nu_{Fluted} = 0.064Re_{d_H}^{0.773}Pr^{0.4}({F_A\over d_H})^{-0.242}({F_P\over d_H})^{-0.108}({F_H\over 90})^{0.599}
-\end{align}
-$$
-
-where the Gnielinski friction factor is $ f = (0.79*ln(Re)-1.64)^{-2} $ and $F_A$, $F_P$, and $F_H$ are the flute amplitude, pitch, and helix angle respectively.
-
-The heat transfer model outputs 10 plots of coolant properties, the exhaust side heat transfer coefficent, and the nozzle hot wall temperature along the nozzle axis. Additionally, the results for circular channels as well as CFD correlation study results are also plotted for comparison. These outputs are intended to help the engineer narrow down the cooling architecture by making the iterative design process quicker, however the model is inherently limited and the selected design should be put through a complete analysis package including three dimensional FEA and CFD.
-
-![Heat Transfer Model Outputs](.\regenDesignImages\heatTransferModel.png)
-
-*Sample heat transfer model outputs.*
+- Over the chamber barrel, Bartz is used outside the throat region it is referenced to. On a straight barrel its coefficient varies only through the wall temperature, with no injector near field and no boundary layer start, and the barrel's gas state takes the chamber pressure as stagnation with no Rayleigh loss.
+- The coolant is taken as fully mixed across a tall channel, where in reality it stratifies from floor to roof.
+- A helical passage curves around the chamber with the hot wall on the inside of the bend, where secondary flow is expected to reduce the heat transfer, so the model is optimistic for a helix, more so the steeper its angle.
 
 # References
 
@@ -567,8 +381,15 @@ The heat transfer model outputs 10 plots of coolant properties, the exhaust side
 
 [8] Bartz - A Simple Equation for the Rapid Estimation of Rocket Nozzle Convective Heat Transfer
 
-[9] Gnielinski - Neue Gleichungen für den Wärme- und den Stoffübergang in turbulent durchströmten Rohren und Kanälen
-        (New equations for heat and mass transfer in turbulent flow pipes and channels)
+[9] Gnielinski - Neue Gleichungen für den Wärme- und den Stoffübergang in turbulent durchströmten Rohren und Kanälen (New equations for heat and mass transfer in turbulent flow pipes and channels)
+
+[10] Carlile, Quentmeyer - An Experimental Investigation of High-Aspect-Ratio Cooling Passages, NASA TM-105679, 1992
+
+[11] Swamee, Jain - Explicit Equations for Pipe-Flow Problems, Journal of the Hydraulics Division, ASCE, 1976
+
+[12] Dipprey, Sabersky - Heat and Momentum Transfer in Smooth and Rough Tubes at Various Prandtl Numbers, International Journal of Heat and Mass Transfer, 1963
+
+Sources for the channel families and the hardware comparison are annotated in [references_regenChannels_2026-09-22.md](./references_regenChannels_2026-09-22.md).
 
 # Author
 

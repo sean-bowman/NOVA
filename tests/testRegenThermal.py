@@ -34,7 +34,7 @@ import numpy as np
 import pytest
 
 from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
-                          hotWallSectorArea, regenHeatTransferModel,
+                          coolantFrictionAndNusselt, hotWallSectorArea, regenHeatTransferModel,
                           solveStationWallTemperature, validateRegenHeatTransferInputs,
                           wallConductionResistance)
 
@@ -668,3 +668,54 @@ class TestRectangularDepth:
         temperatures = [self.wallTemperature(depth, width, machNumber, radius) for depth in depths]
 
         assert all(later > earlier for earlier, later in zip(temperatures, temperatures[1:])), temperatures
+
+class TestCoolantCorrelation:
+
+    '''
+
+    The friction factor is Swamee and Jain's explicit form of Colebrook. It is commonly quoted as
+    within one percent of Colebrook for relative roughness 1e-6 to 1e-2 and Reynolds numbers 5e3
+    to 1e8. Measured against Colebrook solved by iteration it is within one percent for Reynolds
+    numbers 1e4 to 1e7 at relative roughness up to 1e-3, and within 2.8 percent over the whole
+    quoted range, the worst at the rough, low-Reynolds corner (1e-2, 5e3).
+
+    '''
+
+    @staticmethod
+    def colebrook(reynolds, relativeRoughness):
+
+        friction = 0.02
+        for _ in range(100):
+            friction = (-2 * np.log10(relativeRoughness / 3.7 + 2.51 / (reynolds * np.sqrt(friction))))**-2
+        return friction
+
+    @pytest.mark.parametrize('reynolds', [5e3, 1e4, 1e5, 1e6, 1e7, 1e8])
+    @pytest.mark.parametrize('relativeRoughness', [1e-6, 1e-5, 1e-4, 1e-3, 1e-2])
+    def testTheFrictionFactorIsColebrook(self, reynolds, relativeRoughness):
+
+        diameter = 2.0e-3
+        friction, _ = coolantFrictionAndNusselt(reynolds, 0.7, diameter,
+                                                surfaceRoughness = relativeRoughness * diameter)
+        tolerance = 0.01 if (1e4 <= reynolds <= 1e7 and relativeRoughness <= 1e-3) else 0.03
+
+        assert friction == pytest.approx(self.colebrook(reynolds, relativeRoughness), rel = tolerance)
+
+    def testTheShippedRoughnessIsAPrintedChannel(self):
+
+        smooth, _   = coolantFrictionAndNusselt(1e5, 0.7, 2.0e-3, surfaceRoughness = 0.0)
+        printed, _  = coolantFrictionAndNusselt(1e5, 0.7, 2.0e-3)
+
+        assert printed > smooth
+
+class TestPrescribedGasCoefficient:
+
+    '''A prescribed gas-side coefficient replaces Bartz and is held fixed through the solve.'''
+
+    def testTheGasSideFluxIsTheCoefficientTimesItsDrivingDifference(self):
+
+        solution = TestStationSolveIdentities().station(prescribedGasCoefficient = 40.0e3)
+        flux = solution.heatTransfer / 5.0e-5
+
+        assert solution.exhaustConvectiveCoefficient == 40.0e3
+        assert flux == pytest.approx(40.0e3 * (3400.0 - solution.hotWallTemperature), rel = 1e-12)
+        assert solution.converged

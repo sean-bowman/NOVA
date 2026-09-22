@@ -35,7 +35,7 @@ NOVA is a computational toolset for generating and analyzing rocket nozzle geome
     - [Regenerative cooling jacket](#regenerative-cooling-jacket)
     - [Film cooling](#film-cooling)
     - [Radiative extension](#radiative-extension)
-    - [Volutes and keep-out](#volutes-and-keep-out)
+    - [Volutes](#volutes)
     - [Program options](#program-options)
   - [Outputs](#outputs)
   - [Worked example: LOX/LH2 upper-stage nozzle](#worked-example-loxlh2-upper-stage-nozzle)
@@ -170,20 +170,36 @@ Grouped by section, matching the order in the config file.
 
 ### Regenerative cooling jacket
 
-The jacket on `assets/NOVANozzle.json` is sixty circular channels in GRCop-42, with hydrogen coolant at 3.4 kg/s entering at 12 MPa and 30 K, feeding both volutes. `tests/regressionHarness.py` runs that jacket as its `regenCircle` baseline and swaps the cross section to fluted for `regenFluted`; the case table in that file is the record of what each baseline pins. Theory and correlation sources are in [NozzleCooling.md](docs/NozzleCooling.md).
+The jacket covers the whole regen section, from the injector face over the chamber barrel to the regen truncation. The coolant enters through the inlet volute at the aft end, runs forward against the exhaust, and leaves through the return volute at the injector face; at each end a fillet turns the channels off the wall into a straight flare the volute attaches to, the return the mirror image of the inlet. Over the barrel the gas side is Bartz outside its checked range: it is referenced to the throat, and nothing checks it in a subsonic barrel.
+
+Three channel families are built, one per run:
+
+| `channelType` | Section | Held | Sized | Falls out |
+|---|---|---|---|---|
+| `circle` | Circle | Rib | Radius | Wrap angle |
+| `rectangular` | Rounded rectangle, depth along the wall normal | Rib, and the channels run straight | Depth | Width, which fills the pitch at the cold wall less the rib, and aspect ratio |
+| `helical` | Rounded rectangle on a helix of `nChannel` starts | Helix angle and aspect ratio | Width | Rib, which varies along the nozzle |
+
+The size solved for is the section's radial half-extent, `channelRadius`: a circle's radius, half a rectangle's depth. At each station it is the largest channel that holds the wall at `maxWallTemperature`, within the limits of each family. Spirally fluted channels are kept in [experimental/flutedChannels.py](experimental/flutedChannels.py).
+
+The jacket on `assets/NOVANozzle.json` is sixty circular channels in GRCop-42, with hydrogen coolant at 3.4 kg/s entering at 12 MPa and 30 K, feeding both volutes. `tests/regressionHarness.py` runs that jacket as its `regenCircle` baseline, as 160 rectangular channels for `regenRectangular` and as 40 square helical starts for `regenHelical`; the case table in that file is the record of what each baseline pins. Theory and correlation sources are in [NozzleCooling.md](docs/NozzleCooling.md).
+
+The coolant side is compared against Carlile and Quentmeyer's high aspect ratio chambers (NASA TM-105679) in [docs/reports/carlileQuentmeyer_2026-09-22.md](docs/reports/carlileQuentmeyer_2026-09-22.md): every measurement falls inside the band NOVA predicts once the unreported coolant state and roughness are bracketed, which makes it a sensitivity-bounded comparison rather than a validation. The comparison found that NOVA credits wall roughness with heat transfer in proportion to the friction it adds; at the 35 um printed-channel default that runs the predicted wall cooler than the measurements, so treat the wall temperature margin as optimistic.
 
 | Field                                       | Unit | Meaning                                                                                            |
 | --------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------- |
 | `makeCoolingChannels`                       | --   | Build the jacket and run the heat transfer model                                                   |
 | `material`                                  | --   | Wall alloy; see the material table below                                                            |
-| `channelType`                               | --   | `circle` or `fluted` cross section                                                               |
+| `channelType`                               | --   | `circle`, `rectangular` or `helical`                                                               |
 | `hotWallThickness`, `shellThickness`      | m    | Combustion-side wall and outer structural shell thickness                                          |
-| `infillThickness`                          | m    | Rib / infill thickness between channels                                                             |
-| `nChannel`                                  | --   | Fixed channel count. Leave unset to let the optimizer choose within the bounds below               |
-| `numFlutes`                                 | --   | Flute count for the fluted channel type                                                             |
-| `fluteAmplitudeCoef`                        | --   | Flute amplitude as a fraction of the local channel radius                                          |
-| `fluteHelixAngle`                           | deg  | Helix angle of the fluted channels                                                                  |
-| `interfaceLength`                           | m    | Circular channel interface length at the volute ends                                               |
+| `infillThickness`                          | m    | Rib between channels, at least 0.5 mm. Exact at the wall for `rectangular`; the floor for `helical` |
+| `nChannel`                                  | --   | Channel count, or helical starts. Reduced at run time if the throat cannot hold the minimum channel |
+| `minChannelWidth`                           | m    | Narrowest `rectangular` or `helical` channel the process can build, default 1 mm                  |
+| `channelCornerRadius`                       | m    | Corner radius of a `rectangular` or `helical` section. Unset is a sharp corner                     |
+| `maxChannelAspectRatio`                     | --   | Depth a `rectangular` channel may reach as a multiple of its width, default 8                      |
+| `maxChannelDepth`                           | m    | Depth a `rectangular` or `helical` channel may reach. Unset leaves the other limits to hold it       |
+| `channelHelixAngle`                         | deg  | `helical` only: angle to the meridian, 0 to 85                                                     |
+| `channelAspectRatio`                        | --   | `helical` only: depth as a multiple of width, default 1                                            |
 | `numCrossSections`, `numCSPointsChannel` | --   | Cross sections swept along each channel, and points per cross section                              |
 | `maxWallTemperature`                        | K    | Hard cap on hot wall temperature. Leave unset to optimize between the bounds below                 |
 | `maxWallTempUpperBound`, `maxWallTempLowerBound` | K | Bounds for the wall temperature optimization                                                |
@@ -232,7 +248,7 @@ Solves the wall temperature of an uncooled extension beyond the jacket. Needs a 
 | `extensionGasEmissivity`                   | --      | Total emissivity of the exhaust over the mean beam length. Zero makes the gas transparent    |
 | `extensionJointTemperature`                | K       | Wall temperature where the shell meets whatever is upstream. Empty makes the joint adiabatic |
 
-### Volutes and keep-out
+### Volutes
 
 | Field                                                | Unit | Meaning                                                                             |
 | ------------------------------------------------------ | ---- | ------------------------------------------------------------------------------------ |
@@ -244,20 +260,17 @@ Solves the wall temperature of an uncooled extension beyond the jacket. Needs a 
 | `inletVolutePrintability`, `returnVolutePrintability` | -- | Apply overhang-safe shaping                                                        |
 | `inletVoluteTilt`, `returnVoluteTilt`             | deg  | Tilt of the cross section                                                            |
 | `inletGraylocDiameter`, `returnGraylocDiameter`   | in   | Inner diameter of the Grayloc seal ring                                             |
-| `inletVoluteAxialOffset`, `returnVoluteAxialOffset` | m  | Axial offset of the turnaround                                                       |
-| `returnVoluteRadialOffset`                         | m    | Radial offset of the return turnaround                                              |
-| `inletVoluteFlareRoverD`, `returnVoluteFlareRoverD` | -- | Flare radius over diameter at the channel entry/exit                              |
-| `inletVoluteFlareLength`, `returnVoluteFlareLen`  | m    | Flare extension length                                                               |
-| `returnVoluteReturnAngle`                          | deg  | Return angle of the collected channel flow                                          |
-| `keepOutRadius`, `keepOutDepth`, `keepOutHubRadius`, `keepOutAxialOffset` | m | Chamber closure keep-out envelope, any of which may be left unset to take a default from the chamber radius |
+| `inletVoluteAxialOffset`, `returnVoluteAxialOffset` | m  | Where each flare leaves the wall: upstream of the aft end for the inlet, downstream of the injector face for the return |
+| `inletVoluteFlareRoverD`, `returnVoluteFlareRoverD` | -- | Fillet radius of the turn into each flare, over the jacket depth                  |
+| `inletVoluteFlareLength`, `returnVoluteFlareLen`  | m    | Flare length                                                                          |
 
-The keep-out envelope is a packaging boundary the volutes route around, not a model of a closure.
+The chamber keep-out envelope is kept in [experimental/keepOut.py](experimental/keepOut.py) beside the sunken throat that wraps it.
 
 ### Program options
 
 | Field           | Unit | Meaning                                                                                       |
 | ----------------- | ---- | ----------------------------------------------------------------------------------------------- |
-| `plotsEnabled`  | --   | Write every figure the run generates: contour, Mach, pressure, temperature and near-wall views, the interactive channel-mesh and jacket HTML views, and the keep-out trace |
+| `plotsEnabled`  | --   | Write every figure the run generates: contour, Mach, pressure, temperature and near-wall views, the interactive channel-mesh and jacket HTML views, and the volute assembly |
 | `export`        | --   | Write contour text files, STL geometry and the pickled `Nozzle`                              |
 | `filename`      | --   | Base name for the output folder: `<name>Outputs/`                                          |
 
@@ -282,7 +295,7 @@ A run writes to `{filename}Outputs/` beside the repository root.
 
 Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML companion. Matplotlib is the required backend for the GUI, since it is the only one that renders into a Tk canvas; plotly is required for the browser-side interactive views. Both are drawn from one description in `src/NOVA/figures.py`, which also holds the styled renderer for each backend, so the two renderings cannot drift. [featureShowcase/](featureShowcase/) calls the same Matplotlib renderer for its documentation figures, so a run's own output looks exactly like the worked example below.
 
-A run's own `export` writes **STL only**. A STEP writer exists in [experimental/stepExport.py](experimental/stepExport.py): it writes each component as the exact surface it is, a surface of revolution for the walls and the keep-out and a B-spline surface for the swept channels and volutes, rather than as triangles. It is not yet wired into `export`, and it does not perform booleans, so a run does not produce an assembled STEP body; see [docs/reports/stepExport_2026-09-20.md](docs/reports/stepExport_2026-09-20.md) for what it covers and what remains.
+A run's own `export` writes **STL only**. A STEP writer exists in [experimental/stepExport.py](experimental/stepExport.py): it writes each component as the exact surface it is, a surface of revolution for the walls and a B-spline surface for the swept channels and volutes, rather than as triangles. It is not yet wired into `export`, and it does not perform booleans, so a run does not produce an assembled STEP body; see [docs/reports/stepExport_2026-09-20.md](docs/reports/stepExport_2026-09-20.md) for what it covers and what remains. A `rectangular` or `helical` channel needs `channelCornerRadius` above zero for it: the B-spline fit through a sharp corner rings.
 
 Generated `*Outputs/` directories are gitignored. The curated figures above are kept in [featureShowcase/](featureShowcase/); `docs/images/` holds only the GUI screenshots below.
 
@@ -407,14 +420,14 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 | `ceaInterface.py`                                         | Thermochemistry through rocketcea                                                                                                                                                                                                                              |
 | `fluidProperties.py`                                      | One equation-of-state accessor over two backends: REFPROP when installed, CoolProp as the automatic fallback                                                                                                                                                    |
 | `figures.py`                                              | One figure description per view and the styled renderer for each backend: the interactive plotly HTML, the Matplotlib PNGs a run writes and the feature showcase draws for documentation, and the 3D assembly views that have no static twin                  |
-| `keepOut.py`                                              | The keep-out envelope behind the chamber that the jacket and volutes pack around                                                                                                                                                                               |
-| `regenThermal.py`                                         | The regenerative jacket thermal model: Bartz on the gas side, Gnielinski and the fluted blend on the coolant side                                                                                                                                               |
+| `regenThermal.py`                                          | The regenerative jacket thermal model: Bartz on the gas side, Gnielinski on the hydraulic diameter on the coolant side, the wall as the sector each channel owns and the rib as a fin |
 | `ablative.py`                                             | The charring ablator response: CMA in-depth conduction with a receding surface, Arrhenius pyrolysis, surface thermochemistry, and the station march that applies them along a contour                                                                          |
 | `filmCooling.py`                                          | Two film closures and the marches that lower the driving temperature along a contour: the Hatch and Papell correlation with its property correction to the film mean temperature, and the SP-8124 entrainment model that accounts for acceleration and turning |
 | `radiativeCooling.py`                                     | Gas-to-wall radiation as an exact coefficient on its own potential, and the damped Newton solve for the wall temperature of an uncooled extension                                                                                                              |
-| `channelGeometry.py`                                      | Cooling channel cross sections: the transport frame along the centerline, and the circular and fluted profiles                                                                                                                                                  |
-| `channelSizing.py`                                        | The dynamic channel radius solve: converging each station's radius so the hot wall runs at the temperature it is allowed to                                                                                                                                    |
-| `regenChannels.py`                                        | The jacket build: volute interfaces, channel centerline, the swept channels and the wall meshes                                                                                                                                                                 |
+| `channelSections.py`                                       | What the thermal model reads about each channel family: flow area, perimeters, hydraulic diameter, the rib as a fin, the rectangular width and the helical spacing and loxodrome |
+| `channelGeometry.py`                                       | Cooling channel cross sections: the circular profile on a transport frame, and the rounded rectangle on frames built from the wall normal |
+| `channelSizing.py`                                         | The dynamic channel size solve: converging each station so the hot wall runs at the temperature it is allowed to |
+| `regenChannels.py`                                         | The jacket build: the fillet and flare to each volute, the channel centerline and its wrap, the swept channels and the wall meshes |
 | `nozzleVolutes.py`                                        | The inlet and return scrolls, their walls sized against the coolant state, and their print supports                                                                                                                                                            |
 | `chamber.py`                                              | The combustion chamber and the converging section                                                                                                                                                                                                              |
 | `regenStations.py`                                        | Where the jacket ends, and the exhaust state at every station of both sections                                                                                                                                                                                 |

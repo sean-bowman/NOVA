@@ -38,8 +38,21 @@ constant is the SI form of SP-125's 46.6e-10 M^0.5 T^0.6 in lbm/(in s) with T in
 converts to 1.18408e-7 in SI. See tests/testRegenThermal.py for the comparison against a worked
 example.
 
-**Coolant side, not validated.** The correlation is Gnielinski, which is published and whose
-range of validity is known, but nothing here checks the implementation against a reference case.
+**Coolant side, compared against hardware, not validated.** The coefficient is Gnielinski on the
+hydraulic diameter with a Swamee-Jain friction factor, which is within 2.8 percent of Colebrook
+over its range. Against Carlile and Quentmeyer's three copper chambers (NASA TM-105679), solved at
+one station with the gas side fixed from their operating point, all 13 measured throat wall
+temperatures lie inside the band the unknown coolant state and roughness span. The bands are wider
+than the tolerances stated before the comparison, so it is a sensitivity-bounded comparison, not
+a validation: docs/reports/carlileQuentmeyer_2026-09-22.md and tests/testRegenValidation.py.
+
+**Roughness is credited in full, which is non-conservative.** The rough-wall friction factor goes
+into Gnielinski, a smooth-tube correlation, so the Nusselt number rises with the friction: 1.7 to
+2.2 times its smooth value at 1.6 um in that comparison. Rough-tube measurements show heat transfer
+rising less than friction. At the 35 um printed-channel default the model predicts Carlile and
+Quentmeyer's baseline wall-to-coolant difference 39 percent low, so where the credit is not real the
+wall runs hotter than the model reports. No wall-to-bulk property ratio correction is applied, and
+the coolant is taken as mixed across a tall channel.
 
 **Wall conduction, checked in closed form.** Each channel conducts through its own sector of the
 wall, r ln(1 + t/r) / (k A_hw), with A_hw the sector's gas-side area. tests/testRegenThermal.py
@@ -48,6 +61,12 @@ for a thin wall, and holds the station solve to a wall drop equal to the heat fl
 The gas-side area is the wall's, (2 pi r / N) ds_m over the wall's meridional length, so the
 sectors tile the wall at any wrap angle and lengthening the channel path leaves it unchanged;
 both are tested.
+
+**Over the chamber barrel, Bartz is used outside its checked range.** The correlation is
+referenced to the throat and nothing here checks it in a subsonic barrel. On a straight barrel
+its coefficient varies only through the wall temperature, with no injector near field and no
+boundary layer start, and the barrel's gas state takes the chamber pressure as stagnation with
+no Rayleigh loss.
 
 **The gas state the model reads is one dimensional.** Every gas-side property comes from CEA at
 a one-dimensional station, while the near-wall Mach number the method of characteristics
@@ -199,6 +218,49 @@ def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber:
 
     return (constantBartzPart *             (throatArea / localArea)**0.9 *             boundaryLayerCorrectionFactor)
 
+# Surface roughness the coolant-side friction factor is built on [m]: a printed GRCop-42 channel,
+# from the Velo3D material datasheet
+printedSurfaceRoughness = 35e-6
+
+def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
+                              surfaceRoughness: float = printedSurfaceRoughness) -> tuple:
+
+    '''
+
+    Coolant-side Darcy friction factor and Nusselt number on the hydraulic diameter.
+
+    The friction factor is Swamee and Jain's explicit form of Colebrook,
+
+        f = 0.25 / log10(e / (3.7 D_h) + 5.74 / Re^0.9)^2
+
+    and the Nusselt number is Gnielinski's, evaluated with that friction factor,
+
+        Nu = (f/8)(Re - 1000) Pr / (1 + 12.7 (f/8)^0.5 (Pr^(2/3) - 1))
+
+    with every property at the bulk temperature and no wall-to-bulk property ratio correction.
+
+    Parameters:
+    -----------
+    reynoldsNumber, prandtlNumber : float
+        Coolant bulk Reynolds and Prandtl numbers [-].
+    hydraulicDiameter : float
+        Hydraulic diameter of the section [m].
+    surfaceRoughness : float
+        Absolute roughness of the channel wall [m]. The default is a printed channel.
+
+    Returns:
+    --------
+    tuple
+        (Darcy friction factor [-], Nusselt number [-]).
+
+    '''
+
+    frictionFactor = 0.25 / (np.log10((surfaceRoughness / hydraulicDiameter)/3.7 + 5.74/reynoldsNumber**0.9))**2
+    nusseltNumber  = ((frictionFactor / 8) * (reynoldsNumber - 1000) * prandtlNumber) / \
+                     (1 + 12.7 * (frictionFactor / 8)**(1/2) * (prandtlNumber**(2/3) - 1))
+
+    return frictionFactor, nusseltNumber
+
 def hotWallSectorArea(wallRadius, nChannel: int, wallSegmentLength):
 
     '''
@@ -339,6 +401,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
                                 filmMassFlux: float = 0.0, blowingFactor: float = 0.5,
                                 wallEmissivity: float = 0.0, gasEmissivity: float = 0.0,
                                 finHeight: float = 0.0, finThickness: float = 0.0,
+                                prescribedGasCoefficient: float = None,
                                 tolerance: float = 0.01,
                                 maximumIterations: int = 50) -> StationWallSolution:
 
@@ -416,6 +479,10 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
     gasEmissivity : float
         Total emissivity of the combustion gas over its mean beam length [-]. Zero switches
         radiation off exactly.
+    prescribedGasCoefficient : float
+        Gas-side convective coefficient to use in place of Bartz [W/m^2 K], held fixed through
+        the solve. What a comparison against a measured heat flux supplies; the Bartz inputs are
+        then not read.
     finHeight, finThickness : float
         The rib between channels, treated as a straight fin cooled on both faces with an
         adiabatic tip [m]. It adds 2 eta H of perimeter to the coolant side, with eta taken at
@@ -472,11 +539,14 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         conductiveResistance = wallConductionResistance(hotWallThickness, wallRadius,
                                                         wallConductivity, hotWallArea)
 
-        exhaustConvectiveCoefficient = bartzHeatTransferCoefficient(
-            gasStaticTemperature, gasMachNumber, gasGamma,
-            gasConstant, gasMolecularWeight, hotWallTemperatureGuess,
-            chamberPressure, characteristicVelocity, throatDiameter,
-            throatRadiusOfCurvature, throatArea, localArea)
+        if prescribedGasCoefficient is None:
+            exhaustConvectiveCoefficient = bartzHeatTransferCoefficient(
+                gasStaticTemperature, gasMachNumber, gasGamma,
+                gasConstant, gasMolecularWeight, hotWallTemperatureGuess,
+                chamberPressure, characteristicVelocity, throatDiameter,
+                throatRadiusOfCurvature, throatArea, localArea)
+        else:
+            exhaustConvectiveCoefficient = prescribedGasCoefficient
 
         # Film coolant leaving the wall thickens the boundary layer and pushes the temperature
         # gradient away from it. The blowing parameter is formed from the converged coefficient
@@ -1042,10 +1112,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
         # Calculate Nusselt Number
         # Swamee-Jain friction factor for the Gnielinski Nusselt number, on the hydraulic diameter
-        surfaceRoughness       = 35e-6 # Velo3D GRCop-42 material datasheet
-        frictionFactor          = 0.25 / (np.log10((surfaceRoughness / hydraulicDiameter[i])/3.7 + 5.74/coolantReynoldsNumber[i]**0.9))**2
-        coolantNusseltNumber[i] = ((frictionFactor / 8) * (coolantReynoldsNumber[i] - 1000) * coolantPrandtlNumber[i]) / \
-                                        (1 + 12.7 * (frictionFactor / 8)**(1/2) * (coolantPrandtlNumber[i]**(2/3) - 1))
+        frictionFactor, coolantNusseltNumber[i] = coolantFrictionAndNusselt(
+            coolantReynoldsNumber[i], coolantPrandtlNumber[i], hydraulicDiameter[i])
 
         # Calculate pressure drop and update downstream pressure for each channel section
         momentumLossCoef = findKFactor(turnAngle[i], radiusOfCurvature[i], hydraulicDiameter[i])

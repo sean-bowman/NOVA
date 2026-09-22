@@ -237,6 +237,9 @@ class ConfigTab(ttk.Frame):
             missing = [k for k in needed if not isSet(k)]
             if missing:
                 problems.append('Cooling channels need: ' + ', '.join(missing) + '.')
+            # A helix has no default angle; the backend rejects the run without one
+            if config.get('channelType') == 'helical' and not isSet('channelHelixAngle'):
+                problems.append("Helical channels need a 'Channel helix angle'.")
 
         if config.get('makeInletVolute') in (True, 'on') or config.get('makeReturnVolute') in (True, 'on'):
             if config.get('makeCoolingChannels') not in (True, 'on'):

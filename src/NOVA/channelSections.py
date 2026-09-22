@@ -56,6 +56,25 @@ Transfer, straight fin of uniform cross section). The coolant-side area of a sta
 heated perimeter plus 2 eta H, times the station length. A section with no fin has H = 0 and the
 area is the heated perimeter alone, exactly.
 
+----------------------------------------------------------------------
+                        Validation status
+----------------------------------------------------------------------
+
+**The geometry is exact and tested in closed form.** tests/testChannelSections.py holds the rounded
+rectangle to its area and perimeter, a stadium, the square and thin-slot hydraulic diameters, the
+rib to the infill at the cold wall, the loxodrome to its cylinder and cone forms, and the fin
+efficiency to tanh(1) at mH = 1 and to its weak-coupling limit.
+
+**The section and fin physics are compared against hardware, not validated.** Carlile and
+Quentmeyer's rectangular channels of aspect ratio 0.75, 1.50 and 5.00 (NASA TM-105679) all fall
+inside the band NOVA predicts once the unreported coolant state and roughness are bracketed; the
+bands are wider than the tolerances stated beforehand. See docs/reports/carlileQuentmeyer_2026-09-22.md.
+
+**The helical layout has no hardware reference.** The coolant correlation carries no curvature
+correction, and the hot wall of a helical passage is on the inside of its hoop curvature, where
+secondary flow is expected to reduce the heat transfer. The model is therefore non-conservative
+for a helix, increasingly so at high helix angles.
+
 All units are mass base SI:
     - Length [m]
     - Area   [m^2]
