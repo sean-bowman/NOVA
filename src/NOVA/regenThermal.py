@@ -77,7 +77,7 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 from .fluidProperties import fluidProps
-from .errors import ConvergenceFailureError
+from .errors import ConvergenceFailureError, NumericalInstabilityError
 from .ablative import blowingCorrection
 from .channelSections import SECTIONFAMILIES, finEfficiency
 from .figures import regenHeatTransferModelPlots
@@ -1059,21 +1059,22 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         if iterationMode == 'single':
             coolantPressure[i] = coolantPressure[i] - totalPressureDrop
 
-        # Check if there are any nans anywhere in here
-        if True:
-            for name, value in locals().items():
-                try:
-                    # Check scalars
-                    if isinstance(value, (float, int)) and math.isnan(value):
-                        print(f"{name} is NaN (scalar)")
-                        raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
-
-                    # Check arrays
-                    if isinstance(value, np.ndarray) and np.isnan(value).any():
-                        print(f"{name} contains NaN (array)")
-                        raise ValueError(f"{name} is NaN in Nozzle.regenHeatTranferModel.heatTransferModel()")
-                except:
-                    pass  # Ignore variables that can't be NaN
+        # A NaN anywhere in the station's state means an upstream quantity is already bad, and
+        # carrying on would bury the cause stations later. Object arrays hold the conductivity
+        # interpolators and have no NaN to find.
+        for name, value in locals().items():
+            if isinstance(value, float):
+                isBad = math.isnan(value)
+            elif isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.number):
+                isBad = bool(np.isnan(value).any())
+            else:
+                isBad = False
+            if isBad:
+                raise NumericalInstabilityError(
+                    message = f'{name} is NaN at station {i} of the regen thermal model',
+                    variableName = name,
+                    value = value,
+                    operation = f'regenHeatTransferModel station {i}')
 
         # Hot wall convergence
         if not runAdiabaticColdWall:
@@ -1168,7 +1169,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
 
             adiabaticConvectiveHeatTransferCoef[i] = coolantThermalConductivity[i] * coolantNusseltNumber[i] / \
                                                      hydraulicDiameter[i]
-            adiabaticConvectiveResistance = 1 / (adiabaticConvectiveHeatTransferCoef[i] * flowArea[i])
+            adiabaticConvectiveResistance = 1 / (adiabaticConvectiveHeatTransferCoef[i] * heatedArea[i])
 
             adiabaticHeatTransfer[i] = (constantColdWallTemperature - coolantTemperature[i]) / (adiabaticConvectiveResistance)
 

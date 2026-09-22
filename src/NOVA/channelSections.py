@@ -153,6 +153,40 @@ def equivalentDiameter(family: str, halfExtent) -> np.ndarray:
 
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 
+def throatChannelCount(family: str, throatRadius: float, hotWallThickness: float,
+                       infillThickness: float, minHalfExtent: float) -> int:
+
+    '''
+
+    The most channels whose section at the throat is no smaller than the process minimum.
+
+    A circle of radius r packs tangent to its neighbors and to the wall offset by the hot wall
+    less the infill, R = r_t + t - t_inf, when sin(pi / N) = (r + t_inf/2) / (R + r + t_inf/2).
+    Solving at r = minHalfExtent and rounding down gives the channel count.
+
+    Parameters:
+    -----------
+    family : str
+        One of SECTIONFAMILIES.
+    throatRadius : float
+        Hot wall radius at the throat [m].
+    hotWallThickness, infillThickness : float
+        Wall between coolant and exhaust, and material left between channels [m].
+    minHalfExtent : float
+        Smallest half-extent the process can build [m].
+
+    Returns:
+    --------
+    int
+
+    '''
+
+    if family == 'circle':
+        reach = minHalfExtent + infillThickness/2
+        return int(np.pi / (np.arcsin(reach / (reach + throatRadius + hotWallThickness - infillThickness))))
+
+    raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
+
 def finEfficiency(coolantCoefficient: float, wallConductivity: float, finThickness: float,
                   finHeight: float) -> float:
 

@@ -60,6 +60,7 @@ from .geometryTools import DCM, parallelOffset
 from .errors import ConvergenceFailureError, createErrorContext, InvalidInputError
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
+from .channelSections import throatChannelCount
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
@@ -577,9 +578,8 @@ def solveChannelRadii(state, geometry, thermal):
             circleChannelThroatRadius = r - state.infillThickness / 2
             if circleChannelThroatRadius < state.minChannelRadius:
                 print(f'\nnChannel too high; channel radius at throat will be too small.')
-                circleChannelThroatRadius = state.minChannelRadius
-                nChannel = int(np.pi / (np.arcsin((circleChannelThroatRadius + state.infillThickness[0]/2) / \
-                            (circleChannelThroatRadius + state.infillThickness[0]/2 + throatRadius + state.hotWallThickness - state.infillThickness[0]))))
+                nChannel = throatChannelCount(state.channelType, throatRadius, state.hotWallThickness,
+                                              state.infillThickness, state.minChannelRadius)
                 state.nChannel = nChannel
                 print(f'\nnChannel reduced to {nChannel}.')
 

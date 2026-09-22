@@ -570,3 +570,56 @@ class TestHotWallArea:
         assert wrapped['hotWallTemperature'][0] == straight['hotWallTemperature'][0]
         assert wrappedPlots['heatTransfer'][0] == straightPlots['heatTransfer'][0]
         assert wrapped['coolantPressure'][0] < straight['coolantPressure'][0]
+
+class TestModelSafeguards:
+
+    '''The adiabatic comparison balances its own heat, and a NaN stops the march where it appears.'''
+
+    def inputs(self):
+
+        inputs = {key: (value[:1] if isinstance(value, np.ndarray) else value)
+                  for key, value in TestInputValidation().validInputs().items()}
+        inputs.update({
+            'numCrossSections'      : 1,
+            'rHotWall3D'            : np.array([0.05]),
+            'nearWallTemperature'   : np.array([3000.0]),
+            'nearWallMachNumber'    : np.array([1.0]),
+            'hotWallSegmentLength'  : np.array([0.004]),
+            'differentialPathLength': np.array([0.004]),
+            'flowArea'              : np.array([np.pi * 0.002**2]),
+            'heatedArea'            : np.array([np.pi * 0.002 * 0.004]),
+            'hydraulicDiameter'     : np.array([0.004]),
+        })
+
+        return inputs
+
+    def testTheAdiabaticWallBalancesOnTheHeatedArea(self):
+
+        inputs = self.inputs()
+        coldWall = 300.0
+        outputs, plots = regenHeatTransferModel(RegenThermalContext(), inputs,
+                                                constantColdWallTemperature = coldWall)
+
+        coefficient = plots['adiabaticConvectiveHeatTransferCoef'][0]
+        rise = coefficient * inputs['heatedArea'][0] * (coldWall - inputs['coolantInitialTemperature']) \
+               / (inputs['mdot'] * plots['specificHeat'][0])
+
+        assert outputs['coolantTemperature'][0] - inputs['coolantInitialTemperature'] == \
+               pytest.approx(rise, rel = 1e-12)
+
+    def testANaNInTheCoolantStateStopsTheMarch(self, monkeypatch):
+
+        import NOVA.regenThermal as regenThermal
+        from NOVA.errors import NumericalInstabilityError
+
+        realProperties = regenThermal.fluidProps
+
+        def poisoned(*arguments, **keywords):
+            values = list(realProperties(*arguments, **keywords))
+            values[0] = float('nan')
+            return tuple(values)
+
+        monkeypatch.setattr(regenThermal, 'fluidProps', poisoned)
+
+        with pytest.raises(NumericalInstabilityError, match = 'NaN'):
+            regenHeatTransferModel(RegenThermalContext(), self.inputs())

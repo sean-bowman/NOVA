@@ -7,6 +7,10 @@ Every quantity here has a closed form, and each is held to it.
 **A circle is a circle.** Its flow area is pi r^2, its hydraulic diameter 2r, and the perimeter
 the heat enters through is the half that faces the wall, pi r. It has no fin.
 
+**The throat channel count is the packing inverted.** The count it returns is the largest at
+which the channel that fits at the throat is still no smaller than the process minimum, checked
+against the packing formula in channelGeometry at that count and the next.
+
 **The fin is a straight fin with an adiabatic tip.** Its efficiency tanh(mH)/(mH) goes to one as
 the rib conducts perfectly or the coolant stops drawing heat, equals tanh(1) at mH = 1, and a rib
 of no height leaves the station solve exactly as it is without one.
@@ -19,7 +23,7 @@ import numpy as np
 import pytest
 
 from NOVA.channelSections import (SECTIONFAMILIES, SECTIONLABELS, equivalentDiameter,
-                                  finEfficiency, sectionProperties)
+                                  finEfficiency, sectionProperties, throatChannelCount)
 
 class TestCircle:
 
@@ -134,3 +138,23 @@ class TestFinInTheStationSolve:
         assert finned.heatTransfer > bare.heatTransfer
         assert finned.hotWallTemperature < bare.hotWallTemperature
         assert finned.converged
+
+class TestThroatChannelCount:
+
+    '''The channel count is the largest whose throat section still fits the process minimum.'''
+
+    @pytest.mark.parametrize('throatRadius', [0.02, 0.05, 0.12])
+    @pytest.mark.parametrize('minimum', [0.5e-3, 0.75e-3, 1.5e-3])
+    def testItIsTheLargestCountThatStillFits(self, throatRadius, minimum):
+
+        from NOVA.channelGeometry import ChannelGeometryInputs, getMaxChannelRadius
+
+        count = throatChannelCount('circle', throatRadius, 1.0e-3, 1.0e-3, minimum)
+
+        def largestAt(nChannel):
+            geometry = ChannelGeometryInputs(nChannel = nChannel, channelType = 'circle',
+                                             hotWallThickness = 1.0e-3, infillThickness = 1.0e-3)
+            return getMaxChannelRadius(geometry, np.array([throatRadius]), 0)
+
+        assert largestAt(count) >= minimum * (1 - 1e-12)
+        assert largestAt(count + 1) < minimum
