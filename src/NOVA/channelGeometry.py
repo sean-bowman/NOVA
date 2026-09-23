@@ -489,15 +489,18 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
                     + np.cross(axis, v)*np.sin(angle)
                     + axis*np.dot(axis, v)*(1-np.cos(angle)))
 
-        for i, rollAngle in enumerate(crossSectionRoll):
-            rollAngle  += np.pi
+        # Only the stations this call builds carry a frame: the sizing march asks for one station
+        # at a time while the roll array is the whole channel's, and rolling a frame that was
+        # never built leaves a zero vector to re-orthonormalize
+        for i in range(arrLen):
+            rollAngle   = crossSectionRoll[i] + np.pi
             normal[i]   = rollAboutAxis(normal[i], tangent[i], rollAngle)
             binormal[i] = rollAboutAxis(binormal[i], tangent[i], rollAngle)
 
-        # re-orthonormalize to prevent round off drift
-        b = np.cross(tangent[i], normal[i]); b /= np.linalg.norm(b)
-        n = np.cross(b, tangent[i]);         n /= np.linalg.norm(n)
-        normal[i], binormal[i] = n, b
+            # re-orthonormalize to prevent round off drift
+            b = np.cross(tangent[i], normal[i]); b /= np.linalg.norm(b)
+            n = np.cross(b, tangent[i]);         n /= np.linalg.norm(n)
+            normal[i], binormal[i] = n, b
 
         # Sweep cross sections along the centerline
         sweptPoints = np.empty((arrLen, geometry.numCSPointsChannel, 3))
