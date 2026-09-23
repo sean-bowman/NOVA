@@ -201,6 +201,9 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # which is the single constant Bartz assumes and what every configuration written before
         # the measured distribution existed asked for without saying so.
         nozzle.gasSideAxialModel              = inputsPath.get('gasSideAxialModel') or 'uniform'
+        # The entrance and curvature corrections a coolant correlation written for a straight
+        # developed passage needs where the passage is neither. Absent or null is off.
+        nozzle.coolantGeometryCorrections     = inputsPath.get('coolantGeometryCorrections') in (True, 'on')
 
         # A rectangle's width and depth limits and a helix's angle and aspect ratio. Read with
         # defaults, so a configuration written for circular channels needs none of them; a null

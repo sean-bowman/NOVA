@@ -36,6 +36,7 @@
   "nChannel": 60,
   "channelType": "circle",
   "gasSideAxialModel": "uniform",
+  "coolantGeometryCorrections": false,
   "minChannelWidth": 0.001,
   "channelCornerRadius": null,
   "maxChannelAspectRatio": 8.0,

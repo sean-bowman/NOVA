@@ -96,6 +96,7 @@ class RegenChannelState:
     # -- What the build reads -- #
     channelType:                               Any = None
     gasSideAxialModel:                         Any = None
+    coolantGeometryCorrections:                Any = None
     channelAspectRatio:                        Any = None
     channelCornerRadius:                       Any = None
     channelHelixAngle:                         Any = None
@@ -489,6 +490,7 @@ def _sizingState(state) -> 'ChannelSizingState':
         channelType                        = state.channelType,
         # A name rather than a number, so it does not go through valueOrDefault
         gasSideAxialModel                  = state.gasSideAxialModel if isinstance(state.gasSideAxialModel, str) else 'uniform',
+        coolantGeometryCorrections         = bool(state.coolantGeometryCorrections),
         nChannel                           = state.nChannel,
         numCrossSections                   = state.numCrossSections,
         minChannelRadius                   = state.minChannelRadius,

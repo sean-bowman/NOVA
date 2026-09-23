@@ -308,6 +308,11 @@ groups = [
                      'distribution scales it by constants measured along a LOX/GH2 chamber, which '
                      'leaves the barrel alone and takes about 40 percent off the throat. It is a '
                      'calibration from one engine and injector, not a universal curve.'),
+        Field('coolantGeometryCorrections', 'Coolant entrance and curvature corrections', 'bool',
+              default = False, showWhen = _coolingOn,
+              help = 'Enhances the coolant-side coefficient in the developing length after the '
+                     'inlet and through the bends, by the entrance fit and Ito curvature factor '
+                     'NASA TN D-7207 found a station correlation needs to match measured rates.'),
         Field('channelType', 'Channel type', 'choice',
               choices = [('Circular', 'circle'), ('Rectangular', 'rectangular'), ('Helical', 'helical')],
               default = 'circle', showWhen = _coolingOn,

@@ -336,6 +336,87 @@ def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
 
     return frictionFactor, nusseltNumber
 
+def entranceEnhancementFactor(distanceFromInlet, hydraulicDiameter):
+
+    '''
+
+    Heat transfer enhancement in the developing length after a channel inlet.
+
+    A boundary layer that has not filled the passage transfers more heat than a developed one.
+    The fit is Boelter, Young and Iversen's for a 90 degree entrance, as NASA TN D-7207 applies
+    it to rocket coolant passages,
+
+        phi_2 = 2.88 / (S/d)^0.325,    never less than 1
+
+    with S the distance along the channel from its inlet manifold. It reaches 1 at S/d near 33,
+    so it is a correction to the first stretch of a passage and nothing at all further down.
+
+    Parameters:
+    -----------
+    distanceFromInlet : array_like
+        Distance along the channel from the inlet manifold [m].
+    hydraulicDiameter : array_like
+        Hydraulic diameter of the section [m].
+
+    Returns:
+    --------
+    numpy.ndarray
+        Multiplier on the coolant-side coefficient [-], one per station.
+
+    '''
+
+    lengthToDiameter = np.asarray(distanceFromInlet, dtype = float) \
+                       / np.asarray(hydraulicDiameter, dtype = float)
+
+    # At the inlet itself the fit is unbounded, and a passage has no developing length before it
+    lengthToDiameter = np.where(lengthToDiameter > 0, lengthToDiameter, np.inf)
+
+    return np.maximum(2.88 / lengthToDiameter**0.325, 1.0)
+
+def itoCurvatureFactor(reynoldsNumber, sectionRadius, bendRadius):
+
+    '''
+
+    Heat transfer enhancement where a coolant passage follows a bend.
+
+    A curved passage carries a secondary flow, because fluid near the axis is thrown outward
+    harder than the slower fluid at the wall. Ito's resistance ratio for turbulent flow in a
+    curved pipe,
+
+        phi_1 = lambda / lambda_0 = [Re (R/r)^2]^0.05,    for Re (R/r)^2 > 6
+
+    with R the passage's own cross-sectional radius and r the radius of the bend it follows, is
+    what NASA TN D-7207 found gives about the right magnitude for the enhancement measured
+    through a throat. Below the threshold the bend does nothing and the factor is 1.
+
+    The factor says nothing about which way the passage bends. Measured enhancement takes a
+    distance to build and a further distance to decay, so through a throat, where the wall turns
+    one way and then the other within a few diameters, this is an upper bound rather than a
+    distribution.
+
+    Parameters:
+    -----------
+    reynoldsNumber : array_like
+        Coolant Reynolds number on the hydraulic diameter [-].
+    sectionRadius : array_like
+        Cross-sectional radius of the passage [m].
+    bendRadius : array_like
+        Radius of curvature of the path the passage follows [m]. Infinite where it is straight.
+
+    Returns:
+    --------
+    numpy.ndarray
+        Multiplier on the coolant-side coefficient [-], one per station.
+
+    '''
+
+    reynoldsNumber = np.asarray(reynoldsNumber, dtype = float)
+    curvature = np.asarray(sectionRadius, dtype = float) / np.asarray(bendRadius, dtype = float)
+
+    parameter = reynoldsNumber * curvature**2
+
+    return np.where(parameter > 6.0, np.maximum(parameter, 1.0)**0.05, 1.0)
+
 def hotWallSectorArea(wallRadius, nChannel: int, wallSegmentLength):
 
     '''
@@ -1076,6 +1157,15 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # One correlation constant along the whole wall, or the measured distribution over it
     gasSideAxialModel = inputsDict.get('gasSideAxialModel') or 'uniform'
 
+    # The entrance and curvature corrections a coolant correlation written for a straight
+    # developed passage needs where the passage is neither. The coolant enters at the last
+    # station and marches toward the first, so distance from the inlet accumulates backwards.
+    coolantGeometryCorrections = bool(inputsDict.get('coolantGeometryCorrections'))
+    distanceFromInlet = inputsDict.get('distanceFromInlet')
+    if distanceFromInlet is None:
+        distanceFromInlet = np.flip(np.cumsum(np.flip(np.asarray(differentialPathLength, dtype = float))))
+    distanceFromInlet = np.atleast_1d(np.asarray(distanceFromInlet, dtype = float))
+
     # Both default to zero, and zero is exact here: the radiative coefficient returns exactly 0.0
     # and the blowing correction exactly 1.0, so neither moves a bit of the answer.
     wallEmissivity = optionalScalar('wallEmissivity', 0.0)
@@ -1231,6 +1321,14 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         # Swamee-Jain friction factor for the Gnielinski Nusselt number, on the hydraulic diameter
         frictionFactor, coolantNusseltNumber[i] = coolantFrictionAndNusselt(
             coolantReynoldsNumber[i], coolantPrandtlNumber[i], hydraulicDiameter[i])
+
+        # A developing boundary layer after the inlet and the secondary flow through a bend both
+        # carry more heat than the straight developed passage the correlation is written for
+        if coolantGeometryCorrections:
+            coolantNusseltNumber[i] *= float(
+                entranceEnhancementFactor(distanceFromInlet[i], hydraulicDiameter[i])
+                * itoCurvatureFactor(coolantReynoldsNumber[i], 0.5*hydraulicDiameter[i],
+                                     radiusOfCurvature[i]))
 
         # Calculate pressure drop and update downstream pressure for each channel section
         momentumLossCoef = findKFactor(turnAngle[i], radiusOfCurvature[i], hydraulicDiameter[i])

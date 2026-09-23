@@ -191,6 +191,7 @@ The coolant side is compared against Carlile and Quentmeyer's high aspect ratio 
 | `makeCoolingChannels`                       | --   | Build the jacket and run the heat transfer model                                                   |
 | `material`                                  | --   | Wall alloy; see the material table below                                                            |
 | `channelType`                               | --   | `circle`, `rectangular` or `helical`                                                               |
+| `coolantGeometryCorrections`                | --   | Enhances the coolant-side coefficient in the developing length after the inlet and through bends, by the entrance and Ito curvature factors of NASA TN D-7207 |
 | `gasSideAxialModel`                         | --   | `uniform` holds one gas-side correlation constant along the wall, as Bartz does. `measured` scales it by the constants measured along a LOX/GH2 chamber: the barrel is unchanged and the throat drops about 40 percent |
 | `hotWallThickness`, `shellThickness`      | m    | Combustion-side wall and outer structural shell thickness                                          |
 | `infillThickness`                          | m    | Rib between channels, at least 0.5 mm. Exact at the wall for `rectangular`; the floor for `helical` |

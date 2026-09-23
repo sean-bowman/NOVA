@@ -536,6 +536,11 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     differentialPathLength  = np.sqrt(np.diff(xChannelCenterline3D)**2 + np.diff(yChannelCenterline3D)**2 + np.diff(zChannelCenterline3D)**2)
     differentialPathLength  = np.append(differentialPathLength, differentialPathLength[-1])
 
+    # The coolant enters at the last station and marches toward the first, so its distance along
+    # the channel from the inlet manifold accumulates backwards. The entrance correction on the
+    # coolant side reads it, and the sizing march cannot work it out from one station.
+    distanceFromInlet       = np.flip(np.cumsum(np.flip(differentialPathLength)))
+
     # A circular section is rotationally symmetric, so it takes no roll about the path tangent.
     crossSectionRoll        = np.zeros(geometry.numCrossSections)
 
@@ -604,6 +609,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     heatTransferDict["finHeight"]              = section.finHeight
     heatTransferDict["finThickness"]           = section.finThickness
     heatTransferDict["differentialPathLength"] = pathLength
+    heatTransferDict["distanceFromInlet"]      = distanceFromInlet if fullSweep                                                  else distanceFromInlet[stationIndex]
     heatTransferDict["turnAngle"]              = turnAngle
     heatTransferDict["radiusOfCurvature"]      = radiusOfCurvature
 

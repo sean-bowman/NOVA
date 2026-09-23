@@ -46,6 +46,22 @@ Roughly in the order worth attacking.
 
 **Performance.** Pure Python, roughly a hundred seconds for eight thousand lines. Adequate for study, not for an interactive path. numba is neither installed nor declared.
 
+**The gas model, now with a number on it.** Every layer here treats the exhaust as calorically perfect at one ratio of specific heats, and the mesh carries the chamber value. A real exhaust recombines as it expands, and where it stops recombining is a kinetics problem that nothing in NOVA solves. The two limits bracket it, and CEA gives both, so the bracket can be quoted rather than described. On the LOX/LH2 reference engine at 6.89 MPa, a mixture ratio of 5.5 and an area ratio of 40:
+
+| Quantity | Equilibrium | Frozen at throat | Frozen in chamber |
+|---|---|---|---|
+| Exit gamma | 1.2572 | 1.2801 | 1.2879 |
+| Exit Mach | 4.2234 | 4.3901 | 4.4227 |
+| Exit temperature [K] | 1275.3 | 1083.0 | 1025.4 |
+| Exit velocity [m/s] | 4259.9 | 4168.9 | 4118.4 |
+| Throat gamma | 1.1502 | 1.2027 | 1.2027 |
+
+So the chemistry choice alone is worth 4 per cent in exit Mach number and 1.8 per cent in exit gamma, which the correlations and the march both read, and 15 per cent in exit temperature, which anything thermal reads. It is 2.1 per cent in exit velocity, which is the standard equilibrium-to-frozen performance bracket and the size of the uncertainty any one-dimensional performance number here carries.
+
+Three consequences worth separating. The plume geometry inherits the exit Mach and gamma, so a 4 per cent Mach shift moves the cell spacing and the boundary by about as much as the divergent-exit conservation error above. Nothing solved on the equilibrium side is conservative for a jacket, since equilibrium runs the gas hottest. And the mesh gamma, 1.1475 at the chamber, is far from the exit value under either chemistry, which is the same gap the finding above records from the other direction.
+
+What would close it: driving the CEA calls from a `chemistryModel` selector so a run can be solved at either limit and the bracket reported, rather than equilibrium being assumed silently. That is plumbing rather than physics. Closing it properly means local properties through the mesh, which is the same different solver the effective-gamma note in `gasDynamics.effectiveGamma` names.
+
 ## Findings worth not rediscovering
 
 **A front cannot be seeded from the march's own lines.** Those lines are first-family characteristics: 250 of 250 neighbouring pairs lie along the very characteristic the advance would cross against its neighbour's, so the intersection returns a point already on the front. Any working front has to start from a station, not a wave. A test records this.

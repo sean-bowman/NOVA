@@ -216,6 +216,13 @@ harnessCases = {
         'description': 'Circular channels with the measured gas-side axial distribution',
         'overrides': {**regenOverrides, 'gasSideAxialModel': 'measured'},
     },
+    # The coolant-side entrance and curvature corrections on the same jacket, which is where
+    # a correlation written for a straight developed pipe is asked about neither.
+    'regenCoolantCorrections': {
+        'config': 'NOVANozzle.json',
+        'description': 'Circular channels with the coolant entrance and curvature corrections',
+        'overrides': {**regenOverrides, 'coolantGeometryCorrections': True},
+    },
     # A hydrogen film injected at the chamber end of the same jacket. It pins the film path and
     # records what a film that is badly matched in velocity actually buys, which is not much.
     'regenCircleFilm': {
