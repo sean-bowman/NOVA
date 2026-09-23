@@ -132,6 +132,9 @@ class ChannelSizingState:
     channelType : str
         Cross-section family, one of channelSections.SECTIONFAMILIES. The sized quantity is the
         section's radial half-extent: a circle's radius, half a rectangle's depth.
+    gasSideAxialModel : str
+        'uniform' or 'measured', passed to the thermal model, which decides whether the gas-side
+        correlation constant is held along the wall or follows the measured distribution.
     nChannel : int
         Channels around the nozzle.
     numCrossSections : int
@@ -194,6 +197,7 @@ class ChannelSizingState:
 
     # -- What the solve reads -- #
     channelType:                            str   = 'circle'
+    gasSideAxialModel:                      str   = 'uniform'
     nChannel:                               int   = 0
     numCrossSections:                       int   = 0
     minChannelRadius:                       float = 0.0
@@ -981,6 +985,7 @@ def solveChannelRadii(state, geometry, thermal):
             # the local dictionary constains scalars and arrays of length 1
             heatTransferDict_i["numCrossSections"]                = 1
             heatTransferDict_i["channelType"]                     = state.channelType
+            heatTransferDict_i["gasSideAxialModel"]               = state.gasSideAxialModel
             heatTransferDict_i["nChannel"]                        = state.nChannel
             heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness
             heatTransferDict_i["throatRadiusOfCurvature"]         = (state.throatInletCurvatureNonDimensional*state.nozzleScalingFactor + \

@@ -363,7 +363,9 @@ The heat transfer model outputs plots of the coolant properties, both heat trans
 
 ### How far can we trust it?
 
-The gas side is checked against a worked example of the correlation as NASA SP-125 gives it, but not against a measurement.
+The gas side is checked against a worked example of the correlation as NASA SP-125 gives it, but not against a measurement of its own. Measurements exist, and they do not flatter it. Written as $St^*Pr^{*0.7} = C\,Re^{*-0.2}_d$ with properties at Eckert's reference enthalpy, the Bartz form carries $C = 0.026$ along the whole wall, while Schacht, Quentmeyer and Jones measured $C$ at five stations of a LOX/GH2 chamber over 150 to 1000 psia [13] and found it varies: 0.0257 in the cylindrical barrel, 0.0240 through the converging section, 0.0148 at the throat, and 0.0153 to 0.0188 downstream. Four other configurations put the throat between 0.017 and 0.023. So the coefficient here is about right over the barrel and 20 to 40 percent high at the throat, where the flux is highest. A high coefficient is not a licence: it drives the sizing march to a smaller channel, which holds the wall below its limit and charges pressure drop for margin that was already there.
+
+Setting `gasSideAxialModel` to `measured` scales the coefficient by that measured distribution, normalized to the barrel so the absolute level stays Bartz's and only the shape comes from the measurement. On the shipped jacket it leaves the barrel alone, takes 41 percent off the throat, and costs 36 K of coolant pickup for a fifth less pressure drop. It is a calibration from one engine and one injector rather than a correlation, and the source says so itself; the account is in [gasSideAxialDistribution_2026-09-22.md](./reports/gasSideAxialDistribution_2026-09-22.md).
 
 The coolant side was put against Carlile and Quentmeyer's three chambers [10], at one station with the gas side fixed from their stated operating point. Every one of their 13 measured throat wall temperatures lies inside the band NOVA predicts once the coolant state and the channel roughness, neither of which the paper reports, are bracketed. The bands are wider than the tolerances set before the comparison, so it is a comparison, not a validation.
 
@@ -388,6 +390,8 @@ Three more things the model does not see, and it is the onus of the designer to 
 [11] Swamee, Jain - Explicit Equations for Pipe-Flow Problems, Journal of the Hydraulics Division, ASCE, 1976
 
 [12] Dipprey, Sabersky - Heat and Momentum Transfer in Smooth and Rough Tubes at Various Prandtl Numbers, International Journal of Heat and Mass Transfer, 1963
+
+[13] Schacht, Quentmeyer, Jones - Experimental Investigation of Hot-Gas Side Heat-Transfer Rates for a Hydrogen-Oxygen Rocket, NASA TN D-2832, 1965
 
 Sources for the channel families and the hardware comparison are annotated in [references_regenChannels_2026-09-22.md](./references_regenChannels_2026-09-22.md).
 

@@ -170,11 +170,11 @@ Grouped by section, matching the order in the config file.
 
 ### Regenerative cooling jacket
 
-The jacket covers the whole regen section, from the injector face over the chamber barrel to the regen truncation. The coolant enters through the inlet volute at the aft end, runs forward against the exhaust, and leaves through the return volute at the injector face; at each end a fillet turns the channels off the wall into a straight flare the volute attaches to, the return the mirror image of the inlet. Over the barrel the gas side is Bartz outside its checked range: it is referenced to the throat, and nothing checks it in a subsonic barrel.
+The jacket covers the whole regen section, from the injector face over the chamber barrel to the regen truncation. The coolant enters through the inlet volute at the aft end, runs forward against the exhaust, and leaves through the return volute at the injector face; at each end a fillet turns the channels off the wall into a straight flare the volute attaches to, the return the mirror image of the inlet. The gas side is Bartz with a single correlation constant along the whole wall. Measured constants vary with station: on a LOX/GH2 chamber at 150 to 1000 psia they run 0.0257 in the barrel against 0.0148 at the throat (NASA TN D-2832), so NOVA is about right over the barrel and 20 to 40 percent high at the throat, which buys wall margin and charges pressure drop for it. Sources are in [docs/references_gasSideHeatTransfer_2026-09-22.md](docs/references_gasSideHeatTransfer_2026-09-22.md).
 
 Three channel families are built, one per run:
 
-| `channelType` | Section | Held | Sized | Falls out |
+| `channelType` | Section | Held | Sized | Derived |
 |---|---|---|---|---|
 | `circle` | Circle | Rib | Radius | Wrap angle |
 | `rectangular` | Rounded rectangle, depth along the wall normal | Rib, and the channels run straight | Depth | Width, which fills the pitch at the cold wall less the rib, and aspect ratio |
@@ -191,6 +191,7 @@ The coolant side is compared against Carlile and Quentmeyer's high aspect ratio 
 | `makeCoolingChannels`                       | --   | Build the jacket and run the heat transfer model                                                   |
 | `material`                                  | --   | Wall alloy; see the material table below                                                            |
 | `channelType`                               | --   | `circle`, `rectangular` or `helical`                                                               |
+| `gasSideAxialModel`                         | --   | `uniform` holds one gas-side correlation constant along the wall, as Bartz does. `measured` scales it by the constants measured along a LOX/GH2 chamber: the barrel is unchanged and the throat drops about 40 percent |
 | `hotWallThickness`, `shellThickness`      | m    | Combustion-side wall and outer structural shell thickness                                          |
 | `infillThickness`                          | m    | Rib between channels, at least 0.5 mm. Exact at the wall for `rectangular`; the floor for `helical` |
 | `nChannel`                                  | --   | Channel count, or helical starts. Reduced at run time if the throat cannot hold the minimum channel |

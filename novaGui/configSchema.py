@@ -300,6 +300,14 @@ groups = [
               showWhen = _coolingOn,
               help = 'Hot wall alloy. Drives the temperature-dependent thermal conductivity in the '
                      'heat transfer model; sampled properties are shown below.'),
+        Field('gasSideAxialModel', 'Gas-side axial model', 'choice',
+              choices = [('Uniform constant (Bartz)', 'uniform'),
+                         ('Measured distribution (TN D-2832)', 'measured')],
+              default = 'uniform', showWhen = _coolingOn,
+              help = 'Bartz carries one correlation constant along the whole wall. The measured '
+                     'distribution scales it by constants measured along a LOX/GH2 chamber, which '
+                     'leaves the barrel alone and takes about 40 percent off the throat. It is a '
+                     'calibration from one engine and injector, not a universal curve.'),
         Field('channelType', 'Channel type', 'choice',
               choices = [('Circular', 'circle'), ('Rectangular', 'rectangular'), ('Helical', 'helical')],
               default = 'circle', showWhen = _coolingOn,

@@ -197,6 +197,10 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.material                       = inputsPath['material']
         nozzle.nChannel                       = inputsPath['nChannel']
         nozzle.channelType                    = inputsPath['channelType']
+        # How the gas-side correlation constant runs along the wall. Absent or null is 'uniform',
+        # which is the single constant Bartz assumes and what every configuration written before
+        # the measured distribution existed asked for without saying so.
+        nozzle.gasSideAxialModel              = inputsPath.get('gasSideAxialModel') or 'uniform'
 
         # A rectangle's width and depth limits and a helix's angle and aspect ratio. Read with
         # defaults, so a configuration written for circular channels needs none of them; a null
@@ -387,6 +391,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
 
     # Which cross section the jacket is built from. Checked only when there is a jacket, because a
     # contour-only configuration has no reason to name one.
+    if nozzle.makeCoolingChannels == 'on' and nozzle.gasSideAxialModel not in ('uniform', 'measured'):
+        raise InvalidInputError(
+            message = "gasSideAxialModel must be 'uniform' or 'measured'.",
+            parameterName = 'gasSideAxialModel',
+            value = nozzle.gasSideAxialModel,
+            validRange = "'uniform' or 'measured'")
+
     if nozzle.makeCoolingChannels == 'on' and nozzle.channelType not in SECTIONFAMILIES:
         parked = (' Spirally fluted channels are kept in experimental/flutedChannels.py.'
                   if nozzle.channelType == 'fluted' else '')

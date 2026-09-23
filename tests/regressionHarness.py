@@ -208,6 +208,14 @@ harnessCases = {
         'overrides': {**regenOverrides, 'regenTruncationType': 'temp',
                       'regenTruncationValue': 3200.0},
     },
+    # The measured axial distribution of the gas-side correlation constant, which leaves the
+    # barrel where Bartz puts it and takes about 40 percent off the throat. The same jacket as
+    # regenCircle in every other respect, so the pair is the cost of the calibration.
+    'regenMeasuredAxial': {
+        'config': 'NOVANozzle.json',
+        'description': 'Circular channels with the measured gas-side axial distribution',
+        'overrides': {**regenOverrides, 'gasSideAxialModel': 'measured'},
+    },
     # A hydrogen film injected at the chamber end of the same jacket. It pins the film path and
     # records what a film that is badly matched in velocity actually buys, which is not much.
     'regenCircleFilm': {
