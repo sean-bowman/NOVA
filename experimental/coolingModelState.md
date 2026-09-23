@@ -75,6 +75,21 @@ station, which the march does not currently use.
 
 **Variable-property characteristics solve.** The mesh runs on one exponent. Fitting that exponent to the design point is the mitigation that exists; removing the choice means giving the characteristics local properties, which is a different solver. `characteristics.CharacteristicGas` holds one gamma deliberately, and its docstring says a net cannot be built with one gamma and read back under another, so this is a rewrite of that module rather than an extension of it. Tracked as the largest one-dimensional dependency in `docs/NozzleContourValidation.md`.
 
+The gas for that solve now exists, in `src/NOVA/equilibriumExpansion.py`. `expansionTable` samples CEA along the chamber isentrope and `EquilibriumGas` answers the same four relations `CharacteristicGas` does, by interpolating that table rather than evaluating a closed form. The one relation with no closed form at varying gamma is the Prandtl-Meyer function, whose differential `d(nu) = sqrt(M^2 - 1) dV / V` is integrated along the table instead; generated from a constant-gamma expansion it reproduces the closed form to within 0.022 degrees.
+
+What that measures is the size of the simplification, and it is larger than the exponent spread suggests. Turning from the throat on the LOX/LH2 reference engine:
+
+| Area ratio | Local gamma | Equilibrium | At chamber gamma 1.1475 | At effective gamma 1.2005 |
+|---|---|---|---|---|
+| 1.95 | 1.1709 | 33.06 deg | 32.98 deg | 31.27 deg |
+| 9.86 | 1.2223 | 72.62 deg | 75.02 deg | 68.92 deg |
+| 39.58 | 1.2569 | 95.19 deg | 103.14 deg | 92.77 deg |
+| 67.97 | 1.2719 | 102.37 deg | 113.09 deg | 100.97 deg |
+
+The chamber value agrees near the throat, where the gas it describes actually is, and overstates the available turning by 8 degrees at an area ratio of 40 and 10.7 by 68. The effective gamma understates it by 1.4 to 3.7 degrees across the same span and is the better of the two everywhere past an area ratio of about 3, which is what its own docstring predicted on pressure grounds. A wall is drawn from that turning, so this is a candidate explanation for the delivered area ratio departing from the requested one, recorded under the contour work; whether it is the explanation is not established, because the two disagreements have not been put together.
+
+What remains is the solver. The unit process reads gamma and the gas constant inline in four places as well as through the four methods, so swapping the gas means routing those through the interface first, and then deciding what a net solved in one gas and read back in another is allowed to do.
+
 **Molecular rather than equilibrium conductivity in the film transfer coefficient.** A Colburn form fitted on non-reacting air has no reaction conductivity in it, but the station arrays carry the equilibrium value, whose reaction contribution is a factor of 2.7 at 3398 K and 1.4 by 2269 K. Near a slot in the chamber that difference is larger than the reference-temperature effect and runs the other way. Removing it needs a frozen-composition solve at every station, and it raises the same question for Bartz, which is partly immune because `cp / Pr^0.6` largely cancels the reaction term while a bare `k` does not.
 
 **The reactive branch of SP-8124 Appendix A.** It reads a temperature off the wall mixture ratio and the wall enthalpy through an equilibrium solve, and it is the half that would capture a fuel-rich wall burning cooler than dilution alone predicts. Leaving it out is conservative, because the non-reactive branch returns a hotter wall. The wall mixture ratio is already computed and reported.
