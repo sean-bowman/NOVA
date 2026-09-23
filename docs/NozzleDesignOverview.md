@@ -1082,7 +1082,9 @@ Setting `gasSideAxialModel` to `measured` scales the coefficient by that measure
 
 The coolant side was put against Carlile and Quentmeyer's three chambers [10], at one station with the gas side fixed from their stated operating point. Every one of their 13 measured throat wall temperatures lies inside the band NOVA predicts once the coolant state and the channel roughness, neither of which the paper reports, are bracketed. The bands are wider than the tolerances set before the comparison, so it is a comparison, not a validation.
 
-The comparison also exposed a limit of the coolant correlation. It uses the rough-wall friction factor inside Gnielinski's smooth-tube form, so it credits roughness with heat transfer in proportion to the friction it adds, and measured rough tubes do not deliver that [12]. At the 35 um roughness NOVA assumes for a printed channel, the model puts Carlile and Quentmeyer's baseline wall-to-coolant temperature difference 39 percent below what they measured. Read NOVA's wall temperatures as optimistic until a rough-wall correction and printed-channel data close that gap; the full account is in [carlileQuentmeyer_2026-09-22.md](./reports/carlileQuentmeyer_2026-09-22.md).
+What a rough wall is allowed to do to the heat transfer is the least settled part of the coolant side, and `coolantRoughnessModel` makes the choice explicit. Roughness raises the friction factor, and the pressure drop with it, under all three options. The default credits it with the rough-wall heat transfer Dipprey and Sabersky measured [12], which rises with roughness by less than the friction does. Putting the rough friction factor straight into Gnielinski's smooth-tube form instead credits heat transfer in proportion to friction, which no measurement supports, and taking the heat transfer on the smooth-wall factor credits it with nothing, which is what NASA TN D-7207 did [14].
+
+The two hardware comparisons bracket the answer rather than agreeing on it. Carlile and Quentmeyer's wall temperatures want more coolant-side heat transfer than a smooth wall gives: crediting nothing puts 2 of their 13 measurements below the predicted band. The hydrogen coefficients of TN D-7207 want less: against those, crediting nothing lands nearest and the default runs 1.4 to 1.8 times high. A coefficient that is too high cools the wall, so the two datasets pull in opposite directions, and the default sits between them. The accounts are in [carlileQuentmeyer_2026-09-22.md](./reports/carlileQuentmeyer_2026-09-22.md) and [coolantSideAgainstTND7207_2026-09-22.md](./reports/coolantSideAgainstTND7207_2026-09-22.md).
 
 Three more things the model does not see, and it is the onus of the designer to allow for them:
 
@@ -1188,6 +1190,8 @@ contour will land on.
 [12] Dipprey, Sabersky - Heat and Momentum Transfer in Smooth and Rough Tubes at Various Prandtl Numbers, International Journal of Heat and Mass Transfer, 1963
 
 [13] Schacht, Quentmeyer, Jones - Experimental Investigation of Hot-Gas Side Heat-Transfer Rates for a Hydrogen-Oxygen Rocket, NASA TN D-2832, 1965
+
+[14] Schacht, Quentmeyer - Coolant-Side Heat-Transfer Rates for a Hydrogen-Oxygen Rocket and a New Technique for Data Correlation, NASA TN D-7207, 1973
 
 Sources for the channel families and the hardware comparison are annotated in [references_regenChannels_2026-09-22.md](./references_regenChannels_2026-09-22.md).
 

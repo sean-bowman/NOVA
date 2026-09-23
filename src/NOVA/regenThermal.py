@@ -56,13 +56,26 @@ temperatures lie inside the band the unknown coolant state and roughness span. T
 than the tolerances stated before the comparison, so it is a sensitivity-bounded comparison, not
 a validation: docs/reports/carlileQuentmeyer_2026-09-22.md and tests/testRegenValidation.py.
 
-**Roughness is credited in full, which is non-conservative.** The rough-wall friction factor goes
-into Gnielinski, a smooth-tube correlation, so the Nusselt number rises with the friction: 1.7 to
-2.2 times its smooth value at 1.6 um in that comparison. Rough-tube measurements show heat transfer
-rising less than friction. At the 35 um printed-channel default the model predicts Carlile and
-Quentmeyer's baseline wall-to-coolant difference 39 percent low, so where the credit is not real the
-wall runs hotter than the model reports. No wall-to-bulk property ratio correction is applied, and
-the coolant is taken as mixed across a tall channel.
+**Roughness is bounded by measurement, and two datasets disagree about where the bound is.**
+Roughness raises the friction factor, and the pressure drop with it, under every option in
+COOLANTROUGHNESSMODELS. What it may do to the heat transfer is the choice. The default is
+Dipprey and Sabersky's measured rough-wall heat transfer, which rises with roughness by less than
+the friction does. 'fullCredit' puts the rough friction factor into Gnielinski's smooth-tube form,
+which no measurement supports and which was what this model did before the comparisons below.
+'frictionOnly' takes the heat transfer on the smooth-wall factor, which is what NASA TN D-7207 did.
+
+The two hardware comparisons pull in opposite directions, which is why the bounded middle is the
+default rather than either end. Against Carlile and Quentmeyer's chambers all 13 measured wall
+temperatures fall inside the predicted band under the default and under full credit, while
+friction only puts 2 of 13 below its band by predicting the wall too hot. Against the hydrogen
+coefficients of TN D-7207 the ordering reverses: friction only lands nearest the measurements and
+the default runs 1.4 to 1.8 times high. A coefficient that is too high cools the wall, so one
+dataset asks for more heat transfer and the other for less.
+
+The Dipprey and Sabersky fit was taken on water at Prandtl numbers of 1.2 to 5.94 in close-packed
+sand-grain roughness. Hydrogen in a printed channel is below that Prandtl range and rough in a
+different way. No wall-to-bulk property ratio correction is applied, and the coolant is taken as
+mixed across a tall channel.
 
 **The coolant energy balance is exact in enthalpy.** The heat a station passes into the coolant
 is added to its specific enthalpy, and the temperature carrying that enthalpy at the downstream
@@ -297,22 +310,107 @@ def bartzHeatTransferCoefficient(nearWallTemperature: float, nearWallMachNumber:
 # from the Velo3D material datasheet
 printedSurfaceRoughness = 35e-6
 
+# How a rough wall is allowed to raise the coolant-side Nusselt number.
+#
+#   'frictionOnly'      roughness raises the friction factor and the pressure drop with it, and
+#                       the heat transfer is taken on the smooth-wall friction factor. This is
+#                       what NASA TN D-7207 did: friction factors computed with a measured
+#                       surface irregularity, and no roughness effects accounted for in the heat
+#                       transfer at all.
+#   'dippreySabersky'   the measured rough-wall heat transfer of Dipprey and Sabersky, where
+#                       roughness raises heat transfer by less than it raises friction.
+#   'fullCredit'        the rough-wall friction factor goes straight into Gnielinski's
+#                       smooth-tube form, so the Nusselt number rises in proportion to the
+#                       friction. Not supported by any measurement; kept so a result recorded
+#                       under it can be reproduced.
+COOLANTROUGHNESSMODELS = ('frictionOnly', 'dippreySabersky', 'fullCredit')
+
+def swameeJainFriction(reynoldsNumber, relativeRoughness):
+
+    '''Darcy friction factor from Swamee and Jain's explicit form of Colebrook.'''
+
+    return 0.25 / (np.log10(relativeRoughness/3.7 + 5.74/reynoldsNumber**0.9))**2
+
+def gnielinskiNusselt(frictionFactor, reynoldsNumber, prandtlNumber):
+
+    '''Gnielinski's Nusselt number for turbulent pipe flow, on a supplied friction factor.'''
+
+    return ((frictionFactor / 8) * (reynoldsNumber - 1000) * prandtlNumber) / \
+           (1 + 12.7 * (frictionFactor / 8)**(1/2) * (prandtlNumber**(2/3) - 1))
+
+def dippreySaberskyNusselt(frictionFactor, reynoldsNumber, prandtlNumber, relativeRoughness):
+
+    '''
+
+    Nusselt number for a rough wall, from Dipprey and Sabersky's measurements.
+
+    Their sand-grain roughened tubes give the heat transfer that goes with a measured friction,
+
+        St = (f/8) / (1 + sqrt(f/8) [5.19 (e+)^0.2 Pr^0.44 - 8.48]),    e+ = (e/D) Re sqrt(f/8)
+
+    which rises with roughness more slowly than the friction does, and reduces to the smooth-wall
+    result as the roughness Reynolds number falls. Below a roughness Reynolds number of about 5
+    the wall is hydraulically smooth and the smooth-tube form is returned instead, so there is no
+    step between the two.
+
+    The fit was taken on water at Prandtl numbers of 1.2 to 5.94 in close-packed sand-grain
+    roughness. Hydrogen in a printed channel is below that Prandtl range and is rough in a
+    different way, so this is an extrapolation in both, bounded by measurement rather than
+    validated by it.
+
+    Parameters:
+    -----------
+    frictionFactor : array_like
+        Darcy friction factor at the wall's own roughness [-].
+    reynoldsNumber, prandtlNumber : array_like
+        Coolant bulk Reynolds and Prandtl numbers [-].
+    relativeRoughness : array_like
+        Absolute roughness over hydraulic diameter [-].
+
+    Returns:
+    --------
+    numpy.ndarray
+        Nusselt number [-].
+
+    '''
+
+    frictionGroup = np.sqrt(np.asarray(frictionFactor, dtype = float) / 8)
+    roughnessReynolds = np.asarray(relativeRoughness, dtype = float) * reynoldsNumber * frictionGroup
+
+    # The correlation is written for a wall the roughness has already tripped
+    roughWall = roughnessReynolds > 5.0
+    heatTransferFunction = 5.19 * np.maximum(roughnessReynolds, 1e-12)**0.2 * prandtlNumber**0.44
+
+    stanton = frictionGroup**2 / (1 + frictionGroup*(heatTransferFunction - 8.48))
+
+    return np.where(roughWall, stanton * reynoldsNumber * prandtlNumber,
+                    gnielinskiNusselt(swameeJainFriction(reynoldsNumber, 0.0),
+                                      reynoldsNumber, prandtlNumber))
+
 def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
-                              surfaceRoughness: float = printedSurfaceRoughness) -> tuple:
+                              surfaceRoughness: float = printedSurfaceRoughness,
+                              roughnessModel: str = 'dippreySabersky') -> tuple:
 
     '''
 
     Coolant-side Darcy friction factor and Nusselt number on the hydraulic diameter.
 
-    The friction factor is Swamee and Jain's explicit form of Colebrook,
+    The friction factor is Swamee and Jain's explicit form of Colebrook at the wall's own
+    roughness, and it is what the pressure drop is computed from whichever model is selected,
 
         f = 0.25 / log10(e / (3.7 D_h) + 5.74 / Re^0.9)^2
 
-    and the Nusselt number is Gnielinski's, evaluated with that friction factor,
+    What the roughness is allowed to do to the heat transfer is the choice. 'frictionOnly' takes
+    Gnielinski's Nusselt number,
 
         Nu = (f/8)(Re - 1000) Pr / (1 + 12.7 (f/8)^0.5 (Pr^(2/3) - 1))
 
-    with every property at the bulk temperature and no wall-to-bulk property ratio correction.
+    on the smooth-wall friction factor, so roughness costs pressure and buys nothing.
+    'dippreySabersky' takes the measured rough-wall heat transfer, which buys less than the
+    friction it costs. 'fullCredit' puts the rough friction factor into Gnielinski, which buys
+    heat transfer in proportion to the friction and is what no measurement supports.
+
+    Every property is at the bulk temperature, with no wall-to-bulk property ratio correction.
 
     Parameters:
     -----------
@@ -322,6 +420,8 @@ def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
         Hydraulic diameter of the section [m].
     surfaceRoughness : float
         Absolute roughness of the channel wall [m]. The default is a printed channel.
+    roughnessModel : str
+        One of COOLANTROUGHNESSMODELS.
 
     Returns:
     --------
@@ -330,11 +430,19 @@ def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
 
     '''
 
-    frictionFactor = 0.25 / (np.log10((surfaceRoughness / hydraulicDiameter)/3.7 + 5.74/reynoldsNumber**0.9))**2
-    nusseltNumber  = ((frictionFactor / 8) * (reynoldsNumber - 1000) * prandtlNumber) / \
-                     (1 + 12.7 * (frictionFactor / 8)**(1/2) * (prandtlNumber**(2/3) - 1))
+    relativeRoughness = surfaceRoughness / hydraulicDiameter
+    frictionFactor    = swameeJainFriction(reynoldsNumber, relativeRoughness)
 
-    return frictionFactor, nusseltNumber
+    if roughnessModel == 'fullCredit':
+        nusseltNumber = gnielinskiNusselt(frictionFactor, reynoldsNumber, prandtlNumber)
+    elif roughnessModel == 'dippreySabersky':
+        nusseltNumber = dippreySaberskyNusselt(frictionFactor, reynoldsNumber, prandtlNumber,
+                                               relativeRoughness)
+    else:
+        nusseltNumber = gnielinskiNusselt(swameeJainFriction(reynoldsNumber, 0.0),
+                                          reynoldsNumber, prandtlNumber)
+
+    return frictionFactor, float(nusseltNumber) if np.isscalar(reynoldsNumber) else nusseltNumber
 
 def entranceEnhancementFactor(distanceFromInlet, hydraulicDiameter):
 
@@ -838,6 +946,10 @@ regenThermalRules = (
     choiceRule('channelType', 'Channel cross section', choices = SECTIONFAMILIES),
     choiceRule('gasSideAxialModel', 'Gas-side axial distribution',
                choices = ('uniform', 'measured'), required = False),
+    choiceRule('coolantRoughnessModel', 'Coolant roughness model',
+               choices = COOLANTROUGHNESSMODELS, required = False),
+    numericRule('channelSurfaceRoughness', 'Channel surface roughness', units = 'm',
+                minimum = 0, exclusiveMinimum = False, required = False),
     arrayRule('flowArea', 'Channel flow area', units = 'm^2',
               positive = True, sameLengthAs = 'xHotWall3D'),
     arrayRule('heatedArea', 'Coolant-side heated area per station', units = 'm^2',
@@ -1160,6 +1272,12 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # The entrance and curvature corrections a coolant correlation written for a straight
     # developed passage needs where the passage is neither. The coolant enters at the last
     # station and marches toward the first, so distance from the inlet accumulates backwards.
+    # What a rough wall is allowed to do to the heat transfer, and the roughness itself
+    coolantRoughnessModel = inputsDict.get('coolantRoughnessModel') or 'dippreySabersky'
+    channelSurfaceRoughness = inputsDict.get('channelSurfaceRoughness')
+    if channelSurfaceRoughness is None or np.isnan(channelSurfaceRoughness):
+        channelSurfaceRoughness = printedSurfaceRoughness
+
     coolantGeometryCorrections = bool(inputsDict.get('coolantGeometryCorrections'))
     distanceFromInlet = inputsDict.get('distanceFromInlet')
     if distanceFromInlet is None:
@@ -1320,7 +1438,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         # Calculate Nusselt Number
         # Swamee-Jain friction factor for the Gnielinski Nusselt number, on the hydraulic diameter
         frictionFactor, coolantNusseltNumber[i] = coolantFrictionAndNusselt(
-            coolantReynoldsNumber[i], coolantPrandtlNumber[i], hydraulicDiameter[i])
+            coolantReynoldsNumber[i], coolantPrandtlNumber[i], hydraulicDiameter[i],
+            surfaceRoughness = channelSurfaceRoughness, roughnessModel = coolantRoughnessModel)
 
         # A developing boundary layer after the inlet and the secondary flow through a bend both
         # carry more heat than the straight developed passage the correlation is written for

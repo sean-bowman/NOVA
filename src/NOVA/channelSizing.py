@@ -199,6 +199,8 @@ class ChannelSizingState:
     channelType:                            str   = 'circle'
     gasSideAxialModel:                      str   = 'uniform'
     coolantGeometryCorrections:             bool  = False
+    coolantRoughnessModel:                  str   = 'dippreySabersky'
+    channelSurfaceRoughness:                float = float('nan')
     nChannel:                               int   = 0
     numCrossSections:                       int   = 0
     minChannelRadius:                       float = 0.0
@@ -988,6 +990,8 @@ def solveChannelRadii(state, geometry, thermal):
             heatTransferDict_i["channelType"]                     = state.channelType
             heatTransferDict_i["gasSideAxialModel"]               = state.gasSideAxialModel
             heatTransferDict_i["coolantGeometryCorrections"]      = state.coolantGeometryCorrections
+            heatTransferDict_i["coolantRoughnessModel"]           = state.coolantRoughnessModel
+            heatTransferDict_i["channelSurfaceRoughness"]         = state.channelSurfaceRoughness
             heatTransferDict_i["nChannel"]                        = state.nChannel
             heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness
             heatTransferDict_i["throatRadiusOfCurvature"]         = (state.throatInletCurvatureNonDimensional*state.nozzleScalingFactor + \

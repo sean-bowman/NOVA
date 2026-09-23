@@ -37,6 +37,8 @@
   "channelType": "circle",
   "gasSideAxialModel": "uniform",
   "coolantGeometryCorrections": false,
+  "coolantRoughnessModel": "dippreySabersky",
+  "channelSurfaceRoughness": 3.5e-05,
   "minChannelWidth": 0.001,
   "channelCornerRadius": null,
   "maxChannelAspectRatio": 8.0,

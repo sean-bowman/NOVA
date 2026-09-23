@@ -63,6 +63,7 @@ from .contour import divergingSectionFamily
 from .contourKernel import transonicModels
 from .contourOptimization import designVariableBounds, isMonotoneWall
 from .gasDynamics import effectiveGamma
+from .regenThermal import COOLANTROUGHNESSMODELS, printedSurfaceRoughness
 
 def setInputs(nozzle, inputsPath: str | dict) -> None:
 
@@ -204,6 +205,8 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # The entrance and curvature corrections a coolant correlation written for a straight
         # developed passage needs where the passage is neither. Absent or null is off.
         nozzle.coolantGeometryCorrections     = inputsPath.get('coolantGeometryCorrections') in (True, 'on')
+        # What a rough wall is allowed to do to the coolant-side heat transfer
+        nozzle.coolantRoughnessModel          = inputsPath.get('coolantRoughnessModel') or 'dippreySabersky'
 
         # A rectangle's width and depth limits and a helix's angle and aspect ratio. Read with
         # defaults, so a configuration written for circular channels needs none of them; a null
@@ -213,6 +216,8 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
             unset = value is None or (isinstance(value, float) and np.isnan(value))
             return default if unset else float(value)
 
+        # The roughness the coolant-side friction factor is built on. Absent is a printed channel.
+        nozzle.channelSurfaceRoughness        = valueOr('channelSurfaceRoughness', printedSurfaceRoughness)
         nozzle.minChannelWidth                = valueOr('minChannelWidth', 1.0e-3)
         nozzle.channelCornerRadius            = valueOr('channelCornerRadius', 0.0)
         nozzle.maxChannelAspectRatio          = valueOr('maxChannelAspectRatio', 8.0)
@@ -394,6 +399,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
 
     # Which cross section the jacket is built from. Checked only when there is a jacket, because a
     # contour-only configuration has no reason to name one.
+    if nozzle.makeCoolingChannels == 'on' and nozzle.coolantRoughnessModel not in COOLANTROUGHNESSMODELS:
+        raise InvalidInputError(
+            message = f"coolantRoughnessModel must be one of {', '.join(COOLANTROUGHNESSMODELS)}.",
+            parameterName = 'coolantRoughnessModel',
+            value = nozzle.coolantRoughnessModel,
+            validRange = ', '.join(COOLANTROUGHNESSMODELS))
+
     if nozzle.makeCoolingChannels == 'on' and nozzle.gasSideAxialModel not in ('uniform', 'measured'):
         raise InvalidInputError(
             message = "gasSideAxialModel must be 'uniform' or 'measured'.",

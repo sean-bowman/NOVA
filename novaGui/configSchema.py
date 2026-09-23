@@ -308,6 +308,19 @@ groups = [
                      'distribution scales it by constants measured along a LOX/GH2 chamber, which '
                      'leaves the barrel alone and takes about 40 percent off the throat. It is a '
                      'calibration from one engine and injector, not a universal curve.'),
+        Field('coolantRoughnessModel', 'Coolant roughness model', 'choice',
+              choices = [('Friction only (no heat transfer credit)', 'frictionOnly'),
+                         ('Dipprey and Sabersky rough-wall heat transfer', 'dippreySabersky'),
+                         ('Full credit (rough friction into Gnielinski)', 'fullCredit')],
+              default = 'dippreySabersky', showWhen = _coolingOn,
+              help = 'What a rough wall may do to the coolant-side heat transfer. Roughness '
+                     'raises the friction factor and the pressure drop under all three. Friction '
+                     'only is the treatment the hardware comparisons support; full credit is what '
+                     'runs the wall coolest and what no measurement supports.'),
+        Field('channelSurfaceRoughness', 'Channel surface roughness', 'float', default = 3.5e-05,
+              unit = 'm', showWhen = _coolingOn,
+              help = 'Absolute roughness the coolant-side friction factor is built on. The '
+                     'default is a printed GRCop-42 channel from the Velo3D datasheet.'),
         Field('coolantGeometryCorrections', 'Coolant entrance and curvature corrections', 'bool',
               default = False, showWhen = _coolingOn,
               help = 'Enhances the coolant-side coefficient in the developing length after the '

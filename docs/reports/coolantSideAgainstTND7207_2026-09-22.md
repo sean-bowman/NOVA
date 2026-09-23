@@ -4,7 +4,7 @@ Schacht and Quentmeyer measured local coolant-side heat transfer in a liquid-hyd
 
 **The entrance and curvature corrections are implemented and validated against the source's own tabulated values.** `coolantGeometryCorrections` switches them on.
 
-**NOVA's roughness credit is wrong in kind, and this is the second independent measurement that says so.** At the 35 um roughness NOVA assumes for a printed channel, its coefficient runs 1.5 to 5 times the measurements. At the roughness those tubes actually had, it lands within about a factor of 1.5.
+**The roughness treatment is decided by these measurements together with Carlile's, and the two disagree.** Crediting roughness in proportion to friction, which is what preceded this comparison, puts NOVA's coefficient 1.5 to 5 times the measurements at the 35 um a printed channel carries. Crediting nothing lands nearest these measurements and too hot against Carlile's walls. The default is the bounded middle.
 
 **The comparison is bracketed, not tight.** The published ratios carry a bulk state but no Reynolds number, so NOVA's position depends on where in a plausible Reynolds range each point sat. It is a sensitivity-bounded comparison, like the Carlile one, rather than a validation.
 
@@ -43,15 +43,29 @@ Taking their recommended correlation as the reference, $St\,Pr^{0.6} = 0.023\,Re
 
 A ratio below 1 means NOVA predicts more heat transfer than was measured.
 
-Two readings. At a roughness like the one those tubes had, 1.905 um rms on a passage of a few millimetres, NOVA is high by up to a factor of 2 at the warm, developed end and about right at the cold entrance. At the 35 um NOVA assumes for a printed channel, it is high by 1.5 to 5 times everywhere.
+Two readings, both taken with roughness credited in proportion to friction, which is the treatment these measurements were used to replace. At a roughness like the one those tubes had, 1.905 um rms on a passage of a few millimetres, that runs high by up to a factor of 2 at the warm, developed end and about right at the cold entrance. At the 35 um a printed channel carries, it is high by 1.5 to 5 times everywhere.
 
-The cold end is the interesting one. Every correlation in the report underpredicts there: measured over predicted is 2.05 for their own correlation, 3.54 for Hess and Kunz, 3.92 for the film correlation. Hydrogen near its pseudo-critical line transfers more heat than a correlation fitted on moderate property variation expects, which is the whole reason that report exists. NOVA's roughness credit happens to push in the same direction at that station, which makes it look better there than it is.
+The cold end is the interesting one. Every correlation in the report underpredicts there: measured over predicted is 2.05 for their own correlation, 3.54 for Hess and Kunz, 3.92 for the film correlation. Hydrogen near its pseudo-critical line transfers more heat than a correlation fitted on moderate property variation expects, which is the whole reason that report exists. A roughness credit pushes in the same direction at that station, so it flatters a model there for a reason that has nothing to do with roughness.
+
+## The roughness treatment the two datasets bracket
+
+Taking the two hardware comparisons together decides what NOVA does by default, because they do not agree.
+
+| Roughness model | Carlile wall temperatures | TN D-7207 hydrogen coefficients |
+|---|---|---|
+| `frictionOnly` | 11 of 13 inside the band; the wall is predicted too hot | measured over NOVA 0.89 to 2.01, nearest 1 |
+| `dippreySabersky` (default) | 13 of 13 inside; error on T_hw - T_b spans -24 to +73 percent | measured over NOVA 0.56 to 1.40 |
+| `fullCredit` | 13 of 13 inside; error spans -31 to +70 percent | measured over NOVA 0.46 to 1.42 |
+
+A coefficient that is too high cools the wall, so one dataset asks for more coolant-side heat transfer and the other for less. Carlile's chambers are small passages, 0.42 mm hydraulic diameter at an aspect ratio of 5, where a 3 um roughness is a relative roughness of 7e-3; the wall temperatures there are inferred through a SINDA model rather than measured. TN D-7207's ratios are measured coefficients, but for hardware from two other experiments whose Reynolds number and roughness are not reported.
+
+The default is the bounded middle: Dipprey and Sabersky's measured rough-wall heat transfer, which keeps every Carlile point inside its band without crediting roughness in proportion to friction. `frictionOnly` and `fullCredit` remain selectable, and `regenRoughnessFullCredit` in the harness keeps the earlier treatment reproducible.
 
 ## What the source says about roughness
 
 The report computes friction factors with a surface irregularity of 1.905 um rms and states plainly that **no roughness effects were accounted for in the heat transfer**. Its conclusion is that standard friction factors with roughness taken into account predict the pressure drops well, alongside a heat transfer correlation carrying no roughness term at all.
 
-NOVA does the opposite: it feeds the rough-wall Swamee-Jain factor into Gnielinski, so roughness raises the Nusselt number in proportion to the friction it adds. That is what the Carlile comparison found from an inferred wall temperature, and it is what these ratios show directly against measured coefficients.
+That practice is `frictionOnly` here. It is the end of the bracket these measurements favour, and the end that predicts Carlile's walls too hot.
 
 The physical position sits between the two. Dipprey and Sabersky measured rough tubes and found heat transfer rising with roughness, but by less than friction does. So a roughness term belongs in the heat transfer, bounded well below the friction multiplier, rather than either omitted outright or credited in full.
 
@@ -61,7 +75,7 @@ Calibrated and disclosed, not validated:
 
 - The entrance and curvature factors reproduce the source's published values, which validates the implementation against the numbers it came from. What is not established is that they are right for NOVA's channel shapes: they were fitted on round tubes, and a high aspect ratio rectangle has a different developing length and a different secondary flow.
 - The comparison of NOVA's coefficient against the measured ratios is bracketed on Reynolds number and on the roughness of hardware from two other experiments. It bounds the error; it does not measure it.
-- The corrections default off, so every result recorded before this exists is unaffected.
+- The corrections default off. The roughness model does not: its default moved from crediting roughness in proportion to friction to the bounded middle, so every jacket result moves with it.
 
 ## Sources
 

@@ -63,6 +63,16 @@ The film property correction is derived rather than cited. Its transport exponen
 
 Ordered by what would change an answer most.
 
+**The sizing march can stall where the coolant-side corrections flatten its response.** The
+entrance enhancement grows as the channel's own diameter to the 0.325, since it is a function of
+S/d, which opposes the usual result that a larger channel runs its wall hotter. Near the inlet the
+two nearly cancel: on the reference jacket with `coolantGeometryCorrections` on, station 51 settles
+9.3 K above an 800 K target and stops moving, at a radius that is neither bound. Raising the
+iteration ceiling from 50 to 120 changes the residual not at all, so it is a stationary point of
+the search rather than an oscillation. The corrections default off and the harness case carries a
+900 K target, where the same jacket converges. What would settle it is a bracketed root find on a
+station, which the march does not currently use.
+
 **Variable-property characteristics solve.** The mesh runs on one exponent. Fitting that exponent to the design point is the mitigation that exists; removing the choice means giving the characteristics local properties, which is a different solver. `characteristics.CharacteristicGas` holds one gamma deliberately, and its docstring says a net cannot be built with one gamma and read back under another, so this is a rewrite of that module rather than an extension of it. Tracked as the largest one-dimensional dependency in `docs/NozzleContourValidation.md`.
 
 **Molecular rather than equilibrium conductivity in the film transfer coefficient.** A Colburn form fitted on non-reacting air has no reaction conductivity in it, but the station arrays carry the equilibrium value, whose reaction contribution is a factor of 2.7 at 3398 K and 1.4 by 2269 K. Near a slot in the chamber that difference is larger than the reference-temperature effect and runs the other way. Removing it needs a frozen-composition solve at every station, and it raises the same question for Bartz, which is partly immune because `cp / Pr^0.6` largely cancels the reaction term while a bare `k` does not.

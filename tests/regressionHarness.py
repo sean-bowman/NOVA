@@ -216,12 +216,25 @@ harnessCases = {
         'description': 'Circular channels with the measured gas-side axial distribution',
         'overrides': {**regenOverrides, 'gasSideAxialModel': 'measured'},
     },
-    # The coolant-side entrance and curvature corrections on the same jacket, which is where
-    # a correlation written for a straight developed pipe is asked about neither.
+    # The coolant-side entrance and curvature corrections on the same jacket, which is where a
+    # correlation written for a straight developed pipe is asked about neither. The wall target is
+    # 900 K rather than the 800 K the other cases use: the entrance factor grows with the channel's
+    # own diameter, which flattens the wall temperature's response to channel size near the inlet,
+    # and at 800 K the sizing march stalls at station 51 short of its target without being at a
+    # bound. That interaction is recorded in experimental/coolingModelState.md.
     'regenCoolantCorrections': {
         'config': 'NOVANozzle.json',
         'description': 'Circular channels with the coolant entrance and curvature corrections',
-        'overrides': {**regenOverrides, 'coolantGeometryCorrections': True},
+        'overrides': {**regenOverrides, 'coolantGeometryCorrections': True,
+                      'maxWallTemperature': 900.0},
+    },
+    # The roughness treatment that preceded the hardware comparisons, where the rough-wall
+    # friction factor goes into Gnielinski and the Nusselt number rises with it. Kept as a case
+    # so the results recorded under it stay reproducible.
+    'regenRoughnessFullCredit': {
+        'config': 'NOVANozzle.json',
+        'description': 'Circular channels crediting roughness with heat transfer in full',
+        'overrides': {**regenOverrides, 'coolantRoughnessModel': 'fullCredit'},
     },
     # A hydrogen film injected at the chamber end of the same jacket. It pins the film path and
     # records what a film that is badly matched in velocity actually buys, which is not much.

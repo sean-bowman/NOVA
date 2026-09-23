@@ -447,6 +447,8 @@ class Nozzle:
         self.channelType                              = None     # [str]
         self.gasSideAxialModel                        = None     # [str]
         self.coolantGeometryCorrections               = None     # [bool]
+        self.coolantRoughnessModel                    = None     # [str]
+        self.channelSurfaceRoughness                  = None     # [m]
         self.minChannelRadius                         = 0.00075  # [m], half the depth of a rectangle
         self.minChannelWidth: float | None            = None     # [m], rectangles
         self.channelCornerRadius: float | None        = None     # [m], rectangles
