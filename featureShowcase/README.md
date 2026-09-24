@@ -23,6 +23,7 @@ python featureShowcase/buildSubfamilyStudy.py     # searched quadratic against c
 python featureShowcase/buildReferenceOverlays.py  # contours on their references, about 5 minutes
 python featureShowcase/buildStitchedField.py      # chamber to exit in one frame
 python featureShowcase/buildChamberField.py       # chamber and converging section, one dimensional
+python featureShowcase/buildModelComparisons.py    # the selectable thermal and gas models, about 4 minutes
 python featureShowcase/buildReport.py             # renders the effort report to HTML
 ```
 
@@ -31,6 +32,8 @@ python featureShowcase/buildReport.py             # renders the effort report to
 | File | Shows |
 |------|-------|
 | `contour.png` | Wall contour with the generated combustion chamber, throat and chamber diameter called out |
+| `modelComparisonsModels.png` | What each selectable model does: the gas-side constant along the wall against Bartz's single value, what roughness buys on the coolant side, Prandtl-Meyer turning under local properties against two constant exponents, and the entrance and curvature corrections |
+| `modelComparisonsJacket.png` | The reference jacket solved under each model: hot wall temperature, coolant temperature and the channel the sizing march picked |
 | `nearWallState.png` | Near-wall static temperature, static pressure and Mach number along the axis |
 | `fieldMach.png` | Mach number over the characteristics mesh |
 | `fieldPressure.png` | Static pressure over the characteristics mesh |

@@ -40,6 +40,7 @@ featureShowcase/*.pkl
 featureShowcase/*.npz
 # Written fresh on every run of the study that owns them, so they are output.
 featureShowcase/familiesConfig.json
+featureShowcase/modelComparisonConfig.json
 featureShowcase/subfamilyConfig.json
 # The full component set written by experimental/stepExport.py, 1.1 MB that regenerates
 # from the cached showcase nozzle. The single revolved wall beside it is kept, since it is
