@@ -2002,7 +2002,11 @@ def advancePlumeFront(flow: PlumeFlow, front: list, boundaryMach: float) -> list
 
     if len(advanced) < 3:
         return None
-    edge = plumeFreeBoundaryPoint(flow, advanced[-1], front[-1], boundaryMach)
+    # Both parents come from the old line. Crossing a characteristic leaving a point on the new
+    # line against a streamline leaving the old boundary mixes the two, and the intersection walks
+    # upstream as the outer region loses a point a step: the advance then stalls at eleven steps
+    # having carried the boundary half a lip radius. From the old line it reaches fifty four.
+    edge = plumeFreeBoundaryPoint(flow, front[-2], front[-1], boundaryMach)
     if edge is None or edge.x < front[-1].x - 1e-12:
         return None
     advanced.append(edge)
@@ -2027,14 +2031,17 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
     the free boundary condition rotates the outermost point. That smears the expansion near the
     lip and washes out downstream.
 
-    NOT YET USABLE. It advances, and it advances stably where it advances at all, but it stalls
-    after about thirty steps having carried the boundary less than one lip radius, against the
-    march's sixteen. The march remains the solver; this is kept because the reason the obvious
-    approach fails is worth keeping. Seeding a front from the march's own lines cannot work: those
-    lines are first-family characteristics, so neighboring points on one are joined by exactly the
-    characteristic the advance would cross against its neighbor's, and the intersection returns a
-    point that is already there. Any working front has to start from a station, and the remaining
-    problem is holding it away from the characteristic directions as it turns downstream.
+    NOT YET USABLE, and superseded by `experimental/stationMarch.py`, which prescribes the data
+    line instead of letting the characteristics choose it. This one stalls because the line it
+    advances rotates into the first-family characteristic direction: measured at the stall, the
+    front lies within 0.00 degrees of it over part of its length, the spacing along it spans 114
+    to 1, and the boundary has run to two lip radii while the center line has reached a tenth of
+    one. A data line lying on a characteristic carries no information across itself.
+
+    The march remains the package's solver. This is kept because the reason the obvious approach
+    fails is worth keeping: any working front has to start from a station, and it has to be held
+    away from the characteristic directions as it turns downstream, which is what a prescribed
+    station does by construction.
 
     """
     if not initialLine or len(initialLine) < 6:
@@ -2044,7 +2051,8 @@ def solvePlumeFront(flow: PlumeFlow, initialLine: list, ambientPressure: float,
 
     boundaryMach = flow.machFromStaticPressure(ambientPressure)
     # The march works from the lip inward; the front indexes from the center line outward.
-    front = list(reversed(initialLine)) if initialLine[0].r > initialLine[-1].r             else list(initialLine)
+    front = list(reversed(initialLine)) if initialLine[0].r > initialLine[-1].r \
+            else list(initialLine)
     if boundaryMach <= front[-1].mach:
         return {'lines': [], 'boundary': [], 'nodes': [], 'shock': [],
                 'stop': 'notUnderexpanded', 'boundaryMach': boundaryMach, 'referenceFlux': 0.0,
