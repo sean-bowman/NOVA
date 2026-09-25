@@ -75,7 +75,7 @@ station, which the march does not currently use.
 
 **Variable-property characteristics solve.** The mesh runs on one exponent. Fitting that exponent to the design point is the mitigation that exists; removing the choice means giving the characteristics local properties, which is a different solver. `characteristics.CharacteristicGas` holds one gamma deliberately, and its docstring says a net cannot be built with one gamma and read back under another, so this is a rewrite of that module rather than an extension of it. Tracked as the largest one-dimensional dependency in `docs/NozzleContourValidation.md`.
 
-The gas for that solve now exists, in `src/NOVA/equilibriumExpansion.py`. `expansionTable` samples CEA along the chamber isentrope and `EquilibriumGas` answers the same four relations `CharacteristicGas` does, by interpolating that table rather than evaluating a closed form. The one relation with no closed form at varying gamma is the Prandtl-Meyer function, whose differential `d(nu) = sqrt(M^2 - 1) dV / V` is integrated along the table instead; generated from a constant-gamma expansion it reproduces the closed form to within 0.022 degrees.
+The gas for that solve now exists, in `src/NOVA/equilibriumExpansion.py`, and `gasModelState.md` beside this file carries the scope in full. `expansionTable` samples CEA along the chamber isentrope and `EquilibriumGas` answers the same four relations `CharacteristicGas` does, by interpolating that table rather than evaluating a closed form. The one relation with no closed form at varying gamma is the Prandtl-Meyer function, whose differential `d(nu) = sqrt(M^2 - 1) dV / V` is integrated along the table instead; generated from a constant-gamma expansion it reproduces the closed form to within 0.022 degrees.
 
 What that measures is the size of the simplification, and it is larger than the exponent spread suggests. Turning from the throat on the LOX/LH2 reference engine:
 
@@ -108,7 +108,7 @@ What remains is the solver. The unit process reads gamma and the gas constant in
 
 ## Ideas raised and not pursued
 
-**Finite-rate chemistry.** Real nozzle flow sits between equilibrium and frozen, and NOVA's CEA wrapper already takes a `frozen` flag, so the bracket is one argument away. It is worth 2.2 per cent of specific impulse on hydrogen and 3.7 per cent on kerosene. Reporting that bracket wherever a performance number is quoted buys most of the honesty that implementing kinetics would, at almost no cost.
+**Finite-rate chemistry.** Real nozzle flow sits between equilibrium and frozen, and NOVA's CEA wrapper already takes a `frozen` flag, so the bracket is one argument away. It is worth 2.2 per cent of specific impulse on hydrogen and 3.7 per cent on kerosene. Reporting that bracket wherever a performance number is quoted buys most of the honesty that implementing kinetics would, at almost no cost. `gasModelState.md` scopes what implementing it would take, and measures the bracket at 2.1 per cent of exit velocity on the reference engine.
 
 **Plume afterburning.** The plume module does frozen ideal-gas gas dynamics with gamma passed in and no chemistry at all. For plume structure and keep-out envelopes that is defensible, and it is the lowest-value chemistry work available.
 

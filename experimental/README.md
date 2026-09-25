@@ -13,6 +13,7 @@ and features taken out of the package that are worth keeping the source of.
 | `plumeDevelopmentState.md` | Where the plume solver stands, written to be picked up cold |
 | `coolingModelState.md` | Where the film, radiative and extension cooling work stands, and what is open |
 | `internalShockState.md` | How the shock inside an optimized contour is detected and captured, and what a correct rotational solve would take |
+| `gasModelState.md` | What the exhaust is modeled as, what local equilibrium properties would take, and where finite-rate chemistry sits beyond them |
 
 ## Sunken throat converging section
 
