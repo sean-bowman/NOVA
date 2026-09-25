@@ -51,10 +51,19 @@ different method, and nothing in NOVA informs it. What it does not remove is tha
 itself a numerical solution rather than a measurement, so it bounds the difference between two
 characteristic solutions of the same problem and not the distance from the real jet.
 
-The error is reported two ways. Against `V/V_t` it is small by construction, because the center
-line is undisturbed until the leading characteristic reaches it and the ratio only moves from
-0.4095 to 0.4601 across the whole tabulated range. Against the disturbance, `V/V_t` less its
-undisturbed value, it is the honest measure of what the scheme computes.
+The error is reported three ways, because no single one of them is honest on its own.
+
+Against `V/V_t` it is small by construction: the center line is undisturbed until the leading
+characteristic reaches it, and the ratio only moves from 0.4095 to 0.4601 across the whole
+tabulated range, so most of the denominator is a state the scheme never had to compute.
+
+Against the local disturbance, `V/V_t` less its undisturbed value, it is large by construction at
+the upstream end, where the disturbance is a part in sixty of what it reaches downstream and any
+difference divided by it is enormous. That measure overstates the failure as surely as the first
+understates it.
+
+Scaled on the largest disturbance in the tabulated range, it is neither. That is the measure to
+read first: what fraction of the wave's own amplitude the two solutions differ by.
 
 Run it from the NOVA root:
 
@@ -168,14 +177,21 @@ def compare(count: int) -> dict:
 
     sampled = PchipInterpolator(solved['x'], solved['velocityRatio'])(reference[:, 0])
     ratioError = 100.0*(sampled/reference[:, 1] - 1.0)
+
     disturbance = reference[:, 1] - UNDISTURBEDVELOCITYRATIO
     solvedDisturbance = sampled - UNDISTURBEDVELOCITYRATIO
-    # The first station is undisturbed by definition, so a relative error there is meaningless.
-    usable = disturbance > 1e-9
-    disturbanceError = 100.0*(solvedDisturbance[usable]/disturbance[usable] - 1.0)
+    peak = np.abs(disturbance).max()
+    scaledError = 100.0*(solvedDisturbance - disturbance)/peak
+
+    # The first station is undisturbed by definition and the next few carry a part in sixty of
+    # what the wave reaches, so a relative error against them is a small denominator rather than a
+    # result. Reported for completeness, read after the scaled one.
+    usable = disturbance > 0.05*peak
+    relativeError = 100.0*(solvedDisturbance[usable]/disturbance[usable] - 1.0)
 
     return {'count': count, 'short': False, 'sampled': sampled, 'ratioError': ratioError,
-            'disturbanceError': disturbanceError, **solved}
+            'scaledError': scaledError, 'relativeError': relativeError,
+            'peakDisturbance': peak, **solved}
 
 def report(counts = (81, 161, 321)) -> None:
 
@@ -190,20 +206,33 @@ def report(counts = (81, 161, 321)) -> None:
     print(f'  1/tan(mu) is {exit["leadingCharacteristicFoot"]:.7f} against the first tabulated '
           f'station {exit["firstTabulatedStation"]:.7f}')
     print()
-    print(f'{"points":>7} {"stations":>9} {"reach":>7} {"drift %":>9} {"max V/Vt %":>11} '
-          f'{"rms V/Vt %":>11} {"max dist %":>11} {"rms dist %":>11}')
+    print('error scaled on the peak disturbance is the one to read; see the module docstring')
+    print(f'{"points":>7} {"stations":>9} {"drift %":>9} {"max scaled %":>13} '
+          f'{"rms scaled %":>13} {"max V/Vt %":>11} {"rms V/Vt %":>11} {"max rel %":>10}')
 
+    detail = None
     for count in counts:
         result = compare(count)
         if result['short']:
-            print(f'{count:7d} {result["stations"]:9d} {result["reach"]:7.3f} '
-                  f'ended short of the table at {result["stop"]}')
+            print(f'{count:7d} {result["stations"]:9d} '
+                  f'ended short of the table at {result["reach"]:.3f}, {result["stop"]}')
             continue
-        ratio, disturbance = result['ratioError'], result['disturbanceError']
-        print(f'{count:7d} {result["stations"]:9d} {result["reach"]:7.3f} '
-              f'{result["worstDrift"]:+9.3f} {np.abs(ratio).max():11.3f} '
-              f'{np.sqrt((ratio**2).mean()):11.3f} {np.abs(disturbance).max():11.2f} '
-              f'{np.sqrt((disturbance**2).mean()):11.2f}')
+        ratio, scaled = result['ratioError'], result['scaledError']
+        print(f'{count:7d} {result["stations"]:9d} {result["worstDrift"]:+9.3f} '
+              f'{np.abs(scaled).max():13.2f} {np.sqrt((scaled**2).mean()):13.2f} '
+              f'{np.abs(ratio).max():11.3f} {np.sqrt((ratio**2).mean()):11.3f} '
+              f'{np.abs(result["relativeError"]).max():10.1f}')
+        detail = result
+
+    if detail is not None:
+        print()
+        print(f'  per station at {detail["count"]} points, peak disturbance in V/Vt '
+              f'{detail["peakDisturbance"]:.7f}')
+        print(f'    {"x/r":>9} {"table":>10} {"march":>10} {"V/Vt %":>8} {"scaled %":>9}')
+        for (position, value), got, ratioValue, scaledValue in zip(
+                TABLETWOAXIS, detail['sampled'], detail['ratioError'], detail['scaledError']):
+            print(f'    {position:9.5f} {value:10.7f} {got:10.7f} {ratioValue:8.3f} '
+                  f'{scaledValue:9.2f}')
 
 if __name__ == '__main__':
     report()

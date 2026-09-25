@@ -111,7 +111,7 @@ The exit is a conical source flow, which is an exact solution and is what a coni
 
 ## Stage 4: TR R-6 table II, and the interior is wrong
 
-**The solver fails its only interior reference, in the way the reference warned it would.** Stages 1 and 3 read the jet boundary and a conservation residual. Neither detects this: mass conservation on the same runs is 0.10 to 0.20 per cent while the center-line disturbance is over-predicted by 70 per cent rms.
+**The solver fails its only interior reference, in the way the reference warned it would.** Stages 1 and 3 read the jet boundary and a conservation residual. Neither detects this: mass conservation on the same runs is 0.10 to 0.20 per cent while the center-line wave is over-predicted by 8 per cent of its own amplitude, rising to 11 at the downstream end of the tabulated range.
 
 TR R-6 computed table II for exactly this question. Its stated purpose was to assess how much errors near the axis matter, and its conclusion is that appreciable errors in the characteristic net near the axis, and therefore in the velocity along the axis, may have negligibly small effects upon the boundary shape through the maximum value of `y/r` even for the critical condition of a sonic exit. A solver validated on its boundary is not validated.
 
@@ -127,17 +127,17 @@ Three checks fix the reading of the table before anything is compared, all from 
 
 The third is the geometric point where the leading characteristic from the lip reaches the axis, which confirms the column identification and the structure of the net at once.
 
-| Points | mass drift | max error, V/Vt | rms | max error, disturbance | rms |
+| Points | mass drift | max error, scaled | rms, scaled | max error, V/Vt | rms, V/Vt |
 |---|---|---|---|---|---|
-| 81 | -0.199% | 1.210% | 0.915% | 209.6% | 70.1% |
-| 161 | +0.153% | 1.197% | 0.903% | 210.3% | 70.1% |
-| 321 | +0.098% | 1.192% | 0.898% | 210.9% | 70.2% |
+| 81 | -0.199% | 11.02% | 7.92% | 1.210% | 0.915% |
+| 161 | +0.153% | 10.90% | 7.81% | 1.197% | 0.903% |
+| 321 | +0.098% | 10.86% | 7.77% | 1.192% | 0.898% |
 
-Two measures because the first flatters the solver. The center line is undisturbed until the leading characteristic reaches it, and the velocity ratio only moves from 0.4095 to 0.4601 across the whole tabulated range, so an error against the ratio is divided by a number that is mostly the undisturbed state. The disturbance, the ratio less its undisturbed value, is what the scheme actually computes.
+Three measures exist and only one of them is honest. Against the velocity ratio the error is small by construction: the center line is undisturbed until the leading characteristic reaches it, and the ratio only moves from 0.4095 to 0.4601 across the whole range, so most of the denominator is a state the scheme never had to compute. Against the local disturbance it is large by construction at the upstream end, where the disturbance is a part in sixty of what it reaches downstream and any difference divided by it is enormous; that measure reaches 210 per cent and means nothing. Scaled on the largest disturbance in the range it is neither, and it answers the question actually being asked: what fraction of the wave's own amplitude the two solutions differ by.
 
 **The error does not converge.** Four times the radial resolution moves it by one part in sixty, while mass drift halves twice over the same refinement. That is a modelling error, not a discretization error, and no grid will remove it.
 
-**It is concentrated at the lip.** At the foot of the leading characteristic the march is exact, 0.004 per cent, so the arrival of the first disturbance is right. At the next tabulated station, 0.1113 lip radii, the disturbance is already 210 per cent high. It decays monotonically to 11 per cent by 0.4325. The march delivers far too much expansion to the center line immediately and converges toward the right total as it runs.
+**It grows with distance.** At the foot of the leading characteristic the march is exact, 0.004 per cent, so the arrival of the first disturbance is right. From there the error climbs steadily in the scaled measure, 3.6 per cent of the peak at 0.1113 lip radii to 10.9 at 0.4325, and it is one-signed: the march delivers more expansion to the center line than the reference does, everywhere. In the relative measure the same numbers read 210 per cent falling to 11, which is the small denominator upstream rather than a different result.
 
 That is consistent with the centered fan at the lip being carried across one radial interval rather than at a point: a sonic exit turns through its whole Prandtl-Meyer angle at a single point, and no station normal to the axis can hold that. It is the structural cost of prescribing the data line, named in this module from the start, now measured. What is not established is whether a narrower fan behaves better, because a sonic exit at 85 degrees of Mach angle is the widest fan available and no reference exists at a higher exit Mach number.
 
@@ -158,7 +158,7 @@ Stages 1 to 3 need no data that is not already in hand. Stage 4 needs manual tra
 1. **Uniform parallel exit, Pe/Pa 1.05 to 2.** Mass conservation, and the cell period against Prandtl. **Passed at 1.05, open above it**: the period holds to 3.4 per cent throughout, conservation stops converging near one per cent from 1.2 upward.
 2. **NASA TN D-2327's worked cases.** Lip fan and leading characteristic to the center line, which the characteristic march reproduces to a tenth of a per cent. **Not started.**
 3. **A divergent exit.** TR R-6 conclusion 1 measures divergence angle over 0 to 20 degrees as a small effect on the primary wavelength. **Passed at 5 degrees, open above it**: the period spread over 0 to 20 degrees is +0 to +6 per cent against the characteristic march's -25 to -34, and conservation carries the 5 degree point at 0.42 per cent. Beyond 11 degrees conservation runs 8 to 12 per cent and the march fails at 20.
-4. **TR R-6's table II interior field.** A dense characteristic net for a near-sonic exit at a jet static pressure ratio of 2, transcribed in `stationMarchValidation.py`. **Failed**: the center-line disturbance is over-predicted by 70 per cent rms, it does not converge with resolution, and neither the boundary nor mass conservation shows it.
+4. **TR R-6's table II interior field.** A dense characteristic net for a near-sonic exit at a jet static pressure ratio of 2, transcribed in `stationMarchValidation.py`. **Failed**: the center-line wave is over-predicted by 7.8 per cent of its own amplitude rms, it does not converge with resolution, and neither the boundary nor mass conservation shows it.
 
 Above a jet static pressure ratio of about 2, no isentropic net is defensible, by Prandtl's cell length and by TR R-6 independently, because the compression waves reflected from the boundary have coalesced into a shock the net does not carry. That ceiling belongs to the physics and applies here unchanged. TR R-6 adds that divergence brings it on earlier, so stage 3 runs at the weak end.
 
@@ -166,7 +166,7 @@ Above a jet static pressure ratio of about 2, no isentropic net is defensible, b
 
 Nothing in the package imports this module, and stage 4 says keep it that way.
 
-The original gate was stages 1 to 3, which stages 1 and 3 pass at the weak end of their ranges. That gate was wrong. Both read the jet boundary and a conservation residual, and stage 4 measures an interior that is 70 per cent off while conservation holds at two tenths of a per cent and the boundary is unaffected. Promotion on stages 1 to 3 would ship a solver whose boundary is right and whose interior is not, which is the failure TR R-6 computed table II to warn about.
+The original gate was stages 1 to 3, which stages 1 and 3 pass at the weak end of their ranges. That gate was wrong. Both read the jet boundary and a conservation residual, and stage 4 measures a center-line wave 8 per cent off in amplitude while conservation holds at two tenths of a per cent and the boundary is unaffected. Promotion on stages 1 to 3 would ship a solver whose boundary is right and whose interior is not, which is the failure TR R-6 computed table II to warn about.
 
 What promotion now needs is a bound on the interior error over the range NOVA designs for. The measured case is a sonic exit, the widest lip fan a station normal to the axis can be asked to hold; a bell contour leaves at Mach 4 or more, where the fan is a tenth as wide. Whether the error falls with it is the open question, and no published field exists at a higher exit Mach number to settle it. The route that does not need one is to reproduce the lip fan as a fan rather than across a radial interval, and then re-run this same comparison, which would show the improvement directly.
 
