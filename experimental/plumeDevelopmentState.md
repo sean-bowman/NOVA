@@ -46,7 +46,11 @@ Either the constants are wired into `solvePlumeField` or they are deleted and th
 
 ## What is open
 
-Roughly in the order worth attacking.
+The order below is the order the items were found in, which is no longer the order worth attacking them in. Diagnosing the first two moved the third.
+
+**Shock detection is now the gating item.** It decides where both solvers stop, and at present the characteristic march stops at a coalescence without knowing that is what happened, while the station marcher does not stop at all and reports converging conservation while it integrates through one. Nothing else on this list can be finished without it: an interior error cannot be attributed while the solution may contain a discontinuity nothing has flagged, and an envelope cannot be drawn around a solver that does not know when it has left the region its equations describe.
+
+After that, the initial line work is closed, the reach limits are understood and are physical, and what remains is the interior accuracy of both solvers and the gas model.
 
 **The divergent exit, which is two defects and only one of them is the solver's.** The march stops after about one shock cell whenever the exit diverges, which is every bell contour. This is the single thing standing between the solver and the nozzles NOVA actually designs.
 
@@ -86,7 +90,9 @@ Neither solver should be trusted past a coalescence, and only one of them curren
 
 Two defects were found in the front while diagnosing it. Its free boundary point crossed a characteristic leaving the new line against a streamline leaving the old boundary, mixing the two; taking both parents from the old line carries it from eleven steps to fifty four, and that is fixed. The one that ends it is structural: the line rotates into the first-family characteristic direction, measured at the stall as 0.00 degrees of separation over part of its length, with the spacing along it spanning 114 to 1. A data line lying on a characteristic carries no information across itself, which is why prescribing the line is the answer rather than patching the advance.
 
-**Shock coalescence.** `plumeSameFamilyPoint` and `plumeShockCrossing` are written and driven, and default off. The crossing test underneath them is resolution dependent, so they fire on characteristics that would not meet for many jet radii, and each false merge deletes a wave. On the one case that validates they cost more than they buy. Even working, they would give a coalescence inside an isentropic net, with no entropy jump, which is sound only while a shock is weak.
+**Shock coalescence, which is now the first thing to attack rather than the fourth.** `plumeSameFamilyPoint` and `plumeShockCrossing` are written and driven, and default off. The crossing test underneath them is resolution dependent, so they fire on characteristics that would not meet for many jet radii, and each false merge deletes a wave. On the one case that validates they cost more than they buy. Even working, they would give a coalescence inside an isentropic net, with no entropy jump, which is sound only while a shock is weak.
+
+Detection is separable from coalescence and is the part that is needed first. Both solvers already carry enough to measure it without merging anything: a compression coalescing on the free boundary shows up as a radial gradient there whose value does not converge under refinement, 1.85 and 1.90 per doubling at a ratio of 1.2 against 1.60 and 1.47 for the same field at 1.05 where none forms. A criterion built on the ratio between two resolutions is not resolution dependent in the way the crossing test is, which is what made that test unusable. What it buys is that the march can say it stopped at a shock rather than that its boundary point failed, and that the station marcher can refuse to continue through one instead of reporting a converging conservation residual on a solution containing it.
 
 **Rotational method of characteristics.** The destination for a strongly underexpanded plume, where the barrel shock is not weak. Deferred deliberately: the failures met so far have all been bookkeeping in a marching scheme, not missing entropy, and adding shock physics on top of a march that stalls would not help. Note also that shock fitting still needs to know where a shock starts, so the detection problem above follows it there.
 
