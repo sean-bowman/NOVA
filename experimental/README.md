@@ -6,6 +6,8 @@ and features taken out of the package that are worth keeping the source of.
 | Module | What it is |
 |--------|-----------|
 | `tnd2327.py`, `convergeMarch.py`, `convergeRun.py`, `jetNetPrototype.py` | The MOC free-jet plume interior study, described below |
+| `stationMarch.py` | The plume solved on prescribed stations rather than on the characteristics, described below |
+| `stationMarchVerification.py` | The station marcher held against an exact spherical source flow |
 | `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
 | `flutedChannels.py` | Spirally fluted cooling channels and their blended correlation, removed from the package |
 | `keepOut.py` | The keep-out envelope behind the chamber, which the sunken throat wraps around, removed from the package |
@@ -87,6 +89,16 @@ Every written component was read back with OpenCASCADE, which accepted all of th
 match a closed-form reference to 5e-10 for the revolved case and 1e-7 for the swept case.
 [docs/reports/stepExport_2026-09-20.md](../docs/reports/stepExport_2026-09-20.md) carries the
 measurements, the seam study behind the fit, and what booleans would take.
+
+## Station marching
+
+`stationMarch.py` solves the same plume on planes normal to the axis instead of on the characteristics. Points sit at fixed fractions of the local jet radius and the flow at those prescribed positions is found by tracing each point's two characteristics back to the previous station, so the data line can never rotate into a characteristic direction and resolution is held as the jet opens out. The compatibility relations and the velocity formulation are `NOVA.plume`'s, imported rather than transcribed.
+
+It exists because the characteristic march lets the mesh choose its data line, and measured at the point the front-advancing variant stalls that line has rotated to within 0.00 degrees of the first-family direction, with the spacing along it spanning 114 to 1. A data line lying on a characteristic carries no information across itself.
+
+`stationMarchVerification.py` holds it against an exact spherical source flow, which is the one case where a unit process can be handed known data and its own error measured. Every process is second order and the accumulated march error is first, as a second-order step over a step count rising as its inverse must be.
+
+`stationMarchState.md` is the handoff: what works, what does not, and the staged references it has to pass before anything in the package reads it. Nothing does.
 
 ## MOC free-jet plume interior
 

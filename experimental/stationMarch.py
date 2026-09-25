@@ -26,30 +26,49 @@ What it buys, beyond surviving:
     a divergent exit  no longer a special case, since a station is normal to the axis whatever
                       angle the flow leaves the lip at
 
-The compatibility relations, the axisymmetric source terms and the velocity formulation are
-`NOVA.plume`'s own, imported rather than transcribed, so this solver and the characteristic march
-cannot drift apart on the physics. What differs is only which quantities are known at a point:
-the march knows the parents and solves for the position, this knows the position and solves for
-the parents.
+The compatibility relations and the velocity formulation are `NOVA.plume`'s own, imported rather
+than transcribed, so this solver and the characteristic march cannot drift apart on the physics.
+What differs is only which quantities are known at a point: the march knows the parents and solves
+for the position, this knows the position and solves for the parents. The axisymmetric source term
+is the one exception, written here in the cancelled form its own docstring gives, which is the same
+quantity conditioned differently.
 
 ----------------------------------------------------------------------
                             Validation status
 ----------------------------------------------------------------------
 
-**Unproven. Nothing in the package reads this.** It is staged against the same references the
-characteristic march was held to, and it is promoted only when it passes them:
+**Verified, partly validated, and read by nothing in the package.**
 
-    1. uniform parallel exit, Pe/Pa 1.05 to 2, against mass conservation and Prandtl's cell length
-    2. the worked cases of NASA TN D-2327, lip fan and leading characteristic
+`stationMarchVerification.py` holds the scheme against a spherical source flow, an exact solution
+of the equations it solves. Every unit process runs at second order, 1.94 to 2.00 observed, and the
+accumulated mass drift over a marched length at first, which is what a second-order step over a
+step count rising as its inverse gives. That is verification: it establishes that the
+discretization solves the equations it claims to and says nothing about the physics.
+
+Four staged references settle the physics, and promotion follows the first three:
+
+    1. uniform parallel exit, Pe/Pa 1.05 to 2, against mass conservation and Prandtl's cell length.
+       PASSED at 1.05: conservation grid converges at -0.292, -0.169 and -0.095 per cent over 41,
+       81 and 161 points across the jet, and the period measured crest to crest over three cells
+       and 26 lip radii lands 2.45 per cent under Prandtl, whose own docstring records that it runs
+       long. The characteristic march puts the same three crests within 0.03 lip radii and the same
+       period within 0.01 per cent, on a different mesh with different unit processes. OPEN from
+       1.2 to 2: the period holds to 3.4 per cent, conservation stalls near one per cent, and the
+       cause is the formulation rather than the discretization, below.
+    2. the worked cases of NASA TN D-2327, lip fan and leading characteristic. NOT STARTED.
     3. a divergent exit, against TR R-6's measurement that divergence angle has a small effect on
        wavelength over 0 to 20 degrees, which the characteristic march contradicts by -25 per cent
-       at 5 degrees and -34 at 11
-    4. the interior field and boundary shape of TR R-6, whose table II is not yet transcribed
+       at 5 degrees and -34 at 11. NOT STARTED.
+    4. the interior field and boundary shape of TR R-6, whose table II is not yet transcribed.
+       NOT STARTED.
 
 Above a jet static pressure ratio of about 2 no isentropic net is defensible, by Prandtl's cell
-length and by TR R-6 independently, because the compression waves reflected from the boundary
-have coalesced into a shock the net does not carry. That ceiling belongs to the physics rather
-than to the scheme, and it applies here unchanged.
+length and by TR R-6 independently, because the compression waves reflected from the boundary have
+coalesced into a shock the net does not carry. This solver measures the same ceiling from its own
+gradients: at Pe/Pa 1.5 the steepest radial Mach gradient, taken in units of the local jet radius,
+sits at 5.22 lip radii and runs 15.7, 44.3 and 102.4 over those three resolutions, which is a
+gradient with no converged value. At 1.05 nothing downstream exceeds 1.7. The ceiling therefore
+belongs to the physics rather than to the scheme, and it applies here unchanged.
 
 All units are mass base SI, angles in radians.
 
@@ -63,8 +82,37 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
-from NOVA.plume import (PlumeFlow, PlumePoint, _leftRunningTerm, _reciprocalVelocitySlope,
-                        _rightRunningTerm)
+from NOVA.plume import PlumeFlow, PlumePoint, _reciprocalVelocitySlope
+
+def _axisymmetricSource(foot: PlumePoint, characteristicAngle: float, step: float) -> float:
+
+    '''
+
+    Axisymmetric term of a compatibility relation, integrated from a foot over one axial step.
+
+    The relation carries `sin(theta) sin(mu) / sin(theta +/- mu) * dr / r`, which is the form
+    `NOVA.plume` applies, and the increment in radius along the characteristic is
+    `tan(theta +/- mu) dx`. Written that way the sine in the denominator and the tangent in the
+    increment vanish together as the characteristic turns axis-parallel, which the second family
+    does wherever the flow angle reaches the Mach angle. Both are then differences of angles near
+    their own rounding, and the product they form is set by which state each was evaluated at
+    rather than by the flow: at Mach 4 with 14.4 degrees of turning the coefficient reaches -1.6e4
+    and the solve diverges within four iterations.
+
+    Cancelling them analytically leaves `sin(theta) sin(mu) / cos(theta +/- mu) * dx / r`, the same
+    quantity with nothing small in the denominator. The only singular direction left is a
+    characteristic normal to the axis, which the second family cannot reach and the first
+    approaches only at the sonic line.
+
+    The characteristic march is left on the uncancelled form. It meets the same condition, but
+    substituting this one moves its mass drift by a thousandth of a per cent on a parallel exit and
+    does not change where it fails, so its bit-level agreement with the nozzle solver is worth more
+    than the conditioning it does not need.
+
+    '''
+
+    return (math.sin(foot.flowAngle) * math.sin(foot.machAngle) * step
+            / (foot.r * math.cos(characteristicAngle)))
 
 @dataclass
 class Station:
@@ -161,24 +209,47 @@ def _samplers(station: Station):
 
 def _pointAt(flow: PlumeFlow, station: Station, radius: float, machAt, angleAt) -> PlumePoint:
 
-    '''The state at one radius of a station, as a point the relations can read.'''
+    '''
 
-    clamped = min(max(float(radius), float(station.radius[0])), float(station.radius[-1]))
-    mach = float(machAt(clamped))
-    if not math.isfinite(mach) or mach <= 1.0:
-        return None
+    The state at one radius of a station, as a point the relations can read.
 
-    return PlumePoint(station.x, clamped, mach, float(angleAt(clamped)), flow, 'foot')
-
-def stepLimit(flow: PlumeFlow, station: Station, safety: float = 0.5) -> float:
+    A foot below the axis is read by reflection rather than rejected. The jet is symmetric, so the
+    state at a negative radius is the state at its magnitude with the flow angle reversed, and the
+    first-family characteristic reaching a near-axis point from below is the mirror of a
+    second-family characteristic in the lower half. Without it the near-axis points cap the step at
+    a fraction of the radial spacing, which is what forces every characteristic foot to land inside
+    one grid cell.
 
     '''
 
-    The largest axial step whose characteristics still reach back within a point spacing.
+    signed = float(radius)
+    magnitude = abs(signed)
+    if magnitude > float(station.radius[-1]):
+        magnitude = float(station.radius[-1])
+        signed = math.copysign(magnitude, signed)
 
-    A foot that lands further than its neighbors puts the solve on an interpolation over a wide
-    interval, which is where the accuracy goes. Holding the step to a fraction of the spacing over
-    the steepest characteristic keeps every foot local.
+    mach = float(machAt(magnitude))
+    if not math.isfinite(mach) or mach <= 1.0:
+        return None
+
+    angle = float(angleAt(magnitude))
+
+    return PlumePoint(station.x, signed, mach, angle if signed >= 0.0 else -angle, flow, 'foot')
+
+def stepLimit(flow: PlumeFlow, station: Station, safety: float = 1.0) -> float:
+
+    '''
+
+    The axial step that puts the steepest characteristic foot one radial spacing from its point.
+
+    Shortening the step past this does not refine the solution, it degrades it. A foot inside its
+    own grid cell reads the interpolant's slope rather than the station's data, and a monotone cubic
+    carries only second order in its first derivative, so the error per step stops falling while the
+    number of steps keeps rising. Measured on a parallel exit at a jet static pressure ratio of 2,
+    mass drift runs 0.97 per cent at one spacing and 7.20 at half of one.
+
+    `safety` scales the spacing the foot is allowed to span, so values above one read further across
+    the station rather than less far.
 
     '''
 
@@ -211,39 +282,37 @@ def _interiorPoint(flow, station, machAt, angleAt, newX, newRadius, guessMach, g
 
     for _ in range(maxIterations):
         machAngle = math.asin(1.0 / mach)
-        plusSlope  = math.tan(flowAngle + machAngle)
-        minusSlope = math.tan(flowAngle - machAngle)
+        plusAngle  = flowAngle + machAngle
+        minusAngle = flowAngle - machAngle
 
-        below = _pointAt(flow, station, newRadius - step*plusSlope, machAt, angleAt)
-        above = _pointAt(flow, station, newRadius - step*minusSlope, machAt, angleAt)
-        if below is None or above is None or below.r <= 0.0 or above.r <= 0.0:
+        below = _pointAt(flow, station, newRadius - step*math.tan(plusAngle), machAt, angleAt)
+        above = _pointAt(flow, station, newRadius - step*math.tan(minusAngle), machAt, angleAt)
+        if below is None or above is None or abs(below.r) < 1e-12 or abs(above.r) < 1e-12:
             return None
 
         # Average the slopes with the parents, which is what makes the step second order
-        plusSlope  = math.tan(0.5*((below.flowAngle + below.machAngle) + (flowAngle + machAngle)))
-        minusSlope = math.tan(0.5*((above.flowAngle - above.machAngle) + (flowAngle - machAngle)))
-        below = _pointAt(flow, station, newRadius - step*plusSlope, machAt, angleAt)
-        above = _pointAt(flow, station, newRadius - step*minusSlope, machAt, angleAt)
-        if below is None or above is None or below.r <= 0.0 or above.r <= 0.0:
+        plusAngle  = 0.5*((below.flowAngle + below.machAngle) + (flowAngle + machAngle))
+        minusAngle = 0.5*((above.flowAngle - above.machAngle) + (flowAngle - machAngle))
+        below = _pointAt(flow, station, newRadius - step*math.tan(plusAngle), machAt, angleAt)
+        above = _pointAt(flow, station, newRadius - step*math.tan(minusAngle), machAt, angleAt)
+        if below is None or above is None or abs(below.r) < 1e-12 or abs(above.r) < 1e-12:
             return None
 
         slopeOne, slopeTwo = _reciprocalVelocitySlope(below), _reciprocalVelocitySlope(above)
-        leftTerm, rightTerm = _leftRunningTerm(below), _rightRunningTerm(above)
+        belowSource = _axisymmetricSource(below, plusAngle, step)
+        aboveSource = _axisymmetricSource(above, minusAngle, step)
 
         velocity = (1.0 / (slopeOne + slopeTwo)) \
                    * (below.velocity*slopeOne + above.velocity*slopeTwo
-                      + (leftTerm / below.r)*(newRadius - below.r)
-                      + (rightTerm / above.r)*(newRadius - above.r)
+                      + belowSource + aboveSource
                       + above.flowAngle - below.flowAngle)
 
         newMach = flow.machFromVelocity(velocity)
         if not math.isfinite(newMach) or newMach <= 1.0:
             return None
 
-        fromBelow = below.flowAngle + slopeOne*(velocity - below.velocity) \
-                    - (leftTerm / below.r)*(newRadius - below.r)
-        fromAbove = above.flowAngle - slopeTwo*(velocity - above.velocity) \
-                    + (rightTerm / above.r)*(newRadius - above.r)
+        fromBelow = below.flowAngle + slopeOne*(velocity - below.velocity) - belowSource
+        fromAbove = above.flowAngle - slopeTwo*(velocity - above.velocity) + aboveSource
         newAngle = 0.5*(fromBelow + fromAbove)
 
         converged = abs(newMach - mach) <= tolerance*max(abs(newMach), 1.0) \
@@ -271,18 +340,19 @@ def _axisPoint(flow, station, machAt, angleAt, newX, guessMach,
 
     for _ in range(maxIterations):
         machAngle = math.asin(1.0 / mach)
-        minusSlope = math.tan(-machAngle)
-        above = _pointAt(flow, station, -step*minusSlope, machAt, angleAt)
+        minusAngle = -machAngle
+        above = _pointAt(flow, station, -step*math.tan(minusAngle), machAt, angleAt)
         if above is None or above.r <= 0.0:
             return None
 
-        minusSlope = math.tan(0.5*((above.flowAngle - above.machAngle) + (0.0 - machAngle)))
-        above = _pointAt(flow, station, -step*minusSlope, machAt, angleAt)
+        minusAngle = 0.5*((above.flowAngle - above.machAngle) + (0.0 - machAngle))
+        above = _pointAt(flow, station, -step*math.tan(minusAngle), machAt, angleAt)
         if above is None or above.r <= 0.0:
             return None
 
-        slopeTwo, rightTerm = _reciprocalVelocitySlope(above), _rightRunningTerm(above)
-        velocity = above.velocity + (above.flowAngle - rightTerm) / slopeTwo
+        slopeTwo = _reciprocalVelocitySlope(above)
+        aboveSource = _axisymmetricSource(above, minusAngle, step)
+        velocity = above.velocity + (above.flowAngle + aboveSource) / slopeTwo
 
         newMach = flow.machFromVelocity(velocity)
         if not math.isfinite(newMach) or newMach <= 1.0:
@@ -316,15 +386,15 @@ def _boundaryPoint(flow, station, machAt, angleAt, newX, boundaryMach,
     radius = station.boundaryRadius + step*math.tan(previousAngle)
 
     for _ in range(maxIterations):
-        plusSlope = math.tan(0.5*((previousAngle + math.asin(1.0/float(station.mach[-1])))
-                                  + (flowAngle + machAngle)))
-        below = _pointAt(flow, station, radius - step*plusSlope, machAt, angleAt)
+        plusAngle = 0.5*((previousAngle + math.asin(1.0/float(station.mach[-1])))
+                         + (flowAngle + machAngle))
+        below = _pointAt(flow, station, radius - step*math.tan(plusAngle), machAt, angleAt)
         if below is None or below.r <= 0.0:
             return None
 
-        slopeOne, leftTerm = _reciprocalVelocitySlope(below), _leftRunningTerm(below)
+        slopeOne = _reciprocalVelocitySlope(below)
         newAngle = below.flowAngle + slopeOne*(velocity - below.velocity) \
-                   - (leftTerm / below.r)*(radius - below.r)
+                   - _axisymmetricSource(below, plusAngle, step)
         newRadius = station.boundaryRadius + step*math.tan(0.5*(previousAngle + newAngle))
 
         converged = abs(newAngle - flowAngle) <= tolerance \
@@ -384,7 +454,7 @@ def advanceStation(flow: PlumeFlow, station: Station, boundaryMach: float,
 
 def solveStationMarch(flow: PlumeFlow, station: Station, ambientPressure: float,
                       maxLength: float = 20.0, maxStations: int = 20000,
-                      safety: float = 0.5) -> dict:
+                      safety: float = 1.0) -> dict:
 
     '''
 
@@ -403,7 +473,7 @@ def solveStationMarch(flow: PlumeFlow, station: Station, ambientPressure: float,
     maxStations : int
         Ceiling on the number of steps.
     safety : float
-        Fraction of the step limit each step takes.
+        Radial spacings the steepest characteristic foot is allowed to span.
 
     Returns:
     --------

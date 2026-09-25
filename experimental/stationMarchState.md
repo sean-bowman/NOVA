@@ -1,22 +1,22 @@
 # Station marching: state of play
 
-A record of the plume solver that prescribes its data line, written to be picked up cold. It exists, it marches, and it is not yet validated. This document is what works, what does not, and the staged references it has to pass before anything in the package reads it.
+A record of the plume solver that prescribes its data line, written to be picked up cold. It marches, it is verified against an exact solution, and it has passed the first of four staged references. This document is what works, what does not, and what remains before anything in the package reads it.
 
 The goal it serves: extend the nozzle interior solution past the lip to give the jet boundary and the interior field, on a method that can be held against measurement.
 
 ## Why a second solver
 
-`NOVA.plume.solvePlumeMarch` marches the characteristics themselves and the mesh goes where they take it. It is validated where it survives, reproducing Prandtl's cell period within half a per cent at a parallel exit and TN D-2327's worked cases to a tenth, and it does not survive a divergent exit, which is every bell contour.
+`NOVA.plume.solvePlumeMarch` marches the characteristics themselves and the mesh goes where they take it. It is validated where it survives and it does not survive far. On a uniform parallel exit at Mach 3 it ends at 3.3 lip radii at a jet static pressure ratio of 1.2 on a failed boundary point, and reaches 8.6 at 1.5 carrying 38 per cent mass drift. Both are well inside the envelope where an isentropic net is defensible. A divergent exit, which is every bell contour, stops it after about one shock cell.
 
 Diagnosing why produced a measurement rather than a suspicion. At the point the front-advancing variant stalls on a mildly underexpanded jet, the data line lies within **0.00 degrees** of the first-family characteristic direction over part of its length, the point spacing along it spans **114 to 1**, and the boundary has run to two lip radii while the center line has reached a tenth of one. A data line lying on a characteristic carries no information across itself, so the unit process returns points already on the line and the march ends.
 
-That is not a tuning problem. It is what happens when the mesh is allowed to choose the data line.
+That is what happens when the mesh is allowed to choose the data line.
 
 ## What this solver does instead
 
 Stations are planes normal to the axis. The points on each sit at fixed fractions of the local jet radius, and the flow at those prescribed positions is solved by tracing each point's two characteristics back to the previous station and interpolating the state at their feet. The line can never rotate into a characteristic, and resolution is held as the plume opens out.
 
-The compatibility relations, the axisymmetric source terms and the velocity formulation are imported from `NOVA.plume` rather than transcribed, so the two solvers cannot drift apart on the physics. Only which quantities are known changes: the characteristic march knows the parents and solves for the position, this knows the position and solves for the parents.
+The compatibility relations and the velocity formulation are imported from `NOVA.plume` rather than transcribed, so the two solvers cannot drift apart on the physics. Only which quantities are known changes: the characteristic march knows the parents and solves for the position, this knows the position and solves for the parents.
 
 Three things follow that the characteristic march does not give:
 
@@ -26,36 +26,71 @@ Three things follow that the characteristic march does not give:
 
 The cost is an interpolation at every station, which the characteristic march does not pay.
 
-## What works
+## Verification against an exact solution
 
-**It marches.** On a uniform parallel exit at Mach 3 and a jet static pressure ratio of 1.5, it runs the full 14 lip radii asked of it, against roughly 2 for the front-advancing variant with its boundary defect fixed, and about 16 for the characteristic march.
+`stationMarchVerification.py` holds the scheme against a spherical source flow, which is an exact solution of the steady isentropic axisymmetric equations. It is the one case where a unit process can be handed known data and its own error measured, rather than inferred from a conservation residual that says a solve is wrong without saying where.
 
-**The boundary turns over.** A complete first cell, with the crest at 5.09 lip radii, which is what a wavelength would have to be measured between and what neither existing variant reached on this case.
+| Process | Observed order |
+|---|---|
+| interior point, Mach number | 1.98 to 2.00 |
+| interior point, flow angle | 1.94 to 1.99 |
+| center-line point | 1.98 to 2.00 |
+| interior point with its first-family foot reflected through the axis | 1.96 to 1.99 |
+| accumulated mass drift over a marched length | 1.00 |
 
-**The boundary shape is grid converged.** First crest at 5.088, 5.094 and 5.091 lip radii at 41, 81 and 161 points across the jet. Four times the resolution moves it by a tenth of a per cent.
+Second order per step over a step count rising as its inverse gives first order in the accumulated error, which is what the last row is. Both fixes recorded below were found with this, not guessed at.
 
-## What does not work
+It is a verification and not a validation: it establishes that the discretization solves the equations it claims to, and says nothing about whether those equations describe a real plume.
 
-**It loses mass.** About 0.8 per cent of the axial mass flow over 8 lip radii, and the loss is real rather than a measurement artefact: re-integrating the same solved stations on a monotone fit at 4001 samples instead of the station's own trapezoid gives -0.9109 per cent against -0.9128, so the quadrature is not what is wrong.
+## Stage 1: uniform parallel exit
 
-It converges only weakly with radial resolution, -0.91, -0.80 and -0.74 per cent at 41, 81 and 161 points, and not at all with step size, -0.80, -0.87 and -0.72 per cent at half, a quarter and an eighth of the step limit. A defect that ignores both refinements is a formulation error rather than a discretisation one. The characteristic march holds 0.03 per cent on the same case, so this is the gap to close.
+Mach 3, gamma 1.2, 81 points across the jet, marched 26 lip radii. The period is measured crest to crest, because lip to first crest is not the wavelength.
 
-Ruled out so far: characteristic feet landing outside the station and being clamped, which does not happen once in a full march, and the quadrature, above. The remaining suspects are the axis point, which closes on a single relation with an axisymmetric source evaluated at a foot whose radius shrinks with the step, and the free boundary point, whose radius advances on a mean flow angle and therefore sets the enclosed area.
+| Pe/Pa | crests [lip radii] | period | Prandtl | error | worst mass drift |
+|---|---|---|---|---|---|
+| 1.05 | 4.150, 11.559, 18.440 | 7.409 | 7.595 | -2.45% | -0.169% |
+| 1.20 | 4.492, 12.501, 19.900 | 8.009 | 8.191 | -2.22% | -0.335% |
+| 1.50 | 5.097, 14.109, 23.133 | 9.012 | 9.282 | -2.91% | +0.778% |
+| 2.00 | 5.901, 16.421 | 10.520 | 10.888 | -3.38% | -0.973% |
 
-**No second crest.** One crest within 14 lip radii, where Prandtl's cell length for this jet, 7.39, would put a second near 12.5. Whether the march is damping the wave or the first crest is simply late is not established, and the plume notes already record that lip to first crest is not the wavelength.
+Prandtl's length is `NOVA.plume.shockCellLength` on the fully expanded jet diameter and Mach number, which is the reference the characteristic march was held to. Its own docstring records that it runs long against experiment, so a measured period a few per cent under it is the expected sign.
 
-**It fails above a pressure ratio of about 1.5.** At 2.0 the march ends at 7.3 lip radii with a station that cannot be solved. That is inside the envelope where an isentropic net is still defensible, so it is a defect rather than the physics running out.
+**The characteristic march agrees where it survives.** At Pe/Pa 1.05 over 26 lip radii the two solvers put the first three crests at 4.182, 11.590, 18.473 and at 4.150, 11.559, 18.440, giving periods of 7.408 and 7.409. They differ by 0.01 per cent on the period and by three hundredths of a lip radius on crest position, having been run on different meshes with different unit processes. That is the strongest statement available here, because neither solver informs the other.
+
+**Conservation grid converges at Pe/Pa 1.05 and stalls above it.**
+
+| Points | 1.05 | 1.20 | 1.50 | 2.00 |
+|---|---|---|---|---|
+| 41 | -0.292% | -0.819% | -1.200% | -1.932% |
+| 81 | -0.169% | -0.335% | +0.778% | -0.973% |
+| 161 | -0.095% | +0.151% | +0.976% | +1.831% |
+
+At 1.05 the drift falls by a factor near 1.75 per doubling, holding one sign, which is the first order the verification predicts. From 1.2 upward it crosses zero between 81 and 161 points and grows again.
+
+**What stops it converging is a discontinuity forming in the solution.** The steepest radial Mach gradient on each station, taken in units of the local jet radius so the measure does not scale with the grid, sits at x 5.22 to 5.24 lip radii at Pe/Pa 1.5, which is the first boundary crest. Its magnitude at that one location runs 15.7, 44.3 and 102.4 at 41, 81 and 161 points: growth exponents of 1.52 and 1.22 against resolution, trending toward the 1/h of a gradient that has no converged value. At Pe/Pa 1.05 nothing downstream exceeds 1.7 and the largest gradient in the field moves to the lip, where a centered fan is genuinely singular and the station scheme smears it.
+
+So the reflected compression is coalescing, and refining the grid resolves the coalescence more sharply rather than removing it. No isentropic net carries a discontinuity, so no step size or point count recovers conservation there. That is the same ceiling Prandtl's cell length and TR R-6 both put at a pressure ratio of about 2, arrived at a third way, from the solver's own gradients.
+
+**Stage 1 passes at the weak end, and above it the scheme is not the limit.** Grid-converged conservation below a tenth of a per cent, a period within 2.5 per cent of Prandtl, and independent agreement with the characteristic march to 0.01 per cent all hold at Pe/Pa 1.05. At 1.2 to 2.0 the period holds to 3.4 per cent, conservation stalls near one per cent, and the cause is the formulation's assumption rather than its discretization.
+
+## Two defects, found and closed
+
+**The axisymmetric source term was ill-conditioned.** The relation carries `sin(theta) sin(mu) / sin(theta +/- mu) * dr / r`, and the increment in radius along the characteristic is `tan(theta +/- mu) dx`. Both vanish together as the second-family characteristic turns axis-parallel, which happens wherever the flow angle reaches the Mach angle, and the product they form is then set by which state each factor was evaluated at rather than by the flow. Measured at Mach 4 with 14.4 degrees of turning, the coefficient reached -1.6e4 and the solve diverged within four iterations. Cancelling the two analytically gives `sin(theta) sin(mu) / cos(theta +/- mu) * dx / r`, the same quantity with nothing small in the denominator, and the only singular direction left is a characteristic normal to the axis, which the second family cannot reach.
+
+**The step limit was reasoning backwards.** Holding the step to half the radial spacing put every characteristic foot inside its own grid cell, so each solve read the interpolant's slope instead of the station's data. A monotone cubic carries only second order in its first derivative, so the error per step stopped falling while the number of steps kept rising, and refining the step made the answer worse: 1.13 per cent drift at half a spacing against 0.78 at one, and 7.20 against 0.97 at a ratio of 2. The step now places the steepest foot one spacing out.
+
+Lifting it needed the axis treated. A near-axis point's first-family foot crosses the center line, which capped the step at a fraction of the spacing for those points alone. The jet is symmetric, so that foot is read by reflection: the state at a negative radius is the state at its magnitude with the flow angle reversed, and the first-family characteristic reaching the point from below is the mirror of a second-family one in the lower half. The verification confirms it at second order.
 
 ## The staged references
 
 Stages 1 to 3 need no data that is not already in hand. Stage 4 needs manual transcription from a scanned report.
 
-1. **Uniform parallel exit, Pe/Pa 1.05 to 2.** Mass conservation, and the cell period against Prandtl. The characteristic march holds 0.03 per cent and half a per cent here, so it is a like-for-like target rather than a new claim. **Open**: conservation is 0.8 per cent and no period has been measured.
+1. **Uniform parallel exit, Pe/Pa 1.05 to 2.** Mass conservation, and the cell period against Prandtl. **Passed at 1.05, open above it**: the period holds to 3.4 per cent throughout, conservation stops converging near one per cent from 1.2 upward.
 2. **NASA TN D-2327's worked cases.** Lip fan and leading characteristic to the center line, which the characteristic march reproduces to a tenth of a per cent. **Not started.**
-3. **A divergent exit.** TR R-6 measures divergence angle as a small effect on wavelength over 0 to 20 degrees; the characteristic march contradicts it at -25 per cent by 5 degrees and -34 by 11. Reproducing the insensitivity is the falsifiable test that this solver is better rather than merely different. **Not started.**
+3. **A divergent exit.** TR R-6 conclusion 1 measures divergence angle over 0 to 20 degrees as a small effect on the primary wavelength, with a mild decrease attributed to rising shock losses. The characteristic march contradicts it at -25 per cent by 5 degrees and -34 by 11, and cannot resolve a second crest there at all. Reproducing the insensitivity is the falsifiable test that this solver is better rather than merely different. **Not started.**
 4. **TR R-6's interior field and boundary shape.** Table II tabulates a characteristic flow field per nozzle and figures 8a to 8g give boundaries. This is the only interior-field reference available and it has not been transcribed. **Not started.**
 
-Above a jet static pressure ratio of about 2, no isentropic net is defensible, by Prandtl's cell length and by TR R-6 independently, because the compression waves reflected from the boundary have coalesced into a shock the net does not carry. That ceiling belongs to the physics and applies here unchanged.
+Above a jet static pressure ratio of about 2, no isentropic net is defensible, by Prandtl's cell length and by TR R-6 independently, because the compression waves reflected from the boundary have coalesced into a shock the net does not carry. That ceiling belongs to the physics and applies here unchanged. TR R-6 adds that divergence brings it on earlier, so stage 3 runs at the weak end.
 
 ## Promotion
 
@@ -66,7 +101,8 @@ Nothing in the package imports this module. It moves into `src/NOVA` when stages
 Run from the NOVA root with `C:\Users\seanb\miniconda3\python.exe`.
 
 ```
-python -c "import sys; sys.path.insert(0, 'experimental'); import stationMarch"
+python experimental/stationMarchVerification.py   # the exact solution and the observed orders
+python experimental/stationMarchFigures.py        # the boundary, the pressure ratio family, the field
 ```
 
-A march on the case above is `solveStationMarch(flow, uniformStation(flow, 3.0, 1.0, 81), ambient)`, with `ambient` the exit static pressure divided by the jet static pressure ratio. The result carries the stations, the boundary and the per-station mass drift.
+A march is `solveStationMarch(flow, uniformStation(flow, 3.0, 1.0, 81), ambient)`, with `ambient` the exit static pressure divided by the jet static pressure ratio. The result carries the stations, the boundary and the per-station mass drift.
