@@ -294,3 +294,18 @@ The exit plane of a truncated ideal contour is the reason the question arises at
 **Contradicted by experiment.** The strength of the exit divergence effect on shock cell length. TR R-6 measures it as small over 0 to 20 degrees; the net makes it dominant, and additionally fails to survive a divergent exit long enough to resolve a second cell. `Nozzle.plumeField` refuses beyond half a degree of exit divergence for this reason, which excludes every bell contour.
 
 **Not supported by anything found.** A derivation of how a same-family characteristic crossing becomes a discrete shock, how the shock point advances line to line, and how the entropy rise is carried through a net whose remaining points are isentropic. TN D-2327 gives this as FORTRAN only, in `SAMFM` and `TEST`. The production standard, RAMP2, sidesteps the question by switching to a shock-capturing finite difference operator. An implementation here is therefore a transcription of the listings, verifiable against the report's tabulated boundaries but not against an independent derivation.
+
+---
+
+## Love, Grigsby, Lee and Woodling (1959), NASA TR R-6, table II transcribed for the interior field
+
+- **URL:** <https://ntrs.nasa.gov/api/citations/19980228067/downloads/19980228067.pdf>
+- **Accessed:** 2026-09-25
+- **Relevance:** The interior of a solved plume had no reference at all; every check available read the jet boundary or a conservation residual. Table II is the only published characteristic flow field in the sources gathered here, and it was read again to transcribe it.
+- **Key findings:**
+  - **Table II is not an extreme case.** It is a dense characteristic net at a jet static pressure ratio of 2, the ceiling where an isentropic net is still defensible, computed from Owen and Thornhill's near-sonic initial conditions, Mj 1.0038 at a Mach angle of 85 degrees, with a second approximation carried out at each axis point by transcalculation. Pages 38 to 66 of the report, 907 rows.
+  - **Its purpose is the question of whether a boundary check validates a solver.** The report states it was computed to obtain a sonic-exit solution defined in small increments and to assess the effect of errors near the axis upon the jet boundary, and concludes that appreciable errors in the characteristic net near the axis, and therefore in the velocity along the axis, may have negligibly small effects upon the boundary shape through the maximum value of y/r even for the critical condition of Mj about 1.
+  - **The columns are x/r_i, y/r_i, theta and mu in radians, and V/V_t**, with V_t the limiting velocity and the gas at gamma 1.4. Three checks fix the reading from the table alone: mu of 1.483530 rad is 85.0000 degrees and Mach 1.0038 as the heading states; V/V_t there is 0.4095466 against M / sqrt(2/(gamma-1) + M^2) to 2e-8; and the first center-line station, 0.0874887, is 1/tan(85 degrees) to six figures, which is where the leading characteristic from the lip reaches the axis.
+  - **Fifteen center-line stations** run from x/r 0.0874887 to 0.4325213. Each block of the table is one characteristic of the net, and the blocks beginning on the axis give that distribution. Transcribed in `experimental/stationMarchValidation.py`.
+  - **The free boundary is not tabulated.** y/r never exceeds 1.0 across all 907 rows, so table II covers the expansion portion of the interior only, as its own caption says.
+  - **The archive.org OCR of this report is unusable for the table**: it loses the exponent digit from roughly three quarters of the entries written in scientific notation and splits the columns into separate vertical runs. The text layer of the NTRS PDF is row-aligned and keeps the exponents, and is what the transcription reads.

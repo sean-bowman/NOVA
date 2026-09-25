@@ -100,7 +100,9 @@ It exists because the characteristic march lets the mesh choose its data line, a
 
 `stationMarchFigures.py` draws what the scheme gives that the characteristic net does not: the boundary against the other solver over three shock cells, the interior Mach field as a contour, and the cell period against exit divergence angle. That last one is the falsifiable test. TR R-6 measures divergence as a small effect on the primary wavelength and the characteristic march makes it dominant at -24.6 per cent by five degrees; the station marcher reads +6.04 per cent there, and puts the first crest 52 per cent nearer the lip, which is what the characteristic march was measuring instead.
 
-`stationMarchState.md` is the handoff: what works, what does not, and the staged references it has to pass before anything in the package reads it. Nothing does.
+`stationMarchValidation.py` holds it against NASA TR R-6's table II, a dense characteristic net for a near-sonic exit at a jet static pressure ratio of 2 and the only published interior field available. It fails: the center-line disturbance is over-predicted by 70 per cent rms, the error does not converge with resolution, and neither the jet boundary nor mass conservation shows it. TR R-6 computed that table to establish exactly this, that errors near the axis may have negligibly small effects on the boundary shape, so a solver validated on its boundary is not validated.
+
+`stationMarchState.md` is the handoff: what works, what does not, and the staged references it has to pass before anything in the package reads it. Nothing does, and stage 4 says nothing should until the interior error is bounded over the range NOVA designs for.
 
 ## MOC free-jet plume interior
 

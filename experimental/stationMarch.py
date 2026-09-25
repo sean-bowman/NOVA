@@ -62,8 +62,21 @@ Four staged references settle the physics, and promotion follows the first three
        1.05: the period runs +6.04 per cent on the parallel case with conservation at 0.42, and
        the spread over 0 to 20 degrees is +0 to +6. OPEN above it: conservation runs 8 to 12 per
        cent from 11 degrees and the march fails at 20.
-    4. the interior field and boundary shape of TR R-6, whose table II is not yet transcribed.
-       NOT STARTED.
+    4. the interior field of TR R-6's table II, a dense characteristic net for a near-sonic exit at
+       a jet static pressure ratio of 2. FAILED. The center-line velocity ratio agrees to 1.2 per
+       cent, but the disturbance it carries, which is what this scheme computes, is over-predicted
+       by 70 per cent rms and by 210 at the first tabulated station past the leading characteristic,
+       decaying to 11 by 0.43 lip radii. Four times the radial resolution moves it by one part in
+       sixty, so it is a modelling error rather than a discretization one. Mass conservation on the
+       same runs is 0.10 to 0.20 per cent and the boundary is unaffected, exactly as that report
+       predicts: it computed table II to establish that errors near the axis may have negligibly
+       small effects on the boundary shape. Stages 1 and 3 cannot see this.
+
+**Do not promote on stages 1 and 3.** They measure the boundary and a conservation residual, and
+stage 4 establishes that both are blind to an interior that is wrong. What the failure costs is not
+yet bounded: a sonic exit turns through its whole Prandtl-Meyer angle at one point, which is the
+widest fan a station normal to the axis can be asked to hold, and no reference exists at a higher
+exit Mach number to say whether a narrower one behaves better.
 
 A constant flow angle across the exit is not an initial condition here. It sets a nonzero angle on
 the center line, which symmetry forbids, and the first station is rejected. The characteristic
