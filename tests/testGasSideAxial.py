@@ -22,9 +22,9 @@ Author: Sean Bowman
 import numpy as np
 import pytest
 
-from NOVA.regenThermal import (MEASUREDAXIALCONSTANTS, MEASUREDBARRELCONSTANT,
-                               bartzHeatTransferCoefficient, measuredAxialFactor,
-                               solveStationWallTemperature)
+from NOVA.gasSideHeatTransfer import (MEASUREDAXIALCONSTANTS, MEASUREDBARRELCONSTANT,
+                                      bartzHeatTransferCoefficient, measuredAxialFactor)
+from NOVA.regenThermal import solveStationWallTemperature
 
 class TestMeasuredStations:
 

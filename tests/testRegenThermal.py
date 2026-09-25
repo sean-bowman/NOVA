@@ -34,7 +34,8 @@ import numpy as np
 import pytest
 
 from NOVA.fluidProperties import fluidProps
-from NOVA.regenThermal import (RegenThermalContext, bartzHeatTransferCoefficient,
+from NOVA.gasSideHeatTransfer import bartzHeatTransferCoefficient
+from NOVA.regenThermal import (RegenThermalContext,
                           coolantFrictionAndNusselt, hotWallSectorArea, regenHeatTransferModel,
                           solveStationWallTemperature, validateRegenHeatTransferInputs,
                           wallConductionResistance)

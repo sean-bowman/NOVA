@@ -116,6 +116,7 @@ from scipy.optimize import brentq
 
 from .ablative import STEFANBOLTZMANN
 from .errors import ConvergenceFailureError, InvalidInputError
+from .gasSideHeatTransfer import bartzHeatTransferCoefficient
 from .validation import specified
 
 __all__ = [
@@ -665,10 +666,6 @@ def radiativeNozzleExtension(shell: RadiativeShell, axialPosition, radius, machN
         If Newton does not reach the tolerance within the iteration cap.
 
     """
-
-    # Bartz lives in the jacket model, which imports this one. The import is function-local to
-    # break the cycle, the same way the ablative liner reaches it.
-    from .regenThermal import bartzHeatTransferCoefficient
 
     axialPosition = np.asarray(axialPosition, dtype = float)
     radius = np.asarray(radius, dtype = float)

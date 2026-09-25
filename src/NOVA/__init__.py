@@ -41,8 +41,8 @@ __version__ = '0.1.0'
 
 from . import (ablative, ceaInterface, chamber, channelGeometry, channelSizing,
                characteristics, config, contour, contourKernel, errors, exports, figures,
-               filmCooling, fluidProperties, gasDynamics, geometryTools, materials,
-               nozzleVolutes, plume, radiativeCooling,
+               filmCooling, fluidProperties, gasDynamics, gasSideHeatTransfer, geometryTools,
+               materials, nozzleVolutes, plume, radiativeCooling,
                regenChannels, regenStations, regenThermal, units, validation)
 
 # -- Gas dynamics -- #
@@ -128,7 +128,7 @@ __all__ = [
     # Submodules
     'ablative', 'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing',
     'characteristics', 'config', 'contour', 'contourKernel', 'exports', 'figures',
-    'filmCooling', 'gasDynamics', 'materials', 'nozzleVolutes', 'plume',
+    'filmCooling', 'gasDynamics', 'gasSideHeatTransfer', 'materials', 'nozzleVolutes', 'plume',
     'radiativeCooling',
     'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation',
     # Gas dynamics

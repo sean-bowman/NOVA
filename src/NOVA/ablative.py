@@ -100,6 +100,7 @@ from scipy.linalg import solve_banded
 
 from . import materials
 from .errors import ConvergenceFailureError, InvalidInputError
+from .gasSideHeatTransfer import bartzHeatTransferCoefficient
 
 __all__ = [
     'AblationEnvironment', 'AblativeLinerResult', 'BPrimeTable', 'CharringMaterial',
@@ -2075,8 +2076,6 @@ def ablativeNozzleLiner(material, axialPosition, radius, machNumber, staticTempe
         If the station arrays disagree in length or the contour has no throat.
 
     '''
-
-    from .regenThermal import bartzHeatTransferCoefficient
 
     axialPosition = np.asarray(axialPosition, dtype = float)
     radius = np.asarray(radius, dtype = float)
