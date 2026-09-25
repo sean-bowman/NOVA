@@ -139,9 +139,38 @@ Three measures exist and only one of them is honest. Against the velocity ratio 
 
 **It grows with distance.** At the foot of the leading characteristic the march is exact, 0.004 per cent, so the arrival of the first disturbance is right. From there the error climbs steadily in the scaled measure, 3.6 per cent of the peak at 0.1113 lip radii to 10.9 at 0.4325, and it is one-signed: the march delivers more expansion to the center line than the reference does, everywhere. In the relative measure the same numbers read 210 per cent falling to 11, which is the small denominator upstream rather than a different result.
 
-That is consistent with the centered fan at the lip being carried across one radial interval rather than at a point: a sonic exit turns through its whole Prandtl-Meyer angle at a single point, and no station normal to the axis can hold that. It is the structural cost of prescribing the data line, named in this module from the start, now measured. What is not established is whether a narrower fan behaves better, because a sonic exit at 85 degrees of Mach angle is the widest fan available and no reference exists at a higher exit Mach number.
+**The feature it belongs to is the axis focus, not the lip.** Held against the characteristic march on a Mach 3 exit at Pe/Pa 1.05, where both solvers survive, the disagreement concentrates where the expansion converges on the center line. At the first focus the station marcher reaches a disturbance of 0.0367 against the march's 0.0236, 55 per cent too strong, and puts the peak at 2.995 against 3.052.
 
-**Stage 4 fails.** The boundary and the conservation residual are both blind to it.
+It fires at every focus, not once near the lip. Scanning all 1695 of the march's axis points rather than sampling them, the disagreement is bimodal in one lip radius bands:
+
+| Band | max | rms | |
+|---|---|---|---|
+| 2 to 3 | 61.9% | 29.4% | first focus, at 3.05 |
+| 3 to 4 | 60.3% | 11.5% | |
+| 4 to 8 | 0.5% | 0.3% | between foci |
+| 8 to 9 | 58.0% | 18.1% | second focus, at 8.61 |
+| 9 to 10 | 25.4% | 6.4% | |
+| 10 to 12 | 0.5% | 0.4% | between foci |
+
+The peak error is a consistent overshoot of about a quarter: 0.02949 against 0.02363 at the first focus and -0.01270 against -0.01005 at the second, which is a compression focus rather than an expansion one, so the sign of the disturbance does not matter to it. The 58 to 62 per cent maxima are not that overshoot but the phase error beside it, because the station marcher places its peak 0.057 lip radii upstream of the march's and the limb there is steep.
+
+Between foci the two agree to a few tenths of a per cent, which is why a sparse sample of the center line reads as agreement and why no amount of spot-checking would have found this.
+
+Table II reads the same feature. At a sonic exit the leading characteristic meets the axis at 0.0875 lip radii and the focus region runs to about 1.15, so the tabulated range, 0.0875 to 0.4325, lies entirely inside it on the rising limb. The monotonic growth is the same overshoot sampled before it recovers rather than an error that accumulates without bound.
+
+The signature repeats at every exit Mach number the cross-check can reach, always within about a tenth of a lip radius of where the leading characteristic lands, and it grows with exit Mach rather than falling:
+
+| Exit Mach | leading characteristic foot | worst disagreement | at x | rms |
+|---|---|---|---|---|
+| 1.5 | 1.1180 | 35.7% | 1.234 | 5.94% |
+| 2.0 | 1.7321 | 50.3% | 1.856 | 6.96% |
+| 3.0 | 2.8284 | 61.9% | 2.993 | 8.36% |
+
+That trend matters, because the contours NOVA designs leave at Mach 4 or more. It cannot be read as the station marcher getting worse on its own, since the reference here is the characteristic march and its interior is unverified too; what it establishes is that the two disagree more as the focus sharpens, and one of them is wrong by at least that much.
+
+That also explains why refinement does not help. The focus sharpens as the grid refines, measured at 1.65, 2.71 and 4.12 in steepest radial Mach gradient over 41, 81 and 161 points, so a finer grid resolves a stronger focus and preserves the overshoot. The defect is in the near-axis treatment at a converging wave, where the axisymmetric source carries `sin(theta) / r` and both go to zero together.
+
+**Stage 4 fails.** The boundary and the conservation residual are both blind to it, and the failure attaches to a feature rather than to distance: between foci the two solvers track each other closely, at the foci they part by more than half the wave amplitude, and a plume is a train of foci.
 
 ## Two defects, found and closed
 
@@ -168,7 +197,9 @@ Nothing in the package imports this module, and stage 4 says keep it that way.
 
 The original gate was stages 1 to 3, which stages 1 and 3 pass at the weak end of their ranges. That gate was wrong. Both read the jet boundary and a conservation residual, and stage 4 measures a center-line wave 8 per cent off in amplitude while conservation holds at two tenths of a per cent and the boundary is unaffected. Promotion on stages 1 to 3 would ship a solver whose boundary is right and whose interior is not, which is the failure TR R-6 computed table II to warn about.
 
-What promotion now needs is a bound on the interior error over the range NOVA designs for. The measured case is a sonic exit, the widest lip fan a station normal to the axis can be asked to hold; a bell contour leaves at Mach 4 or more, where the fan is a tenth as wide. Whether the error falls with it is the open question, and no published field exists at a higher exit Mach number to settle it. The route that does not need one is to reproduce the lip fan as a fan rather than across a radial interval, and then re-run this same comparison, which would show the improvement directly.
+What promotion needs is the axis focus fixed, and that is now a specific defect rather than a general doubt. The overshoot attaches to where a wave converges on the center line, it survives refinement because refinement sharpens the feature it sits on, and it recurs at every focus of the cell train rather than once near the lip.
+
+Table II is the test to re-run afterward: it samples the rising limb of exactly that focus, so a treatment that fixes it shows up there directly, and no new reference is needed.
 
 ## Reproducing
 

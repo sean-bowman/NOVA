@@ -15,6 +15,13 @@ It is a verification, not a validation. It establishes that the discretization s
 it claims to solve and at what order; it says nothing about whether those equations describe a real
 plume. The references that do are staged in `stationMarchState.md`.
 
+**It does not exercise an axis focus, and that is where the scheme is worst.** A source flow is
+smooth along the center line, so every process here is measured on a solution with no converging
+wave in it. `stationMarchValidation.py` finds the scheme overshooting the axis disturbance by about
+a quarter wherever the cell train focuses on the center line, which is the one feature of a real
+plume this case cannot present. Second order here and a quarter wrong there are both true, and a
+verification case that carried a focus would have caught it.
+
 Three things are measured:
 
     one point       the error in a single interior or center-line solve against the exact state at

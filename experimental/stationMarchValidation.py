@@ -86,7 +86,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
                                 'src'))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from NOVA.plume import PlumeFlow
+from NOVA.plume import PlumeFlow, PlumePoint
 from stationMarch import solveStationMarch, uniformStation
 
 GAMMA = 1.4
@@ -193,6 +193,95 @@ def compare(count: int) -> dict:
             'scaledError': scaledError, 'relativeError': relativeError,
             'peakDisturbance': peak, **solved}
 
+def againstTheCharacteristicMarch(exitMach: float = 3.0, ratio: float = 1.05,
+                                  count: int = 161, maxLength: float = 12.0) -> dict:
+
+    '''
+
+    The two solvers' center lines compared where both survive, which localizes the interior error.
+
+    Table II says this scheme is wrong in the interior and cannot say where, because its stations
+    stop at 0.43 lip radii. The characteristic march reaches twelve at a weak pressure ratio, and
+    the two share only the compatibility relations: not the mesh, the unit processes or the lip. A
+    cross-check between two implementations rather than a validation, and read as one.
+
+    Sampling happens at the march's own axis points. It places one at the exit plane and then none
+    until the leading characteristic reaches the center line, so interpolating it across that gap
+    invents a disturbance where the solution is uniform; the station marcher is dense everywhere
+    and is the side interpolated. Points upstream of `1 / tan(mu)` are dropped for the same reason.
+
+    '''
+
+    from NOVA.plume import solvePlumeMarch
+
+    flow = referenceFlow()
+    ambient = flow.staticPressure(exitMach)/ratio
+
+    radii = np.linspace(1.0, 0.0, 41)
+    line = [PlumePoint(0.0, float(radius), exitMach, 0.0, flow, 'exit') for radius in radii]
+    marched = solvePlumeMarch(flow, line, ambient, numRays = 120, maxLines = 4000)
+    axis = sorted((point for one in marched['lines'] for point in one if abs(point.r) < 1e-9),
+                  key = lambda point: point.x)
+    marchX = np.array([point.x for point in axis])
+    marchRatio = np.array([point.velocity for point in axis])/flow.maxVelocity
+    keep = np.concatenate(([True], np.diff(marchX) > 1e-9))
+    marchX, marchRatio = marchX[keep], marchRatio[keep]
+
+    station = uniformStation(flow, exitMach, 1.0, count)
+    solved = solveStationMarch(flow, station, ambient, maxLength = maxLength,
+                               maxStations = 200000)
+    stationX = np.array([one.x for one in solved['stations']])
+    stationRatio = np.array([flow.velocity(float(one.mach[0]))
+                             for one in solved['stations']])/flow.maxVelocity
+    advancing = np.concatenate(([True], np.diff(stationX) > 1e-9))
+    stationX, stationRatio = stationX[advancing], stationRatio[advancing]
+
+    foot = 1.0/math.tan(math.asin(1.0/exitMach))
+    inside = (marchX >= max(foot, stationX[0])) & (marchX <= min(marchX[-1], stationX[-1]))
+    if inside.sum() < 8:
+        return {'usable': False, 'points': int(inside.sum()), 'stop': marched['stop']}
+
+    sample = marchX[inside]
+    sampledStation = PchipInterpolator(stationX, stationRatio)(sample)
+    base = flow.velocity(exitMach)/flow.maxVelocity
+    marchDisturbance = marchRatio[inside] - base
+    stationDisturbance = sampledStation - base
+    peak = np.abs(marchDisturbance).max()
+    scaled = 100.0*(stationDisturbance - marchDisturbance)/peak
+    worst = int(np.argmax(np.abs(scaled)))
+
+    # Where the march's own axis disturbance turns over: the foci of the cell train. Reporting the
+    # error there and between them separately is the whole point, because a sample that misses them
+    # reads as agreement.
+    foci = []
+    for index in range(1, marchDisturbance.size - 1):
+        if (abs(marchDisturbance[index]) >= abs(marchDisturbance[index - 1])
+                and abs(marchDisturbance[index]) > abs(marchDisturbance[index + 1])
+                and abs(marchDisturbance[index]) > 0.25*peak):
+            foci.append({'x': float(sample[index]), 'march': float(marchDisturbance[index]),
+                         'station': float(stationDisturbance[index]),
+                         'scaled': float(scaled[index])})
+
+    bands = []
+    edges = np.arange(math.floor(sample[0]), math.ceil(sample[-1]) + 1, 1.0)
+    for low, high in zip(edges[:-1], edges[1:]):
+        band = (sample >= low) & (sample < high)
+        if band.sum() == 0:
+            continue
+        bands.append({'low': float(low), 'high': float(high), 'points': int(band.sum()),
+                      'max': float(np.abs(scaled[band]).max()),
+                      'rms': float(np.sqrt((scaled[band]**2).mean()))})
+
+    return {'usable': True, 'points': int(inside.sum()), 'foot': foot, 'peak': peak,
+            'maxScaled': float(np.abs(scaled).max()),
+            'rmsScaled': float(np.sqrt((scaled**2).mean())),
+            'worstAt': float(sample[worst]),
+            'marchPeakAt': float(sample[int(np.argmax(np.abs(marchDisturbance)))]),
+            'stationPeakAt': float(sample[int(np.argmax(np.abs(stationDisturbance)))]),
+            'marchPeak': float(np.abs(marchDisturbance).max()),
+            'stationPeak': float(np.abs(stationDisturbance).max()),
+            'foci': foci, 'bands': bands}
+
 def report(counts = (81, 161, 321)) -> None:
 
     '''Print the exit-state checks and the comparison at each resolution.'''
@@ -234,5 +323,40 @@ def report(counts = (81, 161, 321)) -> None:
             print(f'    {position:9.5f} {value:10.7f} {got:10.7f} {ratioValue:8.3f} '
                   f'{scaledValue:9.2f}')
 
+def reportCrossCheck() -> None:
+
+    '''Print where the two solvers part company on a Mach 3 exit.'''
+
+    print()
+    print('against the characteristic march, Mach 3 exit at Pe/Pa 1.05')
+    result = againstTheCharacteristicMarch()
+    if not result['usable']:
+        print(f'  only {result["points"]} march axis points past the leading characteristic, '
+              f'stop {result["stop"]}')
+        return
+
+    print(f'  {result["points"]} march axis points from the leading characteristic at '
+          f'{result["foot"]:.4f} to twelve lip radii')
+    print(f'  worst disagreement {result["maxScaled"]:.2f} per cent of the wave amplitude at '
+          f'x {result["worstAt"]:.3f}, rms {result["rmsScaled"]:.2f}')
+    print(f'  largest disturbance: march {result["marchPeak"]:.5f} at x '
+          f'{result["marchPeakAt"]:.3f}, station {result["stationPeak"]:.5f} at x '
+          f'{result["stationPeakAt"]:.3f}')
+
+    print()
+    print(f'  axis foci of the march, and the overshoot at each')
+    print(f'    {"x":>8} {"march":>11} {"station":>11} {"scaled %":>10}')
+    for focus in result['foci']:
+        print(f'    {focus["x"]:8.3f} {focus["march"]:11.3e} {focus["station"]:11.3e} '
+              f'{focus["scaled"]:10.2f}')
+
+    print()
+    print('  disagreement in one lip radius bands, which is where the foci separate out')
+    print(f'    {"from":>6} {"to":>6} {"points":>7} {"max %":>9} {"rms %":>9}')
+    for band in result['bands']:
+        print(f'    {band["low"]:6.1f} {band["high"]:6.1f} {band["points"]:7d} '
+              f'{band["max"]:9.2f} {band["rms"]:9.2f}')
+
 if __name__ == '__main__':
     report()
+    reportCrossCheck()

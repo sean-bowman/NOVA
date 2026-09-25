@@ -73,10 +73,24 @@ Four staged references settle the physics, and promotion follows the first three
        and 3 cannot see this.
 
 **Do not promote on stages 1 and 3.** They measure the boundary and a conservation residual, and
-stage 4 establishes that both are blind to an interior that is wrong. What the failure costs is not
-yet bounded: a sonic exit turns through its whole Prandtl-Meyer angle at one point, which is the
-widest fan a station normal to the axis can be asked to hold, and no reference exists at a higher
-exit Mach number to say whether a narrower one behaves better.
+stage 4 establishes that both are blind to an interior that is wrong.
+
+The defect attaches to a feature. Against the characteristic march on a Mach 3 exit at Pe/Pa 1.05,
+where both survive, the disagreement is bimodal along the axis: a few tenths of a per cent of the
+wave amplitude between the foci of the cell train, and 58 to 62 per cent at them. At each focus this
+scheme overshoots the peak disturbance by about a quarter and places it 0.057 lip radii early, and
+the large numbers are that phase shift read on a steep limb rather than the overshoot itself. It
+happens at a compression focus as readily as an expansion one, so the sign does not matter to it.
+
+Between foci the two track each other closely, which is why a sparse sample of the center line reads
+as agreement and why this survived every resolution study. Table II samples the rising limb of the
+first focus at a sonic exit, which is why its error grows monotonically over the tabulated range
+rather than recovering.
+
+Refinement sharpens the focus rather than resolving it, measured at 1.65, 2.71 and 4.12 in steepest
+radial Mach gradient over 41, 81 and 161 points, which is why the error does not converge. The place
+to look is the near-axis treatment at a converging wave, where the axisymmetric source carries
+`sin(theta) / r` with both going to zero together.
 
 A constant flow angle across the exit is not an initial condition here. It sets a nonzero angle on
 the center line, which symmetry forbids, and the first station is rejected. The characteristic
