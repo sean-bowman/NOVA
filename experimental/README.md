@@ -98,6 +98,8 @@ It exists because the characteristic march lets the mesh choose its data line, a
 
 `stationMarchVerification.py` holds it against an exact spherical source flow, which is the one case where a unit process can be handed known data and its own error measured. Every process is second order and the accumulated march error is first, as a second-order step over a step count rising as its inverse must be.
 
+`stationMarchFigures.py` draws what the scheme gives that the characteristic net does not: the boundary against the other solver over three shock cells, the interior Mach field as a contour, and the cell period against exit divergence angle. That last one is the falsifiable test. TR R-6 measures divergence as a small effect on the primary wavelength and the characteristic march makes it dominant at -24.6 per cent by five degrees; the station marcher reads +6.04 per cent there, and puts the first crest 52 per cent nearer the lip, which is what the characteristic march was measuring instead.
+
 `stationMarchState.md` is the handoff: what works, what does not, and the staged references it has to pass before anything in the package reads it. Nothing does.
 
 ## MOC free-jet plume interior

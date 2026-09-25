@@ -73,6 +73,30 @@ So the reflected compression is coalescing, and refining the grid resolves the c
 
 **Stage 1 passes at the weak end, and above it the scheme is not the limit.** Grid-converged conservation below a tenth of a per cent, a period within 2.5 per cent of Prandtl, and independent agreement with the characteristic march to 0.01 per cent all hold at Pe/Pa 1.05. At 1.2 to 2.0 the period holds to 3.4 per cent, conservation stalls near one per cent, and the cause is the formulation's assumption rather than its discretization.
 
+## Stage 3: the divergent exit
+
+The test TR R-6 makes falsifiable. Conclusion 1 reads that divergence angle over 0 to 20 degrees has a small effect on the primary wavelength, with a mild decrease attributed to rising shock losses. The characteristic march contradicts it by -24.6 per cent at 5 degrees and -34.3 at 11.
+
+The exit is a conical source flow, which is an exact solution and is what a conical nozzle delivers, run at Pe/Pa 1.05 with the lip held at Mach 3 so only the divergence changes. 81 points, 26 lip radii, period crest to crest.
+
+| Divergence | first crest | period | on parallel | worst mass drift |
+|---|---|---|---|---|
+| 0 deg | 4.150 | 7.409 | | -0.17% |
+| 5 deg | 1.994 | 7.856 | +6.04% | -0.42% |
+| 11 deg | 2.003 | 7.723 | +4.24% | +8.47% |
+| 14 deg | 2.060 | 7.698 | +3.90% | +11.57% |
+| 20 deg | 2.137 | 7.770 | +4.87% | march failed at 15.8 lip radii |
+
+**The period is insensitive to divergence, which is what the experiment says.** The spread over 0 to 20 degrees is +0 to +6 per cent, against -25 to -34 for the characteristic march. The 5 degree point is the one that carries weight on its own, because conservation there is 0.42 per cent: it reads +6.04 per cent where the characteristic march reads -24.6. From 11 degrees up the period still reads within +5 per cent, but a period measured in a solution losing 8 to 12 per cent of its mass is indicative rather than established.
+
+**Most of the characteristic march's disagreement is the measure, not the physics.** Between a parallel exit and 5 degrees the first crest moves from 4.150 to 1.994 lip radii, which is -52 per cent on lip to first crest while the period moves +6. A divergent exit throws the boundary out early without changing the axial period of the wave structure, and the period is what the report measures.
+
+**Conservation degrades with divergence because the compression coalesces earlier.** The steepest radial Mach gradient, in units of the local jet radius, runs 3.19 to 9.61 at 5 degrees and 29.2 to 69.1 at 11 over 41 and 81 points, at a fixed location each time. Both are gradients with no converged value, and the 11 degree one is where conservation stops converging: 5.08 per cent at 41 points against 8.47 at 81. TR R-6 records that increasing divergence sharply reduces the range of pressure ratios over which no Riemann wave forms, which is the same statement. So the solver reaches its ceiling sooner at a divergent exit, for the reason the report gives.
+
+**A constant flow angle across the exit is not an initial condition.** The uniform Mach, uniform angle line the characteristic march was driven with sets a nonzero flow angle at the center line, which symmetry forbids. The station marcher rejects it at the first station for every angle tested, because it enforces the axis condition. The characteristic march accepted it because it never applies that condition to its initial line, so part of its divergent-exit behavior comes from a line that is not a solution of the equations.
+
+**Stage 3 passes at 5 degrees and is open above it.** The insensitivity is reproduced where conservation holds. Extending it needs either a coalescence treatment or an acceptance that the isentropic ceiling falls with divergence, which is what the reference implies.
+
 ## Two defects, found and closed
 
 **The axisymmetric source term was ill-conditioned.** The relation carries `sin(theta) sin(mu) / sin(theta +/- mu) * dr / r`, and the increment in radius along the characteristic is `tan(theta +/- mu) dx`. Both vanish together as the second-family characteristic turns axis-parallel, which happens wherever the flow angle reaches the Mach angle, and the product they form is then set by which state each factor was evaluated at rather than by the flow. Measured at Mach 4 with 14.4 degrees of turning, the coefficient reached -1.6e4 and the solve diverged within four iterations. Cancelling the two analytically gives `sin(theta) sin(mu) / cos(theta +/- mu) * dx / r`, the same quantity with nothing small in the denominator, and the only singular direction left is a characteristic normal to the axis, which the second family cannot reach.
@@ -87,14 +111,16 @@ Stages 1 to 3 need no data that is not already in hand. Stage 4 needs manual tra
 
 1. **Uniform parallel exit, Pe/Pa 1.05 to 2.** Mass conservation, and the cell period against Prandtl. **Passed at 1.05, open above it**: the period holds to 3.4 per cent throughout, conservation stops converging near one per cent from 1.2 upward.
 2. **NASA TN D-2327's worked cases.** Lip fan and leading characteristic to the center line, which the characteristic march reproduces to a tenth of a per cent. **Not started.**
-3. **A divergent exit.** TR R-6 conclusion 1 measures divergence angle over 0 to 20 degrees as a small effect on the primary wavelength, with a mild decrease attributed to rising shock losses. The characteristic march contradicts it at -25 per cent by 5 degrees and -34 by 11, and cannot resolve a second crest there at all. Reproducing the insensitivity is the falsifiable test that this solver is better rather than merely different. **Not started.**
+3. **A divergent exit.** TR R-6 conclusion 1 measures divergence angle over 0 to 20 degrees as a small effect on the primary wavelength. **Passed at 5 degrees, open above it**: the period spread over 0 to 20 degrees is +0 to +6 per cent against the characteristic march's -25 to -34, and conservation carries the 5 degree point at 0.42 per cent. Beyond 11 degrees conservation runs 8 to 12 per cent and the march fails at 20.
 4. **TR R-6's interior field and boundary shape.** Table II tabulates a characteristic flow field per nozzle and figures 8a to 8g give boundaries. This is the only interior-field reference available and it has not been transcribed. **Not started.**
 
 Above a jet static pressure ratio of about 2, no isentropic net is defensible, by Prandtl's cell length and by TR R-6 independently, because the compression waves reflected from the boundary have coalesced into a shock the net does not carry. That ceiling belongs to the physics and applies here unchanged. TR R-6 adds that divergence brings it on earlier, so stage 3 runs at the weak end.
 
 ## Promotion
 
-Nothing in the package imports this module. It moves into `src/NOVA` when stages 1 to 3 pass, and not before.
+Nothing in the package imports this module. It moves into `src/NOVA` when stages 1 to 3 pass, and not before. Stages 1 and 3 pass at the weak end of their ranges and stage 2 has not been run, so it stays here.
+
+The envelope it would carry on promotion, drawn from what is measured: a jet static pressure ratio to about 1.2 and an exit divergence to about 5 degrees, inside which conservation grid converges below half a per cent and the period holds within 6 per cent of the references. That is already wider than `Nozzle.plumeField`, which refuses beyond half a degree of exit divergence.
 
 ## Reproducing
 
@@ -102,7 +128,7 @@ Run from the NOVA root with `C:\Users\seanb\miniconda3\python.exe`.
 
 ```
 python experimental/stationMarchVerification.py   # the exact solution and the observed orders
-python experimental/stationMarchFigures.py        # the boundary, the pressure ratio family, the field
+python experimental/stationMarchFigures.py        # the boundary, the field, the divergence sweep
 ```
 
-A march is `solveStationMarch(flow, uniformStation(flow, 3.0, 1.0, 81), ambient)`, with `ambient` the exit static pressure divided by the jet static pressure ratio. The result carries the stations, the boundary and the per-station mass drift.
+A march is `solveStationMarch(flow, uniformStation(flow, 3.0, 1.0, 81), ambient)`, with `ambient` the exit static pressure divided by the jet static pressure ratio. `conicalStation(flow, 3.0, radians(5.0), 1.0, 81)` replaces the exit plane with a conical nozzle's. The result carries the stations, the boundary and the per-station mass drift.

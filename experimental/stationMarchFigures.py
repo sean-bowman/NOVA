@@ -5,22 +5,25 @@
 
 What the station marcher gives that the characteristic march does not.
 
-Four panels, each answering one question about the scheme:
+Five panels, each answering one question about the scheme:
 
     the boundary      the jet boundary from both solvers on the same weakly underexpanded case,
-                      with the linear-theory cell period marked, which is the like-for-like check
+                      against Prandtl's cell length, which is the like-for-like check
     the pattern       the boundary over the pressure ratios the scheme is staged against, showing
                       where the reach ends and how the amplitude grows
-    the interior      the Mach field as a filled contour, which is the output the scheme exists for
-                      and which a scattered characteristic net cannot draw directly
     conservation      mass drift along the axis for each ratio, which is where the accuracy of the
                       scheme is read
+    the interior      the Mach field as a filled contour, which is the output the scheme exists for
+                      and which a scattered characteristic net cannot draw directly
+    the divergence    cell period against exit divergence angle, which TR R-6 measures as a small
+                      effect and the characteristic march makes a dominant one
 
 Run it from the NOVA root:
 
     python experimental/stationMarchFigures.py
 
-It writes `stationMarchBoundary.png` and `stationMarchField.png` beside itself.
+It writes `stationMarchBoundary.png`, `stationMarchField.png` and `stationMarchDivergence.png`
+beside itself.
 
 Author: Sean Bowman
 
@@ -41,7 +44,7 @@ sys.path.insert(0, here)
 
 from NOVA.plume import (PlumeFlow, PlumePoint, fullyExpandedDiameter, prandtlCellCoefficient,
                         shockCellLength, solvePlumeMarch)
-from stationMarch import solveStationMarch, uniformStation
+from stationMarch import conicalStation, solveStationMarch, uniformStation
 
 GAMMA = 1.2
 GASCONSTANT = 320.0
@@ -232,6 +235,72 @@ def fieldFigure(solutions: dict):
 
     return figure
 
+def divergenceFigure(flow: PlumeFlow, angles = (0.0, 5.0, 11.0, 14.0, 20.0)):
+
+    '''
+
+    Cell period against exit divergence angle, which TR R-6 measures as a small effect.
+
+    The exit is a conical source flow at Pe/Pa 1.05 with the lip held at the reference Mach number,
+    so the divergence angle is the only thing that changes. The characteristic march reads -24.6
+    per cent at 5 degrees and -34.3 at 11 on the same question, measured lip to first crest, and
+    the left panel shows why the two measures disagree: divergence throws the first crest forward
+    without moving the period.
+
+    '''
+
+    figure, axes = plt.subplots(1, 2, figsize = (12.0, 4.4))
+    colors = (green, copper, blue, warn, muted)
+
+    periods, firstCrests, drifts, solved = [], [], [], []
+    for degrees in angles:
+        station = conicalStation(flow, EXITMACH, math.radians(degrees), 1.0, RADIALPOINTS)
+        ambient = flow.staticPressure(float(station.mach[-1]))/1.05
+        result = solveStationMarch(flow, station, ambient, maxLength = REACH,
+                                   maxStations = 40000)
+        trace = np.array(result['boundary'])
+        found = crests(trace[:, 0], trace[:, 1])
+        drift = np.array(result['massDrift'])
+        periods.append(found[1][0] - found[0][0] if len(found) >= 2 else float('nan'))
+        firstCrests.append(found[0][0] if found else float('nan'))
+        drifts.append(abs(drift[np.argmax(np.abs(drift))]))
+        solved.append((degrees, trace))
+
+    for (degrees, trace), color in zip(solved, colors):
+        axes[0].plot(trace[:, 0], trace[:, 1], color = color, linewidth = 1.5,
+                     label = f'{degrees:.0f} deg')
+    axes[0].set_title('Jet boundary against exit divergence')
+    axes[0].set_xlabel('axial distance [lip radii]')
+    axes[0].set_ylabel('boundary radius [lip radii]')
+    # The 20 degree march collapses at 15.8 lip radii, which would otherwise set the scale.
+    axes[0].set_ylim(0.75, 1.45)
+    axes[0].legend(loc = 'lower right', fontsize = 8, ncol = 5, columnspacing = 0.8,
+                   handlelength = 1.2)
+
+    reference = periods[0]
+    shift = [100.0*(period/reference - 1.0) for period in periods]
+    crestShift = [100.0*(crest/firstCrests[0] - 1.0) for crest in firstCrests]
+    axes[1].plot(angles, shift, color = copper, marker = 'o', linewidth = 1.6,
+                 label = 'period, crest to crest')
+    axes[1].plot(angles, crestShift, color = muted, marker = 's', linewidth = 1.2,
+                 linestyle = '--', label = 'lip to first crest')
+    axes[1].plot([5.0, 11.0], [-24.6, -34.3], color = blue, marker = '^', linewidth = 1.2,
+                 linestyle = ':', label = 'characteristic march')
+    axes[1].axhline(0.0, color = muted, linewidth = 0.8)
+    for degrees, value, drift in zip(angles, shift, drifts):
+        if drift > 1.0:
+            axes[1].annotate(f'{drift:.0f}% drift', (degrees, value),
+                             textcoords = 'offset points', xytext = (0, -16), ha = 'center',
+                             color = warn, fontsize = 8)
+    axes[1].set_title('Shock cell length against exit divergence')
+    axes[1].set_xlabel('exit divergence [deg]')
+    axes[1].set_ylabel('change from a parallel exit [per cent]')
+    axes[1].legend(loc = 'lower left', fontsize = 8)
+
+    figure.tight_layout()
+
+    return figure
+
 def save(figure, name: str) -> str:
 
     '''Write a figure beside this module.'''
@@ -259,6 +328,9 @@ def build() -> None:
 
     save(boundaryFigure(flow, solutions, characteristic), 'stationMarchBoundary.png')
     save(fieldFigure(solutions), 'stationMarchField.png')
+
+    print('  solving the divergence sweep')
+    save(divergenceFigure(flow), 'stationMarchDivergence.png')
 
 if __name__ == '__main__':
     build()

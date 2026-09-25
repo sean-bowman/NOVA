@@ -57,10 +57,17 @@ Four staged references settle the physics, and promotion follows the first three
        cause is the formulation rather than the discretization, below.
     2. the worked cases of NASA TN D-2327, lip fan and leading characteristic. NOT STARTED.
     3. a divergent exit, against TR R-6's measurement that divergence angle has a small effect on
-       wavelength over 0 to 20 degrees, which the characteristic march contradicts by -25 per cent
-       at 5 degrees and -34 at 11. NOT STARTED.
+       wavelength over 0 to 20 degrees, which the characteristic march contradicts by -24.6 per
+       cent at 5 degrees and -34.3 at 11. PASSED at 5 degrees, on a conical source exit at Pe/Pa
+       1.05: the period runs +6.04 per cent on the parallel case with conservation at 0.42, and
+       the spread over 0 to 20 degrees is +0 to +6. OPEN above it: conservation runs 8 to 12 per
+       cent from 11 degrees and the march fails at 20.
     4. the interior field and boundary shape of TR R-6, whose table II is not yet transcribed.
        NOT STARTED.
+
+A constant flow angle across the exit is not an initial condition here. It sets a nonzero angle on
+the center line, which symmetry forbids, and the first station is rejected. The characteristic
+march accepts such a line because it never applies the axis condition to it.
 
 Above a jet static pressure ratio of about 2 no isentropic net is defensible, by Prandtl's cell
 length and by TR R-6 independently, because the compression waves reflected from the boundary have
@@ -82,6 +89,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
+from NOVA.gasDynamics import areaMachRelation, machFromAreaRatio
 from NOVA.plume import PlumeFlow, PlumePoint, _reciprocalVelocitySlope
 
 def _axisymmetricSource(foot: PlumePoint, characteristicAngle: float, step: float) -> float:
@@ -171,6 +179,36 @@ def uniformStation(flow: PlumeFlow, exitMach: float, exitRadius: float, count: i
 
     return Station(x = x, radius = radius, mach = np.full(count, float(exitMach)),
                    flowAngle = np.full(count, float(flowAngle)))
+
+def conicalStation(flow: PlumeFlow, lipMach: float, lipAngle: float, exitRadius: float,
+                   count: int, x: float = 0.0) -> Station:
+
+    '''
+
+    The exit plane of a conical nozzle, which is a radial source flow.
+
+    A conical nozzle carries purely radial flow from the apex, so a plane normal to the axis reads
+    the state at each point's distance from that apex. It is an exact solution of the equations the
+    scheme solves, which a uniform Mach number at a constant nonzero flow angle is not: that one
+    sets a flow angle on the center line, which symmetry forbids, and the first station is
+    rejected. TR R-6's hardware is conical, so this is also the right initial condition for the
+    divergence sweep.
+
+    `lipAngle` is the half angle of the cone in radians, and the Mach number is held at `lipMach`
+    on the lip so that changing the angle changes only the divergence.
+
+    '''
+
+    if lipAngle <= 1e-9:
+        return uniformStation(flow, lipMach, exitRadius, count, x = x)
+
+    apex = exitRadius/math.tan(lipAngle)
+    sonicRadius = math.hypot(apex, exitRadius)/math.sqrt(areaMachRelation(lipMach, flow.gamma))
+    radius = np.linspace(0.0, exitRadius, count)
+    mach = np.array([machFromAreaRatio((math.hypot(apex, value)/sonicRadius)**2, flow.gamma)
+                     for value in radius])
+
+    return Station(x = x, radius = radius, mach = mach, flowAngle = np.arctan2(radius, apex))
 
 def stationFromLine(line, count: int, x: float = None) -> Station:
 
