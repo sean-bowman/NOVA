@@ -16,7 +16,17 @@ The correlations place the jet boundary, the shock cell spacing and the Mach dis
 
 The nozzle unit process the march is meant to continue is `characteristics.axisymmetricMethodOfCharacteristics`, which is importable rather than buried in a closure, so the two can be compared directly.
 
-Tests are `tests/testPlumeMarch.py`, `tests/testPlumeField.py` and `tests/testCharacteristics.py`. The whole suite is 278 tests.
+Tests are `tests/testPlume.py`, `tests/testPlumeMarch.py`, `tests/testPlumeField.py` and `tests/testCharacteristics.py`, 97 tests together.
+
+## The shipped envelope, and the part of it that is not enforced
+
+`Nozzle.plumeField` is the only product face on a solved plume, and `solvePlumeField` admits or refuses a case on four conditions: a plume structure exists, the exit Mach number lies in `plumeFieldMinExitMach` to `plumeFieldMaxExitMach`, 1.5 to 5.0; the exit static pressure ratio is at or above `separationPressureRatio`, 0.4, which is the Summerfield criterion for the nozzle separating internally; the contour carries a characteristic mesh, which a conical one does not; and the march returned at least ten nodes.
+
+**Three of the five envelope constants are dead.** `plumeFieldMinPressureRatio` at 1.05, `plumeFieldMaxPressureRatio` at 2.0 and `plumeFieldMaxWallAngle` at half a degree are defined beside the two that work, re-exported through `Nozzle.py` and imported by `tests/testPlumeField.py`, and they appear in no conditional anywhere in the package.
+
+That matters because the documentation states the opposite. `docs/references_plumeStructure_2026-09-04.md` records that `Nozzle.plumeField` refuses beyond half a degree of exit divergence, which excludes every bell contour. It does not refuse. A bell contour reaching `plumeField` is marched by a solver that stops after about one shock cell on a divergent exit, and the only thing standing between that and a returned field is the ten node floor. The jet static pressure ratio band is unenforced in the same way, at both ends.
+
+Either the constants are wired into `solvePlumeField` or they are deleted and the claim rewritten. The first is the smaller change and matches what every document says is already true.
 
 ## What is validated, and against what
 
@@ -38,11 +48,37 @@ Tests are `tests/testPlumeMarch.py`, `tests/testPlumeField.py` and `tests/testCh
 
 Roughly in the order worth attacking.
 
-**The divergent exit.** The march stops after about one shock cell whenever the exit diverges, which is every bell contour. Conservation degrades with the angle, from 0.03 per cent at a parallel exit to about one per cent at fourteen degrees. Fan resolution accounts for part of it on a uniform exit line and saturates; the residual is unexplained. This is the single thing standing between the solver and the nozzles NOVA actually designs, and `experimental/stationMarch.py` is the answer being built to it.
+**The divergent exit, which is two defects and only one of them is the solver's.** The march stops after about one shock cell whenever the exit diverges, which is every bell contour. This is the single thing standing between the solver and the nozzles NOVA actually designs.
+
+The conservation collapse recorded here previously was the initial line rather than the divergence. Driving the march at Mach 3 and a jet static pressure ratio of 1.05 from a uniform Mach number at a constant flow angle, which is what every earlier sweep used, gives mass drift of 4.5 per cent at two degrees, 21 at three, 53 at five and 70 at eight. Driving it from a conical source flow, which is the exact exit of a conical nozzle and carries zero flow angle on the center line, gives 0.11, 0.15, 0.26 and 0.36 per cent at the same four angles. Two hundred times better, from the initial condition alone.
+
+A constant flow angle across the exit puts that angle on the center line, where symmetry forbids it. The march accepts such a line because it never applies the axis condition to what it is handed; the station marcher rejects it at the first station. Any divergence result in this repository taken on a constant-angle line is measuring that, not the exit angle.
+
+What survives the correction is the reach. A conical exit at two to five degrees still ends between 6.4 and 6.6 lip radii against 17.2 at a parallel exit, and every one of them ends on a failed boundary point. Past about eight degrees conservation collapses again on the conical line too, to 41 per cent at eleven degrees, so there is a second and genuine high-divergence limit behind the first.
+
+**Both open items above fail in the same function.** A parallel exit at a ratio of 1.2 and a conical exit at two degrees both end with `boundaryPointFailed`, in `plumeFreeBoundaryPoint`, with mass drift of a tenth of a per cent at the moment they stop. The solution is accurate right up to the wall it hits, so what is wrong is the free boundary unit process rather than the mesh behind it, and one repair addresses both.
 
 Two things about the recorded -24.6 per cent at five degrees and -34.3 at eleven are now measured rather than assumed. Most of it is the measure: the station marcher puts the first crest 52 per cent nearer the lip at five degrees while the crest-to-crest period moves +6.04, so divergence throws the boundary out early without changing the axial period, which is what TR R-6 reports. The rest is the initial line: a uniform Mach number at a constant nonzero flow angle sets a flow angle on the center line, which symmetry forbids, and the station marcher rejects such a line at its first station for every angle. This march accepts it because it never applies the axis condition to its initial line. A conical source flow is the exact exit of a conical nozzle and is what TR R-6's hardware delivers.
 
-**The pressure ratio ceiling is lower than the physics.** A parallel exit at a jet static pressure ratio of 1.2 ends the march at 3.3 lip radii on a failed boundary point, and 1.5 reaches 8.6 with 38 per cent mass drift. Both are well inside the envelope where an isentropic net is defensible. The station marcher runs 26 lip radii on the same two cases at 0.34 per cent or better, so the limit belongs to the mesh rather than to the relations.
+**The pressure ratio ceiling is lower than the physics, and how much lower depends on `numRays`.** At the default of forty rays a parallel exit at Mach 3 reaches 17.2 lip radii at a jet static pressure ratio of 1.05 and 1.1, both ending on the line budget rather than on a failure, and then ends on a failed boundary point at 7.3 radii at a ratio of 1.2, 9.2 at 1.5 and 4.0 at 2.0. Mass drift at those failures is 0.1 to 0.3 per cent, so the march is accurate right up to the point it stops: what fails is the boundary point, not the solution behind it.
+
+Raising the ray count makes it worse rather than better. The same ratio of 1.2 ends at 3.3 lip radii at a hundred and twenty rays, and a ratio of 1.5 carries 38 per cent drift there against a quarter of a per cent at forty. Earlier records in this document quoted the hundred and twenty ray figures without saying so, which made the ceiling look lower and the drift look worse than the shipped default produces. `solvePlumeMarch` already records the same inversion for a contoured exit line and calls it unexplained; it is the same effect.
+
+**The march stops where a shock forms, and stopping is the right answer.** The stall was read as a mesh defect for as long as nobody looked at what the flow was doing there. It is a coalescing compression.
+
+Two measurements establish it. The boundary does not fail, it converges to a fixed point: over the last eleven lines of the parallel case at a ratio of 1.2 the boundary advances 3.2e-3, 9.5e-4, 8.7e-4, 2.3e-3, 6.4e-4, 5.6e-4, 1.4e-3, 3.3e-4, 2.4e-4, 4.1e-4 and finally 6.6e-6 lip radii, and the gap between each new line's outer end and the previous boundary point closes the same way. Only after that does a shortened line return a point eight ten-thousandths of a radius upstream, which is what `boundaryPointFailed` reports. A tolerance on that test would buy a few lines and nothing else.
+
+And the flow at the stall carries a gradient with no converged value, sitting on the boundary itself. Measured with the station marcher at the same condition, the steepest radial Mach gradient within half a lip radius of the stall runs 2.355, 4.350 and 8.252 over 41, 81 and 161 points across the jet, growing by 1.85 and 1.90 per doubling against the 2.0 of a true discontinuity. The lip fan in the same solutions grows at exactly 2.0, being a centered expansion. At a ratio of 1.05, where the march survives seventeen lip radii, the largest gradient in the field grows at 1.60 and 1.47 and there is no such feature downstream at all.
+
+Where it sits is what makes it this solver's problem. Over those stations the gradient peaks at a radius fraction of 1.000, on the free boundary, while the inner third of the jet reads 0.071, 0.076 and 0.079 and is converged. The compression is coalescing onto the boundary, which is the one place the march closes its lines, so the boundary point is the first thing to feel it.
+
+That also settles why the march is not simply intolerant of steep gradients. At a ratio of 1.5 the strongest feature in the field is an axis focus at 5.21 lip radii growing at 3.1 and 2.47 per doubling, and the march passes straight through it, stalling later at 9.17 where the boundary gradient goes again. It tolerates a focus on the center line and stops at a coalescence on the boundary.
+
+So the ceiling is the physics after all, and the sentence this paragraph used to carry, that the limit belongs to the mesh rather than to the relations, was wrong.
+
+**What that says about the station marcher is worse than what it said about the march.** On the same case it runs the full fourteen lip radii with mass drift of 0.596, 0.261 and 0.146 per cent over those three resolutions, halving cleanly, while marching straight through the coalescence. Its conservation residual reports first-order convergence on a solution containing a discontinuity it cannot represent. Conservation does not detect a shock, which is the same lesson TR R-6's table II teaches about the boundary, arriving from a third direction.
+
+Neither solver should be trusted past a coalescence, and only one of them currently notices one. Shock detection is therefore not a later refinement; it is what decides where both solvers stop.
 
 **The axisymmetric source term is ill-conditioned where the flow angle reaches the Mach angle.** `_rightRunningTerm` divides by `sin(theta - mu)` and its increment carries `tan(theta - mu)`, so both vanish together as the second-family characteristic turns axis-parallel and their product is set by which state each was evaluated at. Cancelling them analytically gives `sin(theta) sin(mu) / cos(theta +/- mu) * dx / r`, which `stationMarch` uses and which took its worst drift from 7.20 per cent to 0.97 on a parallel exit at a ratio of 2. Substituting it here moves the march's drift by a thousandth of a per cent and does not change where it fails, so it is left alone: it costs the bit-level agreement with the nozzle solver that `testInteriorPointReproducesTheNozzleSolverExactly` holds, and buys nothing this solver needs. The conditioning is therefore a known weakness of this module rather than the cause of any failure recorded above.
 
@@ -91,7 +127,7 @@ What would close it: driving the CEA calls from a `chemistryModel` selector so a
 Run from the NOVA root with `C:\Users\seanb\miniconda3\python.exe`.
 
 ```
-python -m pytest                            # the suite, 155 tests
+python -m pytest tests/testPlume.py tests/testPlumeMarch.py tests/testPlumeField.py tests/testCharacteristics.py   # 97 tests
 python experimental/convergeMarch.py        # grid convergence of the march
 python featureShowcase/buildPlumeMarch.py   # the figures
 python featureShowcase/verifyContour.py     # contour against its references
