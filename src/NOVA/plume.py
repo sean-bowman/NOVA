@@ -107,6 +107,12 @@ plumeFieldMinExitMach = 1.5
 plumeFieldMaxExitMach = 5.0
 plumeFieldMaxWallAngle = np.radians(0.5)
 
+# How near the center line a point has to be for the symmetry condition to apply to it, and how
+# much flow angle it may carry there. The march builds every line to cross the axis straight, and
+# an initial line that does not is refused rather than marched: see `solvePlumeMarch`.
+centerLineRadiusTolerance = 1e-9
+centerLineAngleTolerance = np.radians(1e-6)
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Elementary gas dynamics -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -1783,6 +1789,15 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
         shockDeflection, shockMach, stagnationRatio = obliqueShockState(
             lip.mach, flow.gamma, ambientPressure / lipPressure)
 
+    # The initial line has to satisfy the condition every line the march builds satisfies: the
+    # flow crosses the center line straight. A uniform Mach number at a constant nonzero flow
+    # angle does not, and it is an easy line to write by hand, so it is refused rather than
+    # marched. Measured on a Mach 3 exit at Pe/Pa 1.05, marching one costs 4.5 percent of the mass
+    # flow at two degrees and 70 at eight, against 0.11 and 0.36 for the conical source flow that
+    # is the exact exit of a conical nozzle. The exit plane of a contoured nozzle comes from the
+    # characteristic mesh through `plumeExitLine` and satisfies this already.
+    axisPoint = min(initialLine, key = lambda point: abs(point.r))
+
     refusal = None
     if abs(boundaryMach - lip.mach) < 1e-9:
         refusal = 'perfectlyExpanded'
@@ -1790,6 +1805,9 @@ def solvePlumeMarch(flow: PlumeFlow, initialLine: list, ambientPressure: float,
         refusal = 'boundarySubsonic'
     elif ambientPressure > lipPressure and shockDeflection <= 0.0:
         refusal = 'shockDetached'
+    elif abs(axisPoint.r) <= centerLineRadiusTolerance \
+            and abs(axisPoint.flowAngle) > centerLineAngleTolerance:
+        refusal = 'initialLineNotSymmetric'
     if refusal is not None:
         return {'lines': [], 'boundary': [], 'nodes': [], 'shock': [], 'stop': refusal,
                 'boundaryMach': boundaryMach, 'referenceFlux': 0.0, 'fluxSamples': [],

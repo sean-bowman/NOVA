@@ -252,6 +252,37 @@ def testMarchRefusesWithoutAnInitialLine(flow):
     net = solvePlumeMarch(flow, [], 101325.0)
     assert net['stop'] == 'noInitialLine'
 
+def testMarchRefusesAnInitialLineThatCrossesTheAxisAtAnAngle(flow):
+    '''
+    A uniform Mach number at one flow angle is an easy line to write and is not a solution: it puts
+    that angle on the center line, where symmetry forbids it. Marched anyway it costs 4.5 percent
+    of the mass flow at two degrees and 70 at eight, against 0.11 and 0.36 for the conical source
+    flow that is the exact exit of a conical nozzle. The march applies the axis condition to every
+    line it builds and now applies it to the one it is handed.
+    '''
+    ambient = flow.staticPressure(3.0) / 1.05
+    radii = np.linspace(1.0, 0.0, 41)
+
+    angled = [PlumePoint(0.0, float(r), 3.0, np.radians(5.0), flow, 'exit') for r in radii]
+    assert solvePlumeMarch(flow, angled, ambient, numRays = 20,
+                           maxLines = 40)['stop'] == 'initialLineNotSymmetric'
+
+    straight = [PlumePoint(0.0, float(r), 3.0, 0.0, flow, 'exit') for r in radii]
+    assert solvePlumeMarch(flow, straight, ambient, numRays = 20,
+                           maxLines = 40)['stop'] != 'initialLineNotSymmetric'
+
+def testTheAxisConditionOnlyAppliesAtTheAxis(flow):
+    '''
+    A line that stops short of the center line carries whatever angle the flow has there, and is
+    not refused for it. Only a point on the axis has to be straight.
+    '''
+    ambient = flow.staticPressure(3.0) / 1.05
+    radii = np.linspace(1.0, 0.4, 25)
+    offAxis = [PlumePoint(0.0, float(r), 3.0, np.radians(5.0), flow, 'exit') for r in radii]
+
+    assert solvePlumeMarch(flow, offAxis, ambient, numRays = 20,
+                           maxLines = 40)['stop'] != 'initialLineNotSymmetric'
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Coalescence of crossing characteristics -- #
 #--------------------------------------------------------------------------------------------------------------------------#
