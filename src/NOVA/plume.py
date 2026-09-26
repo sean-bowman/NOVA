@@ -101,6 +101,13 @@ separationPressureRatio = 0.4
 #
 # The strongly underexpanded plume that `plumeStructure` correlates is deliberately outside this
 # envelope. Against NASA TN D-2327 the net reaches 47 percent low on maximum jet radius there.
+# Four of these are enforced in `solvePlumeField`. `plumeFieldMinPressureRatio` is not, and is
+# kept as a statement about what is worth resolving rather than what is valid: a jet at a ratio of
+# 1.02 solves correctly and carries a wave structure too weak to be interesting. Enforcing it as a
+# floor would also refuse every overexpanded jet, which the march handles deliberately and with a
+# measured approximation, taking the lip turn as an isentropic compression rather than the oblique
+# shock it is. That approximation holds to 0.2 percent at a ratio of 0.6 and 0.8 percent at 0.4,
+# below which `separationPressureRatio` refuses on the Summerfield criterion instead.
 plumeFieldMinPressureRatio = 1.05
 plumeFieldMaxPressureRatio = 2.0
 plumeFieldMinExitMach = 1.5
@@ -2592,6 +2599,21 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
             f'criterion of {separationPressureRatio:.2f}. The nozzle separates internally, so '
             f'the flow is not attached at the lip and no attached plume model describes it.')
         return result
+    if structure.exitPressureRatio > plumeFieldMaxPressureRatio:
+        result.notes.append(
+            f'Pe/Pa is {structure.exitPressureRatio:.3f}, above the {plumeFieldMaxPressureRatio} '
+            f'this march is held to. Past that ratio the compressions reflected from the jet '
+            f'boundary have coalesced, by Prandtl and by NASA TR R-6 independently, and an '
+            f'isentropic net carries no shock. `plumeStructure` correlates this jet instead.')
+        return result
+    if abs(structure.lipWallAngle) > plumeFieldMaxWallAngle:
+        result.notes.append(
+            f'The exit diverges at {np.degrees(abs(structure.lipWallAngle)):.2f} degrees, past '
+            f'the {np.degrees(plumeFieldMaxWallAngle):.2f} this march is held to. On a divergent '
+            f'exit it solves a wedge near the boundary and never reaches the center line, so no '
+            f'line spans the jet and the solution cannot be checked against anything. '
+            f'`plumeStructure` correlates this jet instead.')
+        return result
 
     # The characteristic mesh is what makes this an extension of the nozzle solution rather
     # than a standalone jet. A conical contour has no mesh and returns None here.
@@ -2640,6 +2662,19 @@ def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoin
     result.solvedTo = float(result.nodeX.max())
     result.stop = net['stop']
     result.massDriftWorst = net['massDriftWorst']
+
+    # Mass conservation is the only check this field carries, and it needs a line that spans the
+    # jet from the axis to the boundary. A march that never reaches the center line produces none,
+    # so the flux has nothing to compare against and comes back as nan. A field with no quality
+    # statement at all is not a solved field, whatever it drew, and a caller reading `solved` has
+    # to see that without parsing the notes.
+    if not np.isfinite(result.massDriftWorst):
+        result.notes.append(
+            'No line of this march spans the jet, so its mass flow cannot be compared with the '
+            'exit plane and the field carries no quality statement. Reported as unsolved for '
+            'that reason rather than for anything wrong with the nodes it did place.')
+        return result
+
     result.solved = True
 
     disk = plumeMachDisk(flow, net)
