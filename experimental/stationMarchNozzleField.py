@@ -56,10 +56,22 @@ root = os.path.dirname(here)
 sys.path.insert(0, os.path.join(root, 'src'))
 sys.path.insert(0, here)
 
+from NOVA.characteristics import CharacteristicGas
+from NOVA.contour import quasiOneDimensionalField
 from NOVA.plume import (PlumeFlow, plumeCharacteristicSeed, plumeExitLine, solvePlumeStructure)
 from stationMarch import solveStationMarch, stationFromLine
 
-AMBIENT = 5000.0
+# The ambient is set from the lip static pressure rather than the one-dimensional exit value,
+# because a truncated contour does not leave one exit state: the lip sits at Mach 3.797 and 24.6
+# kPa while the one-dimensional station reads Mach 4.223 and 14.0 kPa. The boundary condition the
+# march applies is at the lip, so that is the pressure the ratio is taken against, and the figure
+# reports both.
+#
+# The shipped ambient of 5 kPa is a lip ratio of 4.9, where the march loses a third of the mass
+# flow in the first eight lip radii. At 1.5 it holds under two per cent out to six, which is why
+# the figure is drawn there. It is still not a validated result.
+PRESSURERATIO = 1.5
+REACH = 6.0
 RADIALPOINTS = 121
 MILLIMETRES = 1e3
 
@@ -99,13 +111,40 @@ def interiorField(nozzle, exitX):
 
     return np.concatenate(x), np.concatenate(r), np.concatenate(mach)
 
-def plumeField(flow, seed, reach):
+def chamberField(nozzle):
+
+    '''
+
+    The chamber and converging section, which carry no characteristic mesh.
+
+    Nothing solves that region: the flow there is subsonic and the mesh starts at the throat. What
+    is drawn instead is the one-dimensional answer painted across the radius, where the local area
+    ratio fixes one Mach number per station and it is held across the whole cross section. It
+    varies axially and not radially, which is exactly what a one-dimensional solve knows, and it is
+    shaded here so the engine is not a blank outline upstream of its own throat.
+
+    '''
+
+    gas = CharacteristicGas(nozzle.chamberGamma, nozzle.chamberRGasConstant,
+                            nozzle.chamberStagnationTemperature)
+    wallX = np.asarray(nozzle.xNozzleWall, dtype = float)
+    wallR = np.asarray(nozzle.rNozzleWall, dtype = float)
+    throat = int(np.argmin(wallR))
+    upstream = slice(0, throat + 1)
+    field = quasiOneDimensionalField(wallX[upstream], wallR[upstream], gas,
+                                     nozzle.chamberPressure, throatRadius = wallR[throat],
+                                     branch = 'subsonic')
+
+    return (field['x'].ravel(), field['r'].ravel(), field['mach'].ravel(),
+            float(wallX[throat]))
+
+def plumeField(flow, seed, ambient, reach):
 
     '''The station march from the exit plane, as a structured grid.'''
 
     line = plumeExitLine(flow, seed, numPoints = 400)
     station = stationFromLine(line, RADIALPOINTS)
-    result = solveStationMarch(flow, station, AMBIENT, maxLength = reach, maxStations = 200000)
+    result = solveStationMarch(flow, station, ambient, maxLength = reach, maxStations = 200000)
 
     stations = result['stations']
     x = np.array([[one.x]*one.radius.size for one in stations])
@@ -121,76 +160,70 @@ def build():
         nozzle = pickle.load(handle)
 
     seed = plumeCharacteristicSeed(nozzle.plumeContour())
-    structure = solvePlumeStructure(nozzle.plumeContour(), AMBIENT)
     flow = PlumeFlow(seed['gamma'], seed['gasConstant'], seed['stagnationTemperature'],
                      seed['stagnationPressure'])
 
+    lipMach = plumeExitLine(flow, seed, numPoints = 140)[0].mach
+    lipPressure = flow.staticPressure(lipMach)
+    ambient = lipPressure/PRESSURERATIO
+    structure = solvePlumeStructure(nozzle.plumeContour(), ambient)
     lipRadius = structure.lipRadius
-    diskAt = (structure.machDiskX - structure.lipX)/lipRadius if structure.machDiskPresent else 8.0
-    reach = max(2.0, diskAt)
 
+    chamberX, chamberR, chamberMach, throatX = chamberField(nozzle)
     innerX, innerR, innerMach = interiorField(nozzle, seed['exitX'])
-    plumeX, plumeR, plumeMach, drift, result, station = plumeField(flow, seed, reach)
+    plumeX, plumeR, plumeMach, drift, result, station = plumeField(flow, seed, ambient, REACH)
 
     wallX = np.asarray(nozzle.xNozzleWall, dtype = float)*MILLIMETRES
     wallR = np.asarray(nozzle.rNozzleWall, dtype = float)*MILLIMETRES
+    solvedBoundary = np.array(result['boundary'])
 
-    # Two panels because the two things worth seeing are three orders of magnitude apart in scale:
-    # the engine is 1.15 m long and the correlated plume runs past 12 m, so at equal aspect on one
-    # axis the nozzle is a sliver.
-    figure, axesPair = plt.subplots(2, 1, figsize = (15.0, 9.0), height_ratios = [1.55, 1.0])
-    axes, wide = axesPair
-    low = min(innerMach.min(), plumeMach.min())
-    high = max(innerMach.max(), plumeMach.max())
-    levels = np.linspace(low, high, 120)
+    figure, axes = plt.subplots(figsize = (16.0, 6.4))
+    low = min(chamberMach.min(), innerMach.min(), plumeMach.min())
+    high = max(chamberMach.max(), innerMach.max(), plumeMach.max())
+    levels = np.linspace(low, high, 140)
 
-    interior = axes.tricontourf(np.concatenate([innerX, innerX])*MILLIMETRES,
-                                np.concatenate([innerR, -innerR])*MILLIMETRES,
-                                np.concatenate([innerMach, innerMach]),
-                                levels = levels, cmap = 'viridis')
-    outline = np.vstack([np.column_stack([wallX, wallR]),
-                         np.column_stack([wallX[::-1], -wallR[::-1]])])
-    clip = Polygon(outline, closed = True, transform = axes.transData,
-                   facecolor = 'none', edgecolor = 'none')
-    axes.add_patch(clip)
-    interior.set_clip_path(clip)
+    # The chamber and the diverging section are shaded separately because they are different
+    # answers: one dimensional upstream of the throat, where nothing is solved, and the
+    # characteristic mesh downstream of it.
+    for upstreamX, upstreamR, upstreamMach in ((chamberX, chamberR, chamberMach),
+                                               (innerX, innerR, innerMach)):
+        patch = axes.tricontourf(np.concatenate([upstreamX, upstreamX])*MILLIMETRES,
+                                 np.concatenate([upstreamR, -upstreamR])*MILLIMETRES,
+                                 np.concatenate([upstreamMach, upstreamMach]),
+                                 levels = levels, cmap = 'viridis')
+        outline = np.vstack([np.column_stack([wallX, wallR]),
+                             np.column_stack([wallX[::-1], -wallR[::-1]])])
+        clip = Polygon(outline, closed = True, transform = axes.transData,
+                       facecolor = 'none', edgecolor = 'none')
+        axes.add_patch(clip)
+        patch.set_clip_path(clip)
 
     field = None
     for sign in (1.0, -1.0):
         field = axes.contourf(plumeX*MILLIMETRES, sign*plumeR*MILLIMETRES, plumeMach,
                               levels = levels, cmap = 'viridis')
 
-    solvedBoundary = np.array(result['boundary'])
     for sign in (1.0, -1.0):
-        axes.plot(solvedBoundary[:, 0]*MILLIMETRES, sign*solvedBoundary[:, 1]*MILLIMETRES,
-                  color = ink, lw = 1.4,
-                  label = 'jet boundary, station march' if sign > 0 else None)
         axes.plot(wallX, sign*wallR, color = copper, lw = 2.2,
                   label = 'nozzle wall' if sign > 0 else None)
+        axes.plot(solvedBoundary[:, 0]*MILLIMETRES, sign*solvedBoundary[:, 1]*MILLIMETRES,
+                  color = ink, lw = 1.5, label = 'jet boundary' if sign > 0 else None)
 
-    if structure.boundaryX.size:
-        for sign in (1.0, -1.0):
-            axes.plot(structure.boundaryX*MILLIMETRES, sign*structure.boundaryR*MILLIMETRES,
-                      color = green, lw = 1.4, ls = '--',
-                      label = 'jet boundary, correlated' if sign > 0 else None)
-
-    solvedEnd = float(solvedBoundary[-1, 0])*MILLIMETRES
-    extent = max(float(solvedBoundary[:, 1].max())*MILLIMETRES, wallR.max())
-
-    if structure.machDiskPresent:
-        half = min(0.5*structure.machDiskDiameter*MILLIMETRES, 1.12*extent)
-        axes.plot([structure.machDiskX*MILLIMETRES]*2, [-half, half], color = warn, lw = 2.6,
-                  label = 'Mach disk, correlated')
-
+    axes.axvline(throatX*MILLIMETRES, color = green, lw = 1.0, ls = '--', label = 'throat')
     axes.axvline(seed['exitX']*MILLIMETRES, color = muted, lw = 1.0, ls = ':',
                  label = 'exit plane')
 
+    solvedEnd = float(solvedBoundary[-1, 0])*MILLIMETRES
+    extent = max(float(solvedBoundary[:, 1].max())*MILLIMETRES, wallR.max())
     axes.set_xlim(wallX.min() - 60.0, solvedEnd + 120.0)
-    axes.set_ylim(-1.15*extent, 1.15*extent)
-    axes.set_title(f'NOVA nozzle and plume, ambient {AMBIENT/1000:.0f} kPa    '
-                   f'Pe/Pa {structure.exitPressureRatio:.2f}    '
-                   f'Mj {structure.fullyExpandedMach:.2f}    '
-                   f'{len(result["stations"])} stations to {reach:.1f} lip radii')
+    axes.set_ylim(-1.12*extent, 1.12*extent)
+    axes.set_title(f'NOVA nozzle and plume as one field\n'
+                   f'lip Mach {lipMach:.2f} at {lipPressure/1000.0:.1f} kPa into '
+                   f'{ambient/1000.0:.1f} kPa, ratio {PRESSURERATIO:.1f}    boundary Mach '
+                   f'{result["boundaryMach"]:.2f}    {len(result["stations"])} stations to '
+                   f'{(solvedEnd/MILLIMETRES - structure.lipX)/lipRadius:.1f} lip radii    '
+                   f'mass drift {drift:+.1f} %', fontsize = 11)
+    axes.set_xlabel('Axial station [mm]')
     axes.set_ylabel('Radius [mm]')
     axes.set_aspect('equal', adjustable = 'box')
     axes.legend(loc = 'upper left', fontsize = 8, labelcolor = ink)
@@ -199,63 +232,36 @@ def build():
                           fraction = 0.026)
     bar.set_label('Mach number [-]')
 
-    # The same jet at the scale the correlations describe it on, so the solved part can be seen
-    # for the fraction of the plume it is.
-    if structure.boundaryX.size:
-        for sign in (1.0, -1.0):
-            wide.plot(structure.boundaryX*MILLIMETRES, sign*structure.boundaryR*MILLIMETRES,
-                      color = green, lw = 1.5, ls = '--',
-                      label = 'jet boundary, correlated' if sign > 0 else None)
-            wide.plot(solvedBoundary[:, 0]*MILLIMETRES, sign*solvedBoundary[:, 1]*MILLIMETRES,
-                      color = ink, lw = 1.8,
-                      label = 'solved by the station march' if sign > 0 else None)
-            wide.plot(wallX, sign*wallR, color = copper, lw = 1.8)
-    if structure.machDiskPresent:
-        half = 0.5*structure.machDiskDiameter*MILLIMETRES
-        wide.plot([structure.machDiskX*MILLIMETRES]*2, [-half, half], color = warn, lw = 2.6,
-                  label = 'Mach disk, correlated')
-    plumeEnd = (structure.lipX + structure.plumeLength)*MILLIMETRES
-    for cell in structure.cellX:
-        if cell*MILLIMETRES <= plumeEnd:
-            wide.axvline(cell*MILLIMETRES, color = muted, lw = 0.7, ls = ':')
-    wide.set_xlim(wallX.min() - 60.0, plumeEnd + 200.0)
-    wideExtent = max(float(np.abs(structure.boundaryR).max())*MILLIMETRES, extent)
-    wide.set_ylim(-1.15*wideExtent, 1.15*wideExtent)
-    wide.set_title(f'The same jet at its own scale: cell length '
-                   f'{structure.shockCellLength/lipRadius:.1f} lip radii, plume length '
-                   f'{structure.plumeLength*MILLIMETRES:.0f} mm, solved fraction '
-                   f'{100.0*(solvedEnd/MILLIMETRES - structure.lipX)/structure.plumeLength:.0f} '
-                   f'per cent')
-    wide.set_xlabel('Axial station [mm]')
-    wide.set_ylabel('Radius [mm]')
-    wide.set_aspect('equal', adjustable = 'box')
-    wide.legend(loc = 'upper left', fontsize = 8, labelcolor = ink)
-
-    figure.text(0.012, -0.015,
-                'The interior is the contour solve\'s own characteristic mesh. The plume is the '
-                'station marcher continuing it past the lip, on stations normal to the axis, which '
-                'is why it spans the jet\nand contours directly. The correlated boundary and Mach '
-                'disk are fits to measurement and are the numbers to use for this plume\'s scale.',
+    figure.text(0.012, -0.02,
+                'Three regions, one Mach scale. Upstream of the throat nothing is solved and the '
+                'shading is the one-dimensional answer painted across the radius. Between the '
+                "throat and the exit plane it is the contour solve's own characteristic mesh.\n"
+                'Past the lip it is the station marcher continuing that mesh, on stations normal '
+                'to the axis, which is why it spans the jet and contours directly.',
                 fontsize = 8.5, color = muted, va = 'top')
-    figure.text(0.012, -0.085,
-                f'DO NOT TRUST THE SHADED PLUME. Mass flow through a station must equal the exit '
-                f'plane\'s and differs by {drift:+.1f} per cent here, against 0.1 for a uniform '
-                f'exit in the same gas.\nThe correlations put a Mach disk at '
-                f'{diskAt:.1f} lip radii: a normal shock, across which stagnation pressure falls '
-                f'by a different amount on every streamline. This scheme carries one stagnation '
-                f'pressure for the whole field\nand no entropy at all, so nothing it draws at or '
-                f'past that station describes the flow. The shape is shown because it is worth '
-                f'seeing, not because it is right.',
+    figure.text(0.012, -0.10,
+                f'The plume is not a validated result. Mass flow through a station must equal the '
+                f"exit plane's and differs by {drift:+.1f} per cent over these {REACH:.0f} lip "
+                f"radii, against 0.1 for a uniform exit in the same gas. Carried to eight it "
+                f"reaches 7.6 per cent and to twelve, 7.6.\nThe ambient is set from the lip "
+                f"pressure, not the one-dimensional exit value: a truncated contour leaves the "
+                f"lip at Mach {lipMach:.2f} and {lipPressure/1000.0:.1f} kPa against "
+                f"{structure.exitMach:.2f} and "
+                f"{structure.exitPressureRatio*ambient/1000.0:.1f} kPa one-dimensionally, so the "
+                f"two conventions differ.\nAt the shipped 5 kPa the lip ratio is 4.9 and the "
+                f"march loses a third of the flow. The scheme carries one stagnation pressure for "
+                f"the whole field and no entropy either way, so it describes no shock, and this "
+                f"jet forms one further downstream.",
                 fontsize = 8.5, color = warn, va = 'top')
 
     path = os.path.join(here, 'stationMarchNozzleField.png')
     figure.savefig(path, dpi = 150, bbox_inches = 'tight')
     plt.close(figure)
     print(f'  wrote stationMarchNozzleField.png')
-    print(f'  Pe/Pa {structure.exitPressureRatio:.3f}, {len(result["stations"])} stations, '
-          f'reach {reach:.2f} lip radii, worst mass drift {drift:+.2f} per cent')
-    print(f'  Mach disk correlated at {diskAt:.2f} lip radii, '
-          f'{structure.machDiskDiameter/(2*lipRadius):.2f} lip radii across')
+    print(f'  Pe/Pa {structure.exitPressureRatio:.3f}, ambient {ambient:.0f} Pa, '
+          f'{len(result["stations"])} stations, worst mass drift {drift:+.2f} per cent')
+    print(f'  reach {(solvedEnd/MILLIMETRES - structure.lipX)/lipRadius:.2f} lip radii, '
+          f'Mach range {low:.3f} to {high:.3f}')
 
     return path
 
