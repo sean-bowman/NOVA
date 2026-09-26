@@ -96,6 +96,24 @@ Detection is separable from coalescence and is the part that is needed first. Bo
 
 **Rotational method of characteristics.** The destination for a strongly underexpanded plume, where the barrel shock is not weak. Deferred deliberately: the failures met so far have all been bookkeeping in a marching scheme, not missing entropy, and adding shock physics on top of a march that stalls would not help. Note also that shock fitting still needs to know where a shock starts, so the detection problem above follows it there.
 
+### What a solved plume for the shipped nozzle would take
+
+The default configuration is the case to size this against, because it is the one every other part of the tool is demonstrated on and because nothing currently solves it. At its 5 kPa ambient it runs a jet static pressure ratio of 2.80 with a lip diverging at 9.00 degrees, and the correlations report a Mach disk 7.91 lip radii past the lip and 4.61 lip radii across. Sweeping the ambient does not help: a disk is present at every ratio from 2.80 down to 1.05, and the shock cell is 22.4 lip radii long, so no operating point gives even one complete cell. This engine's jet contains a normal shock everywhere it can be flown.
+
+Neither solver reaches it. The characteristic march places forty lines in a wedge between radius 0.321 and 0.230 of a 0.323 metre jet, never touching the center line, which is why its conservation comes back unmeasurable. The station marcher spans the jet properly and loses mass steadily: 0.16 per cent at half a lip radius, 0.90 at two, 6.3 at four, 16.6 at six and 33.6 by the disk. There is no near-field window either; it runs out around two lip radii.
+
+Four pieces stand between that and a solved interior, and only the middle two are ordered with respect to each other.
+
+**Shock detection, which is separable and comes first.** A criterion that says a compression has coalesced, so both solvers stop and say so rather than failing at a boundary point or integrating through. Built on how a gradient changes between two resolutions rather than on whether two characteristics cross, which is what made the existing crossing test unusable. This is worth doing on its own merits and is a prerequisite for everything below.
+
+**Entropy carried per streamline.** The relations here are homentropic, one stagnation pressure for the whole field, which is what makes a single tabulated gas legitimate. A shock puts every streamline that crossed it on its own isentrope, so the mesh has to carry stagnation pressure as a field quantity and interpolate it along with everything else. `contour.py` already does a narrow version of this for the weak front inside an optimized contour, and `internalShockState.md` scopes the general case. The two are the same work.
+
+**A fitted Mach disk.** `plumeMachDisk` already locates one in a solved net and `obliqueShockState` already solves the jump, so the missing part is the bookkeeping: a normal shock across the core, an oblique shock on the barrel, a triple point where they meet, and a slip line downstream of it dividing two streams at one pressure and different entropies. The slip line is an internal boundary the march has to carry, which is a third kind of line beside the two characteristic families.
+
+**A rotational unit process.** With entropy varying across streamlines the compatibility relations pick up a gradient term, and the mesh gains a third family of curves to interpolate across. This is a rewrite of the unit processes rather than an extension of them, and it is the same structural change that finite-rate chemistry would force, recorded in `gasModelState.md` from the other direction.
+
+What it buys is worth stating plainly, because it is narrower than it looks. The correlations already give the boundary scale, the cell spacing and the disk position and size for this nozzle, with the amplitude capped and said to be capped. What the long route adds is the interior: local Mach number, pressure and flow angle at a point in the plume. Nothing in NOVA reads that yet. Base heating, plume impingement and signature all would, and none of them exists.
+
 **Performance.** Pure Python, roughly a hundred seconds for eight thousand lines. Adequate for study, not for an interactive path. numba is neither installed nor declared.
 
 **The gas model, now with a number on it.** Every layer here treats the exhaust as calorically perfect at one ratio of specific heats, and the mesh carries the chamber value. A real exhaust recombines as it expands, and where it stops recombining is a kinetics problem that nothing in NOVA solves. The two limits bracket it, and CEA gives both, so the bracket can be quoted rather than described. On the LOX/LH2 reference engine at 6.89 MPa, a mixture ratio of 5.5 and an area ratio of 40:
