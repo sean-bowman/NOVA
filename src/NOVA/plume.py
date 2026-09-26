@@ -1661,6 +1661,99 @@ def plumeMachDisk(flow: PlumeFlow, net: dict, sonicThreshold: float = 1.05) -> d
             'minimumAxisMach': minimumAxisMach,
             'reason': f'the center line fell to Mach {sonic.mach:.3f}'}
 
+def _crossingsAlongRows(x, r, angle, mach, exitX):
+
+    '''Where each row of a mesh block crosses the exit plane, and the state it carries there.'''
+
+    found = []
+    for index in range(x.shape[0]):
+        usable = (np.isfinite(x[index]) & np.isfinite(r[index])
+                  & np.isfinite(angle[index]) & np.isfinite(mach[index]))
+        if usable.sum() < 2:
+            continue
+        rowX = x[index][usable]
+        order = np.argsort(rowX)
+        rowX = rowX[order]
+        if rowX[0] > exitX or rowX[-1] < exitX:
+            continue
+        rowR = r[index][usable][order]
+        rowAngle = angle[index][usable][order]
+        rowMach = mach[index][usable][order]
+        advancing = np.concatenate(([True], np.diff(rowX) > 0.0))
+        if advancing.sum() < 2:
+            continue
+        rowX, rowR = rowX[advancing], rowR[advancing]
+        rowAngle, rowMach = rowAngle[advancing], rowMach[advancing]
+        found.append((float(np.interp(exitX, rowX, rowR)),
+                      float(np.interp(exitX, rowX, rowAngle)),
+                      float(np.interp(exitX, rowX, rowMach))))
+
+    return found
+
+def _exitPlaneCrossings(seed: dict, scale: float, exitX: float):
+
+    '''
+
+    The state on the exit plane, taken where each mesh characteristic actually crosses it.
+
+    The mesh is stored as structured blocks whose rows march downstream, so a row that spans the
+    exit abscissa crosses it once and the state there follows by interpolating along that row. That
+    is a point on the plane rather than a point near it.
+
+    Gathering every node within a tolerance of the exit abscissa instead, and then sorting the
+    cloud by radius, is what this replaces. None of the nodes it collected lay on the plane: on the
+    shipped nozzle all forty spanned 31 mm of axial distance about an exit at 800 mm, and the flow
+    is still expanding across that distance. Sorting them by radius alone mapped an axial variation
+    onto the radial coordinate, so walking outward alternately sampled upstream and downstream
+    nodes. The profile it produced sawtoothed by 0.4 degrees in flow angle near the lip, against a
+    Prandtl-Meyer turn of 0.62 degrees for the same nozzle near its design point, and it was not
+    monotone in either Mach number or flow angle. A truncated ideal contour leaves neither.
+
+    Returns radius, flow angle and Mach number, ascending in radius, or None.
+
+    '''
+
+    # A node is on the plane or it is not. The tolerance is rounding, not a band: the defect this
+    # replaces came from treating 2 percent of the nozzle length as "on the exit plane".
+    onThePlane = 1e-9 * max(1.0, abs(exitX))
+
+    found = []
+    for xBlock, rBlock, angleBlock, machBlock in zip(seed['xMesh'], seed['rMesh'],
+                                                     seed['flowAngleMesh'], seed['machMesh']):
+        x = np.asarray(xBlock, dtype = float) * scale
+        r = np.asarray(rBlock, dtype = float) * scale
+        angle = np.asarray(angleBlock, dtype = float)
+        mach = np.asarray(machBlock, dtype = float)
+        if r.shape != x.shape or angle.shape != x.shape or mach.shape != x.shape:
+            continue
+
+        # A block that already lies in the exit plane needs no interpolation, which is how a
+        # solver that hands over its exit station directly presents it.
+        exact = (np.isfinite(x) & np.isfinite(r) & np.isfinite(angle) & np.isfinite(mach)
+                 & (np.abs(x - exitX) <= onThePlane))
+        if exact.any():
+            found.extend(zip(r[exact].ravel(), angle[exact].ravel(), mach[exact].ravel()))
+            continue
+
+        if x.ndim != 2:
+            continue
+        rows = _crossingsAlongRows(x, r, angle, mach, exitX)
+        # A mesh stored the other way round has its characteristics down the columns.
+        found.extend(rows if rows else _crossingsAlongRows(x.T, r.T, angle.T, mach.T, exitX))
+
+    usable = [row for row in found if math.isfinite(row[0]) and row[2] > 1.0]
+    if len(usable) < 5:
+        return None
+
+    usable.sort(key = lambda row: row[0])
+    radii = np.array([row[0] for row in usable])
+    angles = np.array([row[1] for row in usable])
+    machs = np.array([row[2] for row in usable])
+
+    advancing = np.concatenate(([True], np.diff(radii) > 0.0))
+
+    return radii[advancing], angles[advancing], machs[advancing]
+
 def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
 
     '''
@@ -1682,27 +1775,10 @@ def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
     if not scale or not exitRadius:
         return None
 
-    radii, angles, machs = [], [], []
-    for xBlock, rBlock, angleBlock, machBlock in zip(seed['xMesh'], seed['rMesh'],
-                                                     seed['flowAngleMesh'], seed['machMesh']):
-        x = np.asarray(xBlock, dtype = float).ravel() * scale
-        r = np.asarray(rBlock, dtype = float).ravel() * scale
-        angle = np.asarray(angleBlock, dtype = float).ravel()
-        mach = np.asarray(machBlock, dtype = float).ravel()
-        keep = (np.isfinite(x) & np.isfinite(r) & np.isfinite(angle) & np.isfinite(mach)
-                & (np.abs(x - exitX) < 0.02 * max(exitX, exitRadius)) & (mach > 1.0))
-        if keep.any():
-            radii.append(r[keep]); angles.append(angle[keep]); machs.append(mach[keep])
-    if not radii:
+    crossings = _exitPlaneCrossings(seed, scale, exitX)
+    if crossings is None:
         return None
-
-    radii = np.concatenate(radii); angles = np.concatenate(angles); machs = np.concatenate(machs)
-    order = np.argsort(radii)
-    radii, angles, machs = radii[order], angles[order], machs[order]
-    unique = np.concatenate([[True], np.diff(radii) > 0.0])
-    radii, angles, machs = radii[unique], angles[unique], machs[unique]
-    if radii.size < 5:
-        return None
+    radii, angles, machs = crossings
 
     sampled = np.linspace(0.0, radii.max(), numPoints)
     angleAt = np.interp(sampled, radii, angles)
