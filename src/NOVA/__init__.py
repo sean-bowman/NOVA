@@ -103,6 +103,8 @@ from .Volute import Volute
 
 # -- Plume -- #
 
+from .stationMarch import (solveStationField, solveStationMarch,
+                           plumeFieldDefaultReach, plumeFieldDriftTolerance)
 from .plume import (PlumeField, PlumeStructure, machDiskDiameter, machDiskLocation,
                     obliqueShockDeflection, shockCellLength)
 
@@ -128,7 +130,7 @@ __all__ = [
     # Submodules
     'ablative', 'ceaInterface', 'chamber', 'channelGeometry', 'channelSizing',
     'characteristics', 'config', 'contour', 'contourKernel', 'exports', 'figures',
-    'filmCooling', 'gasDynamics', 'gasSideHeatTransfer', 'materials', 'nozzleVolutes', 'plume',
+    'filmCooling', 'gasDynamics', 'gasSideHeatTransfer', 'materials', 'nozzleVolutes', 'plume', 'stationMarch',
     'radiativeCooling',
     'regenChannels', 'regenStations', 'regenThermal', 'units', 'validation',
     # Gas dynamics
@@ -167,6 +169,8 @@ __all__ = [
     # Geometry
     'Volute',
     # Plume
+    'solveStationField', 'solveStationMarch', 'plumeFieldDefaultReach',
+    'plumeFieldDriftTolerance',
     'PlumeField', 'PlumeStructure', 'machDiskDiameter', 'machDiskLocation',
     'obliqueShockDeflection', 'shockCellLength',
     # Figures

@@ -504,8 +504,11 @@ def solveConvergingSection(state, convergingSectionAngle: float = 'default', cha
 
     xNozzle, rNozzle  = arcSpline(xNozzleWallCoarse, rNozzleWallCoarse, newNumPoints = state.numContourPoints)
 
-    # Calculate flow properties only if not geometry-only mode
-    if not geometryOnly and divergingSectionFamily(state.divergingSectionType) != 'conical':
+    # Calculate flow properties only if not geometry-only mode. Every family reaches here now: a
+    # cone carries no characteristic solve, so it supplies its diverging near-wall Mach number
+    # from the one-dimensional area-Mach relation instead, and the concatenation below does not
+    # care which of the two produced it.
+    if not geometryOnly:
 
         # Wall properties
         temperatureWall, pressureWall, velocityWall, machNumberWall = calculateConvergingFlowProperties(xConvergingSection, rConvergingSection)
@@ -533,7 +536,7 @@ def solveConvergingSection(state, convergingSectionAngle: float = 'default', cha
 
     # Only assign flow properties if calculated. This condition has to be the same one that
     # guarded the calculation above, or the assignment reads names that were never bound.
-    if not geometryOnly and divergingSectionFamily(state.divergingSectionType) != 'conical':
+    if not geometryOnly:
         state.nozzleNearWallTemperature         = nozzleNearWallTemperature
         state.nozzleNearWallPressure            = nozzleNearWallPressure
         state.nozzleNearWallVelocity            = nozzleNearWallVelocity

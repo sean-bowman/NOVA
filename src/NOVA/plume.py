@@ -101,13 +101,15 @@ separationPressureRatio = 0.4
 #
 # The strongly underexpanded plume that `plumeStructure` correlates is deliberately outside this
 # envelope. Against NASA TN D-2327 the net reaches 47 percent low on maximum jet radius there.
-# Four of these are enforced in `solvePlumeField`. `plumeFieldMinPressureRatio` is not, and is
+# These bound `stationMarch.solveStationField`, which is the product face and
+# the only consumer. `plumeFieldMinPressureRatio` is not enforced, and is
 # kept as a statement about what is worth resolving rather than what is valid: a jet at a ratio of
 # 1.02 solves correctly and carries a wave structure too weak to be interesting. Enforcing it as a
 # floor would also refuse every overexpanded jet, which the march handles deliberately and with a
 # measured approximation, taking the lip turn as an isentropic compression rather than the oblique
 # shock it is. That approximation holds to 0.2 percent at a ratio of 0.6 and 0.8 percent at 0.4,
 # below which `separationPressureRatio` refuses on the Summerfield criterion instead.
+exitPlaneMinimumNodes = 5         # [-], nodes on the exit plane that count as a station
 plumeFieldMinPressureRatio = 1.05
 plumeFieldMaxPressureRatio = 2.0
 plumeFieldMinExitMach = 1.5
@@ -361,6 +363,7 @@ class PlumeField:
     machDiskX: float = 0.0                # [m]
     machDiskDiameter: float = 0.0         # [m]
 
+    gridShape: tuple = ()                 # (stations, points) when the nodes form a grid
     nodeX: np.ndarray = field(default_factory = lambda: np.array([]))        # [m]
     nodeR: np.ndarray = field(default_factory = lambda: np.array([]))        # [m]
     nodeMach: np.ndarray = field(default_factory = lambda: np.array([]))     # [-]
@@ -1717,6 +1720,10 @@ def _exitPlaneCrossings(seed: dict, scale: float, exitX: float):
     # replaces came from treating 2 percent of the nozzle length as "on the exit plane".
     onThePlane = 1e-9 * max(1.0, abs(exitX))
 
+    # Enough nodes to be a profile rather than a coincidence, matching the floor `plumeExitLine`
+    # applies to the assembled line.
+
+
     found = []
     for xBlock, rBlock, angleBlock, machBlock in zip(seed['xMesh'], seed['rMesh'],
                                                      seed['flowAngleMesh'], seed['machMesh']):
@@ -1728,10 +1735,13 @@ def _exitPlaneCrossings(seed: dict, scale: float, exitX: float):
             continue
 
         # A block that already lies in the exit plane needs no interpolation, which is how a
-        # solver that hands over its exit station directly presents it.
+        # solver that hands over its exit station directly presents it. It has to be a station
+        # rather than a coincidence: a single node landing on the plane is not a profile, and
+        # taking it in place of the block's crossings throws the block away. A thrust-optimized
+        # parabola puts exactly one node there and has 44 crossings behind it.
         exact = (np.isfinite(x) & np.isfinite(r) & np.isfinite(angle) & np.isfinite(mach)
                  & (np.abs(x - exitX) <= onThePlane))
-        if exact.any():
+        if exact.sum() >= exitPlaneMinimumNodes:
             found.extend(zip(r[exact].ravel(), angle[exact].ravel(), mach[exact].ravel()))
             continue
 
@@ -2604,221 +2614,3 @@ def plumeCharacteristicSeed(contour) -> dict:
         'exitRadius':            _lastOrZero(getattr(contour, 'rNozzleWall', None)),
         'exitX':                 _lastOrZero(getattr(contour, 'xNozzleWall', None)),
     }
-
-def solvePlumeField(contour, ambientPressure: float, numRays: int = 40, exitPoints: int = 140,
-               maxLines: int = 2000, lineLimit: int = 250) -> 'PlumeField':
-
-    '''
-
-    Solve the plume interior by continuing the nozzle characteristics march past the lip.
-
-    This is the crossing of the handover `plumeCharacteristicSeed` describes. Inside the nozzle
-    the outer boundary is a wall and the contour prescribes the flow angle; past the lip it is
-    a free streamline at ambient pressure and the angle falls out of the solution. Nothing else
-    changes, so the two halves are one solution rather than a solution and a picture. The
-    interior point reproduces the contour solver's own relations exactly, which
-    `tests/testPlumeMarch.py` holds it to.
-
-    Where a result is refused and where it is merely poor are different things, and both are
-    reported rather than confused. Operating points the formulation cannot represent at all are
-    refused outright: a perfectly expanded jet has no wave structure, a strongly overexpanded
-    one detaches its lip shock, and a conical contour leaves no mesh to continue. Everything
-    else is solved and graded, because the march measures its own mass conservation and that
-    says how far a given answer can be trusted without appealing to anything outside it.
-
-    Parameters:
-    -----------
-    ambientPressure : float
-        Back pressure the jet discharges into [Pa].
-    numRays : int
-        Rays in the centered fan at the lip. Raising it helps a uniform exit and hurts a
-        contoured one, and why is not yet understood, so it is left where the real handover
-        works.
-    exitPoints : int
-        Points sampled across the exit plane, which set how many lines the march can start.
-    maxLines : int
-        Ceiling on characteristic lines, so a slow case cannot run unbounded.
-    lineLimit : int
-        Points a line is held to. Finer conserves better and reaches less far.
-
-    Returns:
-    --------
-    PlumeField
-        Solved interior with its own quality report, or an unsolved one carrying the reason.
-
-    '''
-
-    result = PlumeField()
-
-    # A structure already solved at this ambient is reused; anything else is solved fresh.
-    structure = getattr(contour, 'nozzlePlumeStructure', None)
-    if structure is None or structure.ambientPressure != ambientPressure:
-        structure = solvePlumeStructure(contour, ambientPressure = ambientPressure)
-    if structure is None:
-        result.notes.append('No plume structure: the nozzle contour or the exit state is '
-                            'missing, so there is nothing to march from.')
-        return result
-
-    result.exitMach = structure.exitMach
-    result.exitPressureRatio = structure.exitPressureRatio
-    result.lipX = structure.lipX
-    result.lipRadius = structure.lipRadius
-
-    if not (plumeFieldMinExitMach <= structure.exitMach <= plumeFieldMaxExitMach):
-        result.notes.append(
-            f'Exit Mach {structure.exitMach:.3f} is outside the {plumeFieldMinExitMach:.1f} '
-            f'to {plumeFieldMaxExitMach:.1f} band the solver has been exercised over.')
-        return result
-    if structure.exitPressureRatio < separationPressureRatio:
-        result.notes.append(
-            f'Pe/Pa is {structure.exitPressureRatio:.3f}, below the Summerfield separation '
-            f'criterion of {separationPressureRatio:.2f}. The nozzle separates internally, so '
-            f'the flow is not attached at the lip and no attached plume model describes it.')
-        return result
-    if structure.exitPressureRatio > plumeFieldMaxPressureRatio:
-        result.notes.append(
-            f'Pe/Pa is {structure.exitPressureRatio:.3f}, above the {plumeFieldMaxPressureRatio} '
-            f'this march is held to. Past that ratio the compressions reflected from the jet '
-            f'boundary have coalesced, by Prandtl and by NASA TR R-6 independently, and an '
-            f'isentropic net carries no shock. `plumeStructure` correlates this jet instead.')
-        return result
-    if abs(structure.lipWallAngle) > plumeFieldMaxWallAngle:
-        result.notes.append(
-            f'The exit diverges at {np.degrees(abs(structure.lipWallAngle)):.2f} degrees, past '
-            f'the {np.degrees(plumeFieldMaxWallAngle):.2f} this march is held to. On a divergent '
-            f'exit it solves a wedge near the boundary and never reaches the center line, so no '
-            f'line spans the jet and the solution cannot be checked against anything. '
-            f'`plumeStructure` correlates this jet instead.')
-        return result
-
-    # The characteristic mesh is what makes this an extension of the nozzle solution rather
-    # than a standalone jet. A conical contour has no mesh and returns None here.
-    seed = plumeCharacteristicSeed(contour)
-    required = ('gasConstant', 'stagnationTemperature', 'stagnationPressure', 'scalingFactor',
-                'exitX', 'exitRadius', 'xMesh', 'rMesh', 'flowAngleMesh', 'machMesh')
-    if seed is None or any(seed.get(key) is None for key in required):
-        result.notes.append('No characteristic mesh on this contour, so the plume march has '
-                            'no nozzle solution to continue. Conical nozzles take the '
-                            'correlated plume structure instead.')
-        return result
-
-    # The gamma has to be the one the mesh was solved with, not the one the correlations
-    # prefer. `plumeStructure` reports CEA's exit gamma because that is the better number for
-    # a correlation evaluated at the exit; the characteristic mesh was built on the chamber
-    # gamma, and reading its Mach numbers under a different ratio of specific heats makes the
-    # state discontinuous at the very plane the march starts from.
-    flow = PlumeFlow(seed['gamma'], seed['gasConstant'], seed['stagnationTemperature'],
-                     seed['stagnationPressure'])
-    exitLine = plumeExitLine(flow, seed, numPoints = exitPoints)
-    if exitLine is None:
-        result.notes.append('The exit plane could not be read from the characteristic mesh.')
-        return result
-    result.seededFromMesh = True
-
-    net = solvePlumeMarch(flow, exitLine, ambientPressure, numRays = numRays,
-                          maxLines = maxLines, lineLimit = lineLimit)
-    nodes = net['nodes']
-    if len(nodes) < 10:
-        result.notes.append(f'The march did not build a usable net here; it stopped with '
-                            f'"{net["stop"]}".')
-        return result
-
-    machNodes = np.array([point.mach for point in nodes])
-    result.nodeX = np.array([point.x for point in nodes])
-    result.nodeR = np.array([point.r for point in nodes])
-    result.nodeMach = machNodes
-    result.nodeFlowAngle = np.array([point.flowAngle for point in nodes])
-    result.nodePressure = np.array([flow.staticPressure(mach) for mach in machNodes])
-
-    result.boundaryX = np.array([point.x for point in net['boundary']])
-    result.boundaryR = np.array([point.r for point in net['boundary']])
-    result.boundaryMach = net['boundaryMach']
-    result.lipTurnAngle = net['boundaryMach'] and (net['boundary'][-1].flowAngle
-                                                   if len(net['boundary']) > 1 else 0.0)
-    result.solvedTo = float(result.nodeX.max())
-    result.stop = net['stop']
-    result.massDriftWorst = net['massDriftWorst']
-
-    # Mass conservation is the only check this field carries, and it needs a line that spans the
-    # jet from the axis to the boundary. A march that never reaches the center line produces none,
-    # so the flux has nothing to compare against and comes back as nan. A field with no quality
-    # statement at all is not a solved field, whatever it drew, and a caller reading `solved` has
-    # to see that without parsing the notes.
-    if not np.isfinite(result.massDriftWorst):
-        result.notes.append(
-            'No line of this march spans the jet, so its mass flow cannot be compared with the '
-            'exit plane and the field carries no quality statement. Reported as unsolved for '
-            'that reason rather than for anything wrong with the nodes it did place.')
-        return result
-
-    result.solved = True
-
-    disk = plumeMachDisk(flow, net)
-    result.machDiskPresent = bool(disk['present'])
-    if disk['present']:
-        result.machDiskX = disk['x']
-        result.machDiskDiameter = disk['diameter']
-
-    # Shock cell length from the boundary itself, as the axial period between crests. Twice
-    # the distance from the lip to the first crest is a different and larger quantity, because
-    # the lip fan throws the boundary wide before the pattern settles.
-    radii = result.boundaryR
-    if radii.size > 40:
-        window = max(5, radii.size // 200)
-        smoothed = np.convolve(radii, np.ones(window) / window, mode = 'same')
-        crests = []
-        for index in range(window, smoothed.size - window - 1):
-            if smoothed[index] >= smoothed[index - window:index].max() \
-                    and smoothed[index] > smoothed[index + 1:index + 1 + window].max():
-                if not crests or result.boundaryX[index] - result.boundaryX[crests[-1]] \
-                        > 0.4 * max(structure.shockCellLength, 1e-9):
-                    crests.append(index)
-        result.cellsResolved = max(0, len(crests) - 1)
-        if len(crests) >= 2:
-            result.shockCellLength = float(np.diff(result.boundaryX[crests]).mean())
-
-    result.notes.append(
-        'Solved by continuing the nozzle characteristics march past the lip, isentropic and '
-        'with no shock model. The interior point reproduces the contour solver exactly, and '
-        'the march starts from the exit plane of that solve rather than from an assumed '
-        'profile.')
-    drift = abs(result.massDriftWorst)
-    result.notes.append(
-        f'Mass conservation: the flux through the last line differs from the exit plane by '
-        f'{result.massDriftWorst:+.3f} percent. Every line spans the jet, so they must all '
-        f'carry the same flow; this needs no reference outside the solution and is the measure '
-        f'of how far the answer can be trusted.')
-    # Grading rather than refusing. The bands come from what has been measured: a parallel exit
-    # near design holds a few hundredths of a percent, and anything past a few percent has
-    # lost the flow it started with.
-    if not np.isfinite(drift):
-        result.trustworthy = False
-        result.notes.append('DO NOT TRUST: the march was too short to measure its own '
-                            'conservation, so this field carries no quality statement at all.')
-    elif drift > 5.0:
-        result.trustworthy = False
-        result.notes.append(
-            f'DO NOT TRUST: losing {drift:.1f} percent of the mass flow means this field is '
-            f'not a solution of the flow it started from. It is drawn only to show what the '
-            f'march currently produces here.')
-    elif drift > 1.0:
-        result.trustworthy = False
-        result.notes.append(
-            f'Marginal: {drift:.1f} percent of the mass flow is unaccounted for. Treat the '
-            f'field as indicative and not as a result.')
-    else:
-        result.trustworthy = True
-    if abs(np.degrees(structure.lipWallAngle)) > 1.0:
-        result.notes.append(
-            f'The exit diverges at {np.degrees(structure.lipWallAngle):.1f} degrees. The march '
-            f'stops after roughly one shock cell on a divergent exit, and its conservation '
-            f'degrades with the angle, so the field here is near-lip only. It reached '
-            f'{result.cellsResolved} full cells.')
-    if structure.exitPressureRatio < 1.0 and net.get('lipStagnationRatio', 1.0) < 1.0:
-        result.notes.append(
-            f'Overexpanded: the lip turns inward through what is really an oblique shock, '
-            f'taken here as an isentropic compression. The shock would cost '
-            f'{100.0 * (1.0 - net["lipStagnationRatio"]):.2f} percent of stagnation pressure, '
-            f'which is the size of the approximation.')
-
-    return result

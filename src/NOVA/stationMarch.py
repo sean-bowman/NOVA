@@ -37,7 +37,29 @@ quantity conditioned differently.
                             Validation status
 ----------------------------------------------------------------------
 
-**Verified, partly validated, and read by nothing in the package.**
+**Verified, partly validated, and read by `Nozzle.plumeField` inside a stated window.**
+
+This solver draws the plume boundary and interior. It is the boundary that is worth having: the
+correlated alternative in `plume.plumeStructure` interpolates a sinusoid between measured scalars
+and says so, while this one is a computed constant-pressure streamline continuing the contour's own
+characteristic mesh. What the correlations still own, because nothing here can produce them, is the
+jet scale, the shock cell length and the Mach disk: this scheme carries one stagnation pressure for
+the whole field and so describes no shock at all.
+
+The window is short and it is the reason `plumeField` takes a reach. Measured on the shipped
+contour, mass continuity holds inside a per cent out to about two lip radii at every admitted back
+pressure, and past roughly six it is worthless while still reporting a clean stop. Two failure modes
+sit out there, both silent: the free jet boundary collapses onto the axis between lip ratios of
+about 1.8 and 3 and again below 0.8, and above a lip ratio of 4 it sheds mass steadily through one
+long expansion instead. The mass drift is the only thing that separates a usable answer from a
+worthless one, which is why it is returned with every result and annotated on every figure rather
+than reported somewhere the reader can miss.
+
+Below a lip ratio of one the jet is compressed rather than expanded to reach ambient, which
+physically means an oblique shock off the lip. This scheme turns the flow isentropically instead and
+admits it only while the shock it stands in for is weak enough for the substitution to be bounded;
+see `lipShockLossLimit`. On the shipped contour that bound never binds, because the nozzle separates
+internally first.
 
 `stationMarchVerification.py` holds the scheme against a spherical source flow, an exact solution
 of the equations it solves. Every unit process runs at second order, 1.94 to 2.00 observed, and the
@@ -116,8 +138,11 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
-from NOVA.gasDynamics import areaMachRelation, machFromAreaRatio
-from NOVA.plume import PlumeFlow, PlumePoint, _reciprocalVelocitySlope, obliqueShockState
+from .gasDynamics import areaMachRelation, machFromAreaRatio
+from .plume import (PlumeField, PlumeFlow, PlumePoint, _reciprocalVelocitySlope,
+                    obliqueShockState, plumeCharacteristicSeed, plumeExitLine,
+                    plumeFieldMaxExitMach, plumeFieldMinExitMach, separationPressureRatio,
+                    solvePlumeStructure)
 
 # A compressed lip is admitted as an isentropic turn rather than a shock, which is exact only in
 # the limit of vanishing shock strength. `lipShockLossLimit` is how much stagnation pressure the
@@ -617,3 +642,187 @@ def solveStationMarch(flow: PlumeFlow, station: Station, ambientPressure: float,
     return {'stations': stations, 'boundary': boundary, 'massDrift': massDrift, 'stop': stop,
             'boundaryMach': boundaryMach, 'referenceFlux': reference,
             'lipShockLoss': lipShockLoss}
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The product face -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+plumeFieldDefaultReach = 2.0      # [-], lip radii marched unless the caller asks for more
+plumeFieldDriftTolerance = 1.0    # [%], mass continuity error a field is called trustworthy below
+plumeFieldRadialPoints = 121      # [-], points across each station
+
+def solveStationField(contour, ambientPressure: float, reach: float = plumeFieldDefaultReach,
+                      radialPoints: int = plumeFieldRadialPoints,
+                      maxStations: int = 200000) -> PlumeField:
+
+    '''
+
+    Solve the plume boundary and interior by marching stations from the exit plane.
+
+    Parameters:
+    -----------
+    contour : object
+        The nozzle contour, carrying the characteristic mesh the march continues.
+    ambientPressure : float
+        Pressure the plume expands into [Pa].
+    reach : float
+        Axial distance to march, in lip radii. The default is short on purpose: mass continuity
+        holds inside a per cent over roughly two lip radii and is worthless past six, so a longer
+        reach is a request for a picture rather than for an answer. Whatever is asked for, the
+        drift is measured and returned.
+    radialPoints : int
+        Points across each station.
+    maxStations : int
+        Ceiling on the number of steps.
+
+    Returns:
+    --------
+    PlumeField
+        `solved` is False with the reason in `notes` when the case is outside the envelope or the
+        march refused. `trustworthy` is the separate question of whether the answer conserved
+        mass, and it is False whenever `massDriftWorst` exceeds `plumeFieldDriftTolerance`.
+
+    The Mach disk and the shock cell length are copied from the correlated structure rather than
+    solved. This scheme carries one stagnation pressure for the whole field and so describes no
+    shock; those two quantities are fits to measurement and remain the numbers to use.
+
+    '''
+
+    result = PlumeField()
+
+    # A structure already solved at this ambient is reused rather than recomputed, which is how
+    # `Nozzle` drives this and what lets a caller hand in a contour whose structure it built.
+    structure = getattr(contour, 'nozzlePlumeStructure', None)
+    if structure is None or structure.ambientPressure != ambientPressure:
+        structure = solvePlumeStructure(contour, ambientPressure = ambientPressure)
+    if structure is None:
+        result.notes.append('No plume structure: the nozzle contour or the exit state is missing, '
+                            'so there is nothing to march from.')
+        return result
+
+    result.exitMach = structure.exitMach
+    result.exitPressureRatio = structure.exitPressureRatio
+    result.lipX = structure.lipX
+    result.lipRadius = structure.lipRadius
+    result.shockCellLength = structure.shockCellLength
+    result.machDiskPresent = structure.machDiskPresent
+    result.machDiskX = structure.machDiskX
+    result.machDiskDiameter = structure.machDiskDiameter
+
+    if not (plumeFieldMinExitMach <= structure.exitMach <= plumeFieldMaxExitMach):
+        result.notes.append(
+            f'Exit Mach {structure.exitMach:.3f} is outside the {plumeFieldMinExitMach:.1f} to '
+            f'{plumeFieldMaxExitMach:.1f} band the solver has been exercised over.')
+        return result
+
+    # Separation is a statement about the nozzle rather than the plume. Below the Summerfield
+    # criterion the flow is not attached at the lip at all, so no attached plume model describes
+    # it and marching one would answer a question the hardware is not asking.
+    if structure.exitPressureRatio < separationPressureRatio:
+        result.notes.append(
+            f'Pe/Pa is {structure.exitPressureRatio:.3f}, below the Summerfield separation '
+            f'criterion of {separationPressureRatio:.2f}. The nozzle separates internally, so the '
+            f'flow is not attached at the lip.')
+        return result
+
+    # The characteristic mesh is what makes this a continuation of the nozzle solution rather than
+    # a standalone jet. A conical contour has none and takes the correlated structure instead.
+    seed = plumeCharacteristicSeed(contour)
+    required = ('gasConstant', 'stagnationTemperature', 'stagnationPressure', 'exitX',
+                'exitRadius', 'xMesh', 'rMesh', 'flowAngleMesh', 'machMesh')
+    if seed is None or any(seed.get(key) is None for key in required):
+        result.notes.append('No characteristic mesh on this contour, so the march has no nozzle '
+                            'solution to continue. Conical nozzles take the correlated plume '
+                            'structure instead.')
+        return result
+
+    # The gamma has to be the one the mesh was solved with, not the one the correlations prefer.
+    # Reading mesh Mach numbers under a different ratio of specific heats makes the state
+    # discontinuous at the very plane the march starts from.
+    flow = PlumeFlow(seed['gamma'], seed['gasConstant'], seed['stagnationTemperature'],
+                     seed['stagnationPressure'])
+    exitLine = plumeExitLine(flow, seed, numPoints = 400)
+    if exitLine is None:
+        result.notes.append('The exit plane could not be read from the characteristic mesh.')
+        return result
+    result.seededFromMesh = True
+
+    station = stationFromLine(exitLine, radialPoints)
+    march = solveStationMarch(flow, station, ambientPressure, maxLength = reach,
+                              maxStations = maxStations)
+    result.boundaryMach = march['boundaryMach']
+    result.stop = march['stop']
+
+    stations = march['stations']
+    if len(stations) < 2:
+        result.notes.append(_refusalNote(march, ambientPressure))
+        return result
+
+    radius = np.array([one.radius for one in stations])
+    mach = np.array([one.mach for one in stations])
+    angle = np.array([one.flowAngle for one in stations])
+    axial = np.array([one.x for one in stations])
+
+    result.solved = True
+    result.withinEnvelope = True
+    result.gridShape = radius.shape
+    result.nodeX = np.repeat(axial[:, None], radius.shape[1], axis = 1).ravel()
+    result.nodeR = radius.ravel()
+    result.nodeMach = mach.ravel()
+    result.nodeFlowAngle = angle.ravel()
+    result.nodePressure = np.array([flow.staticPressure(value) for value in mach.ravel()])
+    result.boundaryX = np.array([point[0] for point in march['boundary']])
+    result.boundaryR = np.array([point[1] for point in march['boundary']])
+    result.solvedTo = float(axial[-1])
+
+    drift = np.array(march['massDrift'])
+    result.massDriftWorst = float(drift[np.argmax(np.abs(drift))])
+    result.trustworthy = abs(result.massDriftWorst) <= plumeFieldDriftTolerance
+    # Measured against the station the march actually scaled its steps on, so a requested
+    # reach of two comes back as two rather than as the same distance in a different unit.
+    marched = (result.solvedTo - station.x)/station.boundaryRadius
+    result.cellsResolved = (int(marched*station.boundaryRadius/structure.shockCellLength)
+                            if structure.shockCellLength > 0.0 else 0)
+
+    result.notes.append(
+        f'Marched {marched:.2f} lip radii on {len(stations)} stations, stopping on '
+        f'{march["stop"]}. Worst mass continuity error {result.massDriftWorst:+.2f} per cent of '
+        f'the exit mass flow.')
+    if not result.trustworthy:
+        result.notes.append(
+            f'That is past the {plumeFieldDriftTolerance:.1f} per cent this field is called '
+            f'trustworthy within, so the shape is drawable and the numbers on it are not. '
+            f'Shorten the reach.')
+    if march.get('lipShockLoss', 0.0) > 0.0:
+        result.notes.append(
+            f'The lip is compressed rather than expanded at this back pressure. The turn is taken '
+            f'isentropically in place of the oblique shock the flow would really carry, which '
+            f'would have destroyed {100.0*march["lipShockLoss"]:.2f} per cent of the stagnation '
+            f'pressure.')
+    if structure.machDiskPresent:
+        result.notes.append(
+            f'A Mach disk stands {(structure.machDiskX - structure.lipX)/structure.lipRadius:.1f} '
+            f'lip radii downstream by Ashkenas and Sherman. Nothing in this field represents it: '
+            f'the march is isentropic and carries no shock.')
+
+    return result
+
+def _refusalNote(march: dict, ambientPressure: float) -> str:
+
+    '''Why a march that took no step took none, in terms a reader can act on.'''
+
+    stop = march['stop']
+    if stop == 'boundaryNotSupersonic':
+        return (f'Ambient pressure {ambientPressure:.0f} Pa puts the free boundary at Mach '
+                f'{march["boundaryMach"]:.3f}, at or below one, so there are no characteristics '
+                f'to solve on.')
+    if stop == 'lipShockDetached':
+        return ('The turn the lip demands to reach ambient is past an attached oblique shock, so '
+                'the compression cannot be approximated as an isentropic turn.')
+    if stop == 'lipShockTooStrong':
+        return (f'The lip is compressed to reach ambient, and the oblique shock that implies would '
+                f'destroy {100.0*march["lipShockLoss"]:.2f} per cent of the stagnation pressure, '
+                f'past the {100.0*lipShockLossLimit:.0f} per cent an isentropic turn may stand in '
+                f'for.')
+
+    return f'The march took no step and stopped on {stop}.'

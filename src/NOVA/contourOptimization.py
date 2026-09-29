@@ -276,6 +276,10 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
 
     evaluations = {'count': 0}
 
+    # One cache for this search, handed to every solve. The kernel turns on the inflection
+    # angle alone, so Powell's line searches along the other three coordinates re-use it.
+    kernelCache = {}
+
     def merit(designVariables: tuple, mesh: int) -> tuple:
 
         '''Thrust coefficient over mass closure, and the raw pair behind it.'''
@@ -286,7 +290,8 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
         evaluations['count'] += 1
         try:
             state = thrustOptimizedContour(workspace(mesh), lengthFraction, designVariables,
-                                           assignOutputsToObject = False)
+                                           assignOutputsToObject = False,
+                                           kernelCache = kernelCache)
         except Exception:                                               # noqa: BLE001
             # A wall the march cannot solve is not a candidate. Returning rather than raising
             # keeps one bad vector from ending a search that is otherwise going well.

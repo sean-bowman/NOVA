@@ -172,6 +172,50 @@ That also explains why refinement does not help. The focus sharpens as the grid 
 
 **Stage 4 fails.** The boundary and the conservation residual are both blind to it, and the failure attaches to a feature rather than to distance: between foci the two solvers track each other closely, at the foci they part by more than half the wave amplitude, and a plume is a train of foci.
 
+## Two exit pressures on one contour
+
+A truncated ideal contour does not leave one exit state, so "Pe/Pa" names two different numbers and the difference is not small. On the shipped nozzle the lip sits at Mach 3.797 and 24.6 kPa while the one-dimensional station reads Mach 4.223 and 14.0 kPa: a ratio of **1.760** between them.
+
+The march's free boundary condition is applied at the lip, against the lip state, so the lip ratio is the one its physics answers to. `PlumeStructure.exitPressureRatio` reports the one-dimensional value, because that is what the correlations are written in. Both are correct for what they describe. Any pressure ratio quoted in this repository has to say which of the two it is.
+
+**The envelope gate reads the wrong one.** `solvePlumeField` refuses above `plumeFieldMaxPressureRatio`, 2.0, measured on the one-dimensional ratio. On this nozzle that is a lip ratio of 3.52, so the gate admits lip ratios up to three and a half where the ceiling it is enforcing is two. Nothing gets through today only because the wall angle gate refuses this contour first, at 9.00 degrees against half a degree, and it would refuse every bell. A contour with a small exit divergence and a truncated core would pass the angle gate and then be admitted at a lip ratio well past the ceiling.
+
+## The convergent window
+
+Held at a lip ratio of 1.5, which is a one-dimensional ratio of 0.85, the shipped bell exit conserves mass over a short reach and stops doing so over a long one. Reach is axial distance downstream of the exit plane in lip radii, and the error is the station's axial mass flux against the exit plane's, in per cent of exit mass flow:
+
+| x/rLip | 81 points | 161 points | 321 points | Under refinement |
+|---|---|---|---|---|
+| 0.5 | -0.100% | -0.072% | -0.048% | converging |
+| 1.0 | -0.179% | -0.113% | -0.069% | converging |
+| 2.0 | -0.334% | -0.199% | -0.117% | converging |
+| 3.0 | -0.638% | -0.496% | -0.434% | converging, slowing |
+| 4.0 | -1.594% | -1.615% | -1.701% | flat to growing |
+| 6.0 | -0.149% | -0.044% | -0.003% | a zero crossing, not an accuracy |
+| 8.0 | +7.445% | +7.469% | +7.961% | growing |
+
+The drift is not monotone, so it has to be read at the station rather than as a running worst. It falls to a negative excursion, recovers through zero near six lip radii and then runs away positive. A running worst reports that one excursion in every row past it and hides where the error is.
+
+The excursion is where the scheme breaks, and it does not move with the mesh: -1.799 per cent at x/rLip 4.40 on 81 points, -1.853 at 4.36 on 161, -1.947 at 4.40 on 321. A location fixed under refinement is a feature of the flow rather than a property of the grid, and the center line says which feature. Its Mach number holds 4.2033 to four figures out to four lip radii, so nothing has reached the axis before then; it then rises to 4.7584 at 5.54 radii and collapses to 3.3917 by 6. That is the lip fan arriving at the center line, and the stage 4 near-axis defect is what the scheme does with it.
+
+So the march holds a real bell contour from the exit plane to the arrival of the lip fan, near four lip radii, and the error over that stretch converges under refinement: 0.117 per cent at two radii and 0.434 at three on 321 points. Base heating and plume impingement are near-field questions, so a window that reaches the first axis crossing is a usable window. Past the crossing the error is the near-axis defect and no refinement touches it.
+
+The window is conditional on the operating point. At the shipped ambient of 5 kPa, a lip ratio of 4.93, the same march loses 15.1 per cent of the mass flow within six lip radii and there is no usable stretch at any reach.
+
+## Where the error sits in the jet
+
+`massDrift` is one number per station, so it locates the error in x and says nothing about where in the jet it comes from. The local form of the same quantity is the continuity residual, d(rho u r)/dx + d(rho v r)/dr, which is zero for an exact axisymmetric solution and whose integral over the region up to a station returns that station's change in mass flux. Integrated from the exit plane it tracks the reported drift to 0.049 percentage points at every station, 2.7 per cent of the excursion, so the field is a decomposition of the drift rather than a proxy for it.
+
+Contoured over 36 lip radii the jet runs four shock cells, with axis foci at 5.5, 14.3, 23.7 and 33.3 lip radii and a boundary pinch between each pair, a cell every 9.3. The jet interior is clean. The entire residual sits on the two wave fronts leaving the lip and on the spot where they converge on the center line, and along each front it alternates in sign, which is dispersive error on an under-resolved discontinuity rather than diffusion. Between the fronts the scheme is doing what the verification against the exact source flow says it does.
+
+That rules out a class of fixes. The error is not accumulating everywhere at a rate a smaller step or a better interpolant would reduce, which is consistent with the interpolant sweep finding pchip, linear, minmod and MC all within a factor on the same case. It is concentrated where the solution is steep, so what would move it is resolving the fronts: the front-tracking the march cannot seed from its own lines, or the shock capturing that is the standing long pole.
+
+The error is made on a schedule set by that structure. It is spent on the outward leg of each cell, from the axis focus out to the boundary pinch, and partly recovered on the leg back in: -0.30 to +7.67 per cent over the first outward leg, back to +4.35 by the second focus, then +10.53, +9.85, +12.03, +11.85. The net across each cell is +4.65, +5.50 and +2.00 percentage points, weakening as the cells decay, and the march holds 36 lip radii without failing while accumulating 12.1 per cent.
+
+The measured cell is 9.3 lip radii against 12.0 from Prandtl, 22 per cent short. That is a separate discrepancy from the mass loss and is measured on a solution the mass loss says is wrong, so it is not evidence either way about the correlation.
+
+`stationMarchErrorField.py` draws it.
+
 ## Two defects, found and closed
 
 **The axisymmetric source term was ill-conditioned.** The relation carries `sin(theta) sin(mu) / sin(theta +/- mu) * dr / r`, and the increment in radius along the characteristic is `tan(theta +/- mu) dx`. Both vanish together as the second-family characteristic turns axis-parallel, which happens wherever the flow angle reaches the Mach angle, and the product they form is then set by which state each factor was evaluated at rather than by the flow. Measured at Mach 4 with 14.4 degrees of turning, the coefficient reached -1.6e4 and the solve diverged within four iterations. Cancelling the two analytically gives `sin(theta) sin(mu) / cos(theta +/- mu) * dx / r`, the same quantity with nothing small in the denominator, and the only singular direction left is a characteristic normal to the axis, which the second family cannot reach.
@@ -208,6 +252,10 @@ Run from the NOVA root with `C:\Users\seanb\miniconda3\python.exe`.
 ```
 python experimental/stationMarchVerification.py   # the exact solution and the observed orders
 python experimental/stationMarchFigures.py        # the boundary, the field, the divergence sweep
+python experimental/exitPressureConvention.py     # both exit pressures and the reach table
+python experimental/stationMarchErrorField.py     # the error contoured as a field
+python experimental/stationMarchLongField.py     # the Mach field over four cells
+python experimental/plumeShockAnatomy.py         # the shock structure, labelled
 ```
 
 A march is `solveStationMarch(flow, uniformStation(flow, 3.0, 1.0, 81), ambient)`, with `ambient` the exit static pressure divided by the jet static pressure ratio. `conicalStation(flow, 3.0, radians(5.0), 1.0, 81)` replaces the exit plane with a conical nozzle's. The result carries the stations, the boundary and the per-station mass drift.

@@ -426,11 +426,53 @@ def wallCharacteristicProjection(gas: CharacteristicGas, machNumber1: float,
         rPointIntersection = (slopeLeftRunningCharacteristic * xPointIntersection + interceptLeftRunningCharacteristic + \
                               slopeRightRunningCharacteristic * xPointIntersection + interceptRightRunningCharacteristic) / 2
 
-        # Calculate mach number at new point
-        machNumberFunction     = lambda machNumber: (-1 / (np.sqrt(machNumber**2 - 1) + (1/np.tan(flowAnglePoint2))))* \
-                                                    ((rPoint2 - rPointIntersection) / rPoint2) - ((flowAnglePoint2 - \
+        # Calculate mach number at new point.
+        #
+        # One equation in one unknown, solved by Newton against its own derivative. It used to go
+        # to `fsolve`, which is MINPACK's hybrid Powell method for SYSTEMS and estimates a Jacobian
+        # by finite differences. For a scalar root that is the wrong tool by a wide margin, and it
+        # was being set up once per residual evaluation of the least squares wrapping this.
+        # Profiled on one kernel solve at fifty characteristics: 8023 calls, 2.2 of 5.5 seconds.
+        #
+        # The derivative is closed form. Writing S for sqrt(M^2 - 1) and c for cot(theta2), the
+        # residual is nu(M) - B/(S + c) + K with B and K independent of M, so
+        #
+        #     d/dM = nu'(M) + B M / (S (S + c)^2),   nu'(M) = S / (M (1 + (gamma-1)/2 M^2))
+        #
+        # `fsolve` stays as the fallback. A step that leaves the supersonic domain, or an iteration
+        # that will not settle, hands back to the original solver rather than guessing.
+        cotangentPoint2 = 1 / np.tan(flowAnglePoint2)
+        radialTerm      = (rPoint2 - rPointIntersection) / rPoint2
+        offset          = (flowAngleGuess - prandtlMeyerAngleGuess) - flowAnglePoint2
+
+        machNumberFunction     = lambda machNumber: (-1 / (np.sqrt(machNumber**2 - 1) + cotangentPoint2)) * \
+                                                    radialTerm - ((flowAnglePoint2 - \
                                                     gas.prandtlMeyerAngle(machNumber)) - (flowAngleGuess - prandtlMeyerAngleGuess))
-        machNumberIntersection = fsolve(machNumberFunction, machNumber1)[0]
+
+        machNumberIntersection, converged = machNumber1, False
+        for _ in range(12):
+            if not np.isfinite(machNumberIntersection) or machNumberIntersection <= 1.0:
+                break
+            supersonicTerm = np.sqrt(machNumberIntersection**2 - 1)
+            denominator    = supersonicTerm + cotangentPoint2
+            if denominator == 0.0 or supersonicTerm == 0.0:
+                break
+            residualMach = (gas.prandtlMeyerAngle(machNumberIntersection)
+                            - radialTerm / denominator + offset)
+            slope = (supersonicTerm / (machNumberIntersection
+                                       * (1 + 0.5 * (gas.gamma - 1) * machNumberIntersection**2))
+                     + radialTerm * machNumberIntersection
+                     / (supersonicTerm * denominator**2))
+            if slope == 0.0 or not np.isfinite(slope):
+                break
+            step = residualMach / slope
+            machNumberIntersection -= step
+            if abs(step) < 1e-12:
+                converged = bool(machNumberIntersection > 1.0)
+                break
+
+        if not converged:
+            machNumberIntersection = fsolve(machNumberFunction, machNumber1)[0]
 
         # Solve compatibility equations to compute residuals to be minimized
         prandtlMeyerAngleIntersection = gas.prandtlMeyerAngle(machNumberIntersection)

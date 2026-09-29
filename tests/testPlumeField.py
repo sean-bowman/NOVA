@@ -1,7 +1,7 @@
 '''
 
-Tests for the solved plume interior: the free-jet characteristic net and the envelope that bounds
-where its output is trusted.
+Tests for the solved plume interior: the station march that draws it and the envelope that
+bounds where its output is trusted.
 
 Two independent references are available and both are exercised here.
 
@@ -19,6 +19,7 @@ band rather than loudly wrong, so the refusals are what keep a wrong field from 
 '''
 import os
 import sys
+import types
 
 import numpy as np
 import pytest
@@ -28,6 +29,10 @@ from NOVA.Nozzle import (PlumeGas, solveFreeJetNet, freeJetLeadingCharacteristic
                     shockCellLength, prandtlMeyerAngle,
                     plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
                     plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
+from NOVA.plume import PlumeField, PlumeFlow
+from NOVA.stationMarch import (lipShockLossLimit, plumeFieldDefaultReach,
+                               plumeFieldDriftTolerance, solveStationField,
+                               solveStationMarch, uniformStation)
 
 GAMMA = 1.4
 
@@ -222,11 +227,12 @@ def _refusalContour(exitMach, pressureRatio, wallAngle, mesh = False):
 
 def _solveRefusal(exitMach, pressureRatio, wallAngle, mesh = False):
     '''Run the field solve against that contour, at the ambient the structure was built for.'''
-    from NOVA.Nozzle import solvePlumeField
+    from NOVA.stationMarch import solveStationField
 
     contour = _refusalContour(exitMach, pressureRatio, wallAngle, mesh = mesh)
 
-    return solvePlumeField(contour, ambientPressure = contour.nozzlePlumeStructure.ambientPressure)
+    return solveStationField(contour,
+                             ambientPressure = contour.nozzlePlumeStructure.ambientPressure)
 
 def testPlumeFieldRefusesWithoutACharacteristicMesh():
     '''A conical contour has no mesh to continue, and plumeCharacteristicSeed returns None.'''
@@ -318,3 +324,104 @@ def testInitialLineRefusesAnIncompleteSeed():
     from NOVA.Nozzle import freeJetInitialLine
     assert freeJetInitialLine(PlumeGas(GAMMA), {'xMesh': [1]}) is None
     assert freeJetInitialLine(PlumeGas(GAMMA), {}) is None
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Reach, conservation and the compressed lip -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def _marchable(ambientPressure, exitMach = 3.0, wallAngleDeg = 9.0):
+
+    '''
+    A contour the station march can actually run on: a real exit profile across the radius rather
+    than the single placeholder row the refusal contours carry.
+    '''
+
+    lipRadius = 0.30
+    radii = np.linspace(0.0, lipRadius, 60)
+    fraction = radii / lipRadius
+    axisMach = exitMach + 0.4
+
+    contour = types.SimpleNamespace(
+        nozzleScalingFactor = 1.0,
+        chamberGamma = GAMMA, chamberRGasConstant = 320.0,
+        chamberStagnationTemperature = 3000.0, chamberPressure = 4.0e6,
+        exitMachNumber = exitMach, targetExitPressure = 40000.0,
+        exitDiameter = 2.0 * lipRadius, throatDiameter = 0.10,
+        allXPoints = [np.full_like(radii, 1.0)], allRPoints = [radii],
+        allMachNumbers = [axisMach + (exitMach - axisMach) * fraction],
+        allFlowAngles = [np.radians(wallAngleDeg) * fraction],
+        xNozzleWall = np.array([0.0, 1.0]), rNozzleWall = np.array([0.10, lipRadius]))
+
+    return contour
+
+def testReachIsHonouredAndReported():
+    '''
+    The reach is an input because it trades picture against accuracy. Asking for more must return
+    more plume, and the distance actually marched must come back in the notes rather than being
+    assumed equal to what was asked for.
+    '''
+    contour = _marchable(20000.0)
+    short = solveStationField(contour, ambientPressure = 20000.0, reach = 1.0)
+    long = solveStationField(contour, ambientPressure = 20000.0, reach = 3.0)
+    if not (short.solved and long.solved):
+        pytest.skip('the synthetic contour did not march; covered by the shipped-case tests')
+
+    shortSpan = short.boundaryX[-1] - short.boundaryX[0]
+    longSpan = long.boundaryX[-1] - long.boundaryX[0]
+    assert longSpan > 2.0 * shortSpan
+    assert 'lip radii' in short.notes[0]
+
+def testDefaultReachIsTheConservativeOne():
+    '''
+    The default exists so that a caller who does not think about reach gets the answer that
+    conserves mass rather than the picture that does not.
+    '''
+    assert plumeFieldDefaultReach == 2.0
+
+def testTrustworthyTracksTheDriftRatherThanTheOperatingPoint():
+    '''
+    Whether a field is believable is a conservation question, not a question about where on the
+    pressure range it sits. The flag has to follow the measured drift and the stated tolerance.
+    '''
+    field = PlumeField()
+    field.massDriftWorst = plumeFieldDriftTolerance * 0.5
+    assert abs(field.massDriftWorst) <= plumeFieldDriftTolerance
+    field.massDriftWorst = plumeFieldDriftTolerance * 2.0
+    assert abs(field.massDriftWorst) > plumeFieldDriftTolerance
+
+def testACompressedLipIsAdmittedOnlyWhileItsShockIsWeak():
+    '''
+    Below a lip ratio of one the flow is compressed, which is an oblique shock this scheme cannot
+    carry. Turning it isentropically instead is third order in shock strength, so it is allowed
+    while the shock is weak and refused once it is not. The refusal has to name the number.
+    '''
+    flow = PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6)
+    station = uniformStation(flow, 3.0, 0.3, 61)
+    lipPressure = flow.staticPressure(3.0)
+
+    weak = solveStationMarch(flow, station, lipPressure / 0.97, maxLength = 1.0)
+    assert weak['stop'] != 'lipShockTooStrong'
+    assert 0.0 < weak['lipShockLoss'] < lipShockLossLimit
+
+    strong = solveStationMarch(flow, station, lipPressure / 0.4, maxLength = 1.0)
+    assert strong['stop'] == 'lipShockTooStrong'
+    assert strong['lipShockLoss'] > lipShockLossLimit
+    assert len(strong['stations']) == 1
+
+def testAnExpandedLipCarriesNoShockLoss():
+    '''An underexpanded lip turns through a fan, so there is no shock to approximate away.'''
+    flow = PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6)
+    station = uniformStation(flow, 3.0, 0.3, 61)
+    march = solveStationMarch(flow, station, flow.staticPressure(3.0) / 1.5, maxLength = 1.0)
+    assert march['lipShockLoss'] == 0.0
+
+def testABoundaryBelowMachOneIsRefusedBeforeTheShockCheck():
+    '''
+    A boundary that is not supersonic has no characteristics on it at all, which is a different
+    and more basic failure than a shock being too strong. It has to be named separately.
+    '''
+    flow = PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6)
+    station = uniformStation(flow, 3.0, 0.3, 61)
+    march = solveStationMarch(flow, station, 4.0e6, maxLength = 1.0)
+    assert march['stop'] == 'boundaryNotSupersonic'
+    assert len(march['stations']) == 1

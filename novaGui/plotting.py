@@ -298,11 +298,23 @@ def drawPlume(pane: MplPane, nozzle) -> None:
         ax.plot(data.wallX, data.wallR, color = theme.accent, linewidth = 1.8, label = 'Nozzle wall')
         ax.plot(data.wallX, -data.wallR, color = theme.accent, linewidth = 1.8)
 
-    ax.plot(data.boundaryX, data.boundaryR, color = theme.blue, linewidth = 1.6,
-            linestyle = ':', label = 'Plume boundary')
-    ax.plot(data.boundaryX, -data.boundaryR, color = theme.blue, linewidth = 1.6, linestyle = ':')
-    ax.fill_between(data.boundaryX, data.boundaryR, -data.boundaryR,
-                    color = theme.blue, alpha = 0.05)
+    solved = data.boundarySource == 'marched'
+
+    # The station march leaves unstructured nodes, which tricontourf takes directly. The solve is
+    # one half plane, so it is mirrored before contouring.
+    if solved and data.fieldX.size > 3:
+        ax.tricontourf(np.concatenate([data.fieldX, data.fieldX]),
+                       np.concatenate([data.fieldR, -data.fieldR]),
+                       np.concatenate([data.fieldMach, data.fieldMach]),
+                       levels = 40, cmap = 'viridis')
+    else:
+        ax.fill_between(data.boundaryX, data.boundaryR, -data.boundaryR,
+                        color = theme.blue, alpha = 0.05)
+
+    label = 'Plume boundary, solved' if solved else 'Plume boundary, correlated'
+    for sign in (1.0, -1.0):
+        ax.plot(data.boundaryX, sign * data.boundaryR, color = theme.blue, linewidth = 1.6,
+                linestyle = '-' if solved else ':', label = label if sign > 0 else None)
 
     for index, cellPosition in enumerate(np.asarray(data.cellX, dtype = float)):
         ax.axvline(cellPosition, color = theme.textDim, linewidth = 0.7, linestyle = '--',
@@ -314,8 +326,15 @@ def drawPlume(pane: MplPane, nozzle) -> None:
                 color = theme.green, linewidth = 3.5,
                 label = f'Mach disk ({data.machDiskDiameter * 1e3:.0f} mm)')
 
-    ax.set_title(f'{data.title}' + '\n' + f'{data.summary}',
-                 color = theme.text, fontsize = 10)
+    # The drift belongs on the figure whatever its value, because it is what separates a plume
+    # shape worth reading from one that is merely drawn.
+    heading = f'{data.title}' + '\n' + f'{data.summary}'
+    if solved and np.isfinite(data.massDriftWorst):
+        verdict = ('conserves mass over this reach' if data.trustworthy
+                   else 'does not conserve mass over this reach; shorten it')
+        heading += (f'\nmass continuity error {data.massDriftWorst:+.2f} % over '
+                    f'{data.reachMarched:.1f} lip radii  --  {verdict}')
+    ax.set_title(heading, color = theme.text, fontsize = 10)
     ax.set_xlabel('Nozzle axis [m]')
     ax.set_ylabel('Radius [m]')
     ax.set_aspect('equal', adjustable = 'datalim')

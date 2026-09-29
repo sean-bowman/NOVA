@@ -91,7 +91,7 @@ try:
     from .characteristics import CharacteristicGas
     from .contourKernel import ThroatGeometry
     from .contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
-                          conicalContour, divergingSectionFamily,
+                          conicalContour, solveConicalContour, divergingSectionFamily,
                           truncatedIdealContour as solveTruncatedIdealContour,
                           thrustOptimizedParabolicContour as solveThrustOptimizedParabolicContour,
                           thrustOptimizedContour as solveThrustOptimizedContourWall,
@@ -116,7 +116,7 @@ except ImportError as error:
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
-                    PlumeFlow, PlumePoint, solvePlumeStructure, solvePlumeField,
+                    PlumeFlow, PlumePoint, solvePlumeStructure,
                     plumeCharacteristicSeed,
                     fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
                     obliqueShockDeflection, obliqueShockState,
@@ -132,6 +132,9 @@ from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNod
                     machDiskOnsetPressureRatio, separationPressureRatio,
                     plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
                     plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
+from .stationMarch import (solveStationField, solveStationMarch, stationFromLine,
+                           plumeFieldDefaultReach, plumeFieldDriftTolerance,
+                           plumeFieldRadialPoints)
 
 class Nozzle:
 
@@ -1096,8 +1099,11 @@ class Nozzle:
 
         Generate a straight-walled conical diverging section for this nozzle.
 
-        A cone has no characteristic mesh, so no near-wall state is produced here and the plume
-        march, which continues that mesh, refuses a conical contour.
+        A cone has no characteristic mesh. The near-wall state comes from the one-dimensional
+        area-Mach relation along the wall instead, which is what a conical diverging section is
+        conventionally analyzed with and is what the cooling solve reads. The plume march, which
+        continues a mesh, still refuses a conical contour and the correlated plume structure
+        stands in for it.
 
         Parameters:
         -----------
@@ -1109,6 +1115,9 @@ class Nozzle:
 
         '''
 
+        gas = CharacteristicGas(self.chamberGamma, self.chamberRGasConstant,
+                                self.chamberStagnationTemperature)
+
         throat = ThroatGeometry(self.chamberGamma, self.throatRadiusNonDimensional,
                                 self.throatInletCurvatureNonDimensional,
                                 self.throatOutletCurvatureNonDimensional,
@@ -1118,9 +1127,31 @@ class Nozzle:
             self.engineMassFlow, self.chamberPressure, self.throatGamma,
             self.chamberRGasConstant, self.chamberStagnationTemperature)
 
-        self.xNozzleWall, self.rNozzleWall = conicalContour(
-            throat, float(self.expansionRatio), self.nozzleScalingFactor,
-            numPoints = self.numContourPoints, conicalHalfAngle = conicalHalfAngle)
+        solution = ContourSolution(
+            gas = gas, throat = throat,
+            chamberPressure = self.chamberPressure,
+            engineMassFlow = self.engineMassFlow,
+            throatGamma = self.throatGamma,
+            idealMachNumber = self.idealMachNumber,
+            targetExitPressure = self.targetExitPressure,
+            numContourPoints = self.numContourPoints,
+            requestedAreaRatio = float(self.expansionRatio),
+            numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
+            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
+
+        solution = solveConicalContour(solution, conicalHalfAngle = conicalHalfAngle,
+                                       assignOutputsToObject = True)
+
+        # Anything the solve left as None is a branch it did not reach, so it is not copied and a
+        # value from an earlier call survives rather than being overwritten with nothing.
+        for name in contourSolutionOutputs:
+            value = getattr(solution, name)
+            if value is not None:
+                setattr(self, name, value)
+
+        self.nozzleContourSolution = solution
+
+        return solution.thrustCoef
 
     def plumeContour(self):
 
@@ -1188,37 +1219,44 @@ class Nozzle:
 
         return plumeCharacteristicSeed(self.plumeContour())
 
-    def plumeField(self, ambientPressure: float, numRays: int = 40, exitPoints: int = 140,
-                   maxLines: int = 2000, lineLimit: int = 250) -> 'PlumeField':
+    def plumeField(self, ambientPressure: float, reach: float = plumeFieldDefaultReach,
+                   radialPoints: int = plumeFieldRadialPoints,
+                   maxStations: int = 200000) -> 'PlumeField':
 
         '''
 
-        Solve the plume interior by continuing the nozzle characteristics march past the lip.
+        Solve the plume boundary and interior by marching stations downstream of the lip.
 
-        The march is `plume.solvePlumeField`. This method supplies the contour and keeps the
-        result.
+        The march is `stationMarch.solveStationField`, which continues the contour's own
+        characteristic mesh on planes normal to the axis. This method supplies the contour and
+        keeps the result. The boundary it returns is a computed constant-pressure streamline;
+        `plumeStructure` holds the correlated alternative and the quantities this cannot produce,
+        the jet scale and the Mach disk.
 
         Parameters:
         -----------
         ambientPressure : float
             Pressure the plume expands into [Pa].
-        numRays : int
-            Rays in the corner expansion fan at the lip.
-        exitPoints : int
-            Points along the exit line the march starts from.
-        maxLines, lineLimit : int
-            Ceilings on the march, so a net that will not close stops rather than running away.
+        reach : float
+            Axial distance to march, in lip radii. The default is short because that is how far
+            the scheme conserves mass; asking for more returns more plume and a larger error, and
+            the error comes back either way in `massDriftWorst`.
+        radialPoints : int
+            Points across each station.
+        maxStations : int
+            Ceiling on the number of steps.
 
         Returns:
         --------
         PlumeField
-            The solved interior, with its own notes on where it stopped and why.
+            The solved interior, with `trustworthy` recording whether it conserved mass and
+            `notes` saying what was marched and what was approximated.
 
         '''
 
-        self.nozzlePlumeField = solvePlumeField(
-            self.plumeContour(), ambientPressure = ambientPressure, numRays = numRays,
-            exitPoints = exitPoints, maxLines = maxLines, lineLimit = lineLimit)
+        self.nozzlePlumeField = solveStationField(
+            self.plumeContour(), ambientPressure = ambientPressure, reach = reach,
+            radialPoints = radialPoints, maxStations = maxStations)
 
         return self.nozzlePlumeField
 

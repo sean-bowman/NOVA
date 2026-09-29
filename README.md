@@ -170,7 +170,7 @@ Grouped by section, matching the order in the config file.
 
 ### Regenerative cooling jacket
 
-The jacket covers the whole regen section, from the injector face over the chamber barrel to the regen truncation. The coolant enters through the inlet volute at the aft end, runs forward against the exhaust, and leaves through the return volute at the injector face; at each end a fillet turns the channels off the wall into a straight flare the volute attaches to, the return the mirror image of the inlet. The gas side is Bartz with a single correlation constant along the whole wall. Measured constants vary with station: on a LOX/GH2 chamber at 150 to 1000 psia they run 0.0257 in the barrel against 0.0148 at the throat (NASA TN D-2832), so NOVA is about right over the barrel and 20 to 40 percent high at the throat, which buys wall margin and charges pressure drop for it. Sources are in [docs/references_gasSideHeatTransfer_2026-09-22.md](docs/references_gasSideHeatTransfer_2026-09-22.md).
+Coolant enters through the inlet volute at the aft end of the regen nozzle, runs forward against the exhaust, and leaves through the return volute at the injector face; at each end a flare turns the channels off the wall into the volute to allow for variable radial volute placement for wall thickness tailoring. The gas side is Bartz, by default with a single correlation constant along the whole wall. Measured constants vary with station: on a LOX/GH2 chamber at 150 to 1000 psia they run 0.0257 in the barrel against 0.0148 at the throat (NASA TN D-2832), so that default is about right over the barrel and 20 to 40 percent high at the throat, which buys wall margin and charges pressure drop for it. Setting `gasSideAxialModel` to `measured` takes the axial shape from those constants instead, normalized on the barrel so Bartz keeps the absolute level: unity over the barrel and 0.59 at the throat. The correlation and both options live in [src/NOVA/gasSideHeatTransfer.py](src/NOVA/gasSideHeatTransfer.py), which the ablative liner and the radiative extension read as well, and the sources are in [docs/references_gasSideHeatTransfer_2026-09-22.md](docs/references_gasSideHeatTransfer_2026-09-22.md).
 
 Three channel families are built, one per run:
 
@@ -180,7 +180,7 @@ Three channel families are built, one per run:
 | `rectangular` | Rounded rectangle, depth along the wall normal | Rib, and the channels run straight | Depth | Width, which fills the pitch at the cold wall less the rib, and aspect ratio |
 | `helical` | Rounded rectangle on a helix of `nChannel` starts | Helix angle and aspect ratio | Width | Rib, which varies along the nozzle |
 
-The size solved for is the section's radial half-extent, `channelRadius`: a circle's radius, half a rectangle's depth. At each station it is the largest channel that holds the wall at `maxWallTemperature`, within the limits of each family. Spirally fluted channels are kept in [experimental/flutedChannels.py](experimental/flutedChannels.py).
+`channelRadius` references both a circle's radius and half a rectangle's depth for consistency in the backend variables. At each station it is converged to be the largest channel that holds the wall at `maxWallTemperature`, within the limits of each family. Spirally fluted channels are kept in [experimental/flutedChannels.py](experimental/flutedChannels.py).
 
 The jacket on `assets/NOVANozzle.json` is sixty circular channels in GRCop-42, with hydrogen coolant at 3.4 kg/s entering at 12 MPa and 30 K, feeding both volutes. `tests/regressionHarness.py` runs that jacket as its `regenCircle` baseline, as 160 rectangular channels for `regenRectangular` and as 40 square helical starts for `regenHelical`; the case table in that file is the record of what each baseline pins. Theory and correlation sources are in [NozzleCooling.md](docs/NozzleCooling.md).
 
@@ -223,15 +223,15 @@ The `material` field is a wall alloy name resolved by `src/NOVA/materials.py`: `
 Optional throughout: a configuration that names none of these describes an engine with no film. Works alongside a jacket rather than instead of one; see [NozzleCooling.md](docs/NozzleCooling.md) for the two closures.
 
 | Field                              | Unit | Meaning                                                                                          |
-| ------------------------------------ | ---- | ----------------------------------------------------------------------------------------------- |
+| ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
 | `filmCooling`                      | --   | Inject a sheet of coolant along the wall                                                         |
 | `filmCoolingModel`                 | --   | `hatchPapell` (flat-plate correlation) or `sp8124Entrainment` (accounts for acceleration and turning) |
 | `filmCoolant`                      | --   | REFPROP / CoolProp fluid name; must be a gas at its slot conditions                              |
-| `filmMassFlow`                     | kg/s | Coolant through the film ring, bypassing the injector                                           |
+| `filmMassFlow`                     | kg/s | Coolant through the film ring, bypassing the injector                                            |
 | `filmInletTemperature`             | K    | Coolant temperature leaving the slot                                                             |
 | `filmInjectionAxialPosition`       | m    | Axial position of the slot. One ring only                                                        |
-| `filmSlotHeight`                   | m    | Radial height of the annular slot                                                                 |
-| `filmCoolantMixtureRatio`          | --   | Oxidizer to fuel ratio of the coolant itself. Zero is a pure fuel film                            |
+| `filmSlotHeight`                   | m    | Radial height of the annular slot                                                                |
+| `filmCoolantMixtureRatio`          | --   | Oxidizer to fuel ratio of the coolant itself. Zero is a pure fuel film                           |
 | `filmEntrainmentMultiplier`        | --   | psi_m at the slot, for the entrainment closure. SP-8124 recommends 3 to 4                        |
 
 ### Radiative extension

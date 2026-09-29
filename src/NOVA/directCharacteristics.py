@@ -137,10 +137,13 @@ def marchPrescribedWall(gas: CharacteristicGas, wall, startingLine: tuple,
     --------
     dict
         'mach', 'flowAngle', 'x', 'r' as (numLinePoints, numLines) blocks; the wall arrays;
-        'terminated' saying why the march stopped; and the shock record when one was found.
+        'terminated' saying why the march stopped; 'foldedLines', how many lines
+        ended on a step that folded back on itself; and the shock record when one was
+        found.
 
     '''
 
+    foldedLines = 0
     machLine, flowAngleLine, xLine, rLine = (np.asarray(array, dtype = float)
                                              for array in startingLine)
     numLinePoints = len(machLine)
@@ -210,6 +213,23 @@ def marchPrescribedWall(gas: CharacteristicGas, wall, startingLine: tuple,
             mach[i], flowAngle[i], x[i], r[i] = axisymmetricMethodOfCharacteristics(gas, kernel)
             if not np.isfinite(mach[i]) or mach[i] <= 1.0:
                 mach[i], flowAngle[i], x[i], r[i] = np.nan, np.nan, np.nan, np.nan
+                break
+
+            # A step has to advance. Marching along a line runs downstream in x and inward in r,
+            # so an intersection that lands upstream AND further out has folded back on itself and
+            # the two characteristics it was built from have already crossed. Both conditions are
+            # required: a step that stalls in one coordinate alone is ordinary near the axis,
+            # and rejecting on either one kills the march after three lines.
+            #
+            # Nothing above catches it. Such a point comes back finite, supersonic and at positive
+            # radius, and it carries a Mach number half again the exit value at a flow angle no
+            # wall in the nozzle turns through: measured on a thrust-optimized contour, Mach 7.53
+            # at minus forty degrees, from a point that moved half a throat radius back upstream.
+            # It is then handed to the next line as data, and to `axisPoint` as the innermost
+            # state, so one folded point contaminates everything behind it.
+            if x[i] <= x[i - 1] and r[i] >= r[i - 1]:
+                mach[i], flowAngle[i], x[i], r[i] = np.nan, np.nan, np.nan, np.nan
+                foldedLines += 1
                 break
 
             # A line ends at the axis, and where it ends is decided by the flow rather than by
@@ -312,6 +332,7 @@ def marchPrescribedWall(gas: CharacteristicGas, wall, startingLine: tuple,
         'numLines':     len(machColumns),
         'innerReach':   np.array(innerReach[:len(machColumns)]),
         'terminated':   terminated,
+        'foldedLines':  foldedLines,
         'shock':        shock,
         'crossings':    crossings,
     }

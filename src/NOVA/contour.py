@@ -14,7 +14,9 @@ required, then truncate to the area ratio wanted, and the length follows. The in
 free by construction, because it is a piece of an ideal nozzle.
 
 `conicalContour` is a straight wall at a chosen half angle. It has no interior solution and no
-free parameters beyond the angle.
+free parameters beyond the angle. `solveConicalContour` wraps it so a cone finishes the same way
+the contoured families do, supplying the near-wall state from the one-dimensional area-Mach
+relation and the thrust coefficient from a source-flow exit plane.
 
 `raoParabolicContour` draws a skewed parabola between two prescribed wall angles. It solves
 nothing; it exists so that a generated contour can be compared against the construction most
@@ -189,6 +191,7 @@ class ContourSolution:
         # -- What a prescribed-wall family reports about its own solve -- #
         self.chartExtrapolated                   = None   # [bool], Rao chart read above eps 50
         self.marchTerminatedOn                   = None   # [str], why the wall march stopped
+        self.marchFoldedLines                    = None   # [-], lines the march ended on a fold
         self.internalShock                       = None   # [dict], where the net folded, or None
         self.shockFront                          = None   # [dict], the captured front and its loss
         self.thrustCoefWithoutShock              = None   # [-], the same plane with no loss applied
@@ -261,7 +264,7 @@ contourSolutionOutputs = (
     'exitPlaneRadius', 'exitPlaneMach', 'exitPlaneFlowAngle', 'exitPlanePressure',
     'exitAreaAveragedPressure', 'exitMassAveragedPressure', 'exitMassFlux', 'exitMassClosure',
     'exitPlaneSampledFraction',
-    'chartExtrapolated', 'marchTerminatedOn', 'internalShock', 'shockFront',
+    'chartExtrapolated', 'marchTerminatedOn', 'marchFoldedLines', 'internalShock', 'shockFront',
     'thrustCoefWithoutShock', 'shockThrustDebit',
     'deliveredAreaRatio', 'deliveredLengthFraction', 'referenceConeLength', 'exitWallAngle',
     'inflectionWallAngle')
@@ -933,10 +936,24 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
         / np.trapezoid(weight, rExitPlane[::-1]))
     state.exitMassFlux = float(2.0 * np.pi * np.trapezoid(weight, rExitPlane[::-1]))
 
-    # Mass through the exit plane against mass through the choked throat. The two must agree:
-    # the same flow passes both, and nothing is added or removed between them. Any departure is
-    # discretization, in the mesh or in this integration, and it is the only measure of the
-    # solution's quality that needs nothing outside it.
+    # Mass through the exit plane against the one-dimensional choked throat flow.
+    #
+    # This does NOT converge to one, and reading a departure from one as solver error is wrong.
+    # `chokedFlow` below assumes a flat sonic line. The real one is curved by the throat, the
+    # solve carries that curvature from its transonic start line, and the flow it delivers is
+    # correspondingly less: this is the throat discharge coefficient, and it is physics rather
+    # than discretization.
+    #
+    # Measured on the kernel's own downstream boundary, which reaches the axis and so is not
+    # truncated, the deficit is 2.04 per cent at the shipped outlet curvature of 0.382 throat
+    # radii, 1.55 at 0.75 and 0.92 at 1.5. It falls monotonically as the throat flattens, which
+    # is the signature. All three contoured families carry it identically, 0.9787 to 0.9798,
+    # because they share the kernel.
+    #
+    # What is left after it IS a quality measure, and it is the part that differs by family: a
+    # further 0.5 per cent for the truncated ideal contour, whose sampler leaves eight per cent
+    # of the exit area to a linear closure, against 1.5 to 1.8 for the optimized families, whose
+    # exit plane is fully sampled and whose loss is in the forward march and its sampling.
     chokedFlow = (state.chamberPressure * np.pi * state.throatRadiusNonDimensional ** 2
                   * np.sqrt(state.throatGamma
                             / (state.chamberRGasConstant * state.chamberStagnationTemperature)
@@ -1488,7 +1505,8 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
 
 def solvePrescribedWallContour(state: ContourSolution, wall, inflectionAngle: float,
                                lengthFraction: float,
-                               assignOutputsToObject: bool = False) -> ContourSolution:
+                               assignOutputsToObject: bool = False,
+                               kernelCache: dict = None) -> ContourSolution:
 
     '''
 
@@ -1536,8 +1554,31 @@ def solvePrescribedWallContour(state: ContourSolution, wall, inflectionAngle: fl
                                                     state.chamberStagnationTemperature)
 
     # -- The kernel, turned to this family's inflection angle -- #
-    kernel = solveKernel(gas, throat, state.numCharacteristics, inflectionAngle,
-                         state.chamberPressure)
+    #
+    # The kernel depends on one of the four design variables and not the other three, so an
+    # optimizer varying the exit angle or either tension re-solves an identical kernel. That is
+    # 90 per cent of an objective evaluation thrown away: measured at 4.93 seconds against 0.57
+    # for the march behind it, and a forty-evaluation search made 55 kernel solves at 29 distinct
+    # inflection angles.
+    #
+    # `kernelCache` is supplied by the caller and scoped to one search, rather than being module
+    # state, so nothing is shared between solves that should not be. The key carries everything
+    # the kernel depends on by value: an entry is returned only when it would have been recomputed
+    # identically.
+    kernel = None
+    cacheKey = None
+    if kernelCache is not None:
+        cacheKey = (int(state.numCharacteristics), float(inflectionAngle),
+                    float(state.chamberPressure), float(gas.gamma), float(gas.gasConstant),
+                    float(gas.stagnationTemperature), float(throat.throatRadius),
+                    float(throat.outletCurvature))
+        kernel = kernelCache.get(cacheKey)
+
+    if kernel is None:
+        kernel = solveKernel(gas, throat, state.numCharacteristics, inflectionAngle,
+                             state.chamberPressure)
+        if cacheKey is not None:
+            kernelCache[cacheKey] = kernel
 
     state.throatWallX, state.throatWallR = kernel['throatWallX'], kernel['throatWallR']
     state.throatWallAngles = kernel['throatWallAngles']
@@ -1555,6 +1596,15 @@ def solvePrescribedWallContour(state: ContourSolution, wall, inflectionAngle: fl
 
     march = marchPrescribedWall(gas, wall, startingLine)
     state.marchTerminatedOn = march['terminated']
+
+    # How many lines ended on a fold, recorded whether or not the envelope test below finds a
+    # shock. The two disagree: on the shipped parabola the march folds two lines at fifty
+    # characteristics while `shockFront` comes back None, and the folded fraction rises with
+    # resolution, 4.2 per cent of lines at thirty characteristics to 10.0 at a hundred and
+    # twenty. A fold is same-family characteristics crossing, which is compression coalescing,
+    # so a solution reporting no internal shock while folding lines is making a claim it
+    # cannot support. This is the count that says so.
+    state.marchFoldedLines = int(march.get('foldedLines', 0))
     # One authority on whether there is a shock, and it is the envelope. The march keeps its own
     # record of where its lines crossed, but that test was shown to be measuring drift near the
     # axis rather than compression, and the two disagree: it reports a crossing on walls the
@@ -1728,7 +1778,8 @@ def thrustOptimizedParabolicContour(state: ContourSolution, lengthFraction: floa
 
 def thrustOptimizedContour(state: ContourSolution, lengthFraction: float,
                            designVariables: tuple,
-                           assignOutputsToObject: bool = False) -> ContourSolution:
+                           assignOutputsToObject: bool = False,
+                           kernelCache: dict = None) -> ContourSolution:
 
     '''
 
@@ -1773,7 +1824,8 @@ def thrustOptimizedContour(state: ContourSolution, lengthFraction: float,
                           inflectionAngle, exitAngle, inflectionTension, exitTension)
 
     state = solvePrescribedWallContour(state, wall, inflectionAngle, lengthFraction,
-                                       assignOutputsToObject = assignOutputsToObject)
+                                       assignOutputsToObject = assignOutputsToObject,
+                                       kernelCache = kernelCache)
     state.wallDesignVariables = {'inflectionAngle': float(inflectionAngle),
                                  'exitAngle': float(exitAngle),
                                  'inflectionTension': float(inflectionTension),
@@ -1826,6 +1878,95 @@ def conicalContour(throat: ThroatGeometry, areaRatio: float, scalingFactor: floa
     x = np.linspace(0, coneLength, numPoints) * scalingFactor
     r = np.linspace(throat.throatRadius, exitRadius, numPoints) * scalingFactor
     return x, r
+
+def solveConicalContour(state: ContourSolution, conicalHalfAngle: float = 15.0,
+                        assignOutputsToObject: bool = False) -> ContourSolution:
+
+    '''
+
+    Build a straight-walled cone and finish it the way every other family is finished.
+
+    There is nothing to iterate. The wall is a line fixed by the area ratio and the half angle, so
+    this exists to put the cone through the same last step as the contoured families rather than to
+    search for anything.
+
+    What it has to supply in place of a characteristic solve is the near-wall state and the thrust
+    coefficient, and both come from the classical conical treatment:
+
+        near-wall Mach      the one-dimensional area-Mach relation at the local wall radius. It
+                            carries no radial structure and no wave reflections, so it misses the
+                            overexpansion at the arc-to-cone junction that SP-8120 warns can stand
+                            a shock.
+        exit plane          a spherical source flow from the virtual apex, so the flow angle runs
+                            from zero on the axis to the half angle at the wall and the Mach number
+                            is held uniform across the plane. Integrating that plane is what
+                            produces the divergence loss, so `divergenceLossFactor` is not applied
+                            on top: doing both would count it twice.
+
+    The same integral the contoured families use then returns the thrust coefficient, so a cone and
+    a bell are compared on one measure rather than on two conventions.
+
+    Parameters:
+    -----------
+    state : ContourSolution
+        Workspace supplying the chamber state, the throat and the requested area ratio.
+    conicalHalfAngle : float
+        Cone half angle [deg].
+    assignOutputsToObject : bool
+        Whether to write the full output set onto the workspace.
+
+    Returns:
+    --------
+    ContourSolution : the same workspace, with `thrustCoef` set.
+
+    '''
+
+    areaRatio = float(state.requestedAreaRatio)
+    halfAngle = np.radians(float(conicalHalfAngle))
+    scaling = throatScalingFactor(state.engineMassFlow, state.chamberPressure, state.throatGamma,
+                                  state.chamberRGasConstant,
+                                  state.chamberStagnationTemperature)
+
+    state.nozzleScalingFactor = scaling
+
+    # Built non-dimensional, in throat radii, because `finishContourSolution` scales what it is
+    # handed. Passing a wall that is already in metres scales it twice.
+    xNozzleWall, rNozzleWall = conicalContour(state.throat, areaRatio, 1.0,
+                                              numPoints = state.numContourPoints,
+                                              conicalHalfAngle = conicalHalfAngle)
+
+    # The wall Mach number, station by station, from the local area ratio alone.
+    throatRadius = float(np.min(rNozzleWall))
+    localAreaRatio = np.maximum((np.asarray(rNozzleWall, dtype = float)/throatRadius)**2, 1.0)
+    machNumberNozzleWall = np.array([machFromAreaRatio(float(ratio), state.chamberGamma,
+                                                       branch = 'supersonic')
+                                     for ratio in localAreaRatio])
+
+    # The exit plane as a source flow from the virtual apex, ordered wall inward to the axis so it
+    # matches what `exitPlaneThrustCoefficient` integrates for every other family.
+    exitRadius = float(rNozzleWall[-1])
+    apexDistance = exitRadius/np.tan(halfAngle)
+    rExitPlane = np.linspace(exitRadius, 0.0, state.numContourPoints)
+    flowAngleExitPlane = np.arctan2(rExitPlane, apexDistance)
+    machNumberExitPlane = np.full_like(rExitPlane, machNumberNozzleWall[-1])
+
+    velocityTerm, pressureTerm = exitPlaneThrustCoefficient(state, rExitPlane,
+                                                            machNumberExitPlane,
+                                                            flowAngleExitPlane)
+    state.velocityTermThrustCoef = velocityTerm
+    state.pressureTermThrustCoef = pressureTerm
+    thrustCoef = velocityTerm + pressureTerm
+
+    _, wallExitPressure, _ = isentropicValues(machNumberNozzleWall[-1],
+                                              state.chamberStagnationTemperature,
+                                              state.chamberPressure, state.chamberGamma,
+                                              state.chamberRGasConstant)
+
+    finishContourSolution(state, xNozzleWall, rNozzleWall, machNumberNozzleWall,
+                          wallExitPressure = wallExitPressure, thrustCoef = thrustCoef,
+                          assignOutputsToObject = assignOutputsToObject)
+
+    return state
 
 # Initial and final wall angles for the Rao canted-parabola contour, in degrees, against area ratio
 # and percent bell. This is a DIGITIZATION of figure 5(b) of NASA SP-8120, which itself reproduces

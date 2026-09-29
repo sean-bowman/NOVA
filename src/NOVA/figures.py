@@ -220,9 +220,14 @@ class PlumeFigure:
 
     Exhaust plume structure drawn against the nozzle contour.
 
-    The boundary, cell spacing and Mach disk are correlations; the plume interior is not
-    solved, so nothing here is a field. `notes` carries the caveats that belong beside the
-    numbers.
+    The boundary is the station march's computed constant-pressure streamline when one was
+    solved, and the correlated sinusoid when it was not; `boundarySource` says which, because the
+    two are different kinds of claim. The interior Mach field comes with the marched boundary and
+    is empty otherwise. The cell spacing and the Mach disk are always correlations, since the
+    march is isentropic and describes no shock.
+
+    `massDriftWorst` travels with the field and belongs on the figure whatever its value: it is
+    the only thing separating a plume shape worth reading from one that is merely drawn.
 
     '''
 
@@ -238,6 +243,14 @@ class PlumeFigure:
     summary: str = ''
     notes: list = field(default_factory = list)
     title: str = 'Exhaust plume structure'
+
+    boundarySource: str = 'correlated'             # 'marched' or 'correlated'
+    fieldX: np.ndarray = field(default_factory = lambda: np.array([]))      # [m], station nodes
+    fieldR: np.ndarray = field(default_factory = lambda: np.array([]))      # [m]
+    fieldMach: np.ndarray = field(default_factory = lambda: np.array([]))   # [-]
+    massDriftWorst: float = float('nan')           # [%], flux departure from the exit plane
+    trustworthy: bool = False                      # whether that drift is inside tolerance
+    reachMarched: float = 0.0                      # [-], lip radii the march covered
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Extractors -- #
@@ -350,6 +363,39 @@ def plumeFigure(nozzle):
     summary = (f"{structure.jetType}   Pe/Pa {structure.exitPressureRatio:.2f}   "
                f"NPR {structure.nozzlePressureRatio:.1f}   Mj {structure.fullyExpandedMach:.2f}   "
                f"cell {structure.shockCellLength * 1e3:.0f} mm")
+    notes = list(structure.notes)
+
+    # The marched boundary is preferred wherever one exists, because it is a solved streamline
+    # rather than an interpolated shape. Where the march refused, on a conical contour or outside
+    # its envelope, the correlated boundary is what there is and the figure says so.
+    field = getattr(nozzle, 'nozzlePlumeField', None)
+    marched = field is not None and getattr(field, 'solved', False) and field.boundaryX.size > 1
+    if marched:
+        reach = ((field.solvedTo - field.lipX) / field.lipRadius
+                 if field.lipRadius > 0.0 else 0.0)
+        summary += (f"   marched {reach:.1f} lip radii   "
+                    f"mass drift {field.massDriftWorst:+.2f} %")
+        notes = list(field.notes) + notes
+        return PlumeFigure(
+            wallX = wallX, wallR = wallR,
+            boundaryX = field.boundaryX, boundaryR = field.boundaryR,
+            cellX = structure.cellX,
+            machDiskX = structure.machDiskX,
+            machDiskDiameter = structure.machDiskDiameter,
+            machDiskPresent = structure.machDiskPresent,
+            jetType = structure.jetType,
+            summary = summary,
+            notes = notes,
+            boundarySource = 'marched',
+            fieldX = field.nodeX, fieldR = field.nodeR, fieldMach = field.nodeMach,
+            massDriftWorst = field.massDriftWorst,
+            trustworthy = bool(field.trustworthy),
+            reachMarched = reach,
+        )
+
+    if field is not None and field.notes:
+        notes = list(field.notes) + notes
+    summary += '   boundary correlated, not solved'
 
     return PlumeFigure(
         wallX = wallX, wallR = wallR,
@@ -360,7 +406,7 @@ def plumeFigure(nozzle):
         machDiskPresent = structure.machDiskPresent,
         jetType = structure.jetType,
         summary = summary,
-        notes = list(structure.notes),
+        notes = notes,
     )
 
 # Quantity key -> (Nozzle attribute, color bar label, plotly colorscale, figure title)
@@ -624,6 +670,42 @@ def plotlyField(data: FieldFigure):
     figure.update_layout(**layout)
     return figure
 
+def _plumeFieldGrid(data, axialPoints: int = 260, radialPoints: int = 130):
+
+    '''
+
+    Resample the marched plume onto a rectangular grid, or None when there is no field.
+
+    The march puts its points at fixed fractions of a jet radius that changes station to station,
+    so the nodes are structured but not rectangular in (x, r) and plotly's contour needs
+    rectangular. Everything outside the jet boundary is left NaN so the fill stops at the
+    boundary rather than squaring off the jet.
+
+    '''
+
+    if data.fieldX.size < 4 or data.fieldMach.size != data.fieldX.size:
+        return None
+
+    from scipy.interpolate import griddata
+
+    axial = np.linspace(float(data.fieldX.min()), float(data.fieldX.max()), axialPoints)
+    edge = float(np.abs(data.boundaryR).max()) if data.boundaryR.size else float(data.fieldR.max())
+    radial = np.linspace(-edge, edge, radialPoints)
+    axialGrid, radialGrid = np.meshgrid(axial, radial)
+
+    # The solve is one half plane, so it is mirrored before interpolating rather than after.
+    points = np.column_stack([np.concatenate([data.fieldX, data.fieldX]),
+                              np.concatenate([data.fieldR, -data.fieldR])])
+    values = np.concatenate([data.fieldMach, data.fieldMach])
+    machGrid = griddata(points, values, (axialGrid, radialGrid), method = 'linear')
+
+    if data.boundaryX.size > 1:
+        order = np.argsort(data.boundaryX)
+        localEdge = np.interp(axialGrid, data.boundaryX[order], data.boundaryR[order])
+        machGrid = np.where(np.abs(radialGrid) <= localEdge, machGrid, np.nan)
+
+    return axial, radial, machGrid
+
 def plotlyPlume(data):
 
     '''
@@ -637,6 +719,17 @@ def plotlyPlume(data):
 
     figure = go.Figure()
 
+    # The interior goes down first so the wall, the boundary and the Mach disk draw over it.
+    grid = _plumeFieldGrid(data)
+    if grid is not None:
+        axialGrid, radialGrid, machGrid = grid
+        figure.add_trace(go.Contour(
+            x = axialGrid, y = radialGrid, z = machGrid, ncontours = 40,
+            colorscale = 'Viridis', connectgaps = False,
+            contours = dict(coloring = 'fill', showlines = False),
+            colorbar = dict(title = 'Mach', thickness = 14, len = 0.7),
+            name = 'Mach field', hoverinfo = 'skip'))
+
     if data.wallX.size:
         for sign in (1.0, -1.0):
             figure.add_trace(go.Scatter(x = data.wallX, y = sign * data.wallR, mode = 'lines',
@@ -644,11 +737,14 @@ def plotlyPlume(data):
                                         name = 'Nozzle wall', showlegend = sign > 0,
                                         hoverinfo = 'skip'))
 
+    solved = data.boundarySource == 'marched'
+    boundaryName = 'Plume boundary, solved' if solved else 'Plume boundary, correlated'
     for sign in (1.0, -1.0):
         figure.add_trace(go.Scatter(
             x = data.boundaryX, y = sign * data.boundaryR, mode = 'lines',
-            line = dict(color = palette['blue'], width = 2, dash = 'dot'),
-            name = 'Plume boundary', showlegend = sign > 0,
+            line = dict(color = palette['blue'], width = 2,
+                        dash = 'solid' if solved else 'dot'),
+            name = boundaryName, showlegend = sign > 0,
             hovertemplate = 'x %{x:.3f} m<br>r %{y:.3f} m<extra></extra>'))
 
     for index, cellPosition in enumerate(np.asarray(data.cellX, dtype = float)):
@@ -671,12 +767,25 @@ def plotlyPlume(data):
     layout['legend'] = dict(bgcolor = palette['surface'], bordercolor = palette['border'], borderwidth = 1)
     figure.update_layout(**layout)
 
+    # The drift goes on the figure whatever it is, in the colour that says whether to believe the
+    # shape. A plume drawn without it is a picture that reads like a result.
+    if data.boundarySource == 'marched' and np.isfinite(data.massDriftWorst):
+        verdict = ('conserves mass over this reach' if data.trustworthy
+                   else 'does not conserve mass over this reach; shorten it')
+        figure.add_annotation(
+            text = (f'mass continuity error {data.massDriftWorst:+.2f} % of exit mass flow over '
+                    f'{data.reachMarched:.1f} lip radii  --  {verdict}'),
+            xref = 'paper', yref = 'paper', x = 0.0, y = 1.06, showarrow = False,
+            align = 'left', xanchor = 'left',
+            font = dict(color = palette['green'] if data.trustworthy else palette['accent'],
+                        size = 11))
+
     if data.notes:
         figure.add_annotation(
             text = '<br>'.join(f'- {note}' for note in data.notes),
             xref = 'paper', yref = 'paper', x = 0.0, y = -0.30, showarrow = False,
             align = 'left', xanchor = 'left', font = dict(color = palette['muted'], size = 10))
-        figure.update_layout(margin = dict(l = 70, r = 30, t = 60, b = 190))
+        figure.update_layout(margin = dict(l = 70, r = 30, t = 80, b = 230))
 
     return figure
 
