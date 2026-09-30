@@ -52,7 +52,7 @@ assigns. A caller reinstating the feature needs to:
     one traditional shape unconditionally now, with no `contourType` field or choice rule left to
     branch on,
   - carry `xSunkTurnaround2D` and `rSunkTurnaround2D` on `ConvergingSectionState` and
-    `RegenChannelState` again, since the return volute interface reads them,
+    `RegenChannelState` again, since the outlet volute interface reads them,
   - put back the `ConvergingSectionState` fields this module is the only reader of:
     `conicDepthModifier`, `conicPinchModifier`, `hotWallThickness`, `infillThickness`,
     `nChannel`, `numCrossSections`, `shellThickness`, `throatBackWallPitch`,
@@ -118,7 +118,7 @@ def solveSunkenConvergingSection(state, geometryOnly, calculateConvergingFlowPro
     tuple
         (xNozzle, rNozzle, flowProperties, turnaround), where flowProperties is None under
         geometryOnly and otherwise a dict of the five near-wall arrays, and turnaround is the
-        (x, r) pair the return volute routes around.
+        (x, r) pair the outlet volute routes around.
 
     Raises:
     -------
@@ -292,7 +292,7 @@ def solveSunkenConvergingSection(state, geometryOnly, calculateConvergingFlowPro
 
     xNozzle, rNozzle  = arcSpline(xNozzleWallCoarse, rNozzleWallCoarse, newNumPoints = state.numContourPoints)
 
-    # store for return volute channel interfacing
+    # store for outlet volute channel interfacing
     xSunkTurnaround2D = np.concatenate([xOuterArc,xOuterEnvelope])
     rSunkTurnaround2D = np.concatenate([rOuterArc,rOuterEnvelope])
 

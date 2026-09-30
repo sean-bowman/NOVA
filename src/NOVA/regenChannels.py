@@ -14,7 +14,7 @@ What happens here is the sequence, and the sequence matters:
 
     1. Volute interfaces. The jacket runs the whole regen section, from the injector face over
        the chamber barrel to the regen truncation. At each end a fillet turns the channel off the
-       wall into a straight flare the volute attaches to: the inlet at the aft end, the return at
+       wall into a straight flare the volute attaches to: the inlet at the aft end, the outlet at
        the injector face, the one the mirror image of the other. The wall is trimmed back to where
        each fillet leaves it, and everything downstream works on the trimmed section.
     2. Channel radii. The sizing solve, station by station, which also produces the 2D centerline
@@ -115,7 +115,7 @@ class RegenChannelState:
     inletVoluteTilt:                           Any = None
     makeCoolingChannels:                       Any = None
     makeInletVolute:                           Any = None
-    makeReturnVolute:                          Any = None
+    makeOutletVolute:                          Any = None
     molecularWeightRegenSection:               Any = None
     nChannel:                                  Any = None
     numCSPointsChannel:                        Any = None
@@ -126,10 +126,10 @@ class RegenChannelState:
     regenSectionNearWallRecoveryTemperature:   Any = None
     regenSectionNearWallTemperature:           Any = None
     regenSectionFilmDrivingTemperature:        Any = None
-    returnVoluteAxialOffset:                   Any = None
-    returnVoluteFlareLen:                      Any = None
-    returnVoluteFlareRoverD:                   Any = None
-    returnVoluteTilt:                          Any = None
+    outletVoluteAxialOffset:                   Any = None
+    outletVoluteFlareLength:                      Any = None
+    outletVoluteFlareRoverD:                   Any = None
+    outletVoluteTilt:                          Any = None
     shellThickness:                            Any = None
     xRegenNozzle:                              Any = None
 
@@ -155,12 +155,12 @@ class RegenChannelState:
     gasConstantRegenSectionTrimmed:            Any = None
     molecularWeightRegenSectionTrimmed:        Any = None
     numInletInterfaceCS:                       Any = None
-    numReturnInterfaceCS:                      Any = None
+    numOutletInterfaceCS:                      Any = None
     rChannelCenterline2D:                      Any = None
     rInletInterface:                           Any = None
     rRegenNozzleInterfaced:                    Any = None
     rRegenNozzleTrimmed:                       Any = None
-    rReturnInterface:                          Any = None
+    rOutletInterface:                          Any = None
     regenSectionNearWallMachNumberTrimmed:     Any = None
     regenSectionNearWallPressureTrimmed:       Any = None
     regenSectionNearWallRecoveryTemperatureTrimmed: Any = None
@@ -174,7 +174,7 @@ class RegenChannelState:
     xNozzleColdWallMesh:                       Any = None
     xRegenNozzleInterfaced:                    Any = None
     xRegenNozzleTrimmed:                       Any = None
-    xReturnInterface:                          Any = None
+    xOutletInterface:                          Any = None
     yChannel:                                  Any = None
     yChannelCenterline3D:                      Any = None
     yNozzleColdWallMesh:                       Any = None
@@ -213,16 +213,16 @@ class RegenChannelState:
 _buildOutputs = (
     'channelDepth', 'channelRadius', 'channelRibThickness', 'channelWidth', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
     'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed',
-    'numInletInterfaceCS', 'numReturnInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
+    'numInletInterfaceCS', 'numOutletInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
     'rInletInterface', 'rNozzleShell', 'rRegenNozzleInterfaced', 'rRegenNozzleTrimmed',
-    'rReturnInterface', 'regenSectionNearWallMachNumberTrimmed',
+    'rOutletInterface', 'regenSectionNearWallMachNumberTrimmed',
     'regenSectionNearWallPressureTrimmed', 'regenSectionNearWallTemperatureTrimmed',
     'regenSectionNearWallRecoveryTemperatureTrimmed',
     'regenSectionFilmDrivingTemperatureTrimmed',
     'wrapAngles', 'xChannel', 'xChannelCenterline2D',
     'xChannelCenterline3D', 'xInletInterface', 'xNozzleColdWallMesh',
     'xNozzleHotWallMesh', 'xNozzleShell', 'xNozzleShellMesh', 'xRegenNozzleInterfaced',
-    'xRegenNozzleTrimmed', 'xReturnInterface', 'yChannel', 'yChannelCenterline3D',
+    'xRegenNozzleTrimmed', 'xOutletInterface', 'yChannel', 'yChannelCenterline3D',
     'yNozzleColdWallMesh', 'yNozzleHotWallMesh', 'yNozzleShellMesh',
     'zChannel', 'zChannelCenterline3D',
     'zNozzleColdWallMesh', 'zNozzleHotWallMesh', 'zNozzleShellMesh')
@@ -259,11 +259,11 @@ def _makesInletVolute(source):
 
     return read(source, 'makeInletVolute') == 'on'
 
-def _makesReturnVolute(source):
+def _makesOutletVolute(source):
 
-    '''True when a return volute is asked for.'''
+    '''True when a outlet volute is asked for.'''
 
-    return read(source, 'makeReturnVolute') == 'on'
+    return read(source, 'makeOutletVolute') == 'on'
 
 regenChannelRules = (
 
@@ -313,8 +313,8 @@ regenChannelRules = (
     numericRule('inletVoluteAxialOffset', 'Inlet volute axial offset', units = 'm', minimum = 0,
                 when = _makesInletVolute,
                 note = 'Measured upstream from the aft end of the regen section'),
-    numericRule('returnVoluteAxialOffset', 'Return volute axial offset', units = 'm', minimum = 0,
-                when = _makesReturnVolute,
+    numericRule('outletVoluteAxialOffset', 'Outlet volute axial offset', units = 'm', minimum = 0,
+                when = _makesOutletVolute,
                 note = 'Measured downstream from the injector face'),
 )
 
@@ -584,9 +584,9 @@ def solveRegenChannels(state, thermal):
 
         Trim the regen section at each end and build the fillet and flare to each volute.
 
-        The inlet volute sits at the aft end of the regen section and the return volute at the
-        injector face. The return interface is `upstreamVoluteInterfaceCurve`, the inlet one
-        reflected through a plane normal to the axis, so the return is the mirror image of the
+        The inlet volute sits at the aft end of the regen section and the outlet volute at the
+        injector face. The outlet interface is `upstreamVoluteInterfaceCurve`, the inlet one
+        reflected through a plane normal to the axis, so the outlet is the mirror image of the
         inlet for the same offset, fillet, flare and tilt.
 
         Author: Isabella Duprey-Churn
@@ -634,14 +634,14 @@ def solveRegenChannels(state, thermal):
 
             return xInterface, rInterface
 
-        def interfaceToReturn():
+        def interfaceToOutlet():
 
-            filletRadius = filletRadiusAt(state.returnVoluteFlareRoverD, 0)
+            filletRadius = filletRadiusAt(state.outletVoluteFlareRoverD, 0)
 
             # The mirror image of the inlet construction, at the injector face
             xInterface, rInterface, keep = upstreamVoluteInterfaceCurve(
-                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, state.returnVoluteAxialOffset,
-                filletRadius, -np.deg2rad(state.returnVoluteTilt), state.returnVoluteFlareLen)
+                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, state.outletVoluteAxialOffset,
+                filletRadius, -np.deg2rad(state.outletVoluteTilt), state.outletVoluteFlareLength)
             keepStations(keep)
 
             return xInterface, rInterface
@@ -670,13 +670,13 @@ def solveRegenChannels(state, thermal):
             state.xInletInterface, state.rInletInterface = interfaceToInlet()
         else:
             state.xInletInterface, state.rInletInterface = [], []
-        if state.makeReturnVolute == 'on':
-            state.xReturnInterface, state.rReturnInterface = interfaceToReturn()
+        if state.makeOutletVolute == 'on':
+            state.xOutletInterface, state.rOutletInterface = interfaceToOutlet()
         else:
-            state.xReturnInterface, state.rReturnInterface = [], []
+            state.xOutletInterface, state.rOutletInterface = [], []
 
         # Resize arrays to correct lengths
-        if state.makeInletVolute == 'on' or state.makeReturnVolute == 'on':
+        if state.makeInletVolute == 'on' or state.makeOutletVolute == 'on':
 
             xOld = state.xRegenNozzleTrimmed.copy()
 
@@ -702,9 +702,9 @@ def solveRegenChannels(state, thermal):
                 chunkInterpolate(xOld, state.regenSectionNearWallPressureTrimmed,    state.xRegenNozzleTrimmed)
 
         state.numInletInterfaceCS  = len(state.xInletInterface)
-        state.numReturnInterfaceCS = len(state.xReturnInterface)
-        state.xRegenNozzleInterfaced = np.concatenate([state.xReturnInterface,state.xRegenNozzleTrimmed,state.xInletInterface])
-        state.rRegenNozzleInterfaced = np.concatenate([state.rReturnInterface,state.rRegenNozzleTrimmed,state.rInletInterface])
+        state.numOutletInterfaceCS = len(state.xOutletInterface)
+        state.xRegenNozzleInterfaced = np.concatenate([state.xOutletInterface,state.xRegenNozzleTrimmed,state.xInletInterface])
+        state.rRegenNozzleInterfaced = np.concatenate([state.rOutletInterface,state.rRegenNozzleTrimmed,state.rInletInterface])
 
     generateVoluteInterfaces()
 
@@ -851,7 +851,7 @@ def solveRegenChannels(state, thermal):
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         # -- Get Centerline -- #
-        state.channelRadius = np.concatenate([np.ones(state.numReturnInterfaceCS)*state.channelRadius[0],
+        state.channelRadius = np.concatenate([np.ones(state.numOutletInterfaceCS)*state.channelRadius[0],
                                              state.channelRadius,
                                              np.ones(state.numInletInterfaceCS)*state.channelRadius[-1]])
         if state.channelType in ('rectangular', 'helical'):
@@ -903,9 +903,9 @@ def solveRegenChannels(state, thermal):
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
 
-        if state.numReturnInterfaceCS > 0:
-            wallStart = fractionOld[state.numReturnInterfaceCS]
-            state.numReturnInterfaceCS = int(np.sum(fractionNew < wallStart))
+        if state.numOutletInterfaceCS > 0:
+            wallStart = fractionOld[state.numOutletInterfaceCS]
+            state.numOutletInterfaceCS = int(np.sum(fractionNew < wallStart))
         if state.numInletInterfaceCS > 0:
             wallEnd = fractionOld[len(xOld) - state.numInletInterfaceCS - 1]
             state.numInletInterfaceCS = int(np.sum(fractionNew > wallEnd))
@@ -934,7 +934,7 @@ def solveRegenChannels(state, thermal):
         elif state.channelType == 'helical':
             meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
             onWall = np.ones(state.numCrossSections, dtype = bool)
-            onWall[:state.numReturnInterfaceCS] = False
+            onWall[:state.numOutletInterfaceCS] = False
             onWall[state.numCrossSections - state.numInletInterfaceCS:] = False
             state.wrapAngles = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle, active = onWall)
         else:

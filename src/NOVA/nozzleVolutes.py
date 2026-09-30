@@ -7,7 +7,7 @@ The manifolds that feed the cooling channels and collect them again.
 
 A regeneratively cooled jacket has to get coolant in and out. Sixty channels cannot each have
 their own feedline, so they are gathered into a scroll that wraps the nozzle: the inlet volute
-distributes flow from a single fitting into every channel, and the return volute collects it back.
+distributes flow from a single fitting into every channel, and the outlet volute collects it back.
 
 Each scroll carries a cross section that grows in proportion to the flow passing it, which is what
 holds its velocity constant around the wrap and so keeps the static pressure the channels see
@@ -232,7 +232,7 @@ class RegenVoluteState:
     inletVolutePrintability:               Any = None
     inletVoluteTilt:                       Any = None
     makeInletVolute:                       Any = None
-    makeReturnVolute:                      Any = None
+    makeOutletVolute:                      Any = None
     maxVoluteBore:                         Any = None
     minVoluteWallThickness:                Any = None
     nChannel:                              Any = None
@@ -240,11 +240,11 @@ class RegenVoluteState:
     numCSVolute:                           Any = None
     rChannelCenterline2D:                  Any = None
     rNozzleWall:                           Any = None
-    returnGraylocDiameter:                 Any = None
-    returnVoluteAlignment:                 Any = None
-    returnVoluteCrossSection:              Any = None
-    returnVolutePrintability:              Any = None
-    returnVoluteTilt:                      Any = None
+    outletGraylocDiameter:                 Any = None
+    outletVoluteAlignment:                 Any = None
+    outletVoluteCrossSection:              Any = None
+    outletVolutePrintability:              Any = None
+    outletVoluteTilt:                      Any = None
     voluteFOS:                             Any = None
     voluteRelativeRoll:                    Any = None
     voluteScrollType:                      Any = None
@@ -256,42 +256,42 @@ class RegenVoluteState:
     inletVoluteWallClearance:              Any = None
     inletVoluteVelocity:                   Any = None
     inletVoluteVelocityHead:               Any = None
-    returnVoluteThroatArea:                Any = None
-    returnVoluteWallClearance:             Any = None
-    returnVoluteVelocity:                  Any = None
-    returnVoluteVelocityHead:              Any = None
+    outletVoluteThroatArea:                Any = None
+    outletVoluteWallClearance:             Any = None
+    outletVoluteVelocity:                  Any = None
+    outletVoluteVelocityHead:              Any = None
     inletVolute:                           Any = None
-    returnVolute:                          Any = None
+    outletVolute:                          Any = None
     xInletVolute:                          Any = None
     xInletVoluteShell:                     Any = None
     xInletVoluteSupportLower:              Any = None
     xInletVoluteSupportUpper:              Any = None
     xInletVoluteSupportWall:               Any = None
-    xReturnVolute:                         Any = None
-    xReturnVoluteShell:                    Any = None
-    xReturnVoluteSupportLower:             Any = None
-    xReturnVoluteSupportUpper:             Any = None
-    xReturnVoluteSupportWall:              Any = None
+    xOutletVolute:                         Any = None
+    xOutletVoluteShell:                    Any = None
+    xOutletVoluteSupportLower:             Any = None
+    xOutletVoluteSupportUpper:             Any = None
+    xOutletVoluteSupportWall:              Any = None
     yInletVolute:                          Any = None
     yInletVoluteShell:                     Any = None
     yInletVoluteSupportLower:              Any = None
     yInletVoluteSupportUpper:              Any = None
     yInletVoluteSupportWall:               Any = None
-    yReturnVolute:                         Any = None
-    yReturnVoluteShell:                    Any = None
-    yReturnVoluteSupportLower:             Any = None
-    yReturnVoluteSupportUpper:             Any = None
-    yReturnVoluteSupportWall:              Any = None
+    yOutletVolute:                         Any = None
+    yOutletVoluteShell:                    Any = None
+    yOutletVoluteSupportLower:             Any = None
+    yOutletVoluteSupportUpper:             Any = None
+    yOutletVoluteSupportWall:              Any = None
     zInletVolute:                          Any = None
     zInletVoluteShell:                     Any = None
     zInletVoluteSupportLower:              Any = None
     zInletVoluteSupportUpper:              Any = None
     zInletVoluteSupportWall:               Any = None
-    zReturnVolute:                         Any = None
-    zReturnVoluteShell:                    Any = None
-    zReturnVoluteSupportLower:             Any = None
-    zReturnVoluteSupportUpper:             Any = None
-    zReturnVoluteSupportWall:              Any = None
+    zOutletVolute:                         Any = None
+    zOutletVoluteShell:                    Any = None
+    zOutletVoluteSupportLower:             Any = None
+    zOutletVoluteSupportUpper:             Any = None
+    zOutletVoluteSupportWall:              Any = None
 
     # -- Produced by the build -- #
 
@@ -299,24 +299,24 @@ class RegenVoluteState:
 # and forgetting to surface it is a one-line fix rather than a silent drop.
 regenVoluteOutputs = (
     'inletVoluteThroatArea', 'inletVoluteVelocity', 'inletVoluteVelocityHead',
-    'inletVoluteWallClearance', 'returnVoluteThroatArea', 'returnVoluteVelocity',
-    'returnVoluteVelocityHead', 'returnVoluteWallClearance',
-    'inletVolute', 'returnVolute', 'xInletVolute', 'xInletVoluteShell',
+    'inletVoluteWallClearance', 'outletVoluteThroatArea', 'outletVoluteVelocity',
+    'outletVoluteVelocityHead', 'outletVoluteWallClearance',
+    'inletVolute', 'outletVolute', 'xInletVolute', 'xInletVoluteShell',
     'xInletVoluteSupportLower', 'xInletVoluteSupportUpper', 'xInletVoluteSupportWall',
-    'xReturnVolute', 'xReturnVoluteShell', 'xReturnVoluteSupportLower',
-    'xReturnVoluteSupportUpper', 'xReturnVoluteSupportWall', 'yInletVolute', 'yInletVoluteShell',
+    'xOutletVolute', 'xOutletVoluteShell', 'xOutletVoluteSupportLower',
+    'xOutletVoluteSupportUpper', 'xOutletVoluteSupportWall', 'yInletVolute', 'yInletVoluteShell',
     'yInletVoluteSupportLower', 'yInletVoluteSupportUpper', 'yInletVoluteSupportWall',
-    'yReturnVolute', 'yReturnVoluteShell', 'yReturnVoluteSupportLower',
-    'yReturnVoluteSupportUpper', 'yReturnVoluteSupportWall', 'zInletVolute', 'zInletVoluteShell',
+    'yOutletVolute', 'yOutletVoluteShell', 'yOutletVoluteSupportLower',
+    'yOutletVoluteSupportUpper', 'yOutletVoluteSupportWall', 'zInletVolute', 'zInletVoluteShell',
     'zInletVoluteSupportLower', 'zInletVoluteSupportUpper', 'zInletVoluteSupportWall',
-    'zReturnVolute', 'zReturnVoluteShell', 'zReturnVoluteSupportLower',
-    'zReturnVoluteSupportUpper', 'zReturnVoluteSupportWall')
+    'zOutletVolute', 'zOutletVoluteShell', 'zOutletVoluteSupportLower',
+    'zOutletVoluteSupportUpper', 'zOutletVoluteSupportWall')
 
 def solveRegenVolutes(state):
 
     '''
 
-    Generate inlet and return volute geometries for regenerative cooling channels.
+    Generate inlet and outlet volute geometries for regenerative cooling channels.
 
     This method creates the manifold geometry that interfaces the cooling channels
     with external feedlines. It requires generateRegenChannels() to be called first.
@@ -362,7 +362,7 @@ def solveRegenVolutes(state):
         Parameters:
         -----------
         side : str
-            `inlet` or `return`, for the message a refusal carries.
+            `inlet` or `outlet`, for the message a refusal carries.
         volute : Volute
             The built scroll, whose own axis is the nozzle axis.
         alignment : str
@@ -431,7 +431,7 @@ def solveRegenVolutes(state):
         Parameters:
         -----------
         side : str
-            `inlet` or `return`, for the message a refusal carries.
+            `inlet` or `outlet`, for the message a refusal carries.
         station : int
             Channel station the volute attaches to.
         tongueDiameter : float
@@ -455,7 +455,7 @@ def solveRegenVolutes(state):
         '''
 
         family = str(state.inletVoluteCrossSection if side == 'inlet'
-                     else state.returnVoluteCrossSection).lower()
+                     else state.outletVoluteCrossSection).lower()
         scrollType = str(state.voluteScrollType).lower()
 
         tongueArea = sectionArea(family, hydraulicDiameter = tongueDiameter)
@@ -614,9 +614,9 @@ def solveRegenVolutes(state):
         state.yInletVoluteSupportLower = inletVolute.xInternalSupportFilletLower
         state.zInletVoluteSupportLower = inletVolute.yInternalSupportFilletLower
 
-    def generateRegenReturnVolute():
+    def generateRegenOutletVolute():
 
-        print(f'Generating Return Volute:')
+        print(f'Generating Outlet Volute:')
 
         # wall thickness sizing, on the warmer of the coolant and the ambient proof case
         sizingTemperature = max(float(state.coolantExitTemperature), ambientProofTemperature)
@@ -624,78 +624,78 @@ def solveRegenVolutes(state):
 
         ## Create volute object
         # instantiate
-        returnVolute = Volute()
+        outletVolute = Volute()
         # cross section properties
-        returnVolute.crossSectionType           = state.returnVoluteCrossSection
-        returnVolute.circlePrintability         = state.returnVolutePrintability
-        returnVolute.anchorBy                   = state.returnVoluteAlignment
-        returnVolute.printabilityAngle          = state.returnVoluteTilt
-        returnVolute.crossSectionResolution     = state.numCSPointsVolute
-        returnVolute.numCrossSections           = state.numCSVolute
+        outletVolute.crossSectionType           = state.outletVoluteCrossSection
+        outletVolute.circlePrintability         = state.outletVolutePrintability
+        outletVolute.anchorBy                   = state.outletVoluteAlignment
+        outletVolute.printabilityAngle          = state.outletVoluteTilt
+        outletVolute.crossSectionResolution     = state.numCSPointsVolute
+        outletVolute.numCrossSections           = state.numCSVolute
         # scroll properties
-        returnVolute.scrollDirection            = 'cw'
+        outletVolute.scrollDirection            = 'cw'
         # area distribution properties
-        returnVolute.scrollType                 = state.voluteScrollType
-        returnVolute.interfaceHydraulicDiameter = portDiameter(0)*tongueOverPort
-        state.returnVoluteThroatArea, state.returnVoluteVelocity, state.returnVoluteVelocityHead = \
-            scrollThroat('return', 0, returnVolute.interfaceHydraulicDiameter,
-                         units.toSI(state.returnGraylocDiameter, 'length', 'in'),
+        outletVolute.scrollType                 = state.voluteScrollType
+        outletVolute.interfaceHydraulicDiameter = portDiameter(0)*tongueOverPort
+        state.outletVoluteThroatArea, state.outletVoluteVelocity, state.outletVoluteVelocityHead = \
+            scrollThroat('outlet', 0, outletVolute.interfaceHydraulicDiameter,
+                         units.toSI(state.outletGraylocDiameter, 'length', 'in'),
                          state.coolantExitTemperature, state.coolantExitPressure)
-        returnVolute.expandedArea               = state.returnVoluteThroatArea
-        # The return flare leaves the injector face as the mirror image of the inlet flare, so its
+        outletVolute.expandedArea               = state.outletVoluteThroatArea
+        # The outlet flare leaves the injector face as the mirror image of the inlet flare, so its
         # scroll is placed the same way on the port at the other end of the centerline.
-        returnVolute.voluteScrollRadius, returnVolute.axialOffset = scrollPlacement(
-            state.returnVoluteCrossSection, returnVolute.interfaceHydraulicDiameter,
-            state.returnVoluteAlignment, state.xChannelCenterline2D[0],
+        outletVolute.voluteScrollRadius, outletVolute.axialOffset = scrollPlacement(
+            state.outletVoluteCrossSection, outletVolute.interfaceHydraulicDiameter,
+            state.outletVoluteAlignment, state.xChannelCenterline2D[0],
             state.rChannelCenterline2D[0], portDiameter(0))
         # wall properties
-        returnVolute.wallHoopStress             = hoopStressTarget
-        returnVolute.minWallThickness           = state.minVoluteWallThickness or 0.0
-        returnVolute.pressureDifferential       = state.coolantExitPressure
-        returnVolute.alignWallBy                = 'inner'
+        outletVolute.wallHoopStress             = hoopStressTarget
+        outletVolute.minWallThickness           = state.minVoluteWallThickness or 0.0
+        outletVolute.pressureDifferential       = state.coolantExitPressure
+        outletVolute.alignWallBy                = 'inner'
         # options
-        returnVolute.export                     = 'off'
+        outletVolute.export                     = 'off'
 
         # make geometry with error handling
         try:
-            returnVolute.generateVolute()
+            outletVolute.generateVolute()
         except Exception as e:
             raise VoluteGenerationError(
-                message=f"Failed to generate return volute geometry: {str(e)}",
+                message=f"Failed to generate outlet volute geometry: {str(e)}",
                 context=createErrorContext(
-                    scrollRadius=returnVolute.voluteScrollRadius,
-                    axialOffset=returnVolute.axialOffset,
+                    scrollRadius=outletVolute.voluteScrollRadius,
+                    axialOffset=outletVolute.axialOffset,
                     channelRadius=state.channelRadius[0],
                     coolantPressure=state.coolantExitPressure,
                     coolantTemperature=state.coolantExitTemperature
                 ),
-                voluteType='return',
+                voluteType='outlet',
                 failureMode=type(e).__name__
             ) from e
 
-        state.returnVoluteWallClearance = wallClearance('return', returnVolute,
-                                                        state.returnVoluteAlignment)
+        state.outletVoluteWallClearance = wallClearance('outlet', outletVolute,
+                                                        state.outletVoluteAlignment)
 
         ## gather results
         # save object
-        state.returnVolute              = returnVolute
+        state.outletVolute              = outletVolute
         # copy geometry arrays
-        state.xReturnVolute             = returnVolute.zVolute
-        state.yReturnVolute             = returnVolute.xVolute
-        state.zReturnVolute             = returnVolute.yVolute
-        state.xReturnVoluteShell        = returnVolute.zShell
-        state.yReturnVoluteShell        = returnVolute.xShell
-        state.zReturnVoluteShell        = returnVolute.yShell
-        state.xReturnVoluteSupportWall  = returnVolute.zInternalSupportWall
-        state.yReturnVoluteSupportWall  = returnVolute.xInternalSupportWall
-        state.zReturnVoluteSupportWall  = returnVolute.yInternalSupportWall
-        state.xReturnVoluteSupportUpper = returnVolute.zInternalSupportFilletUpper
-        state.yReturnVoluteSupportUpper = returnVolute.xInternalSupportFilletUpper
-        state.zReturnVoluteSupportUpper = returnVolute.yInternalSupportFilletUpper
-        state.xReturnVoluteSupportLower = returnVolute.zInternalSupportFilletLower
-        state.yReturnVoluteSupportLower = returnVolute.xInternalSupportFilletLower
-        state.zReturnVoluteSupportLower = returnVolute.yInternalSupportFilletLower
-        state.returnVolute              = returnVolute
+        state.xOutletVolute             = outletVolute.zVolute
+        state.yOutletVolute             = outletVolute.xVolute
+        state.zOutletVolute             = outletVolute.yVolute
+        state.xOutletVoluteShell        = outletVolute.zShell
+        state.yOutletVoluteShell        = outletVolute.xShell
+        state.zOutletVoluteShell        = outletVolute.yShell
+        state.xOutletVoluteSupportWall  = outletVolute.zInternalSupportWall
+        state.yOutletVoluteSupportWall  = outletVolute.xInternalSupportWall
+        state.zOutletVoluteSupportWall  = outletVolute.yInternalSupportWall
+        state.xOutletVoluteSupportUpper = outletVolute.zInternalSupportFilletUpper
+        state.yOutletVoluteSupportUpper = outletVolute.xInternalSupportFilletUpper
+        state.zOutletVoluteSupportUpper = outletVolute.yInternalSupportFilletUpper
+        state.xOutletVoluteSupportLower = outletVolute.zInternalSupportFilletLower
+        state.yOutletVoluteSupportLower = outletVolute.xInternalSupportFilletLower
+        state.zOutletVoluteSupportLower = outletVolute.yInternalSupportFilletLower
+        state.outletVolute              = outletVolute
 
     # ------------------ #
     # -- DO THE THING -- #
@@ -705,8 +705,8 @@ def solveRegenVolutes(state):
 
         generateRegenInletVolute()
 
-    if state.makeReturnVolute == 'on':
+    if state.makeOutletVolute == 'on':
 
-        generateRegenReturnVolute()
+        generateRegenOutletVolute()
 
     return state

@@ -13,8 +13,8 @@ Four results bear on whether the volute is the right shape:
 | Neither volute reaches the channels it feeds | Ports end 13.18 mm and 12.39 mm short of the scroll |
 | Inlet volute intersects the gas-side wall | 1.51 mm at the duct, 2.20 mm at the shell |
 | The scroll closes on itself with no cutwater | Tongue section nested inside the throat section, 0.21 mm between walls |
-| The area law is not the constant-velocity law | 6.18x the required area at the inlet tongue, 10.85x at the return tongue |
-| The feed is undersized for distribution | Velocity head 4.16x the jacket pressure drop at the inlet, 20.2x at the return |
+| The area law is not the constant-velocity law | 6.18x the required area at the inlet tongue, 10.85x at the outlet tongue |
+| The feed is undersized for distribution | Velocity head 4.16x the jacket pressure drop at the inlet, 20.2x at the outlet |
 
 Nine selectable options either raise, do nothing, or silently produce something other than what they name. The printability support cannot be switched on from a configuration file at all.
 
@@ -54,7 +54,7 @@ The first and last cross sections sit at the same wrap angle, 90.00 degrees on b
 | | Tongue section radius | Throat section radius | Centres apart | Wall to wall |
 |---|---|---|---|---|
 | Inlet | 4.07 mm | 12.69 mm | 8.41 mm | 0.21 mm |
-| Return | 5.40 mm | 12.69 mm | 7.12 mm | 0.18 mm |
+| Outlet | 5.40 mm | 12.69 mm | 7.12 mm | 0.18 mm |
 
 There is no cutwater between them and no end face on either section, so the duct is a closed annular manifold joined through a 0.2 mm lip. A monotone area taper is the design law for a scroll with a cutwater, where the flow passes each station once. In a closed ring the flow divides at the feed and reaches every station from both directions, and the area law that follows is symmetric about the feed rather than monotone.
 
@@ -69,7 +69,7 @@ port and the duct never meet:
 | | Nearest scroll point to the channel port | Port radius | Short by | Sections containing the port |
 |---|---|---|---|---|
 | Inlet | 16.89 mm | 3.71 mm | 13.18 mm | 0 of 60 |
-| Return | 16.89 mm | 4.50 mm | 12.39 mm | 0 of 60 |
+| Outlet | 16.89 mm | 4.50 mm | 12.39 mm | 0 of 60 |
 
 The gap is the placement index. `rChannelCenterline2D[-3]` sits two stations inboard of the flare
 end, and consecutive stations along the flare differ by 8.4 mm in radius, which is the 16.89 mm
@@ -87,8 +87,8 @@ Radial clearance between every volute point and the gas-side wall at the same ax
 |---|---|---|
 | Inlet volute duct | -1.51 mm | 30 of 2400 |
 | Inlet volute shell | -2.20 mm | 48 of 2400 |
-| Return volute duct | +5.66 mm | 0 |
-| Return volute shell | +4.90 mm | 0 |
+| Outlet volute duct | +5.66 mm | 0 |
+| Outlet volute shell | +4.90 mm | 0 |
 
 The inlet volute occupies radii from 79.5 mm to 104.9 mm across an axial span of 43.3 mm to 68.6 mm, where the diverging wall runs from 71.6 mm to 86.4 mm. The intersection is at the innermost points of the largest sections.
 
@@ -98,7 +98,7 @@ The cause is the combination of `outer` alignment, which grows the section inwar
 |---|---|---|---|---|
 | Radius | 96.57 mm | 104.91 mm | 113.35 mm | 121.79 mm |
 
-The flare occupies 6 of the 60 channel stations at the inlet end and 8 at the return end, and those counts are derived from the flare geometry and then re-derived after resampling. The scroll radius is therefore a function of station count rather than of the geometry, and a one-station shift moves it further than the interference it currently has.
+The flare occupies 6 of the 60 channel stations at the inlet end and 8 at the outlet end, and those counts are derived from the flare geometry and then re-derived after resampling. The scroll radius is therefore a function of station count rather than of the geometry, and a one-station shift moves it further than the interference it currently has.
 
 Alignment alone resolves it on this configuration:
 
@@ -165,30 +165,30 @@ Further defects found by reading:
 
 The published law for a scroll that distributes or collects evenly around its wrap is that the area at angular position `theta` from the tongue carries the fraction `theta/360` of the throat flow, so `A(theta) = A_throat theta/360`. Huzel and Huang give it as equation 6-69 for a plain pump volute; it is Stepanoff's constant-velocity rule.
 
-NOVA's area is linear in wrap angle, which is the right form, with a tongue intercept that is not. The intercept is set by the channel port: `interfaceHydraulicDiameter` is the port equivalent diameter times 1.1 at the inlet and 1.2 at the return. The constant-velocity law asks for the throat area divided by the channel count.
+NOVA's area is linear in wrap angle, which is the right form, with a tongue intercept that is not. The intercept is set by the channel port: `interfaceHydraulicDiameter` is the port equivalent diameter times 1.1 at the inlet and 1.2 at the outlet. The constant-velocity law asks for the throat area divided by the channel count.
 
 | | Tongue area built | Law at 60 channels | Ratio |
 |---|---|---|---|
 | Inlet | 52.21 mm2 | 8.45 mm2 | 6.18 |
-| Return | 91.62 mm2 | 8.45 mm2 | 10.85 |
+| Outlet | 91.62 mm2 | 8.45 mm2 | 10.85 |
 
 Built area over the law, around the wrap:
 
 | Position from the tongue | 0 deg | 36 deg | 180 deg | 360 deg |
 |---|---|---|---|---|
 | Inlet | 6.18x | 1.67x | 1.08x | 1.00x |
-| Return | 10.85x | 2.26x | 1.16x | 1.00x |
+| Outlet | 10.85x | 2.26x | 1.16x | 1.00x |
 
 What that does to the velocity, on the assumption that each of the 60 channels takes an equal share:
 
 | | Tongue | Feed | Ratio |
 |---|---|---|---|
 | Inlet | 14.6 m/s | 90.3 m/s | 6.18 |
-| Return | 40.4 m/s | 438.7 m/s | 10.85 |
+| Outlet | 40.4 m/s | 438.7 m/s | 10.85 |
 
-A constant-velocity scroll holds that ratio at 1.00. The scroll as built is a diffuser: the inlet decelerates by a factor of 6.2 between the feed and the tongue, and the return accelerates by a factor of 10.9 between the tongue and the feed.
+A constant-velocity scroll holds that ratio at 1.00. The scroll as built is a diffuser: the inlet decelerates by a factor of 6.2 between the feed and the tongue, and the outlet accelerates by a factor of 10.9 between the tongue and the feed.
 
-The other published law, Pfleiderer's constant angular momentum, requires `A(theta)/r(theta)` to be linear through the origin. On a scroll of fixed radius the centroid radius varies only because the section grows off its anchor, by 9.4 per cent at the inlet and 6.7 per cent at the return, so the two laws coincide to within that on this geometry. The choice between them is second order beside the 6x to 11x departure from both.
+The other published law, Pfleiderer's constant angular momentum, requires `A(theta)/r(theta)` to be linear through the origin. On a scroll of fixed radius the centroid radius varies only because the section grows off its anchor, by 9.4 per cent at the inlet and 6.7 per cent at the outlet, so the two laws coincide to within that on this geometry. The choice between them is second order beside the 6x to 11x departure from both.
 
 ## Distribution criterion
 
@@ -197,7 +197,7 @@ The criterion for even distribution between branches is that the pressure change
 | | Feed velocity | Mach | Velocity head | Head over jacket drop |
 |---|---|---|---|---|
 | Inlet | 90.3 m/s | 0.065 | 303 kPa | 4.16 |
-| Return | 438.7 m/s | 0.381 | 1472 kPa | 20.24 |
+| Outlet | 438.7 m/s | 0.381 | 1472 kPa | 20.24 |
 
 The jacket pressure drop is 72.71 kPa, 1.05 per cent of chamber pressure. Both volutes therefore carry several times more velocity head than the channels carry pressure drop, with the ratio the wrong side of unity by 4x and 20x. Huzel and Huang put the pressure recovery of a pump volute at 70 to 90 per cent of the flow kinetic energy, so most of that head appears as a static pressure difference between the channels near the tongue and those near the feed.
 
@@ -205,7 +205,7 @@ A one-dimensional distribution model over the 60 channels, with each channel a q
 
 Two independent criteria give nearly the same feed size:
 
-| Criterion | Inlet bore | Return bore |
+| Criterion | Inlet bore | Outlet bore |
 |---|---|---|
 | Velocity head at 10 per cent of the jacket drop | 64.5 mm (2.54 in) | 95.8 mm (3.77 in) |
 | Velocity head at 25 per cent of the jacket drop | 51.3 mm (2.02 in) | 76.2 mm (3.00 in) |
@@ -229,9 +229,9 @@ which tends to `p a / t` as `R` grows, recovering the cylinder. The maximum is a
 | | Tube radius | Bend radius | Correction | Built | Required |
 |---|---|---|---|---|---|
 | Inlet | 4.08 to 12.70 mm | 92.2 to 100.8 mm | 1.021 to 1.080 | 0.192 to 0.597 mm | 0.196 to 0.645 mm |
-| Return | 5.40 to 12.70 mm | 108.3 to 115.6 mm | 1.025 to 1.066 | 0.325 to 0.764 mm | 0.333 to 0.815 mm |
+| Outlet | 5.40 to 12.70 mm | 108.3 to 115.6 mm | 1.025 to 1.066 | 0.325 to 0.764 mm | 0.333 to 0.815 mm |
 
-The built wall is 7.4 per cent thin at the worst inlet section and 6.2 per cent thin at the worst return section. Thin-wall membrane theory is valid here: the worst `t/a` is 0.060.
+The built wall is 7.4 per cent thin at the worst inlet section and 6.2 per cent thin at the worst outlet section. Thin-wall membrane theory is valid here: the worst `t/a` is 0.060.
 
 ### Allowable stress
 
@@ -279,7 +279,7 @@ channel work rather than volute work and is not addressed here.
 
 1. **Attach the scroll to the channels and clear the wall.** Both follow from the same placement: put the tongue section on the port it meets, rather than reading a scroll radius from `rChannelCenterline2D[-3]`, and check the clearance after placement rather than trusting the alignment. The tongue is drawn barely wider than the port, so centring it on the port is the only placement that opens one into the other.
 2. **Decide what the scroll is.** A cutwater and an end face make the monotone taper correct and give the feed somewhere to attach. Leaving it a closed ring makes the taper symmetric about the feed instead. The generator currently builds neither.
-3. **Size the feed from the flow.** The tongue area is set by the channel port and the throat by the fitting, so velocity is an outcome nothing checks. Deriving the throat from a target velocity head, or from the tongue area times the channel count, ties both ends to the flow and puts the shipped case near a 2.5 inch inlet and a 3 to 3.8 inch return.
+3. **Size the feed from the flow.** The tongue area is set by the channel port and the throat by the fitting, so velocity is an outcome nothing checks. Deriving the throat from a target velocity head, or from the tongue area times the channel count, ties both ends to the flow and puts the shipped case near a 2.5 inch inlet and a 3 to 3.8 inch outlet.
 4. **Report the scroll velocity and its head against the jacket drop.** One line of output makes the whole class of error visible at build time.
 5. **Expose `voluteFOS`, bound the allowable to its data range, and size at the governing temperature.** The ambient proof case asks for 43 per cent more wall than the cold case.
 6. **Carry the toroidal correction and a minimum printable wall.** 6 to 7 per cent and a 1 mm floor respectively.
@@ -295,17 +295,17 @@ a ring scroll and inner alignment.
 
 | Measurement | Audit | After |
 |---|---|---|
-| Channel port to the nearest scroll surface | 13.18 mm short (inlet), 12.39 mm (return) | port centred in the tongue section |
+| Channel port to the nearest scroll surface | 13.18 mm short (inlet), 12.39 mm (outlet) | port centred in the tongue section |
 | Sections containing the port | 0 of 60 | 60 of 60 |
 | Inlet wall clearance | -1.51 mm | +32.3 mm |
-| Return wall clearance | +5.66 mm | +40.1 mm |
-| Scroll velocity, throat over tongue | 6.18 (inlet), 10.85 (return) | 1.00 by construction |
-| Velocity head over jacket pressure drop | 4.16 (inlet), 20.24 (return) | 0.11 (inlet), 0.25 (return) |
+| Outlet wall clearance | +5.66 mm | +40.1 mm |
+| Scroll velocity, throat over tongue | 6.18 (inlet), 10.85 (outlet) | 1.00 by construction |
+| Velocity head over jacket pressure drop | 4.16 (inlet), 20.24 (outlet) | 0.11 (inlet), 0.25 (outlet) |
 | Inlet throat | 506.7 mm2, the 1 inch fitting | 1566 mm2, 44.7 mm bore, from the law |
-| Return throat | 506.7 mm2 | 2310 mm2, 54.2 mm bore |
-| Feed velocity | 90.3 m/s (inlet), 438.7 m/s (return) | 14.6 m/s (inlet), 48.1 m/s (return) |
+| Outlet throat | 506.7 mm2 | 2310 mm2, 54.2 mm bore |
+| Feed velocity | 90.3 m/s (inlet), 438.7 m/s (outlet) | 14.6 m/s (inlet), 48.1 m/s (outlet) |
 | Allowable stress | 255.3 MPa, extrapolated 48 K below its data, at FOS 1 | 118.7 MPa, at the ambient proof temperature, at FOS 1.5 |
-| Volute wall | 0.192 to 0.597 mm (inlet), 0.325 to 0.764 mm (return) | 1.000 to 2.472 mm (inlet), 1.000 to 3.003 mm (return) |
+| Volute wall | 0.192 to 0.597 mm (inlet), 0.325 to 0.764 mm (outlet) | 1.000 to 2.472 mm (inlet), 1.000 to 3.003 mm (outlet) |
 | Toroidal crotch correction | absent, wall 7.4 per cent thin | carried per section |
 | Area the build reports | the ideal circle only | `crossSectionalArea`, `drawnArea` and `flowArea` |
 | Options that raise from inside or do nothing quietly | nine | none |

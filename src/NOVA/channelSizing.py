@@ -1049,7 +1049,7 @@ def solveChannelRadii(state, geometry, thermal):
         # into heatTransferPlots reversed, at N - 1 - i. That puts the inlet at the last
         # index and the exit at the first, which is the convention the model's own
         # summary uses when it reports a pressure drop. Reading the last index instead
-        # returned the inlet state under the name of the exit state, and the return
+        # returned the inlet state under the name of the exit state, and the outlet
         # volute is sized from it: the wall thickness comes from the GRCop yield strength
         # at that temperature, and a cryogenic inlet temperature reports a far higher
         # yield strength than the warm exit the volute actually sees.

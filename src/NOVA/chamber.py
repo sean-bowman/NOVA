@@ -128,7 +128,7 @@ convergingSectionRules = (
 
     # -- Which volutes the section has to leave room for -- #
     choiceRule('makeInletVolute', 'Inlet volute', choices = ('on', 'off')),
-    choiceRule('makeReturnVolute', 'Return volute', choices = ('on', 'off')),
+    choiceRule('makeOutletVolute', 'Outlet volute', choices = ('on', 'off')),
 
     # -- The near-wall state a solved diverging section hands over -- #
     arrayRule('nozzleNearWallTemperature', 'Near wall temperature', units = 'K',
@@ -195,7 +195,7 @@ class ConvergingSectionState:
     convergingSectionAngle:                  Any = None
     divergingSectionType:                    Any = None
     makeInletVolute:                         Any = None
-    makeReturnVolute:                        Any = None
+    makeOutletVolute:                        Any = None
     nozzleScalingFactor:                     Any = None
     numContourPoints:                        Any = None
     throatInletCurvatureNonDimensional:      Any = None
@@ -452,9 +452,9 @@ def solveConvergingSection(state, convergingSectionAngle: float = 'default', cha
         elif state.makeInletVolute == 'on':
             inletVolute = True
 
-        if outletVolute == 'default' and state.makeReturnVolute == 'off':
+        if outletVolute == 'default' and state.makeOutletVolute == 'off':
             outletVolute    = False
-        elif state.makeReturnVolute == 'on':
+        elif state.makeOutletVolute == 'on':
             outletVolute = True
 
     print(f'Generating Traditional Converging Section.')

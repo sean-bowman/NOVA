@@ -5,7 +5,7 @@
 The axisymmetric volume behind the chamber that the cooling jacket has to pack around.
 
 A regeneratively cooled chamber does not end at the injector face. Whatever closes the chamber
-sits behind it, and the return volute and its supports have to route outside that volume. NOVA
+sits behind it, and the outlet volute and its supports have to route outside that volume. NOVA
 does not model what fills it, so it is described as a keep-out: an envelope that geometry must
 clear, named by three numbers rather than read from a part-specific contour.
 
@@ -28,7 +28,7 @@ that geometry outside it does not intersect it.
 
 The envelope was drawn for a hybrid nozzle, where the jacket's return turned around on the
 converging section and routed behind a chamber closure NOVA did not generate. NOVA generates its
-own chamber and jackets it to the injector face, where the return volute sits, so the volume
+own chamber and jackets it to the injector face, where the outlet volute sits, so the volume
 this described is the injector's. The package drew it and exported it, and nothing checked any
 geometry against it: `packingClearance` has no caller outside its own tests.
 

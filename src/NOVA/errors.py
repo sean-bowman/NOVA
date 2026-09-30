@@ -394,7 +394,7 @@ class VoluteGenerationError(RegenGeometryError):
 
     '''
 
-    Exception raised when volute (inlet/return manifold) generation fails.
+    Exception raised when volute (inlet/outlet manifold) generation fails.
 
     This error occurs when the Volute class cannot generate valid manifold geometry
     for interfacing the cooling channels with external feedlines. Common causes:
@@ -405,7 +405,7 @@ class VoluteGenerationError(RegenGeometryError):
         - Stress exceeds material allowable stress
 
     Attributes:
-        voluteType (str): Type of volute ('inlet' or 'return')
+        voluteType (str): Type of volute ('inlet' or 'outlet')
         failureMode (str): Specific failure mode
 
     '''
@@ -420,7 +420,7 @@ class VoluteGenerationError(RegenGeometryError):
         Args:
             message: Description of the volute generation failure
             context: Error context dictionary
-            voluteType: 'inlet' or 'return'
+            voluteType: 'inlet' or 'outlet'
             failureMode: Specific mode of failure
 
         '''

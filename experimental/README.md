@@ -56,7 +56,7 @@ available to set it against. The module docstring lists what reinstating it woul
 `keepOut.py` holds the quarter ellipse of revolution that described the volume behind a chamber
 closure, drawn when the jacket's return turned around on the converging section of a hybrid
 nozzle and routed behind a closure NOVA did not generate. NOVA jackets its own chamber to the
-injector face, where the return volute sits, so the package does not build, draw or export it.
+injector face, where the outlet volute sits, so the package does not build, draw or export it.
 
 `sunkenNozzle.py` is its one geometric consumer and imports it from beside itself. Nothing ever
 checked geometry against it: `packingClearance` had no caller. The module docstring records a

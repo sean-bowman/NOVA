@@ -149,7 +149,7 @@ def _rectangularOrHelicalChannels(config: dict) -> bool:
 
 def _anyVolute(config: dict) -> bool:
     return (config.get('makeInletVolute') in (True, 'on')
-            or config.get('makeReturnVolute') in (True, 'on'))
+            or config.get('makeOutletVolute') in (True, 'on'))
 
 def _radiativeExtensionOn(config: dict) -> bool:
     return config.get('makeRadiativeExtension') in (True, 'on')
@@ -510,14 +510,14 @@ groups = [
     Group('Volutes', [
         Field('makeInletVolute', 'Generate inlet volute', 'bool', default = False,
               help = 'Build the inlet manifold volute that feeds the channels.'),
-        Field('makeReturnVolute', 'Generate return volute', 'bool', default = False,
-              help = 'Build the return manifold volute that collects the channels.'),
+        Field('makeOutletVolute', 'Generate outlet volute', 'bool', default = False,
+              help = 'Build the outlet manifold volute that collects the channels.'),
         Field('numCSVolute', 'Volute cross sections', 'int', default = None, showWhen = _anyVolute,
               help = 'Number of cross sections swept around each volute.'),
         Field('numCSPointsVolute', 'Points per volute cross section', 'int', default = None, showWhen = _anyVolute,
               help = 'Number of points defining each volute cross section.'),
         Field('voluteRelativeRoll', 'Volute relative roll', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
-              help = 'Roll offset between the inlet and return volutes.'),
+              help = 'Roll offset between the inlet and outlet volutes.'),
         Field('voluteScrollType', 'Scroll type', 'choice',
               choices = [('Ring', 'ring'), ('Cutwater', 'cutwater')], default = 'ring',
               showWhen = _anyVolute,
@@ -566,32 +566,32 @@ groups = [
               help = 'Fillet radius of the turn into the inlet flare, over the jacket depth.'),
         Field('inletVoluteFlareLength', 'Inlet flare length', 'float', default = None, unit = 'm', showWhen = _anyVolute,
               help = 'Flare extension length for the inlet channel entry.'),
-        Field('returnVoluteCrossSection', 'Return cross section', 'choice',
+        Field('outletVoluteCrossSection', 'Outlet cross section', 'choice',
               choices = [('Circle', 'circle'), ('Squircle', 'squarc')], default = 'circle',
-              showWhen = _anyVolute, help = 'Cross-section shape of the return volute.'),
-        Field('returnVoluteAlignment', 'Return alignment', 'choice',
+              showWhen = _anyVolute, help = 'Cross-section shape of the outlet volute.'),
+        Field('outletVoluteAlignment', 'Outlet alignment', 'choice',
               choices = [('Center', 'c'), ('North', 'n'), ('South', 's'), ('Inner', 'i'), ('Outer', 'o'),
                          ('North-inner', 'ni'), ('South-inner', 'si'), ('North-outer', 'no'), ('South-outer', 'so')],
               default = 'i', showWhen = _anyVolute,
-              help = 'Which edge of the return volute cross section holds still as the scroll '
+              help = 'Which edge of the outlet volute cross section holds still as the scroll '
                      'grows, and so whether the growing sections reach toward the nozzle or away '
                      'from it. Inner grows them outward, clear of the wall.'),
-        Field('returnVolutePrintability', 'Return printability shaping', 'choice',
+        Field('outletVolutePrintability', 'Outlet printability shaping', 'choice',
               choices = [('Off', 'off'), ('Thick', 'thick'), ('Thin', 'thin')], default = 'off',
               showWhen = _anyVolute,
-              help = 'Overhang support drawn inside the return scroll. Thick braces it with a wall '
+              help = 'Overhang support drawn inside the outlet scroll. Thick braces it with a wall '
                      'and two filleted transitions, thin with a sheet and one. Circular sections '
                      'only.'),
-        Field('returnVoluteTilt', 'Return volute tilt', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
-              help = 'Tilt of the return volute cross section.'),
-        Field('returnGraylocDiameter', 'Return Grayloc seal ID', 'float', default = None, unit = 'in', showWhen = _anyVolute,
-              help = 'Inner diameter of the return Grayloc seal ring.'),
-        Field('returnVoluteAxialOffset', 'Return volute axial offset', 'float', default = None, unit = 'm', showWhen = _anyVolute,
-              help = 'Distance downstream of the injector face at which the return flare leaves the wall.'),
-        Field('returnVoluteFlareRoverD', 'Return flare R/D', 'float', default = None, showWhen = _anyVolute,
-              help = 'Fillet radius of the turn into the return flare, over the jacket depth.'),
-        Field('returnVoluteFlareLen', 'Return flare length', 'float', default = None, unit = 'm', showWhen = _anyVolute,
-              help = 'Flare extension length for the return channel exit.'),
+        Field('outletVoluteTilt', 'Outlet volute tilt', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
+              help = 'Tilt of the outlet volute cross section.'),
+        Field('outletGraylocDiameter', 'Outlet Grayloc seal ID', 'float', default = None, unit = 'in', showWhen = _anyVolute,
+              help = 'Inner diameter of the outlet Grayloc seal ring.'),
+        Field('outletVoluteAxialOffset', 'Outlet volute axial offset', 'float', default = None, unit = 'm', showWhen = _anyVolute,
+              help = 'Distance downstream of the injector face at which the outlet flare leaves the wall.'),
+        Field('outletVoluteFlareRoverD', 'Outlet flare R/D', 'float', default = None, showWhen = _anyVolute,
+              help = 'Fillet radius of the turn into the outlet flare, over the jacket depth.'),
+        Field('outletVoluteFlareLength', 'Outlet flare length', 'float', default = None, unit = 'm', showWhen = _anyVolute,
+              help = 'Flare extension length for the outlet channel exit.'),
     ], collapsed = True, note = 'Requires cooling channels to be enabled.', expandWhen = _anyVolute),
 
     Group('Program Options', [

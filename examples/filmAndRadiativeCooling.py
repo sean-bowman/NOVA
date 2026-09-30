@@ -73,7 +73,7 @@ def referenceConfiguration(**overrides):
         'filmCooling': False, 'filmCoolant': None, 'filmMassFlow': None,
         'filmInletTemperature': None, 'filmInjectionAxialPosition': None, 'filmSlotHeight': None,
         'makeRadiativeExtension': 'off',
-        'makeInletVolute': False, 'makeReturnVolute': False})
+        'makeInletVolute': False, 'makeOutletVolute': False})
 
     configuration.update({'plotsEnabled': 'off', 'export': 'off'})
     configuration.update(overrides)

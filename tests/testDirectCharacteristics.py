@@ -43,7 +43,7 @@ def truncatedIdeal():
         config = json.load(handle)
     config.update({'divergingSectionType': 'tic', 'Lstar': None, 'plumeAmbientPressure': None,
                    'plotsEnabled': False, 'export': False, 'makeCoolingChannels': 'off',
-                   'makeInletVolute': 'off', 'makeReturnVolute': 'off',
+                   'makeInletVolute': 'off', 'makeOutletVolute': 'off',
                    'makeRadiativeExtension': 'off', 'filmCooling': 'off'})
 
     scratch = os.path.join(root, 'runs', 'testDirectCharacteristics')

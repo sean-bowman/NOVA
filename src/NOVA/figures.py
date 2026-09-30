@@ -976,9 +976,9 @@ def _addVoluteBranch(figure, nozzle, arrayPrefix: str, voluteName: str, colors) 
     Parameters:
     -----------
     arrayPrefix : str
-        'Inlet' or 'Return', matching the x{arrayPrefix}Volute-style attribute names.
+        'Inlet' or 'Outlet', matching the x{arrayPrefix}Volute-style attribute names.
     voluteName : str
-        'inletVolute' or 'returnVolute', the Volute instance carrying wallThickness and
+        'inletVolute' or 'outletVolute', the Volute instance carrying wallThickness and
         circlePrintability.
 
     '''
@@ -1015,7 +1015,7 @@ def volutesFigure(nozzle):
     The nozzle wall and shell, the print bed, and both volutes with their shells and print
     supports, in one 3D assembly.
 
-    A representative channel is highlighted in red so the return volute's smallest cross
+    A representative channel is highlighted in red so the outlet volute's smallest cross
     section can be checked by eye against the channel flare it attaches to.
 
     Returns:
@@ -1025,10 +1025,10 @@ def volutesFigure(nozzle):
 
     '''
 
-    if nozzle.makeInletVolute != 'on' and nozzle.makeReturnVolute != 'on':
+    if nozzle.makeInletVolute != 'on' and nozzle.makeOutletVolute != 'on':
         return None
 
-    # The representative channel, rolled a quarter turn to the orientation the return volute's
+    # The representative channel, rolled a quarter turn to the orientation the outlet volute's
     # narrowest cross section is checked against. This is a display aid only; nothing downstream
     # reads it.
     numCSPointsChannel, numStations = nozzle.numCSPointsChannel, len(nozzle.xChannel[0, :])
@@ -1059,8 +1059,8 @@ def volutesFigure(nozzle):
     colors = _cyclicHSVColors(nozzle.numCSVolute)
     if nozzle.makeInletVolute == 'on':
         _addVoluteBranch(figure, nozzle, 'Inlet', 'inletVolute', colors)
-    if nozzle.makeReturnVolute == 'on':
-        _addVoluteBranch(figure, nozzle, 'Return', 'returnVolute', colors)
+    if nozzle.makeOutletVolute == 'on':
+        _addVoluteBranch(figure, nozzle, 'Outlet', 'outletVolute', colors)
 
     figure.update_layout(
         scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',

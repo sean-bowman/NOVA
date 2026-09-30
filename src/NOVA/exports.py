@@ -99,18 +99,18 @@ def exportData(nozzle, filename: str = 'default'):
             py2cad(filename[:-4] + 'InletVolutePrintSupportsUpper.stl', nozzle.xInletVoluteSupportUpper, nozzle.yInletVoluteSupportUpper, nozzle.zInletVoluteSupportUpper)
             if nozzle.inletVolute.circlePrintability == 'thick':
                 py2cad(filename[:-4] + 'InletVolutePrintSupportsLower.stl', nozzle.xInletVoluteSupportLower, nozzle.yInletVoluteSupportLower, nozzle.zInletVoluteSupportLower)
-    if nozzle.makeReturnVolute == 'on':
-        print(f'Exporting Return Volute Surface Mesh to .stl')
-        py2cad(filename[:-4] + 'ReturnVolute.stl', nozzle.xReturnVolute, nozzle.yReturnVolute, nozzle.zReturnVolute)
+    if nozzle.makeOutletVolute == 'on':
+        print(f'Exporting Outlet Volute Surface Mesh to .stl')
+        py2cad(filename[:-4] + 'OutletVolute.stl', nozzle.xOutletVolute, nozzle.yOutletVolute, nozzle.zOutletVolute)
         if nozzle.inletVolute.wallThickness is not None:
-            print(f'Exporting Return Volute Shell Surface Mesh to .stl')
-            py2cad(filename[:-4] + 'ReturnVoluteShell.stl', nozzle.xReturnVoluteShell, nozzle.yReturnVoluteShell, nozzle.zReturnVoluteShell)
-        if nozzle.returnVolute.circlePrintability == 'thick' or nozzle.returnVolute.circlePrintability == 'thin':
-            print(f'Exporting Return Volute Print Supports to .stl')
-            py2cad(filename[:-4] + 'ReturnVolutePrintSupportsWall.stl', nozzle.xReturnVoluteSupportWall, nozzle.yReturnVoluteSupportWall, nozzle.zReturnVoluteSupportWall)
-            py2cad(filename[:-4] + 'ReturnVolutePrintSupportsUpper.stl', nozzle.xReturnVoluteSupportUpper, nozzle.yReturnVoluteSupportUpper, nozzle.zReturnVoluteSupportUpper)
-            if nozzle.returnVolute.circlePrintability == 'thick':
-                py2cad(filename[:-4] + 'ReturnVolutePrintSupportsLower.stl', nozzle.xReturnVoluteSupportLower, nozzle.yReturnVoluteSupportLower, nozzle.zReturnVoluteSupportLower)
+            print(f'Exporting Outlet Volute Shell Surface Mesh to .stl')
+            py2cad(filename[:-4] + 'OutletVoluteShell.stl', nozzle.xOutletVoluteShell, nozzle.yOutletVoluteShell, nozzle.zOutletVoluteShell)
+        if nozzle.outletVolute.circlePrintability == 'thick' or nozzle.outletVolute.circlePrintability == 'thin':
+            print(f'Exporting Outlet Volute Print Supports to .stl')
+            py2cad(filename[:-4] + 'OutletVolutePrintSupportsWall.stl', nozzle.xOutletVoluteSupportWall, nozzle.yOutletVoluteSupportWall, nozzle.zOutletVoluteSupportWall)
+            py2cad(filename[:-4] + 'OutletVolutePrintSupportsUpper.stl', nozzle.xOutletVoluteSupportUpper, nozzle.yOutletVoluteSupportUpper, nozzle.zOutletVoluteSupportUpper)
+            if nozzle.outletVolute.circlePrintability == 'thick':
+                py2cad(filename[:-4] + 'OutletVolutePrintSupportsLower.stl', nozzle.xOutletVoluteSupportLower, nozzle.yOutletVoluteSupportLower, nozzle.zOutletVoluteSupportLower)
 
     # Each geometry above is written as its own .stl. A single assembly file would be more
     # convenient to open, but py2cad writes one solid per call and a multi-solid STL needs a

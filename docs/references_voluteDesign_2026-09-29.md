@@ -39,7 +39,7 @@ Sources consulted for the volute generator audit, covering scroll area laws, man
 
 - **URL:** <https://ui.adsabs.harvard.edu/abs/1976ATJFE..98..654B/abstract>
 - **Accessed:** 2026-09-29
-- **Relevance:** The foundational treatment of flow distribution in dividing and combining manifolds, which is what the inlet and return volutes are. Establishes the governing equations and what a distribution prediction requires.
+- **Relevance:** The foundational treatment of flow distribution in dividing and combining manifolds, which is what the inlet and outlet volutes are. Establishes the governing equations and what a distribution prediction requires.
 - **Key findings:**
   - Lateral branch flows in dividing, combining, reverse and parallel manifolds follow from two first-order differential equations in flow rate and header pressure difference, or one second-order nonlinear equation in flow rate alone.
   - Prediction depends on the momentum exchange and discharge coefficients and on a valid physical model of the branching process.

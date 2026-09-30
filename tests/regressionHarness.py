@@ -97,7 +97,7 @@ strippedToContour = {
     'extensionJointTemperature'     : ABSENT,
 
     'makeInletVolute'               : False,
-    'makeReturnVolute'              : False,
+    'makeOutletVolute'              : False,
     'numCSVolute'                   : None,
     'numCSPointsVolute'             : None,
     'voluteRelativeRoll'            : None,
@@ -112,19 +112,19 @@ strippedToContour = {
     'inletVoluteAxialOffset'        : None,
     'inletVoluteFlareRoverD'        : None,
     'inletVoluteFlareLength'        : None,
-    'returnVoluteCrossSection'      : None,
-    'returnVoluteAlignment'         : None,
-    'returnVoluteTilt'              : None,
-    'returnGraylocDiameter'         : None,
-    'returnVoluteAxialOffset'       : None,
-    'returnVoluteFlareRoverD'       : None,
-    'returnVoluteFlareLen'          : None,
+    'outletVoluteCrossSection'      : None,
+    'outletVoluteAlignment'         : None,
+    'outletVoluteTilt'              : None,
+    'outletGraylocDiameter'         : None,
+    'outletVoluteAxialOffset'       : None,
+    'outletVoluteFlareRoverD'       : None,
+    'outletVoluteFlareLength'          : None,
 }
 
 # The jacket the regen cases are pinned on, switched back on over the stripped contour. Sixty
 # circular channels in GRCop-42, hydrogen at 3.4 kg/s entering at 12 MPa and 30 K, above the
 # hydrogen critical point. The chamber is generated at the shipped L* of 1.0 m, so the jacket
-# runs over the barrel from the injector face, where the return volute sits, to the aft end,
+# runs over the barrel from the injector face, where the outlet volute sits, to the aft end,
 # where the inlet volute sits. Every number here is pinned by a baseline, so changing one moves
 # that baseline.
 regenOverrides = {
@@ -145,7 +145,7 @@ regenOverrides = {
     'coolantInitialPressure'   : 12000000.0,
     'coolantMassFlow'          : 3.4,
     'makeInletVolute'          : True,
-    'makeReturnVolute'         : True,
+    'makeOutletVolute'         : True,
     'numCSVolute'              : 60,
     'numCSPointsVolute'        : 40,
     'voluteRelativeRoll'       : 0.0,
@@ -164,13 +164,13 @@ regenOverrides = {
     'inletVoluteAxialOffset'   : 0.01,
     'inletVoluteFlareRoverD'   : 1.5,
     'inletVoluteFlareLength'   : 0.03,
-    'returnVoluteCrossSection' : 'circle',
-    'returnVoluteAlignment'    : 'i',
-    'returnVoluteTilt'         : 0.0,
-    'returnGraylocDiameter'    : 1.0,
-    'returnVoluteAxialOffset'  : 0.01,
-    'returnVoluteFlareRoverD'  : 1.5,
-    'returnVoluteFlareLen'     : 0.03,
+    'outletVoluteCrossSection' : 'circle',
+    'outletVoluteAlignment'    : 'i',
+    'outletVoluteTilt'         : 0.0,
+    'outletGraylocDiameter'    : 1.0,
+    'outletVoluteAxialOffset'  : 0.01,
+    'outletVoluteFlareRoverD'  : 1.5,
+    'outletVoluteFlareLength'     : 0.03,
 }
 
 # The cases the harness records. Every case runs assets/NOVANozzle.json and differs only in what

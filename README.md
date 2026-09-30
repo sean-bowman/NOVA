@@ -170,7 +170,7 @@ Grouped by section, matching the order in the config file.
 
 ### Regenerative cooling jacket
 
-Coolant enters through the inlet volute at the aft end of the regen nozzle, runs forward against the exhaust, and leaves through the return volute at the injector face; at each end a flare turns the channels off the wall into the volute to allow for variable radial volute placement for wall thickness tailoring. Each scroll is placed on the channel port it meets, since its tongue is drawn barely wider than that port, and the build refuses a scroll that reaches inside the gas-side wall.
+Coolant enters through the inlet volute at the aft end of the regen nozzle, runs forward against the exhaust, and leaves through the outlet volute at the injector face; at each end a flare turns the channels off the wall into the volute to allow for variable radial volute placement for wall thickness tailoring. Each scroll is placed on the channel port it meets, since its tongue is drawn barely wider than that port, and the build refuses a scroll that reaches inside the gas-side wall.
 
 The scroll area is linear in wrap angle, because the flow a station carries is linear in the ports it has passed. The two topologies differ in where the tongue sits. A `cutwater` scroll runs from the tongue at one end of the wrap to the throat at the other and stops short of a full turn by the angle its tongue wall occupies. A `ring` wraps the full turn, is fed from both directions at once, and puts the tongue half a turn from the throat, so each half serves half the ports and the two ends of the sweep match. Holding the velocity constant around the wrap then fixes the throat at the tongue area times the ports one run serves, which is Huzel and Huang eq. 6-69, so the throat follows from the channel port and the port count rather than from the fitting. The build reports the scroll velocity, its velocity head and that head against the jacket pressure drop, which is what sets how evenly the channels are fed, and refuses a throat wider than `maxVoluteBore`. Theory, measured comparisons and the open items are in [docs/reports/voluteAudit_2026-09-29.md](docs/reports/voluteAudit_2026-09-29.md). The gas side is Bartz, by default with a single correlation constant along the whole wall. Measured constants vary with station: on a LOX/GH2 chamber at 150 to 1000 psia they run 0.0257 in the barrel against 0.0148 at the throat (NASA TN D-2832), so that default is about right over the barrel and 20 to 40 percent high at the throat, which buys wall margin and charges pressure drop for it. Setting `gasSideAxialModel` to `measured` takes the axial shape from those constants instead, normalized on the barrel so Bartz keeps the absolute level: unity over the barrel and 0.59 at the throat. The correlation and both options live in [src/NOVA/gasSideHeatTransfer.py](src/NOVA/gasSideHeatTransfer.py), which the ablative liner and the radiative extension read as well, and the sources are in [docs/references_gasSideHeatTransfer_2026-09-22.md](docs/references_gasSideHeatTransfer_2026-09-22.md).
 
@@ -258,19 +258,19 @@ Solves the wall temperature of an uncooled extension beyond the jacket. Needs a 
 
 | Field                                                | Unit | Meaning                                                                             |
 | ------------------------------------------------------ | ---- | ------------------------------------------------------------------------------------ |
-| `makeInletVolute`, `makeReturnVolute`             | --   | Build the inlet manifold and the return manifold                                    |
+| `makeInletVolute`, `makeOutletVolute`             | --   | Build the inlet manifold and the outlet manifold                                    |
 | `numCSVolute`, `numCSPointsVolute`               | --   | Cross sections swept around each volute, and points per cross section              |
-| `voluteRelativeRoll`                               | deg  | Roll offset between the inlet and return volutes                                    |
+| `voluteRelativeRoll`                               | deg  | Roll offset between the inlet and outlet volutes                                    |
 | `voluteScrollType`                                 | --   | `ring` or `cutwater`                                                                 |
 | `maxVoluteBore`                                    | m    | Largest scroll throat the build accepts before refusing                             |
-| `inletVoluteCrossSection`, `returnVoluteCrossSection` | -- | `circle` or `squarc`. An egg section is kept in [experimental/eggVolute.py](experimental/eggVolute.py) |
-| `inletVoluteAlignment`, `returnVoluteAlignment`   | --   | `c`, `n`, `s`, `i`, `o`, `ni`, `si`, `no` or `so`: which edge of a section holds still as the scroll grows, and so whether it grows toward the nozzle or away from it |
-| `inletVolutePrintability`, `returnVolutePrintability` | -- | Apply overhang-safe shaping                                                        |
-| `inletVoluteTilt`, `returnVoluteTilt`             | deg  | Tilt of the cross section, read by a squircle section                                |
-| `inletGraylocDiameter`, `returnGraylocDiameter`   | in   | Inner diameter of the Grayloc seal ring the scroll transitions into                  |
-| `inletVoluteAxialOffset`, `returnVoluteAxialOffset` | m  | Where each flare leaves the wall: upstream of the aft end for the inlet, downstream of the injector face for the return |
-| `inletVoluteFlareRoverD`, `returnVoluteFlareRoverD` | -- | Fillet radius of the turn into each flare, over the jacket depth                  |
-| `inletVoluteFlareLength`, `returnVoluteFlareLen`  | m    | Flare length                                                                          |
+| `inletVoluteCrossSection`, `outletVoluteCrossSection` | -- | `circle` or `squarc`. An egg section is kept in [experimental/eggVolute.py](experimental/eggVolute.py) |
+| `inletVoluteAlignment`, `outletVoluteAlignment`   | --   | `c`, `n`, `s`, `i`, `o`, `ni`, `si`, `no` or `so`: which edge of a section holds still as the scroll grows, and so whether it grows toward the nozzle or away from it |
+| `inletVolutePrintability`, `outletVolutePrintability` | -- | Apply overhang-safe shaping                                                        |
+| `inletVoluteTilt`, `outletVoluteTilt`             | deg  | Tilt of the cross section, read by a squircle section                                |
+| `inletGraylocDiameter`, `outletGraylocDiameter`   | in   | Inner diameter of the Grayloc seal ring the scroll transitions into                  |
+| `inletVoluteAxialOffset`, `outletVoluteAxialOffset` | m  | Where each flare leaves the wall: upstream of the aft end for the inlet, downstream of the injector face for the outlet |
+| `inletVoluteFlareRoverD`, `outletVoluteFlareRoverD` | -- | Fillet radius of the turn into each flare, over the jacket depth                  |
+| `inletVoluteFlareLength`, `outletVoluteFlareLength`  | m    | Flare length                                                                          |
 
 The chamber keep-out envelope is kept in [experimental/keepOut.py](experimental/keepOut.py) beside the sunken throat that wraps it.
 
@@ -412,7 +412,7 @@ That is checked rather than asserted. `tests/testFacade.py` holds it structurall
 
 The nozzle interior point and the plume interior point are the same relations, and the fact that they now live in separate modules is what makes it checkable: `tests/testCharacteristics.py` compares them directly and states how far apart they end up.
 
-Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInletVolute`, `makeReturnVolute`, `filmCooling`, `makeRadiativeExtension`, `inletVolutePrintability`, `returnVolutePrintability`) accept JSON booleans or the strings `"on"` / `"off"`.
+Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInletVolute`, `makeOutletVolute`, `filmCooling`, `makeRadiativeExtension`, `inletVolutePrintability`, `outletVolutePrintability`) accept JSON booleans or the strings `"on"` / `"off"`.
 
 | Module                                                      | Holds                                                                                                                                                                                                                                                          |
 | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -436,7 +436,7 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 | `channelGeometry.py`                                       | Cooling channel cross sections: the circular profile on a transport frame, and the rounded rectangle on frames built from the wall normal |
 | `channelSizing.py`                                         | The dynamic channel size solve: converging each station so the hot wall runs at the temperature it is allowed to |
 | `regenChannels.py`                                         | The jacket build: the fillet and flare to each volute, the channel centerline and its wrap, the swept channels and the wall meshes |
-| `nozzleVolutes.py`                                        | The inlet and return scrolls, their walls sized against the coolant state, and their print supports                                                                                                                                                            |
+| `nozzleVolutes.py`                                        | The inlet and outlet scrolls, their walls sized against the coolant state, and their print supports                                                                                                                                                            |
 | `chamber.py`                                              | The combustion chamber and the converging section                                                                                                                                                                                                              |
 | `regenStations.py`                                        | Where the jacket ends, and the exhaust state at every station of both sections                                                                                                                                                                                 |
 | `config.py`                                               | Reading a configuration from JSON or a dictionary                                                                                                                                                                                                              |

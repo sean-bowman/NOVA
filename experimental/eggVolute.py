@@ -65,7 +65,7 @@ A caller reinstating it in the package needs to:
   - fix the three inverted loops before anything reads the result,
   - move `bezier`, `drawEgg` and `generateEggVolute` back into `Volute.py`, restore
     `eggPointiness` on the constructor and the `case 'egg'` arm in `generateVolute`,
-  - restore `'egg'` to the `inletVoluteCrossSection` and `returnVoluteCrossSection` choices in
+  - restore `'egg'` to the `inletVoluteCrossSection` and `outletVoluteCrossSection` choices in
     `novaGui/configSchema.py` and drop the rejection in `config.py`,
   - record a regression case with an egg cross section, since the nine that pin the volutes all
     run circles.

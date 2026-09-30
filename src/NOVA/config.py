@@ -106,8 +106,8 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
 
     Regen Volutes:
         - Inlet volute (makeInletVolute, inletVoluteCrossSection, inletVoluteAlignment, etc.)
-        - Return volute (makeReturnVolute, returnVoluteCrossSection, returnVoluteAlignment, etc.)
-        - Grayloc fittings (inletGraylocDiameter, returnGraylocDiameter)
+        - Outlet volute (makeOutletVolute, outletVoluteCrossSection, outletVoluteAlignment, etc.)
+        - Grayloc fittings (inletGraylocDiameter, outletGraylocDiameter)
 
     Program Options:
         - One plotting switch (plotsEnabled)
@@ -148,7 +148,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # `False == 'on'` is silently False rather than an error. Without
         # this normalization every plot and export is quietly disabled.
         for key in ('plotsEnabled', 'export',
-                    'makeCoolingChannels', 'makeInletVolute', 'makeReturnVolute',
+                    'makeCoolingChannels', 'makeInletVolute', 'makeOutletVolute',
                     'filmCooling', 'makeRadiativeExtension'):
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
@@ -291,7 +291,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
 
         # -- Regen Volute Inputs -- #
         nozzle.makeInletVolute                = inputsPath['makeInletVolute']
-        nozzle.makeReturnVolute               = inputsPath['makeReturnVolute']
+        nozzle.makeOutletVolute               = inputsPath['makeOutletVolute']
         nozzle.numCSVolute                    = inputsPath['numCSVolute']
         nozzle.numCSPointsVolute              = inputsPath['numCSPointsVolute']
         nozzle.voluteRelativeRoll             = inputsPath['voluteRelativeRoll']
@@ -307,14 +307,14 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.inletVoluteAxialOffset         = inputsPath['inletVoluteAxialOffset']
         nozzle.inletVoluteFlareRoverD         = inputsPath['inletVoluteFlareRoverD']
         nozzle.inletVoluteFlareLength         = inputsPath['inletVoluteFlareLength']
-        nozzle.returnVoluteCrossSection       = inputsPath['returnVoluteCrossSection']
-        nozzle.returnVoluteAlignment          = inputsPath['returnVoluteAlignment']
-        nozzle.returnVolutePrintability       = inputsPath['returnVolutePrintability']
-        nozzle.returnVoluteTilt               = inputsPath['returnVoluteTilt']
-        nozzle.returnGraylocDiameter          = inputsPath['returnGraylocDiameter']
-        nozzle.returnVoluteAxialOffset        = inputsPath['returnVoluteAxialOffset']
-        nozzle.returnVoluteFlareRoverD        = inputsPath['returnVoluteFlareRoverD']
-        nozzle.returnVoluteFlareLen           = inputsPath['returnVoluteFlareLen']
+        nozzle.outletVoluteCrossSection       = inputsPath['outletVoluteCrossSection']
+        nozzle.outletVoluteAlignment          = inputsPath['outletVoluteAlignment']
+        nozzle.outletVolutePrintability       = inputsPath['outletVolutePrintability']
+        nozzle.outletVoluteTilt               = inputsPath['outletVoluteTilt']
+        nozzle.outletGraylocDiameter          = inputsPath['outletGraylocDiameter']
+        nozzle.outletVoluteAxialOffset        = inputsPath['outletVoluteAxialOffset']
+        nozzle.outletVoluteFlareRoverD        = inputsPath['outletVoluteFlareRoverD']
+        nozzle.outletVoluteFlareLength           = inputsPath['outletVoluteFlareLength']
 
         # -- Program Options -- #
         #
@@ -429,7 +429,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
     # A printability support is a shape, not a flag: 'thick' and 'thin' draw different supports
     # and 'off' draws none, so a boolean cannot select one.
     for flag, key in (('makeInletVolute', 'inletVolutePrintability'),
-                      ('makeReturnVolute', 'returnVolutePrintability')):
+                      ('makeOutletVolute', 'outletVolutePrintability')):
         if getattr(nozzle, flag) != 'on':
             continue
         if getattr(nozzle, key) not in VOLUTEPRINTABILITY:
@@ -439,7 +439,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
                 value = getattr(nozzle, key),
                 validRange = ', '.join(VOLUTEPRINTABILITY))
 
-    if (nozzle.makeInletVolute == 'on' or nozzle.makeReturnVolute == 'on') \
+    if (nozzle.makeInletVolute == 'on' or nozzle.makeOutletVolute == 'on') \
             and nozzle.voluteScrollType not in SCROLLTYPES:
         raise InvalidInputError(
             message = f"voluteScrollType must be one of {', '.join(SCROLLTYPES)}.",
@@ -450,7 +450,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
     # Each volute names its own cross section, and either volute can be off, so the check runs
     # per volute rather than once.
     for flag, key in (('makeInletVolute', 'inletVoluteCrossSection'),
-                      ('makeReturnVolute', 'returnVoluteCrossSection')):
+                      ('makeOutletVolute', 'outletVoluteCrossSection')):
         if getattr(nozzle, flag) != 'on':
             continue
         section = getattr(nozzle, key)

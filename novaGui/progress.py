@@ -63,7 +63,7 @@ def _voluteStages() -> list:
 
     return [
         Stage(r'Generating Inlet Volute',                 0.95, 0.96, 'inlet volute'),
-        Stage(r'Generating Return Volute',                0.96, 0.97, 'return volute'),
+        Stage(r'Generating Outlet Volute',                0.96, 0.97, 'outlet volute'),
     ]
 
 def _outputStages() -> list:
@@ -86,7 +86,7 @@ class StageTracker:
         config = config or {}
         cooling = config.get('makeCoolingChannels') in (True, 'on')
         volutes = (config.get('makeInletVolute') in (True, 'on')
-                   or config.get('makeReturnVolute') in (True, 'on'))
+                   or config.get('makeOutletVolute') in (True, 'on'))
 
         self.stages = _contourStages()
         if cooling:

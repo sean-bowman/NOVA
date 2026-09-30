@@ -265,7 +265,7 @@ def compressionIndices(xCircle: np.ndarray, yCircle: np.ndarray, zCircle: np.nda
 
 def interfaceBlend(i: int, fluteAmplitude: np.ndarray, gaussianCurve: np.ndarray,
                    totalPathLength: float, numCrossSections: int, numCSPointsChannel: int,
-                   interfaceLength: float, numInletInterfaceCS: int, numReturnInterfaceCS: int) -> tuple:
+                   interfaceLength: float, numInletInterfaceCS: int, numOutletInterfaceCS: int) -> tuple:
 
     '''
 
@@ -285,7 +285,7 @@ def interfaceBlend(i: int, fluteAmplitude: np.ndarray, gaussianCurve: np.ndarray
         Stations along the channel and points around a section.
     interfaceLength : float
         Circular run at each volute interface [m].
-    numInletInterfaceCS, numReturnInterfaceCS : int
+    numInletInterfaceCS, numOutletInterfaceCS : int
         Stations in each volute interface.
 
     Returns:
@@ -301,15 +301,15 @@ def interfaceBlend(i: int, fluteAmplitude: np.ndarray, gaussianCurve: np.ndarray
     blendUp                        = np.linspace(0, 1, numInterfaceBlendCrossSections + 1)
     blendDown                      = np.linspace(1, 0, numInterfaceBlendCrossSections + 1)
 
-    returnEnd  = numReturnInterfaceCS + numInterfaceCrossSections
+    outletEnd  = numOutletInterfaceCS + numInterfaceCrossSections
     inletStart = numCrossSections - numInterfaceCrossSections - numInletInterfaceCS
 
     # Circular return run
-    if i <= returnEnd:
+    if i <= outletEnd:
         return np.zeros(numCSPointsChannel), 1
-    # Blend up out of the return run
-    if i <= returnEnd + numInterfaceBlendCrossSections:
-        return fluteAmplitude[i] * gaussianCurve * blendUp[i - returnEnd], 1 - blendUp[i - returnEnd]
+    # Blend up out of the outlet run
+    if i <= outletEnd + numInterfaceBlendCrossSections:
+        return fluteAmplitude[i] * gaussianCurve * blendUp[i - outletEnd], 1 - blendUp[i - outletEnd]
     # Fully fluted
     if i <= inletStart - numInterfaceBlendCrossSections:
         return fluteAmplitude[i] * gaussianCurve, 0

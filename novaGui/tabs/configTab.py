@@ -308,7 +308,7 @@ class ConfigTab(ttk.Frame):
             if config.get('channelType') == 'helical' and not isSet('channelHelixAngle'):
                 problems.append("Helical channels need a 'Channel helix angle'.")
 
-        if config.get('makeInletVolute') in (True, 'on') or config.get('makeReturnVolute') in (True, 'on'):
+        if config.get('makeInletVolute') in (True, 'on') or config.get('makeOutletVolute') in (True, 'on'):
             if config.get('makeCoolingChannels') not in (True, 'on'):
                 problems.append('Volute generation requires cooling channels to be enabled.')
 

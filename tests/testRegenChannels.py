@@ -448,7 +448,7 @@ class TestVoluteInterface:
     straight flare along the plane. It draws the fillet at 1.0005 of its radius so the circle is
     certain to cut the wall, which leaves the join 1.8 degrees off tangent, acos(1/1.0005), with
     the arc dipping 0.0005 of the fillet radius into the wall before it rises, and it finds that
-    cut against a 300 point polygon, which places it within the polygon's sagitta of the wall. The upstream end, where the return volute sits, is the same construction
+    cut against a 300 point polygon, which places it within the polygon's sagitta of the wall. The upstream end, where the outlet volute sits, is the same construction
     reflected, so on a barrel that is symmetric about its middle the two ends must be mirror
     images.
 

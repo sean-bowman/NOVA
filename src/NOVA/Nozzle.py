@@ -162,7 +162,7 @@ class Nozzle:
     station against a wall temperature limit, with the coolant marched from inlet to outlet. Film
     cooling and an uncooled radiation-cooled extension attach to the same solve.
 
-    Inlet and return volutes, the inlet at the aft end of the jacket and the return at the
+    Inlet and outlet volutes, the inlet at the aft end of the jacket and the outlet at the
     injector face.
 
     Exhaust plume, either from correlations or by continuing the characteristics march past the
@@ -264,7 +264,7 @@ class Nozzle:
         generateRegenChannels               channels and the jacket around them
         regenHeatTransferModel              coolant and wall thermal state along the jacket
         regenHeatTransferModelPlots         draws that result
-        generateRegenVolutes                inlet and return volutes
+        generateRegenVolutes                inlet and outlet volutes
         generateRadiativeExtension          wall temperature of the uncooled extension
 
     Plume:
@@ -491,10 +491,10 @@ class Nozzle:
 
         self.xRegenNozzleInterfaced: np.ndarray | None = None    # [m]
         self.rRegenNozzleInterfaced                   = None     # [m]
-        self.numReturnInterfaceCS                     = None     # [int]
+        self.numOutletInterfaceCS                     = None     # [int]
         self.numInletInterfaceCS                      = None     # [int]
-        self.xReturnInterface                         = None     # [m]
-        self.rReturnInterface                         = None     # [m]
+        self.xOutletInterface                         = None     # [m]
+        self.rOutletInterface                         = None     # [m]
         self.xInletInterface                          = None     # [m]
         self.rInletInterface                          = None     # [m]
 
@@ -516,7 +516,7 @@ class Nozzle:
 
         # Volute Inputs
         self.makeInletVolute                          = None     # 'on' , 'off'
-        self.makeReturnVolute                         = None     # 'on' , 'off'
+        self.makeOutletVolute                         = None     # 'on' , 'off'
         self.numCSPointsVolute                        = None     # [int]
         self.voluteRelativeRoll                       = None     # [deg]
         self.voluteScrollType                         = 'ring'   # 'ring' , 'cutwater'
@@ -531,14 +531,14 @@ class Nozzle:
         self.inletGraylocDiameter: float | None       = None     # [in]
         self.inletVoluteAxialOffset                   = None     # [m]
 
-        self.returnVoluteCrossSection                 = None     # 'circle' , 'squarc'
-        self.returnVoluteAlignment                    = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
-        self.returnVolutePrintability                 = None     # 'off' , 'thick' , 'thin
-        self.returnVoluteTilt                         = None     # [deg]
-        self.returnGraylocDiameter: float | None      = None     # [in]
-        self.returnVoluteAxialOffset                  = None     # [m]
-        self.returnVoluteFlareRoverD                  = None     # [-]
-        self.returnVoluteFlareLen                     = None     # [m]
+        self.outletVoluteCrossSection                 = None     # 'circle' , 'squarc'
+        self.outletVoluteAlignment                    = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
+        self.outletVolutePrintability                 = None     # 'off' , 'thick' , 'thin
+        self.outletVoluteTilt                         = None     # [deg]
+        self.outletGraylocDiameter: float | None      = None     # [in]
+        self.outletVoluteAxialOffset                  = None     # [m]
+        self.outletVoluteFlareRoverD                  = None     # [-]
+        self.outletVoluteFlareLength                     = None     # [m]
 
         # Volute Outputs
         self.inletVolute: Any                         = None     # Volute object; set when volute is built
@@ -558,22 +558,22 @@ class Nozzle:
         self.yInletVoluteSupportLower                 = None     # [m]
         self.zInletVoluteSupportLower                 = None     # [m]
 
-        self.returnVolute: Any                        = None     # Volute object; set when volute is built
-        self.xReturnVolute                            = None     # [m]
-        self.yReturnVolute                            = None     # [m]
-        self.zReturnVolute                            = None     # [m]
-        self.xReturnVoluteShell                       = None     # [m]
-        self.yReturnVoluteShell                       = None     # [m]
-        self.zReturnVoluteShell                       = None     # [m]
-        self.xReturnVoluteSupportWall                 = None     # [m]
-        self.yReturnVoluteSupportWall                 = None     # [m]
-        self.zReturnVoluteSupportWall                 = None     # [m]
-        self.xReturnVoluteSupportUpper                = None     # [m]
-        self.yReturnVoluteSupportUpper                = None     # [m]
-        self.zReturnVoluteSupportUpper                = None     # [m]
-        self.xReturnVoluteSupportLower                = None     # [m]
-        self.yReturnVoluteSupportLower                = None     # [m]
-        self.zReturnVoluteSupportLower                = None     # [m]
+        self.outletVolute: Any                        = None     # Volute object; set when volute is built
+        self.xOutletVolute                            = None     # [m]
+        self.yOutletVolute                            = None     # [m]
+        self.zOutletVolute                            = None     # [m]
+        self.xOutletVoluteShell                       = None     # [m]
+        self.yOutletVoluteShell                       = None     # [m]
+        self.zOutletVoluteShell                       = None     # [m]
+        self.xOutletVoluteSupportWall                 = None     # [m]
+        self.yOutletVoluteSupportWall                 = None     # [m]
+        self.zOutletVoluteSupportWall                 = None     # [m]
+        self.xOutletVoluteSupportUpper                = None     # [m]
+        self.yOutletVoluteSupportUpper                = None     # [m]
+        self.zOutletVoluteSupportUpper                = None     # [m]
+        self.xOutletVoluteSupportLower                = None     # [m]
+        self.yOutletVoluteSupportLower                = None     # [m]
+        self.zOutletVoluteSupportLower                = None     # [m]
 
         # -- Heat Transfer Model -- #
 
@@ -1398,7 +1398,7 @@ class Nozzle:
 
         '''
 
-        Build the inlet and return volutes onto the cooling channels.
+        Build the inlet and outlet volutes onto the cooling channels.
 
         The build itself is `volutes.solveRegenVolutes`, which takes the channel ends and the
         volute definition explicitly. This method supplies them and copies the result back.
@@ -1703,7 +1703,7 @@ class Nozzle:
             self.generateRegenChannels()
 
             # Generate volute(s)
-            if self.makeInletVolute == 'on' or self.makeReturnVolute == 'on':
+            if self.makeInletVolute == 'on' or self.makeOutletVolute == 'on':
                 self.generateRegenVolutes()
 
         # -- Radiation-Cooled Extension -- #
