@@ -209,11 +209,14 @@ def py2cad(filename: str, xData: np.ndarray | list, yData: np.ndarray | list, zD
     # Helper function to find the facet normal and write the current facet data to the file
     def writeFacet(fileID, point1, point2, point3):
 
-        # Find face normal
+        # Find face normal. A facet with two coincident corners has no normal, which the
+        # division would write to the file as NaN, so it is written as zero instead: the format
+        # allows it and readers recompute from the vertices.
         vector1 = point2 - point1
         vector2 = point3 - point1
         vector3 = np.cross(vector1, vector2)
-        normal = vector3 / np.sqrt(np.sum(vector3**2))
+        magnitude = np.sqrt(np.sum(vector3**2))
+        normal = vector3 / magnitude if magnitude > 0.0 else np.zeros(3)
 
         # Write data to file, ensure data types are what .stl expects
         fileID.write(np.float32(normal))

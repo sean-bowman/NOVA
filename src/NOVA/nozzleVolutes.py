@@ -6,16 +6,23 @@
 The manifolds that feed the cooling channels and collect them again.
 
 A regeneratively cooled jacket has to get coolant in and out. Sixty channels cannot each have
-their own feedline, so they are gathered into a scroll that wraps the nozzle once: the inlet
-volute distributes flow from a single interface into every channel, and the return volute
-collects it back. Each is a duct whose cross section grows around the scroll in proportion to
-the flow it is carrying, which is what keeps the velocity, and so the distribution between
-channels, roughly even.
+their own feedline, so they are gathered into a scroll that wraps the nozzle: the inlet volute
+distributes flow from a single fitting into every channel, and the return volute collects it back.
 
-The scroll geometry itself lives in Volute.py, which draws one from a scroll radius, a cross
-section family and an area distribution. What happens here is everything around it: reading the
-channel ends the volute has to attach to, sizing its wall against the pressure and temperature
-the coolant is at, and growing the print supports an unsupported scroll needs.
+Each scroll carries a cross section that grows in proportion to the flow passing it, which is what
+holds its velocity constant around the wrap and so keeps the static pressure the channels see
+uniform. The flow passing a station is linear in the ports it has already served, so the area is
+linear in wrap angle, and the throat that closes the law is the tongue area times the ports one
+run serves: Huzel and Huang, Design of Liquid Propellant Rocket Engines, eq. 6-69. A `cutwater`
+scroll serves every port on one run; a `ring` is fed from both directions and serves half on each.
+The tongue itself is fixed by the channel port it opens onto, so the throat is what the law sets,
+and the Grayloc fitting is what the throat then transitions into rather than the throat itself.
+
+The scroll geometry lives in Volute.py, which draws one from a scroll radius, a cross section
+family and an area distribution, and the section algebra in voluteSections.py. What happens here
+is everything around it: placing the scroll on the channel port it gathers, sizing its wall
+against the pressure and temperature the coolant is at, checking it clears the gas-side wall, and
+growing the print supports an unsupported scroll needs.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -28,9 +35,24 @@ manufacturer figures interpolated on a cubic spline, and the spline extrapolates
 data it was given without saying so. That is worth knowing: a lookup below the lowest datum
 returns a number that no measurement supports.
 
-**Nothing else here is validated.** The scroll area distribution, the flare into the interface
-and the print supports are geometry, and the claim made for them is that they close and that
-they clear what they are meant to clear.
+**The area law is a published design rule, not a validated model.** The constant velocity law is
+standard practice for a scroll that sheds or gathers evenly around its wrap, and following it is a
+statement about practice rather than a prediction checked against data. What the law is for, an
+even split between the channels, is not measured anywhere: no flow distribution test, no CFD of
+the built surface with its branches resolved. The scroll velocity, its velocity head and that head
+against the jacket pressure drop are reported at build time, because the ratio of the two is what
+the distribution literature says governs the split, and on a jacket whose channels carry little
+pressure drop that ratio can sit the wrong side of one.
+
+**The rest is geometry.** The flare into the interface and the print supports close and clear what
+they are meant to clear, which is the whole claim. Placement and wall clearance are checked: the
+tongue section is centred on the channel port, and a scroll reaching inside the gas-side wall is
+refused rather than drawn.
+
+**The wall carries no toroidal correction.** The hoop relation is the straight cylinder one
+evaluated on the section hydraulic diameter, and a scroll is a torus, whose membrane stress peaks
+at the inner crotch. On the shipped engine that is 6 to 7 per cent of thickness, measured in
+docs/reports/voluteAudit_2026-09-29.md.
 
 ----------------------------------------------------------------------
                         Geometry conventions
@@ -65,7 +87,85 @@ from .geometryTools import DCM
 from .errors import InvalidInputError, VoluteGenerationError, createErrorContext
 from .Volute import Volute
 from .channelSections import equivalentDiameter
+from .fluidProperties import fluidProps
+from .voluteSections import (constantVelocityThroatArea, portsPerScroll,
+                             scrollPlacement, sectionArea, sectionHydraulicDiameter)
 from .validation import applyRules, arrayRule, presentRule
+
+# How much wider the tongue section is drawn than the port it meets, so the port opens into the
+# scroll rather than meeting its wall tangentially.
+tongueOverPort = 1.1
+
+# Manufacturer 0.2 per cent yield and ultimate tensile data for the GRCop alloys, in degrees
+# Fahrenheit and ksi as published. The tables are the whole basis of the wall thickness, so the
+# lookup below refuses to read outside them rather than letting a spline invent a number.
+grcopStrengthData = {
+    (42, 'yield'):    ([-320, 70, 392, 752, 1112, 1472], [33.5, 25.8, 24, 20.4, 15.1, 7.4]),
+    (42, 'ultimate'): ([-320, 70, 392, 752, 1112, 1472], [76.6, 52.3, 37, 28.3, 16.3, 8.9]),
+    (84, 'yield'):    ([-423.4, -315.4, 70, 392, 752, 1112, 1472], [37, 37, 30, 28, 24, 16, 7]),
+    (84, 'ultimate'): ([-423.4, -315.4, 70, 392, 752, 1112, 1472],
+                       [103, 90, 57, 38, 29, 17, 8]),
+}
+
+# A pressurized part is proof tested and leak checked at room temperature, where a copper alloy is
+# weaker than it is at coolant temperature, so that is the case the wall has to carry.
+ambientProofTemperature = 293.15
+
+def grcopStrength(stressType: str = 'yield', temperature: float = 298.0, alloy: int = 42) -> float:
+
+    '''
+
+    0.2 per cent yield or ultimate tensile strength of a GRCop alloy [Pa].
+
+    Manufacturer data on a cubic spline. Outside the data the nearest measured temperature is used
+    rather than the spline's continuation, because a spline extrapolates without saying so and the
+    values it returns below the lowest datum are not supported by any measurement: on GRCop-42 the
+    lowest yield datum is 77.6 K, and a hydrogen inlet at 30 K sits 48 K below it.
+
+    Parameters:
+    -----------
+    stressType : str
+        `yield` or `ultimate`.
+    temperature : float
+        Metal temperature [K].
+    alloy : int
+        42 or 84.
+
+    Returns:
+    --------
+    float
+        Strength [Pa].
+
+    Raises:
+    -------
+    InvalidInputError
+        On an unrecognized alloy or stress type.
+
+    '''
+
+    key = (int(alloy), str(stressType).lower())
+
+    if key[1] not in ('yield', 'ultimate'):
+        raise InvalidInputError(
+            message = 'Unrecognized stress type',
+            parameterName = 'stressType',
+            value = stressType,
+            validRange = 'yield or ultimate')
+
+    if key not in grcopStrengthData:
+        raise InvalidInputError(
+            message = f'Unrecognized GRCopper alloy for {key[1]} strength',
+            parameterName = 'alloy',
+            value = alloy,
+            validRange = '42 or 84')
+
+    temperatureF, strengthKSI = grcopStrengthData[key]
+    temperatureK = units.toSI(np.asarray(temperatureF, dtype = float), 'temperature', 'degF')
+    strengthPa = np.asarray(strengthKSI, dtype = float)*6.895e6
+
+    held = float(np.clip(temperature, temperatureK.min(), temperatureK.max()))
+
+    return float(CubicSpline(temperatureK, strengthPa)(held))
 
 # What a volute needs from the channel build it attaches to. The volute is grown onto the ends of
 # the channels, so what it reads is geometry the sizing solve produced rather than configuration.
@@ -118,10 +218,12 @@ class RegenVoluteState:
     channelRadius:                         Any = None
     channelType:                           Any = None
     channelWidth:                          Any = None
+    coolant:                               Any = None
     coolantExitPressure:                   Any = None
     coolantExitTemperature:                Any = None
     coolantInitialPressure:                Any = None
     coolantInitialTemperature:             Any = None
+    coolantMassFlow:                       Any = None
     dataFolder:                            Any = None
     export:                                Any = None
     inletGraylocDiameter:                  Any = None
@@ -131,9 +233,13 @@ class RegenVoluteState:
     inletVoluteTilt:                       Any = None
     makeInletVolute:                       Any = None
     makeReturnVolute:                      Any = None
+    maxVoluteBore:                         Any = None
+    minVoluteWallThickness:                Any = None
+    nChannel:                              Any = None
     numCSPointsVolute:                     Any = None
     numCSVolute:                           Any = None
     rChannelCenterline2D:                  Any = None
+    rNozzleWall:                           Any = None
     returnGraylocDiameter:                 Any = None
     returnVoluteAlignment:                 Any = None
     returnVoluteCrossSection:              Any = None
@@ -141,9 +247,19 @@ class RegenVoluteState:
     returnVoluteTilt:                      Any = None
     voluteFOS:                             Any = None
     voluteRelativeRoll:                    Any = None
+    voluteScrollType:                      Any = None
     xChannelCenterline2D:                  Any = None
+    xNozzleWall:                           Any = None
 
     # -- Read and written as the volutes are grown -- #
+    inletVoluteThroatArea:                 Any = None
+    inletVoluteWallClearance:              Any = None
+    inletVoluteVelocity:                   Any = None
+    inletVoluteVelocityHead:               Any = None
+    returnVoluteThroatArea:                Any = None
+    returnVoluteWallClearance:             Any = None
+    returnVoluteVelocity:                  Any = None
+    returnVoluteVelocityHead:              Any = None
     inletVolute:                           Any = None
     returnVolute:                          Any = None
     xInletVolute:                          Any = None
@@ -182,6 +298,9 @@ class RegenVoluteState:
 # The fields a build hands back to a Nozzle. Kept beside the class so that adding a field
 # and forgetting to surface it is a one-line fix rather than a silent drop.
 regenVoluteOutputs = (
+    'inletVoluteThroatArea', 'inletVoluteVelocity', 'inletVoluteVelocityHead',
+    'inletVoluteWallClearance', 'returnVoluteThroatArea', 'returnVoluteVelocity',
+    'returnVoluteVelocityHead', 'returnVoluteWallClearance',
     'inletVolute', 'returnVolute', 'xInletVolute', 'xInletVoluteShell',
     'xInletVoluteSupportLower', 'xInletVoluteSupportUpper', 'xInletVoluteSupportWall',
     'xReturnVolute', 'xReturnVoluteShell', 'xReturnVoluteSupportLower',
@@ -215,89 +334,6 @@ def solveRegenVolutes(state):
     # Validate inputs before volute generation
     validateRegenVoluteInputs(state)
 
-    def getGRCopStrength(stressType: str = 'yield', temperature: float = 298, alloy: float = 42):
-
-        '''
-
-        Returns 0.20% yield strength or ultimate tensile strength [Pa] 
-        of specified GRCopper alloy (42 or 84) at specified temperature [K].
-
-        Interpolates manufacturer data.
-
-        '''
-
-        if stressType.lower() == 'ultimate':
-
-            if alloy == 84:
-
-                TdataF     = np.array([-423.4,-315.4,70,392,752,1112,1472])
-                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
-                UTSdataKSI = np.array([103,90,57,38,29,17,8])
-                UTSdataPA  = UTSdataKSI*6.895e6
-
-                UTS = CubicSpline(TdataK,UTSdataPA)(temperature)
-
-                return UTS
-
-            elif alloy == 42:
-
-                TdataF     = np.array([-320,70,392,752,1112,1472])
-                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
-                UTSdataKSI = np.array([76.6,52.3,37,28.3,16.3,8.9])
-                UTSdataPA  = UTSdataKSI*6.895e6
-
-                UTS = CubicSpline(TdataK,UTSdataPA)(temperature)
-
-                return UTS
-
-            else:
-                raise InvalidInputError(
-                    message='Unrecognized GRCopper alloy for ultimate tensile strength',
-                    parameterName='alloy',
-                    value=alloy,
-                    validRange='42 or 84'
-                )
-
-        elif stressType.lower() == 'yield':
-
-            if alloy == 84:
-
-                TdataF     = np.array([-423.4,-315.4,70,392,752,1112,1472])
-                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
-                YSdataKSI  = np.array([37,37,30,28,24,16,7])
-                YSdataPA   = YSdataKSI*6.895e6
-
-                YS = CubicSpline(TdataK,YSdataPA)(temperature)
-
-                return YS
-
-            elif alloy == 42:
-
-                TdataF     = np.array([-320,70,392,752,1112,1472])
-                TdataK     = units.toSI(TdataF, 'temperature', 'degF')
-                YSdataKSI  = np.array([33.5,25.8,24,20.4,15.1,7.4])
-                YSdataPA   = YSdataKSI*6.895e6
-
-                YS = CubicSpline(TdataK,YSdataPA)(temperature)
-
-                return YS
-
-            else:
-                raise InvalidInputError(
-                    message='Unrecognized GRCopper alloy for yield strength',
-                    parameterName='alloy',
-                    value=alloy,
-                    validRange='42 or 84'
-                )
-
-        else:
-            raise InvalidInputError(
-                message='Unrecognized stress type',
-                parameterName='stressType',
-                value=stressType,
-                validRange='yield or ultimate'
-            )
-
     def portDiameter(station: int) -> float:
 
         '''The diameter of the round port matching the channel at one end [m].'''
@@ -312,14 +348,164 @@ def solveRegenVolutes(state):
     # -- METHODS -- #
     # ------------- #
 
+    def wallClearance(side: str, volute, alignment: str) -> float:
+
+        '''
+
+        Smallest radial gap between the built scroll and the gas-side wall [m].
+
+        The scroll is placed on the channel port, and the alignment then decides which way its
+        growing sections reach. An alignment that reaches inward puts the largest sections into
+        the nozzle, which is a clash rather than a packaging preference, so it is refused here
+        rather than drawn.
+
+        Parameters:
+        -----------
+        side : str
+            `inlet` or `return`, for the message a refusal carries.
+        volute : Volute
+            The built scroll, whose own axis is the nozzle axis.
+        alignment : str
+            The anchor the sections were aligned by.
+
+        Returns:
+        --------
+        float
+            Minimum clearance [m], negative where the scroll is inside the wall.
+
+        Raises:
+        -------
+        VoluteGenerationError
+            When any part of the scroll or its shell sits inside the wall.
+
+        '''
+
+        if state.xNozzleWall is None or state.rNozzleWall is None:
+            return None
+
+        order = np.argsort(np.asarray(state.xNozzleWall, dtype = float))
+        wallX = np.asarray(state.xNozzleWall, dtype = float)[order]
+        wallR = np.asarray(state.rNozzleWall, dtype = float)[order]
+
+        clearance = np.inf
+        for axial, first, second in ((volute.zVolute, volute.xVolute, volute.yVolute),
+                                     (volute.zShell, volute.xShell, volute.yShell)):
+            if np.size(axial) == 0:
+                continue
+            x = np.asarray(axial, dtype = float).ravel()
+            r = np.sqrt(np.asarray(first, dtype = float).ravel()**2
+                        + np.asarray(second, dtype = float).ravel()**2)
+            wall = np.interp(x, wallX, wallR, left = np.nan, right = np.nan)
+            gap = np.nanmin(r - wall)
+            clearance = min(clearance, float(gap)) if np.isfinite(gap) else clearance
+
+        if np.isfinite(clearance) and clearance < 0.0:
+            raise VoluteGenerationError(
+                message = (f'The {side} scroll reaches {abs(clearance)*1e3:.2f} mm inside the '
+                           f'gas-side wall. The scroll is placed on the channel port it meets, so '
+                           f'the alignment decides which way its sections grow from there: '
+                           f'{alignment!r} grows them toward the nozzle. An alignment that grows '
+                           f'them outward clears it.'),
+                context = createErrorContext(
+                    clearance = clearance,
+                    alignment = alignment,
+                    scrollRadius = volute.voluteScrollRadius,
+                    throatArea = float(np.max(volute.crossSectionalArea))),
+                voluteType = side,
+                failureMode = 'scrollInsideWall')
+
+        return clearance if np.isfinite(clearance) else None
+
+    def scrollThroat(side: str, station: int, tongueDiameter: float, fittingDiameter: float,
+                     temperature: float, pressure: float) -> tuple:
+
+        '''
+
+        Throat area the constant velocity law asks for, and what the scroll runs at.
+
+        The tongue is fixed by the port it meets, so the throat is what the law sets: the flow a
+        run carries is linear in the ports it has passed, which holds the velocity constant only
+        when the throat is the tongue times the ports that run serves. A ring serves half of them
+        each way, a cutwater all of them.
+
+        Parameters:
+        -----------
+        side : str
+            `inlet` or `return`, for the message a refusal carries.
+        station : int
+            Channel station the volute attaches to.
+        tongueDiameter : float
+            Hydraulic diameter of the tongue section [m].
+        fittingDiameter : float
+            Bore of the fitting the scroll transitions into [m].
+        temperature, pressure : float
+            Coolant state in the scroll, for the density the velocity is read at.
+
+        Returns:
+        --------
+        tuple
+            Throat area [m^2], velocity [m/s] and velocity head [Pa]. Velocity and head are None
+            when no coolant is named.
+
+        Raises:
+        -------
+        VoluteGenerationError
+            When the law asks for a throat wider than `maxVoluteBore`.
+
+        '''
+
+        family = str(state.inletVoluteCrossSection if side == 'inlet'
+                     else state.returnVoluteCrossSection).lower()
+        scrollType = str(state.voluteScrollType).lower()
+
+        tongueArea = sectionArea(family, hydraulicDiameter = tongueDiameter)
+        throatArea = constantVelocityThroatArea(tongueArea, state.nChannel, scrollType)
+        bore = 2.0*np.sqrt(throatArea/np.pi)
+
+        if state.maxVoluteBore is not None and np.isfinite(state.maxVoluteBore) \
+                and bore > state.maxVoluteBore:
+            raise VoluteGenerationError(
+                message = (f'The constant velocity law asks for a {side} scroll throat of '
+                           f'{bore*1e3:.1f} mm bore, past the {state.maxVoluteBore*1e3:.1f} mm '
+                           f'limit. The throat is the tongue times the ports one run serves, and '
+                           f'the tongue is set by the channel port it meets: '
+                           f'{portDiameter(station)*1e3:.2f} mm at station {station}. A port that '
+                           f'size cannot be fed at constant velocity by a scroll that fits. '
+                           f'Reduce the channel size at that end, or raise maxVoluteBore and '
+                           f'accept the scroll it asks for.'),
+                context = createErrorContext(
+                    throatBore = bore,
+                    maxVoluteBore = state.maxVoluteBore,
+                    channelPortDiameter = portDiameter(station),
+                    portsPerRun = portsPerScroll(state.nChannel, scrollType),
+                    scrollType = scrollType),
+                voluteType = side,
+                failureMode = 'throatBeyondLimit')
+
+        velocity, head = None, None
+        if state.coolant is not None and state.coolantMassFlow is not None:
+            density = float(fluidProps(state.coolant, 'TP', 'D', temperature, pressure))
+            runFlow = state.coolantMassFlow*portsPerScroll(state.nChannel, scrollType) \
+                / state.nChannel
+            velocity = runFlow/(density*throatArea)
+            head = 0.5*density*velocity**2
+            drop = float(state.coolantInitialPressure - state.coolantExitPressure)
+            print(f'  {side} scroll: throat {throatArea*1e6:.0f} mm2 ({bore*1e3:.1f} mm bore), '
+                  f'{velocity:.1f} m/s, velocity head {head/1e3:.0f} kPa, '
+                  f'{head/drop:.2f} times the jacket pressure drop')
+            print(f'  {side} fitting: {fittingDiameter*1e3:.1f} mm bore, so the scroll transitions '
+                  f'through an area ratio of {throatArea/(np.pi*(fittingDiameter/2)**2):.2f}')
+
+        return throatArea, velocity, head
+
     def generateRegenInletVolute():
 
         print(f'Generating Inlet Volute:')
 
-        # wall thickness sizing
-        hoopStressTarget = getGRCopStrength('yield', state.coolantInitialTemperature, 42)
-        FOS = state.voluteFOS
-        hoopStressTarget *= 1/FOS
+        # wall thickness sizing. The wall is proof tested at room temperature, where the alloy
+        # is weaker than it is at hydrogen temperature, so it is sized on the warmer of the two.
+        sizingTemperature = max(float(state.coolantInitialTemperature), ambientProofTemperature)
+        hoopStressTarget = grcopStrength('yield', sizingTemperature, 42)/state.voluteFOS
 
         ## Create volute object
         # instantiate
@@ -333,27 +519,23 @@ def solveRegenVolutes(state):
         inletVolute.numCrossSections               = state.numCSVolute
         # scroll properties
         inletVolute.scrollDirection                = 'ccw'
-        if state.inletVoluteCrossSection == 'squarc':
-
-            xFlareEndCAD = state.xChannelCenterline2D[-1] - np.sin(np.deg2rad(state.inletVoluteTilt))*0.003
-            rFlareEndCAD = state.rChannelCenterline2D[-1] - np.cos(np.deg2rad(state.inletVoluteTilt))*0.003
-            xSquarcCorner = xFlareEndCAD + np.cos(np.deg2rad(state.inletVoluteTilt))*state.channelRadius[-1]*1.05
-            rSquarcCorner = rFlareEndCAD - np.sin(np.deg2rad(state.inletVoluteTilt))*state.channelRadius[-1]*1.05
-
-            inletVolute.voluteScrollRadius         = rSquarcCorner
-            inletVolute.axialOffset                = xSquarcCorner
-
-        else:
-            inletVolute.voluteScrollRadius         = state.rChannelCenterline2D[-3]
-            inletVolute.axialOffset                = state.xChannelCenterline2D[-3]
         # area distribution properties
-        if state.inletVoluteCrossSection == 'squarc':
-            inletVolute.interfaceCharLen           = portDiameter(-1)*1.1
-        else:
-            inletVolute.interfaceHydraulicDiameter = portDiameter(-1)*1.1
-        inletVolute.expandedHydraulicDiameter      = units.toSI(state.inletGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter
+        inletVolute.scrollType                     = state.voluteScrollType
+        inletVolute.interfaceHydraulicDiameter     = portDiameter(-1)*tongueOverPort
+        state.inletVoluteThroatArea, state.inletVoluteVelocity, state.inletVoluteVelocityHead = \
+            scrollThroat('inlet', -1, inletVolute.interfaceHydraulicDiameter,
+                         units.toSI(state.inletGraylocDiameter, 'length', 'in'),
+                         state.coolantInitialTemperature, state.coolantInitialPressure)
+        inletVolute.expandedArea                   = state.inletVoluteThroatArea
+        # The scroll is placed on the channel port it gathers, at the end of the flare rather than
+        # at a station part way along it.
+        inletVolute.voluteScrollRadius, inletVolute.axialOffset = scrollPlacement(
+            state.inletVoluteCrossSection, inletVolute.interfaceHydraulicDiameter,
+            state.inletVoluteAlignment, state.xChannelCenterline2D[-1],
+            state.rChannelCenterline2D[-1], portDiameter(-1))
         # wall properties
         inletVolute.wallHoopStress                 = hoopStressTarget
+        inletVolute.minWallThickness               = state.minVoluteWallThickness or 0.0
         inletVolute.pressureDifferential           = state.coolantInitialPressure
         inletVolute.alignWallBy                    = 'inner'
         # options
@@ -375,6 +557,9 @@ def solveRegenVolutes(state):
                 voluteType='inlet',
                 failureMode=type(e).__name__
             ) from e
+
+        state.inletVoluteWallClearance = wallClearance('inlet', inletVolute,
+                                                       state.inletVoluteAlignment)
 
         # relative roll
         for i in range(state.numCSVolute):
@@ -433,10 +618,9 @@ def solveRegenVolutes(state):
 
         print(f'Generating Return Volute:')
 
-        # wall thickness sizing
-        hoopStressTarget = getGRCopStrength('yield', state.coolantExitTemperature, 42)
-        FOS = state.voluteFOS
-        hoopStressTarget *= 1/FOS
+        # wall thickness sizing, on the warmer of the coolant and the ambient proof case
+        sizingTemperature = max(float(state.coolantExitTemperature), ambientProofTemperature)
+        hoopStressTarget = grcopStrength('yield', sizingTemperature, 42)/state.voluteFOS
 
         ## Create volute object
         # instantiate
@@ -450,15 +634,23 @@ def solveRegenVolutes(state):
         returnVolute.numCrossSections           = state.numCSVolute
         # scroll properties
         returnVolute.scrollDirection            = 'cw'
-        # The return flare leaves the injector face as the mirror image of the inlet flare, so
-        # the scroll is placed the inlet's way from the other end of the centerline.
-        returnVolute.voluteScrollRadius         = state.rChannelCenterline2D[2]
-        returnVolute.axialOffset                = state.xChannelCenterline2D[2]
         # area distribution properties
-        returnVolute.interfaceHydraulicDiameter = portDiameter(0)*1.2
-        returnVolute.expandedHydraulicDiameter  = units.toSI(state.returnGraylocDiameter, 'length', 'in')  # grayloc interface hydraulic diameter
+        returnVolute.scrollType                 = state.voluteScrollType
+        returnVolute.interfaceHydraulicDiameter = portDiameter(0)*tongueOverPort
+        state.returnVoluteThroatArea, state.returnVoluteVelocity, state.returnVoluteVelocityHead = \
+            scrollThroat('return', 0, returnVolute.interfaceHydraulicDiameter,
+                         units.toSI(state.returnGraylocDiameter, 'length', 'in'),
+                         state.coolantExitTemperature, state.coolantExitPressure)
+        returnVolute.expandedArea               = state.returnVoluteThroatArea
+        # The return flare leaves the injector face as the mirror image of the inlet flare, so its
+        # scroll is placed the same way on the port at the other end of the centerline.
+        returnVolute.voluteScrollRadius, returnVolute.axialOffset = scrollPlacement(
+            state.returnVoluteCrossSection, returnVolute.interfaceHydraulicDiameter,
+            state.returnVoluteAlignment, state.xChannelCenterline2D[0],
+            state.rChannelCenterline2D[0], portDiameter(0))
         # wall properties
         returnVolute.wallHoopStress             = hoopStressTarget
+        returnVolute.minWallThickness           = state.minVoluteWallThickness or 0.0
         returnVolute.pressureDifferential       = state.coolantExitPressure
         returnVolute.alignWallBy                = 'inner'
         # options
@@ -480,6 +672,9 @@ def solveRegenVolutes(state):
                 voluteType='return',
                 failureMode=type(e).__name__
             ) from e
+
+        state.returnVoluteWallClearance = wallClearance('return', returnVolute,
+                                                        state.returnVoluteAlignment)
 
         ## gather results
         # save object

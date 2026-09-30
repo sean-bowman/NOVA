@@ -32,6 +32,11 @@ differential between the fluid volume and ambient must be passed in.
 Hoop stress wall thickness calculations are done with respect to the 
 hydraulic diameter by calling the utils hoop stress calculator.
 
+> The numbers a cross section measures live in voluteSections.py: the area, perimeter and
+hydraulic diameter of each family, the area law that distributes them around the wrap, and where
+an anchor puts a section relative to the scroll radius. This module draws and sweeps them. The
+split is there because a family described once cannot drift between the generators that draw it.
+
 > All units are in Mass Base SI
     - Length      [m]
     - Area        [m^2]
@@ -46,56 +51,89 @@ Author: Sean Bowman
 '''
 
 import numpy as np
-from scipy.interpolate import interp1d
-from math import dist
 from tqdm import tqdm
 
 from .exports import py2cad
-from .geometryTools import intersection, parallelOffset
+from .geometryTools import DCM, intersection, parallelOffset
+from .voluteSections import (SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS, anchorOffset,
+                             characteristicLengthFromArea, checkFamily,
+                             checkScrollType, resolveScrollAreas,
+                             scrollAreaDistribution, sectionHydraulicDiameter,
+                             tongueGapAngle)
 
-def bezier(p1: float, p4: float, theta_1: float, theta_2: float, magnitude, res, TwoD=1):
+def sweptSectionAreas(x, y, z):
 
     '''
-   
-     Creates a bezier curve utilizing p1 and p4 as the end points, theta_1 and theta_2 as end angles, and magnitude to control the magnitude of the curve
-    
+
+    Area each drawn cross section encloses [m^2].
+
+    Taken on the swept mesh by Newell's method, which needs no projection, so it measures the
+    surface that was written rather than the profile it was drawn from. A closed profile of `N`
+    chords inscribed in a circle encloses `(N/2 pi) sin(2 pi/N)` of it, which is 0.43 per cent
+    short at the forty points a volute is drawn with by default and falls as the square of the
+    count.
+
+    Parameters:
+    -----------
+    x, y, z : np.ndarray
+        Swept coordinates, (numCrossSections, crossSectionResolution).
+
+    Returns:
+    --------
+    np.ndarray
+        Enclosed area of each section [m^2].
+
     '''
 
-    # Scale the magnitude to the size of the bezier to make it less dependent on the input points
-    length = np.sqrt(((p4[1]-p1[1])**2) + ((p4[0]-p1[0])**2))
-    magnitude[0] = magnitude[0]*length
-    magnitude[1] = magnitude[1]*length
+    x, y, z = [np.asarray(value, dtype = float) for value in (x, y, z)]
 
-    # Create control points p2, p3 from given angles and magnitudes
-    py2 = magnitude[0]*np.sin(np.radians(theta_1)) # (magnitude[0]-p1[0] - p1[0])*np.tan(np.radians(theta_1)) + p1[1]
-    px2 = np.sqrt((magnitude[0]**2)-(py2**2))
-    p2 = [px2+p1[0], py2+p1[1]] # magnitude, angle
-    py3 = magnitude[1]*np.sin(np.radians(theta_2)) # (p4[0]-magnitude[1] - p4[0])*np.tan(np.radians(theta_2)) + p4[1]
-    px3 = np.sqrt((magnitude[1]**2) - (py3**2))
-    p3 = [p4[0]-px3, p4[1]-py3] # magnitude, angle
+    if x.ndim != 2 or x.shape[0] == 0:
+        return np.array([])
 
-    # Bezier parametric equation
-    def eqn(p1, p2, p3, p4, t):
-        return (1 - (t**3))*p1 + (3*t*(1-t)**2)*p2 + 3*(t**2)*(1-t)*p3 + (t**3)*p4
+    areas = np.zeros(x.shape[0])
+    for i in range(x.shape[0]):
+        points = np.column_stack([x[i], y[i], z[i]])
+        cross = np.cross(points, np.roll(points, -1, axis = 0))
+        areas[i] = 0.5*np.linalg.norm(np.sum(cross, axis = 0))
 
-    # parametric bezier
-    t = np.linspace(0, 1, res)
-    x = [eqn(0, p2[0]-p1[0], p3[0]-p1[0], p4[0]-p1[0], i)+p1[0] for i in t]
-    y = [eqn(0, p2[1]-p1[1], p3[1]-p1[1], p4[1]-p1[1], i)+p1[1] for i in t]
+    return areas
 
-    # Plot Bezier curve for debugging
-    # plt.plot(x, y, c='k')
-    # plt.plot(p2[0], p2[1], '*')
-    # plt.plot(p3[0], p3[1], '*')
-    # plt.plot(p1[0], p1[1], '*')
-    # plt.plot(p4[0], p4[1], '*')
-    #plt.show()
+def rollAboutAxis(rollAngle, source, destination) -> None:
 
-    return [x, y]
+    '''
+
+    Roll each cross section about the scroll axis into place, writing into `destination`.
+
+    A cross section is drawn in the YZ plane and belongs at its own angle around the scroll, so
+    the sweep is one rotation about Z per section. `geometryTools.DCM` builds the same
+    `Rx @ Ry @ Rz` product this replaced, and with no rotation about X or Y those two factors are
+    exactly the identity.
+
+    Parameters:
+    -----------
+    rollAngle : np.ndarray
+        Wrap angle of each cross section [rad].
+    source : tuple
+        The three coordinate arrays to roll, each (numCrossSections, points).
+    destination : tuple
+        The three arrays the rolled coordinates are written into, same shapes.
+
+    '''
+
+    sourceX, sourceY, sourceZ = source
+    destinationX, destinationY, destinationZ = destination
+
+    for i in range(len(rollAngle)):
+
+        destinationX[i,:], destinationY[i,:], destinationZ[i,:] = \
+            DCM(eulerAngles = [0, 0, rollAngle[i]],
+                valueMatrix = [sourceX[i,:], sourceY[i,:], sourceZ[i,:]],
+                rotationOrder = 'xyz')
 
 def dynamicEggShell(yInnerCS, zInnerCS,
                     wallThickness:float=None,
-                    wallHoopStress:float=None, pressureDifferential:float=None, hydraulicDiameter:float=None):
+                    wallHoopStress:float=None, pressureDifferential:float=None, hydraulicDiameter:float=None,
+                    bendRadius=None, minimumThickness:float=0.0):
 
     '''
 
@@ -114,6 +152,9 @@ def dynamicEggShell(yInnerCS, zInnerCS,
             wallHoopStress[1]       = target hoop stress of the volute walls including FoS [Pa]
             pressureDifferential[1] = pressure difference between fluid volume and ambient [Pa]
             hydraulicDiameter[N]    = hydraulic diameter, [m]
+            bendRadius[N or 1]      = distance from the axis of revolution to each section centre,
+                                      which carries the toroidal crotch correction, [m]
+            minimumThickness[1]     = floor the sized thickness is held at, [m]
     outputs: 
         yOuter[NxM]  = y coordinates of outer cross sections
         zOuter[NxM]  = z coordinates of outer cross sections
@@ -141,20 +182,29 @@ def dynamicEggShell(yInnerCS, zInnerCS,
             raise Exception('If sizing shell by hoop stress, please specify pressure differential.')
 
         wallThickness = np.zeros((N))
+        bend = np.full(N, np.nan) if bendRadius is None \
+            else np.broadcast_to(np.asarray(bendRadius, dtype = float), (N,))
         for i in range(N):
             wallThickness[i] = hoopStressCalculator(hoopStress = wallHoopStress,
                                                     pressureDifferential = pressureDifferential,
-                                                    diameter = hydraulicDiameter[i])
+                                                    diameter = hydraulicDiameter[i],
+                                                    bendRadius = None if np.isnan(bend[i])
+                                                    else bend[i])
+        # A printed wall cannot be thinner than the process draws, whatever the stress allows.
+        wallThickness = np.maximum(wallThickness, minimumThickness)
     # catch prespecified wall thickness
-    if wallThickness.__class__ is int or wallThickness.__class__ is float:
+    if np.isscalar(wallThickness) or (np.ndim(wallThickness) == 0
+                                     and wallThickness is not None):
         # constant wall thickness
-        wallThickness = wallThickness*np.ones((N))
+        wallThickness = float(wallThickness)*np.ones((N))
     else:
         # dynamic wall thickness
-        if len(wallThickness) is not N:
-
-            ...
-            # raise Exception('Wall thickness input must be of length equal to number of cross sections or scalar.')
+        wallThickness = np.atleast_1d(np.asarray(wallThickness, dtype = float))
+        if wallThickness.size == 1:
+            wallThickness = np.full(N, float(wallThickness[0]))
+        elif wallThickness.size != N:
+            raise ValueError(f'A wall thickness array must carry one value per cross section, '
+                             f'{N} of them, or a single value. It carried {wallThickness.size}.')
 
     # preallocate
     yShellCS, zShellCS = [np.zeros((N,M)) for _ in range(2)]
@@ -225,41 +275,96 @@ def dynamicEggShell(yInnerCS, zInnerCS,
 
     return yShellCS, zShellCS, y1Prime, z1Prime, wallThickness
 
-def hoopStressCalculator(pressureDifferential: float, diameter: float, thickness: float = None, hoopStress: float = None) -> float:
+def toroidalCrotchFactor(diameter, bendRadius):
 
     '''
 
-    This function is a simple wrapper around the calculation of cylindrical hoop stress for convenience of use.
+    How much more membrane stress a torus carries at its inner crotch than a straight tube [-].
 
-    The form of the equation is:
+    For a toroidal shell of tube radius `a` on a bend radius `R` under internal pressure `p`, the
+    membrane stress around the tube is
 
-    sigma_h = dP * D / 2*t
+        sigma = (p a)/(2 t) (2R + a sin(phi))/(R + a sin(phi))
+
+    which tends to the straight cylinder value `p a / t` as `R` grows. It peaks where the tube
+    faces the axis, `sin(phi) = -1`, and the factor returned is that peak over the straight tube
+    value: `(2R - a)/(2(R - a))`.
+
+    Parameters:
+    -----------
+    diameter : float or np.ndarray
+        Tube diameter, twice `a` [m].
+    bendRadius : float or np.ndarray
+        Distance from the axis of revolution to the tube centre [m].
+
+    Returns:
+    --------
+    float or np.ndarray
+        Factor at or above one, and one where no bend radius is given.
 
     '''
 
-    # Which version of the problem are we solving
-    if thickness is not None and hoopStress is None:
-        calculateHoopStress = True
-        calculateThickness  = False
-    if thickness is None and hoopStress is not None:
-        calculateThickness  = True
-        calculateHoopStress = False
+    if bendRadius is None:
+        return 1.0
 
-    # -- Depending on which thing we are calculating, calculate it yo -- #
+    a = np.asarray(diameter, dtype = float)/2.0
+    bend = np.asarray(bendRadius, dtype = float)
 
-    # Hoop Stress
-    if calculateHoopStress:
-        hoopStress = (pressureDifferential * diameter) / (2 * thickness)
+    # A tube as wide as its own bend has no crotch to speak of, and the closed form runs away
+    # there, so the correction is held at the last radius where the shell is still a torus.
+    clearance = np.maximum(bend - a, 0.5*a)
 
-    # Wall thickness
-    if calculateThickness:
-        thickness = (pressureDifferential * diameter) / (2 * hoopStress)
+    return (2.0*bend - a)/(2.0*clearance)
 
-    # Return the relevant calculated component
-    if calculateThickness:
-        return thickness
-    elif calculateHoopStress:
-        return hoopStress
+def hoopStressCalculator(pressureDifferential: float, diameter: float, thickness: float = None,
+                         hoopStress: float = None, bendRadius = None) -> float:
+
+    '''
+
+    Thin wall hoop stress, or the thickness that holds one, for a straight tube or a torus.
+
+    The straight tube relation is
+
+        sigma_h = dP * D / (2 t)
+
+    and a bend radius multiplies it by `toroidalCrotchFactor`, which is what a scroll needs: a
+    volute is a torus, and its wall is thinnest relative to its load where the tube faces the axis.
+
+    Parameters:
+    -----------
+    pressureDifferential : float
+        Pressure across the wall [Pa].
+    diameter : float
+        Tube diameter [m].
+    thickness : float, optional
+        Wall thickness, to solve for stress [m].
+    hoopStress : float, optional
+        Allowable stress, to solve for thickness [Pa].
+    bendRadius : float, optional
+        Distance from the axis of revolution to the tube centre [m]. Omitted, the tube is straight.
+
+    Returns:
+    --------
+    float
+        Stress [Pa] when a thickness was given, thickness [m] when a stress was given.
+
+    Raises:
+    -------
+    ValueError
+        Unless exactly one of `thickness` and `hoopStress` is given.
+
+    '''
+
+    if (thickness is None) == (hoopStress is None):
+        raise ValueError('hoopStressCalculator needs exactly one of thickness and hoopStress: '
+                         'the other is what it solves for.')
+
+    factor = toroidalCrotchFactor(diameter, bendRadius)
+
+    if hoopStress is None:
+        return (pressureDifferential * diameter) * factor / (2 * thickness)
+
+    return (pressureDifferential * diameter) * factor / (2 * hoopStress)
 
 class Volute:
 
@@ -282,6 +387,7 @@ class Volute:
                  axialOffset:                   float = 0,
                  anchorBy:                      str   = 'c',
                  scaledBy:                      str   = 'linear',
+                 scrollType:                    str   = 'cutwater',
                  numOrifices:                   int   = None,
                  interfaceArea:                 float = None,
                  interfaceHydraulicDiameter:    float = None,
@@ -289,10 +395,10 @@ class Volute:
                  expandedArea:                  float = None,
                  expandedHydraulicDiameter:     float = None,
                  expandedCharLen:               float = None,
-                 eggPointiness:                 float = 1,
                  printabilityAngle:             float = 0,
                  circlePrintability:            str   = 'off',
                  wallThickness:                 float = None,
+                 minWallThickness:              float = 0.0,
                  wallHoopStress:                float = None,
                  pressureDifferential:          float = None,
                  alignWallBy:                   str   = 'inner',
@@ -307,7 +413,7 @@ class Volute:
         self.voluteScrollRadius     = voluteScrollRadius     # [m]
         self.scrollDirection        = scrollDirection        # 'cw' , 'ccw'
         # Cross sections
-        self.crossSectionType       = crossSectionType       # 'circle' , 'egg', 'squarc'
+        self.crossSectionType       = crossSectionType       # 'circle' , 'squarc'
         self.numCrossSections       = numCrossSections       # [int]
         self.crossSectionResolution = crossSectionResolution # [int]
         # Alignment
@@ -315,7 +421,8 @@ class Volute:
         self.anchorBy               = anchorBy               # 'c' , 'n' , 's' , 'i' , 'o' , 'ni' , 'si' , 'no' , 'so'
 
         # Area Distribution
-        self.scaledBy                   = scaledBy                   # 'linear' , 'momentum' #^ Momentum is not currently working
+        self.scaledBy                   = scaledBy                   # 'linear'
+        self.scrollType                 = scrollType                 # 'cutwater' , 'ring'
         self.numOrifices                = numOrifices                # [int]
         self.interfaceArea              = interfaceArea              # [m^2]
         self.interfaceHydraulicDiameter = interfaceHydraulicDiameter # [m]
@@ -325,12 +432,12 @@ class Volute:
         self.expandedCharLen            = expandedCharLen            # [m] characteristic length option used for squarc volutes
 
         # Printability criteria
-        self.eggPointiness      = eggPointiness      # Pointiness of the top of the egg (1 is regular egg, above that is sharper)
         self.printabilityAngle  = printabilityAngle  # [deg] Angle of geometry with printability concerns
         self.circlePrintability = circlePrintability # 'on' , 'off' flag for interior support wall for circle volute
 
         # Wall options
         self.wallThickness        = wallThickness        # [m] scalar or vector or None
+        self.minWallThickness     = minWallThickness     # [m] floor the sized wall is held at
         self.wallHoopStress       = wallHoopStress       # [Pa]
         self.pressureDifferential = pressureDifferential # [Pa]
         self.alignWallBy          = alignWallBy          # 'inner' , 'outer'
@@ -343,8 +450,11 @@ class Volute:
         self.outputDirectory = outputDirectory # [str], None writes to the working directory
 
         # -- Calculated properties -- #
-        self.crossSectionArea  = []
-        self.hydraulicDiameter = []
+        self.crossSectionalArea = []   # [m^2] area the law asked for at each section
+        self.hydraulicDiameter  = []   # [m]   from the area the law asked for
+        self.drawnArea          = []   # [m^2] area the drawn polygon encloses
+        self.flowArea           = []   # [m^2] drawn area less any support inside the duct
+        self.supportArea        = []   # [m^2] area a printability support occupies
 
         # -- Outputs -- #
         self.xVolute = []
@@ -393,28 +503,75 @@ class Volute:
         # # Step 1: Make the diffuser
         # self.generateDiffuser()
 
-        # Step 2: Determine the type of volute to create and generate it
-        match self.crossSectionType:
+        # Step 2: Determine the type of volute to create and generate it. A name the generator
+        # does not build has to be refused here: returning empty arrays looks like a volute with
+        # no geometry in it rather than a cross section that was never drawn.
+        family = str(self.crossSectionType).lower()
+        checkFamily(family)
+        checkScrollType(str(self.scrollType).lower())
+
+        # A support is a shape rather than a flag, so a name that is neither shape nor 'off' asked
+        # for something that does not exist and used to draw nothing without saying so.
+        support = str(self.circlePrintability).lower()
+        if support not in VOLUTEPRINTABILITY:
+            raise ValueError(f'circlePrintability must be one of '
+                             f'{", ".join(VOLUTEPRINTABILITY)}, not {self.circlePrintability!r}.')
+
+        if str(self.scaledBy).lower() != 'linear':
+            raise ValueError("scaledBy must be 'linear'. The area law is linear in wrap angle; no "
+                             'other distribution is implemented.')
+
+        # The overhang support is drawn from a circular wall, so it has no squircle form: its
+        # fillets are found by intersecting the support against a circular arc, which on a
+        # squircle's straight faces has no solution.
+        if family != 'circle' and str(self.circlePrintability).lower() in ('thick', 'thin'):
+            raise ValueError(f'A printability support is drawn for a circular cross section only, '
+                             f'not for {family!r}. Draw the section as a circle, or leave the '
+                             f'support off.')
+
+        match family:
             case 'circle':
                 self.generateCircleVolute()
-            case 'egg':
-                self.generateEggVolute()
             case 'squarc':
                 self.generateSquarcVolute()
 
-        # Step 3: Export geometry (if user specified)
+        # Step 3: Record what the swept surface encloses, which is not what the area law asked
+        # for: a section is drawn as a polygon inscribed in its own profile, and a support inside
+        # the duct takes area back out of it.
+        self.drawnArea = sweptSectionAreas(self.xVolute, self.yVolute, self.zVolute)
+        self.flowArea = self.drawnArea - np.asarray(self.supportArea, dtype = float) \
+            if np.size(self.supportArea) else self.drawnArea
+
+        # Step 4: Export geometry (if user specified)
         if self.export == 'on':
 
-            py2cad(os.path.join(outputDirectory, self.filename + '.stl'), self.xVolute[1:], self.yVolute[1:], self.zVolute[1:])
+            py2cad(os.path.join(outputDirectory, self.filename + '.stl'), self.xVolute, self.yVolute, self.zVolute)
             if self.wallThickness is not None:
-                py2cad(os.path.join(outputDirectory, self.filename + '_eggShell.stl'), self.xShell[1:], self.yShell[1:], self.zShell[1:])
+                py2cad(os.path.join(outputDirectory, self.filename + '_eggShell.stl'), self.xShell, self.yShell, self.zShell)
             if self.circlePrintability.lower() == 'thick':
-                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportWall.stl'),        self.xInternalSupportWall[1:], self.yInternalSupportWall[1:], self.zInternalSupportWall[1:])
-                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportFilletUpper.stl'), self.xInternalSupportFilletUpper[1:], self.yInternalSupportFilletUpper[1:], self.zInternalSupportFilletUpper[1:])
-                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportFilletLower.stl'), self.xInternalSupportFilletLower[1:], self.yInternalSupportFilletLower[1:], self.zInternalSupportFilletLower[1:])
+                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportWall.stl'),        self.xInternalSupportWall, self.yInternalSupportWall, self.zInternalSupportWall)
+                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportFilletUpper.stl'), self.xInternalSupportFilletUpper, self.yInternalSupportFilletUpper, self.zInternalSupportFilletUpper)
+                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportFilletLower.stl'), self.xInternalSupportFilletLower, self.yInternalSupportFilletLower, self.zInternalSupportFilletLower)
             if self.circlePrintability.lower() == 'thin':
-                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportWall.stl'),        self.xInternalSupportWall[1:], self.yInternalSupportWall[1:], self.zInternalSupportWall[1:])
-                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportFilletUpper.stl'), self.xInternalSupportFilletUpper[1:], self.yInternalSupportFilletUpper[1:], self.zInternalSupportFilletUpper[1:])
+                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportWall.stl'),        self.xInternalSupportWall, self.yInternalSupportWall, self.zInternalSupportWall)
+                py2cad(os.path.join(outputDirectory, self.filename + '_internalSupportFilletUpper.stl'), self.xInternalSupportFilletUpper, self.yInternalSupportFilletUpper, self.zInternalSupportFilletUpper)
+
+    def tongueGap(self) -> float:
+
+        '''
+
+        Angle the sweep stops short of a full turn by [rad].
+
+        A ring closes on itself and carries no tongue wall, so it sweeps the full turn. A cutwater
+        needs its two ends in different meridional planes with a wall between them, so it stops
+        short by the angle that wall occupies at the scroll radius.
+
+        '''
+
+        if str(self.scrollType).lower() == 'ring':
+            return 0.0
+
+        return tongueGapAngle(self.voluteScrollRadius, self.wallThickness, self.numCrossSections)
 
     def generateCircleVolute(self):
 
@@ -591,9 +748,9 @@ class Volute:
             yLatticeWallNoOverlap = np.array([yRectilinear[-1],-yRectilinear[-1],-yRectilinear[-1],yRectilinear[-1],yRectilinear[-1]])
             zLatticeWallNoOverlap = np.array([zRectilinear[-1], zRectilinear[-1], zRectilinear[0], zRectilinear[0], zRectilinear[-1]])
             # trapazoidal integration
-            supportArea = abs(np.trapz(zTransitionBodyLowerNoOverlap,yTransitionBodyLowerNoOverlap)) + \
-                abs(np.trapz(zTransitionBodyUpperNoOverlap,yTransitionBodyUpperNoOverlap)) + \
-                    abs(np.trapz(zLatticeWallNoOverlap,yLatticeWallNoOverlap))
+            supportArea = abs(np.trapezoid(zTransitionBodyLowerNoOverlap,yTransitionBodyLowerNoOverlap)) + \
+                abs(np.trapezoid(zTransitionBodyUpperNoOverlap,yTransitionBodyUpperNoOverlap)) + \
+                    abs(np.trapezoid(zLatticeWallNoOverlap,yLatticeWallNoOverlap))
 
             # # Debug plot
             # plt.figure()
@@ -656,48 +813,31 @@ class Volute:
             # plt.show(block = True)
             # debug = 1
 
-            supportArea = np.abs(np.trapz(zInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS)) + 0.002*abs(zInternalSupportWallCS[0]-zInternalSupportWallCS[1])
+            supportArea = np.abs(np.trapezoid(zInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS)) + 0.002*abs(zInternalSupportWallCS[0]-zInternalSupportWallCS[1])
 
             return xInternalSupportWallCS,       yInternalSupportWallCS,       zInternalSupportWallCS,\
                     xInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS,zInternalSupportFilletUpperCS,\
                     supportArea
 
         ## Define area distribution
-        # Case 2: Specifying numOrifices and expandedArea OR expandedHydraulicDiameter
-        if all((self.numOrifices, any((self.expandedArea, self.expandedHydraulicDiameter)))):
-            # Set whichever expanded region parameter was not specified
-            if self.expandedArea is None and self.expandedHydraulicDiameter is not None:
-                self.expandedArea              = np.pi * (self.expandedHydraulicDiameter / 2)**2
-            elif self.expandedArea is not None and self.expandedHydraulicDiameter is None:
-                self.expandedHydraulicDiameter = 2 * np.sqrt(self.expandedArea / np.pi)
+        scroll = resolveScrollAreas(str(self.crossSectionType).lower(),
+                                    interfaceArea = self.interfaceArea,
+                                    interfaceHydraulicDiameter = self.interfaceHydraulicDiameter,
+                                    interfaceCharacteristicLength = self.interfaceCharLen,
+                                    expandedArea = self.expandedArea,
+                                    expandedHydraulicDiameter = self.expandedHydraulicDiameter,
+                                    expandedCharacteristicLength = self.expandedCharLen,
+                                    numOrifices = self.numOrifices)
+        self.interfaceArea              = scroll['interfaceArea']
+        self.expandedArea               = scroll['expandedArea']
+        self.interfaceHydraulicDiameter = scroll['interfaceHydraulicDiameter']
+        self.expandedHydraulicDiameter  = scroll['expandedHydraulicDiameter']
+        self.numOrifices                = scroll['numOrifices']
 
-            # Set interface values based on scaling method
-            if self.scaledBy.lower() == 'linear':
-                self.interfaceArea               = self.expandedArea / self.numOrifices
-                self.interfaceHydraulicDiameter  = 2 * np.sqrt(self.interfaceArea / np.pi)
-            elif self.scaledBy.lower() == 'momentum':
-                debug = 1 # Not implemented
-        # Case 3: Specifying interfaceArea OR interfaceHydraulicDiameter and expandedArea OR expandedHydraulicDiameter
-        if all((any((self.interfaceArea, self.interfaceHydraulicDiameter)), any((self.expandedArea, self.expandedHydraulicDiameter)))):
-
-            # Set whichever interface parameter was not specified
-            if self.interfaceArea is None and self.interfaceHydraulicDiameter is not None:
-                self.interfaceArea              = np.pi * (self.interfaceHydraulicDiameter / 2)**2
-            elif self.interfaceArea is not None and self.interfaceHydraulicDiameter is None:
-                self.interfaceHydraulicDiameter = 2 * np.sqrt(self.interfaceArea / np.pi)
-
-            # Set whichever expanded region parameter was not specified
-            if self.expandedArea is None and self.expandedHydraulicDiameter is not None:
-                self.expandedArea              = np.pi * (self.expandedHydraulicDiameter / 2)**2
-            elif self.expandedArea is not None and self.expandedHydraulicDiameter is None:
-                self.expandedHydraulicDiameter = 2 * np.sqrt(self.expandedArea / np.pi)
-
-            # Calculate numOrifices based on area ratio
-            if self.scaledBy.lower() == 'linear':
-                self.numOrifices = self.expandedArea / self.interfaceArea
-
-        self.crossSectionalArea = np.linspace(self.interfaceArea,self.expandedArea,self.numCrossSections)
-        self.hydraulicDiameter  = 2 * np.sqrt(self.crossSectionalArea/np.pi)
+        self.crossSectionalArea = scrollAreaDistribution(self.interfaceArea, self.expandedArea,
+                                                         self.numCrossSections,
+                                                         str(self.scrollType).lower())
+        self.hydraulicDiameter  = sectionHydraulicDiameter('circle', self.crossSectionalArea)
         radiusDistribution      = self.hydraulicDiameter/2
 
         ## generate inner wall CSs with center at (0,0):
@@ -717,9 +857,11 @@ class Volute:
                 [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
         thetaCirc = np.linspace(0, 2*np.pi, self.crossSectionResolution)
         counter = np.zeros((self.numCrossSections))
+        supportAreaDistribution = np.zeros((self.numCrossSections))
         # loop
-        print(f'Generating Volute Cross Sections:')
-        for i in tqdm(range(self.numCrossSections)):
+        if str(self.progressbar).lower() == 'on':
+            print('Generating Volute Cross Sections:')
+        for i in tqdm(range(self.numCrossSections), disable = str(self.progressbar).lower() != 'on'):
 
             R = radiusDistribution[i]
             yCS[i,:] = R*np.cos(thetaCirc)
@@ -751,6 +893,7 @@ class Volute:
                     usableArea  = nominalArea - supportArea
 
                 radiusDistribution[i] = R
+                supportAreaDistribution[i] = supportArea
 
             if self.circlePrintability.lower() == 'thin':
 
@@ -777,29 +920,7 @@ class Volute:
                 radiusDistribution[i] = R
 
             # move to anchor point
-            dy = 0
-            dz = 0
-            match self.anchorBy.lower():
-                case 'n':
-                    dz -= R
-                case 's':
-                    dz += R
-                case 'o':
-                    dy -= R
-                case 'i':
-                    dy += R
-                case 'no':
-                    dy -= R/np.sqrt(2)
-                    dz -= R/np.sqrt(2)
-                case 'so':
-                    dy -= R/np.sqrt(2)
-                    dz += R/np.sqrt(2)
-                case 'ni':
-                    dy += R/np.sqrt(2)
-                    dz -= R/np.sqrt(2)
-                case 'si':
-                    dy += R/np.sqrt(2)
-                    dz += R/np.sqrt(2)
+            dy, dz = anchorOffset(self.anchorBy, R)
             yCS[i,:]                           += dy
             zCS[i,:]                           += dz
             if self.circlePrintability.lower() == 'thick':
@@ -816,18 +937,24 @@ class Volute:
                 zInternalSupportFilletUpperCS[i,:] += dz
 
         # update values to refelct circle cupport area corrections
+        self.supportArea        = supportAreaDistribution
         self.hydraulicDiameter  = radiusDistribution*2
         self.crossSectionalArea = np.pi*(radiusDistribution**2)
 
         # generate shell
         if self.wallThickness is not None or self.wallHoopStress is not None:
+            # Each section is a tube on its own bend radius, the radius of its centre, which is
+            # where the toroidal correction to the hoop stress comes from.
+            bendRadius = self.voluteScrollRadius + np.array(
+                [anchorOffset(self.anchorBy, R)[0] for R in radiusDistribution])
             yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
                                                         self.wallThickness,
-                                                        self.wallHoopStress, self.pressureDifferential, self.hydraulicDiameter)
+                                                        self.wallHoopStress, self.pressureDifferential, self.hydraulicDiameter,
+                                                        bendRadius, self.minWallThickness)
             self.wallThickness = wallThickness
             xShellCS = np.zeros_like(xCS)
             # catch inverted wall
-            if abs(np.trapz(yShellCS[0,:],zShellCS[0,:])) < abs(np.trapz(yCS[0,:],zCS[0,:])):
+            if abs(np.trapezoid(yShellCS[0,:],zShellCS[0,:])) < abs(np.trapezoid(yCS[0,:],zCS[0,:])):
                 self.wallThickness *= -1
                 yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
                                                         self.wallThickness)
@@ -890,88 +1017,37 @@ class Volute:
                     yShellCS[i,:] += self.voluteScrollRadius - y1p[i]
                     zShellCS[i,:] += -z1p[i]
                     if self.circlePrintability.lower() ==  'thick':
-                        yInternalSupportWallCS[i,:]        += self.voluteScrollRadius - y1p
-                        zInternalSupportWallCS[i,:]        += -z1p
-                        yInternalSupportFilletUpperCS[i,:] += self.voluteScrollRadius - y1p
-                        zInternalSupportFilletUpperCS[i,:] += -z1p
-                        yInternalSupportFilletLowerCS[i,:] += self.voluteScrollRadius - y1p
-                        zInternalSupportFilletLowerCS[i,:] += -z1p
+                        yInternalSupportWallCS[i,:]        += self.voluteScrollRadius - y1p[i]
+                        zInternalSupportWallCS[i,:]        += -z1p[i]
+                        yInternalSupportFilletUpperCS[i,:] += self.voluteScrollRadius - y1p[i]
+                        zInternalSupportFilletUpperCS[i,:] += -z1p[i]
+                        yInternalSupportFilletLowerCS[i,:] += self.voluteScrollRadius - y1p[i]
+                        zInternalSupportFilletLowerCS[i,:] += -z1p[i]
                     if self.circlePrintability.lower() ==  'thin':
-                        yInternalSupportWallCS[i,:]        += self.voluteScrollRadius - y1p
-                        zInternalSupportWallCS[i,:]        += -z1p
-                        yInternalSupportFilletUpperCS[i,:] += self.voluteScrollRadius - y1p
-                        zInternalSupportFilletUpperCS[i,:] += -z1p
+                        yInternalSupportWallCS[i,:]        += self.voluteScrollRadius - y1p[i]
+                        zInternalSupportWallCS[i,:]        += -z1p[i]
+                        yInternalSupportFilletUpperCS[i,:] += self.voluteScrollRadius - y1p[i]
+                        zInternalSupportFilletUpperCS[i,:] += -z1p[i]
         else:
             raise Exception('Invalid wall alignment argument. Please specify inner or outer.')
 
         # roll cross sections about scroll axis to create mesh
+        sweep = 2*np.pi - self.tongueGap()
         if self.scrollDirection.lower() == 'cw':
-            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections)
+            rollAngle = np.linspace(0, sweep, self.numCrossSections)
         elif self.scrollDirection.lower() == 'ccw':
-            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections)
+            rollAngle = np.linspace(sweep, 0, self.numCrossSections)
         else:
             raise Exception('Invalid scroll direction argument. Please specify cw or ccw.')
         xVolute, yVolute, zVolute = [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
-        for i in range(self.numCrossSections):
-
-            V = [xCS[i,:], yCS[i,:], zCS[i,:]]
-            E = [0,        0,        rollAngle[i]]
-
-            # Direction Cosines (rotation matrix) construction:
-
-            Rx = np.array([                                     \
-                [1,             0,              0           ],  \
-                [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-            Ry = np.array([                                     \
-                [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                [0,             1,              0           ],  \
-                [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-            Rz = np.array([                                     \
-                [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                [0,             0,              1           ]]) # Z-axis rotation
-
-            R = Rx@Ry@Rz                                        # Rotation matrix
-
-            # Un-centered rotated matrix:
-            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V
-            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V
-            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V
+        rollAboutAxis(rollAngle, (xCS, yCS, zCS),
+                      (xVolute, yVolute, zVolute))
 
         # roll outer wall cross sections about scroll axis to create mesh
         if self.wallThickness is not None:
             xShell, yShell, zShell = [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xShellCS[i,:], yShellCS[i,:], zShellCS[i,:]]
-                E = [0,             0,             rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V
-                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V
-                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V
+            rollAboutAxis(rollAngle, (xShellCS, yShellCS, zShellCS),
+                          (xShell, yShell, zShell))
 
         # roll inner support cross sections about scroll axis to create mesh
         if self.circlePrintability.lower() == 'thick':
@@ -981,151 +1057,21 @@ class Volute:
                 [np.zeros((self.numCrossSections,int(1.5*self.crossSectionResolution+1))) for _ in range(3)]
             xInternalSupportFilletLower, yInternalSupportFilletLower, zInternalSupportFilletLower = \
                 [np.zeros((self.numCrossSections,int(self.crossSectionResolution+1))) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportWallCS[i,:], yInternalSupportWallCS[i,:], zInternalSupportWallCS[i,:]]
-                E = [0,                       0,                       rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
-                E = [0,                                  0,                                  rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportFilletLowerCS[i,:], yInternalSupportFilletLowerCS[i,:], zInternalSupportFilletLowerCS[i,:]]
-                E = [0,                                  0,                                  rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportFilletLower[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportFilletLower[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportFilletLower[i,:] = (R@V).T[:,2]            # Extract Z from V
+            rollAboutAxis(rollAngle, (xInternalSupportWallCS, yInternalSupportWallCS, zInternalSupportWallCS),
+                          (xInternalSupportWall, yInternalSupportWall, zInternalSupportWall))
+            rollAboutAxis(rollAngle, (xInternalSupportFilletUpperCS, yInternalSupportFilletUpperCS, zInternalSupportFilletUpperCS),
+                          (xInternalSupportFilletUpper, yInternalSupportFilletUpper, zInternalSupportFilletUpper))
+            rollAboutAxis(rollAngle, (xInternalSupportFilletLowerCS, yInternalSupportFilletLowerCS, zInternalSupportFilletLowerCS),
+                          (xInternalSupportFilletLower, yInternalSupportFilletLower, zInternalSupportFilletLower))
         if self.circlePrintability.lower() == 'thin':
             xInternalSupportWall, yInternalSupportWall, zInternalSupportWall =                      \
                 [np.zeros((self.numCrossSections,2)) for _ in range(3)]
             xInternalSupportFilletUpper, yInternalSupportFilletUpper, zInternalSupportFilletUpper = \
                 [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportWallCS[i,:], yInternalSupportWallCS[i,:], zInternalSupportWallCS[i,:]]
-                E = [0,                       0,                       rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
-                E = [0,                                  0,                                  rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
+            rollAboutAxis(rollAngle, (xInternalSupportWallCS, yInternalSupportWallCS, zInternalSupportWallCS),
+                          (xInternalSupportWall, yInternalSupportWall, zInternalSupportWall))
+            rollAboutAxis(rollAngle, (xInternalSupportFilletUpperCS, yInternalSupportFilletUpperCS, zInternalSupportFilletUpperCS),
+                          (xInternalSupportFilletUpper, yInternalSupportFilletUpper, zInternalSupportFilletUpper))
 
         # axial location
         zVolute += self.axialOffset
@@ -1344,9 +1290,9 @@ class Volute:
             yLatticeWallNoOverlap = np.array([yRectilinear[-1],-yRectilinear[-1],-yRectilinear[-1],yRectilinear[-1],yRectilinear[-1]])
             zLatticeWallNoOverlap = np.array([zRectilinear[-1], zRectilinear[-1], zRectilinear[0], zRectilinear[0], zRectilinear[-1]])
             # trapazoidal integration
-            supportArea = abs(np.trapz(zTransitionBodyLowerNoOverlap,yTransitionBodyLowerNoOverlap)) + \
-                abs(np.trapz(zTransitionBodyUpperNoOverlap,yTransitionBodyUpperNoOverlap)) + \
-                    abs(np.trapz(zLatticeWallNoOverlap,yLatticeWallNoOverlap))
+            supportArea = abs(np.trapezoid(zTransitionBodyLowerNoOverlap,yTransitionBodyLowerNoOverlap)) + \
+                abs(np.trapezoid(zTransitionBodyUpperNoOverlap,yTransitionBodyUpperNoOverlap)) + \
+                    abs(np.trapezoid(zLatticeWallNoOverlap,yLatticeWallNoOverlap))
 
             # ySquarc = np.concatenate([[-R],R * np.cos(np.linspace(-np.pi/2,np.pi,self.crossSectionResolution)),[-R]])
             # zSquarc = np.concatenate([[-R],R * np.sin(np.linspace(-np.pi/2,np.pi,self.crossSectionResolution)),[-R]])
@@ -1415,40 +1361,32 @@ class Volute:
             # plt.show(block = True)
             # debug = 1
 
-            supportArea = abs(np.trapz(zInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS)) + 0.002*abs(zInternalSupportWallCS[0]-zInternalSupportWallCS[1])
+            supportArea = abs(np.trapezoid(zInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS)) + 0.002*abs(zInternalSupportWallCS[0]-zInternalSupportWallCS[1])
 
             return xInternalSupportWallCS,       yInternalSupportWallCS,       zInternalSupportWallCS,\
                     xInternalSupportFilletUpperCS,yInternalSupportFilletUpperCS,zInternalSupportFilletUpperCS,\
                     supportArea
 
         ## Define area distribution
-        # determine interface area from specified parameter
-        if self.interfaceArea is None and self.interfaceHydraulicDiameter is not None:
-            charLInterface     = self.interfaceHydraulicDiameter*(2+1.5*np.pi)/(4+3*np.pi)
-            self.interfaceArea = (charLInterface**2)*(1+0.75*np.pi)
-        elif self.interfaceArea is None and self.interfaceCharLen is not None:
-            self.interfaceArea = (self.interfaceCharLen**2)*(1+0.75*np.pi)
-        elif self.interfaceArea is None and self.numOrifices is not None:
-            if self.expandedArea is None:
-                if self.expandedHydraulicDiameter is not None:
-                    charLExpanded      = self.expandedHydraulicDiameter*(2+1.5*np.pi)/(4+3*np.pi)
-                    self.expandedArea  = (charLExpanded**2)*(1+0.75*np.pi)
-                elif self.expandedCharLen is not None:
-                    self.expandedArea  = (self.expandedCharLen**2)*(1+0.75*np.pi)
-            self.interfaceArea = self.expandedArea/self.numOrifices
-        # determine expanded area from specified parameter
-        if self.expandedArea is None and self.expandedHydraulicDiameter is not None:
-            charLExpanded      = self.expandedHydraulicDiameter*(2+1.5*np.pi)/(4+3*np.pi)
-            self.expandedArea  = (charLExpanded**2)*(1+0.75*np.pi)
-        elif self.expandedArea is None and self.expandedCharLen is not None:
-            self.expandedArea  = (self.expandedCharLen**2)*(1+0.75*np.pi)
-        elif self.expandedArea is None and self.numOrifices is not None:
-            self.expandedArea  = self.interfaceArea*self.numOrifices
+        scroll = resolveScrollAreas(str(self.crossSectionType).lower(),
+                                    interfaceArea = self.interfaceArea,
+                                    interfaceHydraulicDiameter = self.interfaceHydraulicDiameter,
+                                    interfaceCharacteristicLength = self.interfaceCharLen,
+                                    expandedArea = self.expandedArea,
+                                    expandedHydraulicDiameter = self.expandedHydraulicDiameter,
+                                    expandedCharacteristicLength = self.expandedCharLen,
+                                    numOrifices = self.numOrifices)
+        self.interfaceArea              = scroll['interfaceArea']
+        self.expandedArea               = scroll['expandedArea']
+        self.interfaceHydraulicDiameter = scroll['interfaceHydraulicDiameter']
+        self.expandedHydraulicDiameter  = scroll['expandedHydraulicDiameter']
+        self.numOrifices                = scroll['numOrifices']
 
-        # get characteristic length distribution from area distribution
-        self.crossSectionalArea = np.linspace(self.interfaceArea,self.expandedArea,self.numCrossSections)
-        charLenDistribution     = np.sqrt(self.crossSectionalArea/(1 + 0.75*np.pi)) # squarc geometry specific
-        self.hydraulicDiameter  = 4*self.crossSectionalArea / ((1.5*np.pi*charLenDistribution) + (2*charLenDistribution))  # D_H = 4A/P
+        self.crossSectionalArea = scrollAreaDistribution(self.interfaceArea, self.expandedArea,
+                                                         self.numCrossSections,
+                                                         str(self.scrollType).lower())
+        charLenDistribution     = characteristicLengthFromArea('squarc', self.crossSectionalArea)
+        self.hydraulicDiameter  = sectionHydraulicDiameter('squarc', self.crossSectionalArea)
 
         tiltAngle = -np.deg2rad(self.printabilityAngle)
 
@@ -1470,8 +1408,9 @@ class Volute:
         thetaCirc = np.linspace(0.5*np.pi + tiltAngle, -np.pi + tiltAngle, self.crossSectionResolution - 2)
         counter = np.zeros((self.numCrossSections))
         # loop
-        print(f'Generating Volute Cross Sections:')
-        for i in tqdm(range(self.numCrossSections)):
+        if str(self.progressbar).lower() == 'on':
+            print('Generating Volute Cross Sections:')
+        for i in tqdm(range(self.numCrossSections), disable = str(self.progressbar).lower() != 'on'):
 
             L = charLenDistribution[i]
             yCirc = L*np.sin(thetaCirc) - L*(np.cos(tiltAngle) - np.sin(tiltAngle))
@@ -1558,13 +1497,17 @@ class Volute:
 
         # generate shell
         if self.wallThickness is not None or self.wallHoopStress is not None:
+            # A squircle is drawn with its corner on the scroll radius, so its centre, and the bend
+            # radius the toroidal correction reads, sits one characteristic length outboard.
+            bendRadius = self.voluteScrollRadius + charLenDistribution
             yShellCS, zShellCS, y1p, z1p, wallThickness= dynamicEggShell(yCS,zCS,
                                                         self.wallThickness,
-                                                        self.wallHoopStress, self.pressureDifferential, self.hydraulicDiameter)
+                                                        self.wallHoopStress, self.pressureDifferential, self.hydraulicDiameter,
+                                                        bendRadius, self.minWallThickness)
             self.wallThickness = wallThickness
             xShellCS = np.zeros_like(xCS)
             # catch inverted wall
-            if abs(np.trapz(yShellCS[0,:],zShellCS[0,:])) < abs(np.trapz(yCS[0,:],zCS[0,:])):
+            if abs(np.trapezoid(yShellCS[0,:],zShellCS[0,:])) < abs(np.trapezoid(yCS[0,:],zCS[0,:])):
                 self.wallThickness *= -1
                 yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
                                                         self.wallThickness)
@@ -1603,88 +1546,37 @@ class Volute:
                     yShellCS[i,:] -= self.voluteScrollRadius - y1p[i]
                     zShellCS[i,:] -= -z1p[i]
                     if self.circlePrintability.lower() ==  'thick':
-                        yInternalSupportWallCS[i,:]        -= self.voluteScrollRadius - y1p
-                        zInternalSupportWallCS[i,:]        -= -z1p
-                        yInternalSupportFilletUpperCS[i,:] -= self.voluteScrollRadius - y1p
-                        zInternalSupportFilletUpperCS[i,:] -= -z1p
-                        yInternalSupportFilletLowerCS[i,:] -= self.voluteScrollRadius - y1p
-                        zInternalSupportFilletLowerCS[i,:] -= -z1p
+                        yInternalSupportWallCS[i,:]        -= self.voluteScrollRadius - y1p[i]
+                        zInternalSupportWallCS[i,:]        -= -z1p[i]
+                        yInternalSupportFilletUpperCS[i,:] -= self.voluteScrollRadius - y1p[i]
+                        zInternalSupportFilletUpperCS[i,:] -= -z1p[i]
+                        yInternalSupportFilletLowerCS[i,:] -= self.voluteScrollRadius - y1p[i]
+                        zInternalSupportFilletLowerCS[i,:] -= -z1p[i]
                     if self.circlePrintability.lower() ==  'thin':
-                        yInternalSupportWallCS[i,:]        -= self.voluteScrollRadius - y1p
-                        zInternalSupportWallCS[i,:]        -= -z1p
-                        yInternalSupportFilletUpperCS[i,:] -= self.voluteScrollRadius - y1p
-                        zInternalSupportFilletUpperCS[i,:] -= -z1p
+                        yInternalSupportWallCS[i,:]        -= self.voluteScrollRadius - y1p[i]
+                        zInternalSupportWallCS[i,:]        -= -z1p[i]
+                        yInternalSupportFilletUpperCS[i,:] -= self.voluteScrollRadius - y1p[i]
+                        zInternalSupportFilletUpperCS[i,:] -= -z1p[i]
         else:
             raise Exception('Invalid wall alignment argument. Please specify inner or outer.')
 
         # roll cross sections about scroll axis to create mesh
+        sweep = 2*np.pi - self.tongueGap()
         if self.scrollDirection.lower() == 'cw':
-            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections)
+            rollAngle = np.linspace(0, sweep, self.numCrossSections)
         elif self.scrollDirection.lower() == 'ccw':
-            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections)
+            rollAngle = np.linspace(sweep, 0, self.numCrossSections)
         else:
             raise Exception('Invalid scroll direction argument. Please specify cw or ccw.')
         xVolute, yVolute, zVolute = [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
-        for i in range(self.numCrossSections):
-
-            V = [xCS[i,:], yCS[i,:], zCS[i,:]]
-            E = [0,        0,        rollAngle[i]]
-
-            # Direction Cosines (rotation matrix) construction:
-
-            Rx = np.array([                                     \
-                [1,             0,              0           ],  \
-                [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-            Ry = np.array([                                     \
-                [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                [0,             1,              0           ],  \
-                [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-            Rz = np.array([                                     \
-                [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                [0,             0,              1           ]]) # Z-axis rotation
-
-            R = Rx@Ry@Rz                                        # Rotation matrix
-
-            # Un-centered rotated matrix:
-            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V
-            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V
-            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V
+        rollAboutAxis(rollAngle, (xCS, yCS, zCS),
+                      (xVolute, yVolute, zVolute))
 
         # roll outer wall cross sections about scroll axis to create mesh
         if self.wallThickness is not None:
             xShell, yShell, zShell = [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xShellCS[i,:], yShellCS[i,:], zShellCS[i,:]]
-                E = [0,             0,             rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V
-                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V
-                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V
+            rollAboutAxis(rollAngle, (xShellCS, yShellCS, zShellCS),
+                          (xShell, yShell, zShell))
 
         # roll inner support cross sections about scroll axis to create mesh
         if self.circlePrintability.lower() == 'thick':
@@ -1694,151 +1586,21 @@ class Volute:
                 [np.zeros((self.numCrossSections,int(1.5*self.crossSectionResolution+1))) for _ in range(3)]
             xInternalSupportFilletLower, yInternalSupportFilletLower, zInternalSupportFilletLower = \
                 [np.zeros((self.numCrossSections,int(0.75*self.crossSectionResolution+2))) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportWallCS[i,:], yInternalSupportWallCS[i,:], zInternalSupportWallCS[i,:]]
-                E = [0,                       0,                       rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
-                E = [0,                                  0,                                  rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportFilletLowerCS[i,:], yInternalSupportFilletLowerCS[i,:], zInternalSupportFilletLowerCS[i,:]]
-                E = [0,                                  0,                                  rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportFilletLower[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportFilletLower[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportFilletLower[i,:] = (R@V).T[:,2]            # Extract Z from V
+            rollAboutAxis(rollAngle, (xInternalSupportWallCS, yInternalSupportWallCS, zInternalSupportWallCS),
+                          (xInternalSupportWall, yInternalSupportWall, zInternalSupportWall))
+            rollAboutAxis(rollAngle, (xInternalSupportFilletUpperCS, yInternalSupportFilletUpperCS, zInternalSupportFilletUpperCS),
+                          (xInternalSupportFilletUpper, yInternalSupportFilletUpper, zInternalSupportFilletUpper))
+            rollAboutAxis(rollAngle, (xInternalSupportFilletLowerCS, yInternalSupportFilletLowerCS, zInternalSupportFilletLowerCS),
+                          (xInternalSupportFilletLower, yInternalSupportFilletLower, zInternalSupportFilletLower))
         if self.circlePrintability.lower() == 'thin':
             xInternalSupportWall, yInternalSupportWall, zInternalSupportWall =                      \
                 [np.zeros((self.numCrossSections,2)) for _ in range(3)]
             xInternalSupportFilletUpper, yInternalSupportFilletUpper, zInternalSupportFilletUpper = \
                 [np.zeros((self.numCrossSections,self.crossSectionResolution)) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportWallCS[i,:], yInternalSupportWallCS[i,:], zInternalSupportWallCS[i,:]]
-                E = [0,                       0,                       rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportWall[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportWall[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportWall[i,:] = (R@V).T[:,2]            # Extract Z from V
-            for i in range(self.numCrossSections):
-
-                V = [xInternalSupportFilletUpperCS[i,:], yInternalSupportFilletUpperCS[i,:], zInternalSupportFilletUpperCS[i,:]]
-                E = [0,                                  0,                                  rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xInternalSupportFilletUpper[i,:] = (R@V).T[:,0]            # Extract X from V
-                yInternalSupportFilletUpper[i,:] = (R@V).T[:,1]            # Extract Y from V
-                zInternalSupportFilletUpper[i,:] = (R@V).T[:,2]            # Extract Z from V
+            rollAboutAxis(rollAngle, (xInternalSupportWallCS, yInternalSupportWallCS, zInternalSupportWallCS),
+                          (xInternalSupportWall, yInternalSupportWall, zInternalSupportWall))
+            rollAboutAxis(rollAngle, (xInternalSupportFilletUpperCS, yInternalSupportFilletUpperCS, zInternalSupportFilletUpperCS),
+                          (xInternalSupportFilletUpper, yInternalSupportFilletUpper, zInternalSupportFilletUpper))
 
         # axial location
         zVolute += self.axialOffset
@@ -1877,571 +1639,3 @@ class Volute:
             self.xInternalSupportFilletUpper = xInternalSupportFilletUpper
             self.yInternalSupportFilletUpper = yInternalSupportFilletUpper
             self.zInternalSupportFilletUpper = zInternalSupportFilletUpper
-
-    def generateEggVolute(self):
-
-        '''
-        
-        Can i offer you an egg in this trying time?
-
-        The area distribution can be bounded either by hydraulic diameter or CSA on
-        both the interface and expanded ends.
-
-        The anchor point can be north, south, inside, outside, combinations thereof, or center.
-        Specify the anchor point with one or two letters, e.g. 'n' , 'o' , or 'no'.
-        Unspecified, the default is center.
-        An invalid anchor point will anchor south.
-
-        Default egg pointiness is 1.
-        
-        '''
-
-        def drawEgg(h,pointiness=1):
-
-            # im stealing this egg -B
-
-            top_circle_scaling_factor = pointiness  # Pointiness of the top of the egg
-
-            # -- Declare properties of egg -- #
-
-            phi = (1/2)*(1 + np.sqrt(5))
-            theta_test = np.linspace(0,2*np.pi,100)
-
-            c = h*phi/(1 + np.sqrt(7 - 4*phi))
-            r1 = c                                          # Circle 1's radius
-            r2 = c*(2 - phi)                                # Circle 2's radius
-            r3 = c*(2*phi - 3)/top_circle_scaling_factor    # Circle 3's radius
-            a = 2*c*(2 - phi)
-            L = c*np.cos(np.radians(108-90))
-
-            circle_1_center_x = r2 + r3*top_circle_scaling_factor
-            circle_1_center_y = (0.5*r3/np.tan(np.deg2rad(108-90)))*top_circle_scaling_factor
-            circle_x_1_left = r1*np.cos(theta_test) - circle_1_center_x
-            circle_y_1_left = r1*np.sin(theta_test) + circle_1_center_y
-
-            circle_x_1_right = r1*np.cos(theta_test) + circle_1_center_x
-            circle_y_1_right = r1*np.sin(theta_test) + circle_1_center_y
-
-            circle_2_center_y = circle_1_center_y
-            circle_x_2 = r2*np.cos(theta_test)
-            circle_y_2 = r2*np.sin(theta_test) + circle_2_center_y
-            circle_2 = interp1d(circle_x_2,circle_y_2)
-            y = circle_2(0)
-
-            circle_3_center_y = min(circle_y_2) + h - r3/top_circle_scaling_factor
-            circle_x_3 = r3*np.cos(theta_test)
-            circle_y_3 = r3*np.sin(theta_test) + circle_3_center_y
-
-            # -- Only plot the egg part -- #
-
-            yellow_dashed = dist([circle_1_center_x, circle_1_center_y], [(3*r2)/2, L-circle_1_center_y])
-            theta_1_int = (np.pi/2 - np.arccos((r2/2)/yellow_dashed)) + np.radians(5*top_circle_scaling_factor)
-            # theta_1_int = np.pi/2 - np.arctan2((circle_3_center_y - circle_2_center_y),(r2 + r3*top_circle_scaling_factor))
-
-            theta_1_right = np.linspace(np.pi,np.pi/2 + theta_1_int)
-            theta_1_left = np.linspace(np.pi/2 - theta_1_int,0)
-            theta_2 = np.linspace(2*np.pi,np.pi)
-            theta_3 = np.linspace(np.pi/2 + theta_1_int, np.pi/2 - theta_1_int)
-
-            egg_arc_1_x = r1*np.cos(theta_1_right) + circle_1_center_x   # This is circle 1 right
-            egg_arc_1_y = r1*np.sin(theta_1_right) + circle_1_center_y
-
-            # egg_arc_2_x = r3*np.cos(theta_3)                           # This is circle 3
-            # egg_arc_2_y = r3*np.sin(theta_3) + circle_3_center_y
-
-            egg_arc_3_x = r1*np.cos(theta_1_left) - circle_1_center_x    # This is circle 1 left
-            egg_arc_3_y = r1*np.sin(theta_1_left) + circle_1_center_y
-
-            # Make egg tip (previously circle 3)
-            # Bezier spline controls
-                # 0.7 and 0.1 used because at pointiness=1 the egg is egg shaped
-            mag_sides = 0.7/top_circle_scaling_factor
-            mag_tip = 0.1/top_circle_scaling_factor
-            res = int(self.crossSectionResolution/4) ############################################################################### WEE WOO WEE WOO
-
-            # Find angle of egg before spline
-            dx = abs(egg_arc_1_x[-2]-egg_arc_1_x[-1])
-            dy = abs(egg_arc_1_y[-2]-egg_arc_1_y[-1])
-            angle = np.degrees(np.arctan2(dy, dx))
-
-            # Initialize arrays
-            egg_arc_2_x = np.zeros(res)
-            egg_arc_2_y = np.zeros(res)
-
-            # Make left half of egg tip spline
-            p1 = [egg_arc_1_x[-1], egg_arc_1_y[-1]]
-            p2 = [0, abs((min(circle_y_2)))+h]
-            egg_tip_spline = bezier(p1, p2, angle, 0, [mag_sides, mag_tip], int(res/2))
-            egg_arc_2_x[:int(res/2)], egg_arc_2_y[:int(res/2)] = egg_tip_spline[0], egg_tip_spline[1]
-
-            # Make right half of egg tip spline
-            p1 = [0, abs((min(circle_y_2)))+h]
-            p2 = [egg_arc_3_x[0], egg_arc_3_y[0]]
-            egg_tip_spline = bezier(p1, p2, 0, -angle, [mag_tip, mag_sides], int(res/2))
-            egg_arc_2_x[int((res/2)):], egg_arc_2_y[int((res/2)):] = egg_tip_spline[0], egg_tip_spline[1]
-
-            egg_arc_4_x = r2*np.cos(theta_2)                             # This is circle 2
-            egg_arc_4_y = r2*np.sin(theta_2) + circle_2_center_y
-
-            egg_x = np.concatenate([egg_arc_1_x[:-1],egg_arc_2_x,egg_arc_3_x[1:-1],egg_arc_4_x])
-            egg_y = np.concatenate([egg_arc_1_y[:-1],egg_arc_2_y,egg_arc_3_y[1:-1],egg_arc_4_y])
-
-            for i in np.arange(len(egg_x)-2,-1,-1):
-                if [egg_x[i],egg_y[i]] == [egg_x[i+1],egg_y[i+1]]:
-                    egg_x = np.delete(egg_x,i)
-                    egg_y = np.delete(egg_y,i)
-            # egg_x, egg_y, _ = arcSpline(egg_x, egg_y, np.zeros((len(egg_x))),newNumPoints=self.crossSectionResolution)
-
-            # plt.figure()
-            # plt.plot(circle_x_1_left,circle_y_1_left,'purple')
-            # plt.plot(circle_x_1_right,circle_y_1_right,'blue')
-            # plt.plot(circle_x_2,circle_y_2,'red')
-            # plt.plot(circle_x_3,circle_y_3,'green')
-
-            # plt.plot   ( egg_arc_1_x[:-1], egg_arc_1_y[:-1],          'orange',label='arc 1')
-            # plt.plot   ( egg_arc_2_x,      egg_arc_2_y,               'green',label='arc 2')
-            # plt.plot   ( egg_arc_3_x,      egg_arc_3_y,               'blue',label='arc 3')
-            # plt.scatter([egg_arc_3_x[-1]],[egg_arc_3_y[-1]],200,color='b',marker='*')
-            # plt.plot   ( egg_arc_4_x,      egg_arc_4_y,               'red',label='arc 4')
-            # plt.scatter([egg_arc_4_x[0]], [egg_arc_4_y[0]],100, color='r',marker='*')
-
-            # plt.legend()
-            # plt.gca().set_aspect('equal')
-            # plt.show(block=True)
-
-            # plt.figure()
-            # plt.style.use('dark_background')
-            # plt.plot(egg_x,egg_y,'w')
-            # plt.gca().set_aspect('equal')
-            # plt.show(block=True)
-
-            return egg_x, egg_y
-
-        eggTolerance = 1e-6
-        # make resolution eggable
-        self.crossSectionResolution = int(np.ceil(self.crossSectionResolution/8)*8)
-
-        ## Define area distribution
-        if self.progressbar == 'on':
-            print('Converging egg volute area distribution. This should only take a few seconds.')
-
-        if self.numOrifices is None:
-            # if not specified, get interface area from interface hydraulic diameter
-            if self.interfaceHydraulicDiameter is not None:
-
-                if self.interfaceArea is not None:
-                    raise Exception('Please specify only interface area OR hydraulic diameter')
-
-                # guess and check egg until interface area is determined
-                interfaceEggH = self.interfaceHydraulicDiameter
-                yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
-                interfaceEggCSA  = np.trapz(zInterfaceEgg,yInterfaceEgg)
-                interfaceEggPeri = 0
-                for i in range(len(yInterfaceEgg)-1):
-                    interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
-                checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
-                while abs(checkInterfaceEggHD - self.interfaceHydraulicDiameter) > eggTolerance:
-                    if checkInterfaceEggHD - self.interfaceHydraulicDiameter > 0:
-                        interfaceEggH -= eggTolerance*2
-                        yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
-                        interfaceEggCSA  = np.trapz(zInterfaceEgg,yInterfaceEgg)
-                        interfaceEggPeri = 0
-                        for i in range(len(yInterfaceEgg)-1):
-                            interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
-                        checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
-                    elif checkInterfaceEggHD - self.interfaceHydraulicDiameter < 0:
-                        interfaceEggH += eggTolerance*2
-                        yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
-                        interfaceEggCSA  = np.trapz(zInterfaceEgg,yInterfaceEgg)
-                        interfaceEggPeri = 0
-                        for i in range(len(yInterfaceEgg)-1):
-                            interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
-                        checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
-                self.interfaceArea = interfaceEggCSA
-            # if not specified, get expanded area from expanded hydraulic diameter
-            if self.expandedHydraulicDiameter is not None:
-
-                if self.expandedArea is not None:
-                    raise Exception('Please specify only expanded area OR hydraulic diameter')
-
-                # guess and check egg until expanded area is determined
-                expandedEggH = self.expandedHydraulicDiameter
-                yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
-                expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                expandedEggPeri = 0
-                for i in range(len(yExpandedEgg)-1):
-                    expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                checkexpandedEggHD = 4*expandedEggCSA/expandedEggPeri
-                while abs(checkexpandedEggHD - self.expandedHydraulicDiameter) > eggTolerance:
-                    if checkexpandedEggHD - self.expandedHydraulicDiameter > 0:
-                        expandedEggH -= eggTolerance*3
-                        yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
-                        expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                        expandedEggPeri = 0
-                        for i in range(len(yExpandedEgg)-1):
-                            expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                        checkexpandedEggHD = 4*expandedEggCSA/expandedEggPeri
-                    elif checkexpandedEggHD - self.expandedHydraulicDiameter < 0:
-                        expandedEggH += eggTolerance*3
-                        yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
-                        expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                        expandedEggPeri = 0
-                        for i in range(len(yExpandedEgg)-1):
-                            expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                        checkexpandedEggHD = 4*expandedEggCSA/expandedEggPeri
-                self.expandedArea = expandedEggCSA
-            else: # need to establish expanded hydraulic diameter to make first cross section
-                eggHeightGuess = self.expandedArea/10
-                yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                while abs(expandedEggCSA - self.expandedArea) < eggTolerance:
-                    if expandedEggCSA > self.expandedArea:
-                        eggHeightGuess -= eggTolerance*3
-                        yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                        expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                    elif expandedEggCSA < self.expandedArea:
-                        eggHeightGuess += eggTolerance*3
-                        yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                        expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                expandedEggPeri = 0
-                for i in range(len(yExpandedEgg)-1):
-                    expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                self.expandedHydraulicDiameter = 4*expandedEggCSA/expandedEggPeri
-        else:
-            # expanded end specified
-            if self.interfaceArea is None and self.interfaceHydraulicDiameter is None:
-
-                # if not specified, get expanded area from expanded hydraulic diameter
-                if self.expandedHydraulicDiameter is not None:
-
-                    if self.expandedArea is not None:
-                        raise Exception('Please specify only expanded area OR hydraulic diameter')
-
-                    # guess and check egg until expanded area is determined
-                    expandedEggH = self.expandedHydraulicDiameter
-                    yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
-                    expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                    expandedEggPeri = 0
-                    for i in range(len(yExpandedEgg)-1):
-                        expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                    checkexpandedEggHD = 4*expandedEggCSA/expandedEggPeri
-                    while abs(checkexpandedEggHD - self.expandedHydraulicDiameter) > eggTolerance:
-                        if checkexpandedEggHD - self.expandedHydraulicDiameter > 0:
-                            expandedEggH -= eggTolerance*3
-                            yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
-                            expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                            expandedEggPeri = 0
-                            for i in range(len(yExpandedEgg)-1):
-                                expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                            checkexpandedEggHD = 4*expandedEggCSA/expandedEggPeri
-                        elif checkexpandedEggHD - self.expandedHydraulicDiameter < 0:
-                            expandedEggH += eggTolerance*3
-                            yExpandedEgg, zExpandedEgg = drawEgg(h=expandedEggH,pointiness=self.eggPointiness)
-                            expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                            expandedEggPeri = 0
-                            for i in range(len(yExpandedEgg)-1):
-                                expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                            checkexpandedEggHD = 4*expandedEggCSA/expandedEggPeri
-                    self.expandedArea = expandedEggCSA
-                else: # need to establish expanded hydraulic diameter to make first cross section
-                    eggHeightGuess = self.expandedArea/10
-                    yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                    expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                    while abs(expandedEggCSA - self.expandedArea) < eggTolerance:
-                        if expandedEggCSA > self.expandedArea:
-                            eggHeightGuess -= eggTolerance*3
-                            yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                            expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                        elif expandedEggCSA < self.expandedArea:
-                            eggHeightGuess += eggTolerance*3
-                            yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                            expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                    expandedEggPeri = 0
-                    for i in range(len(yExpandedEgg)-1):
-                        expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                    self.expandedHydraulicDiameter = 4*expandedEggCSA/expandedEggPeri
-
-                self.interfaceArea = self.expandedArea/self.numOrifices
-            # interface end specified
-            elif self.expandedArea is None and self.expandedHydraulicDiameter is None:
-
-                # if not specified, get interface area from interface hydraulic diameter
-                if self.interfaceHydraulicDiameter is not None:
-
-                    if self.interfaceArea is not None:
-                        raise Exception('Please specify only interface area OR hydraulic diameter')
-
-                    # guess and check egg until interface area is determined
-                    interfaceEggH = self.interfaceHydraulicDiameter
-                    yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
-                    interfaceEggCSA  = np.trapz(zInterfaceEgg,yInterfaceEgg)
-                    interfaceEggPeri = 0
-                    for i in range(len(yInterfaceEgg)-1):
-                        interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
-                    checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
-                    while abs(checkInterfaceEggHD - self.interfaceHydraulicDiameter) > eggTolerance:
-                        if checkInterfaceEggHD - self.interfaceHydraulicDiameter > 0:
-                            interfaceEggH -= eggTolerance*3
-                            yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
-                            interfaceEggCSA  = np.trapz(zInterfaceEgg,yInterfaceEgg)
-                            interfaceEggPeri = 0
-                            for i in range(len(yInterfaceEgg)-1):
-                                interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
-                            checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
-                        elif checkInterfaceEggHD - self.interfaceHydraulicDiameter < 0:
-                            interfaceEggH += eggTolerance*3
-                            yInterfaceEgg, zInterfaceEgg = drawEgg(h=interfaceEggH,pointiness=self.eggPointiness)
-                            interfaceEggCSA  = np.trapz(zInterfaceEgg,yInterfaceEgg)
-                            interfaceEggPeri = 0
-                            for i in range(len(yInterfaceEgg)-1):
-                                interfaceEggPeri += np.sqrt((yInterfaceEgg[i+1] - yInterfaceEgg[i])**2 + (zInterfaceEgg[i+1] - zInterfaceEgg[i])**2)
-                            checkInterfaceEggHD = 4*interfaceEggCSA/interfaceEggPeri
-                    self.interfaceArea = interfaceEggCSA
-
-                self.expandedArea = self.interfaceArea*self.numOrifices
-
-                if self.expandedHydraulicDiameter is None: # need to establish expanded hydraulic diameter to make first cross section
-                    eggHeightGuess = self.expandedArea/10
-                    yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                    expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                    while abs(expandedEggCSA - self.expandedArea) < eggTolerance:
-                        if expandedEggCSA > self.expandedArea:
-                            eggHeightGuess -= eggTolerance*3
-                            yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                            expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                        elif expandedEggCSA < self.expandedArea:
-                            eggHeightGuess += eggTolerance*3
-                            yExpandedEgg, zExpandedEgg = drawEgg(h=eggHeightGuess,pointiness=self.eggPointiness)
-                            expandedEggCSA  = np.trapz(zExpandedEgg,yExpandedEgg)
-                    expandedEggPeri = 0
-                    for i in range(len(yExpandedEgg)-1):
-                        expandedEggPeri += np.sqrt((yExpandedEgg[i+1] - yExpandedEgg[i])**2 + (zExpandedEgg[i+1] - zExpandedEgg[i])**2)
-                    self.expandedHydraulicDiameter = 4*expandedEggCSA/expandedEggPeri
-
-        localCrossSectionResolution = len(yExpandedEgg)
-
-        # distribute
-        if self.scaledBy.lower() == 'linear':
-            self.crossSectionalArea = np.linspace(self.interfaceArea,self.expandedArea,self.numCrossSections)
-        elif self.scaledBy.lower() == 'momentum':
-            debug = 1 # not implemented
-
-        ## generate inner wall CSs with seat at (0,0):
-        if self.progressbar == 'on':
-            print('Generating cross sections.')
-        # preallocate
-        xCS, yCS, zCS = [np.zeros((self.numCrossSections,localCrossSectionResolution)) for _ in range(3)] # 196 is the resolution of egg idk
-        eggHeight = self.expandedHydraulicDiameter
-        eggHeights, eggWidths, zEggCenters = [np.zeros((self.numCrossSections)) for _ in range(3)]
-        hydraulicDiameter = np.zeros((self.numCrossSections))
-        # loop
-        for i in tqdm(range(self.numCrossSections-1,-1,-1)):
-            targetArea = self.crossSectionalArea[i]
-            yCSi, zCSi = drawEgg(h=eggHeight,pointiness=self.eggPointiness)
-            checkArea = np.trapz(zCSi,yCSi)
-            while abs(checkArea - targetArea) > eggTolerance:
-                if checkArea > targetArea:
-                    eggHeight -= eggTolerance*2
-                    yCSi, zCSi = drawEgg(h=eggHeight,pointiness=self.eggPointiness)
-                    checkArea = np.trapz(zCSi,yCSi)
-                else:
-                    eggHeight += eggTolerance*2
-                    yCSi, zCSi = drawEgg(h=eggHeight,pointiness=self.eggPointiness)
-                    checkArea = np.trapz(zCSi,yCSi)
-            zCSi -= min(zCSi) # make sure it sits on its ass
-            yCS[i,:] = yCSi
-            zCS[i,:] = zCSi
-            eggPeri = 0
-            for j in range(len(yExpandedEgg)-1):
-                eggPeri += np.sqrt((yCSi[j+1] - yCSi[j])**2 + (zCSi[j+1] - zCSi[j])**2)
-            hydraulicDiameter[i] = 4*targetArea/eggPeri
-
-            # move to anchor point
-            eggHeights[i]  = max(zCSi)
-            eggWidths[i]   = max(yCSi)
-            zEggCenters[i] = zCSi[np.where(yCSi == max(yCSi))][0]
-            dy = 0
-            dz = 0
-            match self.anchorBy.lower():
-                case 'c':
-                    dz -= zEggCenters[i]
-                case 'n':
-                    dz -= eggHeights[i]
-                case 's':
-                    dz -= 0
-                case 'o':
-                    dy -= eggWidths[i]
-                    dz -= zEggCenters[i]
-                case 'i':
-                    dy += eggWidths[i]
-                    dz -= zEggCenters[i]
-                case 'no':
-                    dy -= eggWidths[i]
-                    dz -= eggHeights[i]
-                case 'so':
-                    dy -= eggWidths[i]
-                    dz -= 0
-                case 'ni':
-                    dy += eggWidths[i]
-                    dz -= eggHeights[i]
-                case 'si':
-                    dy += eggWidths[i]
-                    dz -= 0
-            yCS[i,:] += dy
-            zCS[i,:] += dz
-
-        self.hydraulicDiameter = hydraulicDiameter
-
-        # generate shell
-        if self.wallThickness is not None or self.wallHoopStress is not None:
-
-            if self.progressbar == 'on':
-                print('Generating shell.')
-
-            yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
-                                                                    self.wallThickness,
-                                                                    self.wallHoopStress, self.pressureDifferential, self.hydraulicDiameter)
-            self.wallThickness = wallThickness
-            xShellCS = np.zeros_like(xCS)
-            # catch inverted wall
-            if abs(np.trapz(yShellCS[0,:],zShellCS[0,:])) < abs(np.trapz(yCS[0,:],zCS[0,:])):
-                self.wallThickness *= -1
-                yShellCS, zShellCS, _, _, wallThickness= dynamicEggShell(yCS,zCS,
-                                                        self.wallThickness)
-            self.wallThickness = abs(wallThickness)
-
-        # move cross sections to correct radius
-        if self.progressbar == 'on':
-            print('Locating radially.')
-        if self.alignWallBy == 'inner':
-            yCS += self.voluteScrollRadius
-            if self.wallThickness is not None:
-                yShellCS += self.voluteScrollRadius
-        elif self.alignWallBy == 'outer':
-
-            if self.wallThickness is None:
-                print('No outer wall to align by.')
-                yCS += self.voluteScrollRadius
-                if self.wallThickness is not None:
-                    yShellCS += self.voluteScrollRadius
-            elif self.wallThickness is not None:
-                y1p = np.zeros((self.numCrossSections))
-                z1p = np.zeros((self.numCrossSections))
-                match self.anchorBy.lower():
-                    case 'n':
-                        z1p += self.wallThickness
-                    case 's':
-                        z1p -= self.wallThickness
-                    case 'o':
-                        y1p += self.wallThickness
-                    case 'i':
-                        y1p -= self.wallThickness
-                    case 'no':
-                        y1p += self.wallThickness
-                        z1p += self.wallThickness
-                    case 'so':
-                        y1p += self.wallThickness
-                        z1p -= self.wallThickness
-                    case 'ni':
-                        y1p -= self.wallThickness
-                        z1p += self.wallThickness
-                    case 'si':
-                        y1p -= self.wallThickness
-                        z1p -= self.wallThickness
-
-                for i in range(self.numCrossSections):
-                    yCS[i,:] += self.voluteScrollRadius - y1p[i]
-                    zCS[i,:] += -z1p[i]
-                    yShellCS[i,:] += self.voluteScrollRadius - y1p[i]
-                    zShellCS[i,:] += -z1p[i]
-        else:
-            raise Exception('Invalid wall alignment argument. Please specify inner or outer.')
-
-        # roll cross sections about scroll axis to create mesh
-        if self.progressbar == 'on':
-            print('Generating 3D geometry.')
-        if self.scrollDirection.lower() == 'cw':
-            rollAngle = np.linspace(0, 2*np.pi, self.numCrossSections)
-        elif self.scrollDirection.lower() == 'ccw':
-            rollAngle = np.linspace(2*np.pi, 0, self.numCrossSections)
-        else:
-            raise Exception('Invalid scroll direction argument. Please specify cw or ccw.')
-        xVolute, yVolute, zVolute = [np.zeros((self.numCrossSections,localCrossSectionResolution)) for _ in range(3)]
-        for i in range(self.numCrossSections):
-
-            V = [xCS[i,:], yCS[i,:], zCS[i,:]]
-            E = [0,        0,        rollAngle[i]]
-
-            # Direction Cosines (rotation matrix) construction:
-
-            Rx = np.array([                                     \
-                [1,             0,              0           ],  \
-                [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-            Ry = np.array([                                     \
-                [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                [0,             1,              0           ],  \
-                [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-            Rz = np.array([                                     \
-                [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                [0,             0,              1           ]]) # Z-axis rotation
-
-            R = Rx@Ry@Rz                                        # Rotation matrix
-
-            # Un-centered rotated matrix:
-            xVolute[i,:] = (R@V).T[:,0]                  # Extract X from V
-            yVolute[i,:] = (R@V).T[:,1]                  # Extract Y from V
-            zVolute[i,:] = (R@V).T[:,2]                  # Extract Z from V
-
-        # roll outer wall cross sections about scroll axis to create mesh
-        if self.wallThickness is not None:
-            xShell, yShell, zShell = [np.zeros((self.numCrossSections,localCrossSectionResolution)) for _ in range(3)]
-            for i in range(self.numCrossSections):
-
-                V = [xShellCS[i,:], yShellCS[i,:], zShellCS[i,:]]
-                E = [0,             0,             rollAngle[i]]
-
-                # Direction Cosines (rotation matrix) construction:
-
-                Rx = np.array([                                     \
-                    [1,             0,              0           ],  \
-                    [0,             np.cos(E[0]),  -np.sin(E[0])],  \
-                    [0,             np.sin(E[0]),   np.cos(E[0])]]) # X-Axis rotation
-
-                Ry = np.array([                                     \
-                    [np.cos(E[1]),  0,              np.sin(E[1])],  \
-                    [0,             1,              0           ],  \
-                    [-np.sin(E[1]), 0,              np.cos(E[1])]]) # Y-axis rotation
-
-                Rz = np.array([                                     \
-                    [np.cos(E[2]), -np.sin(E[2]),   0           ],  \
-                    [np.sin(E[2]),  np.cos(E[2]),   0           ],  \
-                    [0,             0,              1           ]]) # Z-axis rotation
-
-                R = Rx@Ry@Rz                                        # Rotation matrix
-
-                # Un-centered rotated matrix:
-                xShell[i,:] = (R@V).T[:,0]                  # Extract X from V
-                yShell[i,:] = (R@V).T[:,1]                  # Extract Y from V
-                zShell[i,:] = (R@V).T[:,2]                  # Extract Z from V
-
-        # axial location
-        if self.progressbar == 'on':
-            print('Locating axially.')
-        zVolute += self.axialOffset
-        if self.wallThickness is not None:
-            zShell += self.axialOffset
-
-        # assign
-        if self.progressbar == 'on':
-            print('Finishing volute.')
-        self.xVolute = xVolute
-        self.yVolute = yVolute
-        self.zVolute = zVolute
-        if self.wallThickness is not None:
-            self.xShell = xShell
-            self.yShell = yShell
-            self.zShell = zShell

@@ -518,16 +518,44 @@ groups = [
               help = 'Number of points defining each volute cross section.'),
         Field('voluteRelativeRoll', 'Volute relative roll', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
               help = 'Roll offset between the inlet and return volutes.'),
+        Field('voluteScrollType', 'Scroll type', 'choice',
+              choices = [('Ring', 'ring'), ('Cutwater', 'cutwater')], default = 'ring',
+              showWhen = _anyVolute,
+              help = 'Ring wraps a full turn and is fed from both directions, so its throat is at '
+                     'the feed and its tongue half a turn away. Cutwater stops short of a full '
+                     'turn and puts a wall between its two ends, with the tongue at one end and '
+                     'the throat at the other.'),
+        Field('voluteFOS', 'Volute factor of safety', 'float', default = 1.5,
+              showWhen = _anyVolute,
+              help = 'Factor the alloy yield strength is divided by to size the volute wall. The '
+                     'wall is sized on the warmer of the coolant and a room temperature proof '
+                     'case, since a copper alloy is weaker warm.'),
+        Field('minVoluteWallThickness', 'Minimum volute wall', 'float', default = 1.0e-3,
+              unit = 'm', showWhen = _anyVolute,
+              help = 'Thinnest wall the process can print, which floors what the hoop stress asks '
+                     'for. Published LPBF work on GRCop holds vertical walls at 1 mm.'),
+        Field('maxVoluteBore', 'Maximum scroll bore', 'float', default = 0.15, unit = 'm',
+              showWhen = _anyVolute,
+              help = 'Largest scroll throat the build will accept. The throat follows from the '
+                     'channel port and the port count, so a large channel asks for a large '
+                     'scroll; past this the build refuses rather than drawing one that will not '
+                     'fit.'),
         Field('inletVoluteCrossSection', 'Inlet cross section', 'choice',
-              choices = [('Circle', 'circle'), ('Egg', 'egg'), ('Squircle', 'squarc')], default = 'circle',
+              choices = [('Circle', 'circle'), ('Squircle', 'squarc')], default = 'circle',
               showWhen = _anyVolute, help = 'Cross-section shape of the inlet volute.'),
         Field('inletVoluteAlignment', 'Inlet alignment', 'choice',
               choices = [('Center', 'c'), ('North', 'n'), ('South', 's'), ('Inner', 'i'), ('Outer', 'o'),
                          ('North-inner', 'ni'), ('South-inner', 'si'), ('North-outer', 'no'), ('South-outer', 'so')],
-              default = 'o', showWhen = _anyVolute,
-              help = 'Alignment of the inlet volute cross section relative to the wall.'),
-        Field('inletVolutePrintability', 'Inlet printability shaping', 'bool', default = False, showWhen = _anyVolute,
-              help = 'Apply overhang-safe shaping to the inlet volute.'),
+              default = 'i', showWhen = _anyVolute,
+              help = 'Which edge of the inlet volute cross section holds still as the scroll '
+                     'grows, and so whether the growing sections reach toward the nozzle or away '
+                     'from it. Inner grows them outward, clear of the wall.'),
+        Field('inletVolutePrintability', 'Inlet printability shaping', 'choice',
+              choices = [('Off', 'off'), ('Thick', 'thick'), ('Thin', 'thin')], default = 'off',
+              showWhen = _anyVolute,
+              help = 'Overhang support drawn inside the inlet scroll. Thick braces it with a wall '
+                     'and two filleted transitions, thin with a sheet and one. Circular sections '
+                     'only.'),
         Field('inletVoluteTilt', 'Inlet volute tilt', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
               help = 'Tilt of the inlet volute cross section.'),
         Field('inletGraylocDiameter', 'Inlet Grayloc seal ID', 'float', default = None, unit = 'in', showWhen = _anyVolute,
@@ -539,15 +567,21 @@ groups = [
         Field('inletVoluteFlareLength', 'Inlet flare length', 'float', default = None, unit = 'm', showWhen = _anyVolute,
               help = 'Flare extension length for the inlet channel entry.'),
         Field('returnVoluteCrossSection', 'Return cross section', 'choice',
-              choices = [('Circle', 'circle'), ('Egg', 'egg'), ('Squircle', 'squarc')], default = 'circle',
+              choices = [('Circle', 'circle'), ('Squircle', 'squarc')], default = 'circle',
               showWhen = _anyVolute, help = 'Cross-section shape of the return volute.'),
         Field('returnVoluteAlignment', 'Return alignment', 'choice',
               choices = [('Center', 'c'), ('North', 'n'), ('South', 's'), ('Inner', 'i'), ('Outer', 'o'),
                          ('North-inner', 'ni'), ('South-inner', 'si'), ('North-outer', 'no'), ('South-outer', 'so')],
-              default = 'o', showWhen = _anyVolute,
-              help = 'Alignment of the return volute cross section relative to the wall.'),
-        Field('returnVolutePrintability', 'Return printability shaping', 'bool', default = False, showWhen = _anyVolute,
-              help = 'Apply overhang-safe shaping to the return volute.'),
+              default = 'i', showWhen = _anyVolute,
+              help = 'Which edge of the return volute cross section holds still as the scroll '
+                     'grows, and so whether the growing sections reach toward the nozzle or away '
+                     'from it. Inner grows them outward, clear of the wall.'),
+        Field('returnVolutePrintability', 'Return printability shaping', 'choice',
+              choices = [('Off', 'off'), ('Thick', 'thick'), ('Thin', 'thin')], default = 'off',
+              showWhen = _anyVolute,
+              help = 'Overhang support drawn inside the return scroll. Thick braces it with a wall '
+                     'and two filleted transitions, thin with a sheet and one. Circular sections '
+                     'only.'),
         Field('returnVoluteTilt', 'Return volute tilt', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
               help = 'Tilt of the return volute cross section.'),
         Field('returnGraylocDiameter', 'Return Grayloc seal ID', 'float', default = None, unit = 'in', showWhen = _anyVolute,

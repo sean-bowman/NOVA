@@ -58,6 +58,7 @@ import numpy as np
 
 from .errors import InvalidInputError
 from .channelSections import SECTIONFAMILIES
+from .voluteSections import SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS
 from .ceaInterface import CEA
 from .contour import divergingSectionFamily
 from .contourKernel import transonicModels
@@ -148,7 +149,6 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # this normalization every plot and export is quietly disabled.
         for key in ('plotsEnabled', 'export',
                     'makeCoolingChannels', 'makeInletVolute', 'makeReturnVolute',
-                    'inletVolutePrintability', 'returnVolutePrintability',
                     'filmCooling', 'makeRadiativeExtension'):
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
@@ -295,6 +295,10 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.numCSVolute                    = inputsPath['numCSVolute']
         nozzle.numCSPointsVolute              = inputsPath['numCSPointsVolute']
         nozzle.voluteRelativeRoll             = inputsPath['voluteRelativeRoll']
+        nozzle.voluteScrollType               = inputsPath.get('voluteScrollType', 'ring')
+        nozzle.maxVoluteBore                  = inputsPath.get('maxVoluteBore', 0.15)
+        nozzle.minVoluteWallThickness         = inputsPath.get('minVoluteWallThickness', 1.0e-3)
+        nozzle.voluteFOS                      = inputsPath.get('voluteFOS', 1.5)
         nozzle.inletVoluteCrossSection        = inputsPath['inletVoluteCrossSection']
         nozzle.inletVoluteAlignment           = inputsPath['inletVoluteAlignment']
         nozzle.inletVolutePrintability        = inputsPath['inletVolutePrintability']
@@ -421,6 +425,43 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
             parameterName = 'channelType',
             value = nozzle.channelType,
             validRange = ', '.join(SECTIONFAMILIES))
+
+    # A printability support is a shape, not a flag: 'thick' and 'thin' draw different supports
+    # and 'off' draws none, so a boolean cannot select one.
+    for flag, key in (('makeInletVolute', 'inletVolutePrintability'),
+                      ('makeReturnVolute', 'returnVolutePrintability')):
+        if getattr(nozzle, flag) != 'on':
+            continue
+        if getattr(nozzle, key) not in VOLUTEPRINTABILITY:
+            raise InvalidInputError(
+                message = f"{key} must be one of {', '.join(VOLUTEPRINTABILITY)}.",
+                parameterName = key,
+                value = getattr(nozzle, key),
+                validRange = ', '.join(VOLUTEPRINTABILITY))
+
+    if (nozzle.makeInletVolute == 'on' or nozzle.makeReturnVolute == 'on') \
+            and nozzle.voluteScrollType not in SCROLLTYPES:
+        raise InvalidInputError(
+            message = f"voluteScrollType must be one of {', '.join(SCROLLTYPES)}.",
+            parameterName = 'voluteScrollType',
+            value = nozzle.voluteScrollType,
+            validRange = ', '.join(SCROLLTYPES))
+
+    # Each volute names its own cross section, and either volute can be off, so the check runs
+    # per volute rather than once.
+    for flag, key in (('makeInletVolute', 'inletVoluteCrossSection'),
+                      ('makeReturnVolute', 'returnVoluteCrossSection')):
+        if getattr(nozzle, flag) != 'on':
+            continue
+        section = getattr(nozzle, key)
+        if section not in VOLUTESECTIONS:
+            parked = (' An egg cross section is kept in experimental/eggVolute.py.'
+                      if section == 'egg' else '')
+            raise InvalidInputError(
+                message = f"{key} must be one of {', '.join(VOLUTESECTIONS)}.{parked}",
+                parameterName = key,
+                value = section,
+                validRange = ', '.join(VOLUTESECTIONS))
 
     # Which diverging section family was asked for. Resolved here, once, so a spelling that names
     # nothing is rejected while the configuration is still being read rather than reaching the

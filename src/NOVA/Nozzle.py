@@ -514,23 +514,24 @@ class Nozzle:
         self.xChannel: np.ndarray                     = np.array([]) # [m]
         self.zChannel: np.ndarray                     = np.array([]) # [m]
 
-
         # Volute Inputs
         self.makeInletVolute                          = None     # 'on' , 'off'
         self.makeReturnVolute                         = None     # 'on' , 'off'
         self.numCSPointsVolute                        = None     # [int]
         self.voluteRelativeRoll                       = None     # [deg]
-        self.voluteFOS                                = 1        # []
+        self.voluteScrollType                         = 'ring'   # 'ring' , 'cutwater'
+        self.maxVoluteBore                            = 0.15     # [m]
+        self.minVoluteWallThickness                   = 1.0e-3   # [m]
+        self.voluteFOS                                = 1.5      # []
 
-
-        self.inletVoluteCrossSection                  = None     # 'circle' , 'egg' , 'squarc'
-        self.inletVoluteAlignment                     = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
+        self.inletVoluteCrossSection                  = None     # 'circle' , 'squarc'
+        self.inletVoluteAlignment                     = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'  (outward is 'i')
         self.inletVolutePrintability                  = None     # 'off' , 'thick' , 'thin
         self.inletVoluteTilt                          = None     # [deg]
         self.inletGraylocDiameter: float | None       = None     # [in]
         self.inletVoluteAxialOffset                   = None     # [m]
 
-        self.returnVoluteCrossSection                 = None     # 'circle' , 'egg' , 'squarc'
+        self.returnVoluteCrossSection                 = None     # 'circle' , 'squarc'
         self.returnVoluteAlignment                    = None     # 'n' , 's' , 'o' , 'i' , 'no' , 'ni' , 'so' , 'si' , 'c'
         self.returnVolutePrintability                 = None     # 'off' , 'thick' , 'thin
         self.returnVoluteTilt                         = None     # [deg]

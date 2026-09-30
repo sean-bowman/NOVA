@@ -15,6 +15,7 @@ and features taken out of the package that are worth keeping the source of.
 | `sunkenNozzle.py` | The sunken throat converging section, removed from the package |
 | `flutedChannels.py` | Spirally fluted cooling channels and their blended correlation, removed from the package |
 | `keepOut.py` | The keep-out envelope behind the chamber, which the sunken throat wraps around, removed from the package |
+| `eggVolute.py` | The egg volute cross section, removed from the package |
 | `stepExport.py` | STEP export of every nozzle component as exact surfaces, described below |
 | `plumeDevelopmentState.md` | Where the plume solver stands, written to be picked up cold |
 | `coolingModelState.md` | Where the film, radiative and extension cooling work stands, and what is open |
@@ -61,6 +62,25 @@ injector face, where the return volute sits, so the package does not build, draw
 checked geometry against it: `packingClearance` had no caller. The module docstring records a
 default-placement defect, a null axial offset landing the envelope on the throat plane, and what
 reinstating it would take.
+
+## Egg volute cross section
+
+`eggVolute.py` holds the egg cross section for a volute scroll: two circular arcs joined by a
+Bezier tip whose control magnitudes follow the shoulder tangents, with `eggPointiness` setting how
+sharp the point is. It was a third `crossSectionType` on `Volute` until it moved here, and the
+package builds circles and squircles.
+
+`EggVolute` subclasses the package `Volute`, so the section runs from here unchanged and any other
+cross section passes through to the package. Its own dispatch predates the two scroll
+topologies and carries neither: an egg is always drawn as a monotone taper over a full turn, so
+`voluteScrollType` does not reach it.
+
+The section solve is the reason it is here. Three of its branches, the ones handed an area rather
+than a hydraulic diameter, test convergence with the inequality reversed, so they exit on the
+first pass and keep an initial guess that uses an area as a length. The branches driven by
+hydraulic diameter converge, by a fixed-step walk of a few micrometres per iteration.
+`crossSectionResolution` is ignored, `scaledBy = 'momentum'` raises, and there is no printability
+support or cross-section tilt. The module docstring lists what reinstating it would take.
 
 ## STEP export
 
