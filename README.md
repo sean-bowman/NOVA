@@ -116,14 +116,6 @@ On Windows, `novaGui.bat` launches it with no console window. Run `python -m nov
 | Analysis    | Sizing, chamber geometry, delivered performance, station thermochemistry, and the regenerative cooling summary when a jacket was built.                                                                                                                |
 | Export      | The output location and the files the last run produced. Double-click a row to open it.                                                                                                                                                                |
 
-![Config tab](docs/images/guiConfigTab.png)
-
-![2D geometry tab](docs/images/guiGeometry2dTab.png)
-
-![3D geometry tab](docs/images/guiGeometry3dTab.png)
-
-![Analysis tab](docs/images/guiAnalysisTab.png)
-
 [novaGui/README.md](novaGui/README.md) covers the run pipeline, the plotting split between Matplotlib and plotly, display scaling and the progress model.
 
 ## Configuration reference
@@ -170,9 +162,9 @@ Grouped by section, matching the order in the config file.
 
 ### Regenerative cooling jacket
 
-Coolant enters through the inlet volute at the aft end of the regen nozzle, runs forward against the exhaust, and leaves through the outlet volute at the injector face; at each end a flare turns the channels off the wall into the volute to allow for variable radial volute placement for wall thickness tailoring. Each scroll is placed on the channel port it meets, since its tongue is drawn barely wider than that port, and the build refuses a scroll that reaches inside the gas-side wall.
+Coolant enters through the inlet volute at the aft end of the regen nozzle, runs forward against the exhaust, and leaves through the outlet volute at the injector face; at each end a flare turns the channels off the wall into the volute to allow for variable radial volute placement for wall thickness tailoring. The scroll area is linear in wrap angle. A `cutwater` scroll runs from the tongue at one end of the wrap to the throat at the other and stops short of a full turn by the angle its tongue wall occupies. A `ring` wraps the full turn, is fed from both directions at once, and puts the tongue half a turn from the throat, so each half serves half the ports and the two ends of the sweep match.
 
-The scroll area is linear in wrap angle, because the flow a station carries is linear in the ports it has passed. The two topologies differ in where the tongue sits. A `cutwater` scroll runs from the tongue at one end of the wrap to the throat at the other and stops short of a full turn by the angle its tongue wall occupies. A `ring` wraps the full turn, is fed from both directions at once, and puts the tongue half a turn from the throat, so each half serves half the ports and the two ends of the sweep match. Holding the velocity constant around the wrap then fixes the throat at the tongue area times the ports one run serves, which is Huzel and Huang eq. 6-69, so the throat follows from the channel port and the port count rather than from the fitting. The build reports the scroll velocity, its velocity head and that head against the jacket pressure drop, which is what sets how evenly the channels are fed, and refuses a throat wider than `maxVoluteBore`. Theory, measured comparisons and the open items are in [docs/reports/voluteAudit_2026-09-29.md](docs/reports/voluteAudit_2026-09-29.md). The gas side is Bartz, by default with a single correlation constant along the whole wall. Measured constants vary with station: on a LOX/GH2 chamber at 150 to 1000 psia they run 0.0257 in the barrel against 0.0148 at the throat (NASA TN D-2832), so that default is about right over the barrel and 20 to 40 percent high at the throat, which buys wall margin and charges pressure drop for it. Setting `gasSideAxialModel` to `measured` takes the axial shape from those constants instead, normalized on the barrel so Bartz keeps the absolute level: unity over the barrel and 0.59 at the throat. The correlation and both options live in [src/NOVA/gasSideHeatTransfer.py](src/NOVA/gasSideHeatTransfer.py), which the ablative liner and the radiative extension read as well, and the sources are in [docs/references_gasSideHeatTransfer_2026-09-22.md](docs/references_gasSideHeatTransfer_2026-09-22.md).
+Gas-side heat transfer is Bartz by default with a single correlation constant along the whole wall. Measured constants vary with station: on a LOX/GH2 chamber at 150 to 1000 psia they run 0.0257 in the barrel against 0.0148 at the throat (NASA TN D-2832), so that default is about right over the barrel and 20 to 40 percent high at the throat, which buys wall margin and charges pressure drop for it. Setting `gasSideAxialModel` to `measured` takes the axial shape from those constants instead, normalized on the barrel so Bartz keeps the absolute level: unity over the barrel and 0.59 at the throat. The correlation and both options live in [src/NOVA/gasSideHeatTransfer.py](src/NOVA/gasSideHeatTransfer.py), which the ablative liner and the radiative extension read as well, and the sources are in [docs/references_gasSideHeatTransfer_2026-09-22.md](docs/references_gasSideHeatTransfer_2026-09-22.md).
 
 Three channel families are built, one per run:
 
@@ -184,15 +176,24 @@ Three channel families are built, one per run:
 
 `channelRadius` references both a circle's radius and half a rectangle's depth for consistency in the backend variables. At each station it is converged to be the largest channel that holds the wall at `maxWallTemperature`, within the limits of each family. Spirally fluted channels are kept in [experimental/flutedChannels.py](experimental/flutedChannels.py).
 
-The jacket on `assets/NOVANozzle.json` is sixty circular channels in GRCop-42, with hydrogen coolant at 3.4 kg/s entering at 12 MPa and 30 K, feeding both volutes. `tests/regressionHarness.py` runs that jacket as its `regenCircle` baseline, as 160 rectangular channels for `regenRectangular` and as 40 square helical starts for `regenHelical`; the case table in that file is the record of what each baseline pins. Theory and correlation sources are in [NozzleCooling.md](docs/NozzleCooling.md).
+A channel may not exceed the largest that fits between its neighbors, may not reach past `maxChannelDepth` out from the wall, and may not fall below `minChannelRadius`. Coolant outlet properties are checked against `minCoolantExitPressure` and `minCoolantExitTemperature`.
 
-The coolant side is compared against Carlile and Quentmeyer's high aspect ratio chambers (NASA TM-105679) in [docs/reports/carlileQuentmeyer_2026-09-22.md](docs/reports/carlileQuentmeyer_2026-09-22.md): every measurement falls inside the band NOVA predicts once the unreported coolant state and roughness are bracketed, which makes it a sensitivity-bounded comparison rather than a validation. What a rough wall may do to the coolant-side heat transfer is set by `coolantRoughnessModel`, and the two hardware comparisons bracket it rather than agreeing: Carlile's wall temperatures want more coolant-side heat transfer than a smooth-wall correlation gives, and the hydrogen coefficients of NASA TN D-7207 want less. The default is the bounded middle, Dipprey and Sabersky's measured rough-wall heat transfer.
+The size is arrived at one of two ways, set by `channelSizingMode`. `thermal`: each station converges its own size, at about seven passes of the thermal model per station. `manual` reads the size off `manualChannelProfile` and marches each station once, so the wall temperature, the pressure drop and the coolant exit state come out as results rather than targets.
+
+A profile is a half-extent in meters for a constant channel, or a list of `[key, half-extent]` control points, linear in the key between them and flat outside them. `manualChannelProfileKey` names the key: `areaRatio` is the local area ratio signed negative upstream of the throat, so a 3.2 contraction ratio chamber reads -3.2, the throat is -1 on the converging side and +1 on the diverging side, and no station sits between the two. `jacketFraction` is the meridional distance along the jacket from the injector face, 0 to 1, which is the key a recorded profile is written in because the area ratio holds one value along a constant radius barrel. A station whose requested size will not fit between its neighbors, or falls below the process minimum, stops the run and names the station and the bound; a channel count too high for its throat stops it too, where the search reduces the count instead.
+
+Every run prints the profile it built and writes it to `<name>ChannelProfile.json` beside the exported geometry. A configuration may name that file as its `manualChannelProfile` instead of listing points.
+
+What a rough wall may do to the coolant-side heat transfer is set by `coolantRoughnessModel`: Carlile's wall temperatures want more coolant-side heat transfer than a smooth-wall correlation gives, and the hydrogen coefficients of NASA TN D-7207 want less. The default is the bounded middle, Dipprey and Sabersky's measured rough-wall heat transfer.
 
 | Field                                       | Unit | Meaning                                                                                            |
 | --------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------- |
 | `makeCoolingChannels`                       | --   | Build the jacket and run the heat transfer model                                                   |
 | `material`                                  | --   | Wall alloy; see the material table below                                                            |
 | `channelType`                               | --   | `circle`, `rectangular` or `helical`                                                               |
+| `channelSizingMode`                         | --   | `thermal` converges each station's channel size against `maxWallTemperature`; `manual` reads it off `manualChannelProfile` and marches once |
+| `manualChannelProfile`                      | m    | `manual` only: a half-extent for a constant channel, a list of `[key, half-extent]` control points, or a path to a profile a run recorded |
+| `manualChannelProfileKey`                   | --   | `manual` only: `areaRatio`, signed negative upstream of the throat, or `jacketFraction` from the injector face. Default `areaRatio` |
 | `coolantRoughnessModel`                     | --   | What a rough wall may do to the coolant-side heat transfer: `frictionOnly`, `dippreySabersky` or `fullCredit`. Roughness raises the friction factor and the pressure drop under all three |
 | `channelSurfaceRoughness`                   | m    | Absolute roughness the coolant-side friction factor is built on, default 35 um for a printed channel |
 | `coolantGeometryCorrections`                | --   | Enhances the coolant-side coefficient in the developing length after the inlet and through bends, by the entrance and Ito curvature factors of NASA TN D-7207 |
@@ -203,20 +204,20 @@ The coolant side is compared against Carlile and Quentmeyer's high aspect ratio 
 | `minChannelWidth`                           | m    | Narrowest `rectangular` or `helical` channel the process can build, default 1 mm                  |
 | `channelCornerRadius`                       | m    | Corner radius of a `rectangular` or `helical` section. Unset is a sharp corner                     |
 | `maxChannelAspectRatio`                     | --   | Depth a `rectangular` channel may reach as a multiple of its width, default 8                      |
-| `maxChannelDepth`                           | m    | Depth a `rectangular` or `helical` channel may reach. Unset leaves the other limits to hold it       |
+| `maxChannelDepth`                           | m    | How far any channel may reach out from the wall, a circle's diameter included. Unset leaves a circle bounded only by the room between its neighbors |
 | `channelHelixAngle`                         | deg  | `helical` only: angle to the meridian, 0 to 85                                                     |
 | `channelAspectRatio`                        | --   | `helical` only: depth as a multiple of width, default 1                                            |
 | `numCrossSections`, `numCSPointsChannel` | --   | Cross sections swept along each channel, and points per cross section                              |
-| `maxWallTemperature`                        | K    | Hard cap on hot wall temperature. Leave unset to optimize between the bounds below                 |
-| `maxWallTempUpperBound`, `maxWallTempLowerBound` | K | Bounds for the wall temperature optimization                                                |
-| `nChannelUpperBound`, `nChannelLowerBound` | --   | Bounds for the channel-count search                                                                |
+| `maxWallTemperature`                        | K    | Hot wall temperature the jacket is held to, one value for the whole jacket. Required whenever the jacket is built |
+| `maxWallTempUpperBound`, `maxWallTempLowerBound` | K | Bounds for a wall temperature search. Read by no solver: no such search is implemented |
+| `nChannelUpperBound`, `nChannelLowerBound` | --   | Bounds for a channel-count search. Read by no solver: no such search is implemented |
 | `coolantClass`                              | --   | `fuel` or `oxidizer`: which propellant stream feeds the jacket                                  |
 | `coolant`                                   | --   | REFPROP / CoolProp fluid name                                                                       |
 | `coolantInitialTemperature`                | K    | Coolant temperature entering the jacket                                                             |
 | `coolantInitialPressure`                    | Pa   | Coolant pressure entering the jacket                                                                 |
 | `coolantMassFlow`                           | kg/s | Coolant mass flow through the jacket                                                                |
-| `minCoolantExitPressure`                    | Pa   | Lower limit on coolant pressure at the jacket exit                                                  |
-| `minCoolantExitTemperature`                 | K    | Lower limit on coolant temperature at the jacket exit                                              |
+| `minCoolantExitPressure`                    | Pa   | Lower limit on coolant pressure at the jacket exit. Checked once the jacket is solved; unset is no limit |
+| `minCoolantExitTemperature`                 | K    | Lower limit on coolant temperature at the jacket exit. Checked once the jacket is solved; unset is no limit |
 
 The `material` field is a wall alloy name resolved by `src/NOVA/materials.py`: `GRCop-42`, `CuCrZr`, `OFHC Copper`, `NARloy-Z`, `AlSi10Mg`, `Al 6061-T6`, `Inconel 718`, `Inconel 625`, `316L`, `Ti-6Al-4V`, or a recognized free-text alias. The heat transfer model samples that module's temperature-dependent thermal conductivity curve for whichever alloy is named; an unrecognized name falls back to GRCop-42 with a warning. Conductivity curves are validated against their cited sources in `tests/testMaterials.py`.
 
@@ -305,7 +306,7 @@ Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML c
 
 A run's own `export` writes **STL only**. A STEP writer exists in [experimental/stepExport.py](experimental/stepExport.py): it writes each component as the exact surface it is, a surface of revolution for the walls and a B-spline surface for the swept channels and volutes, rather than as triangles. It is not yet wired into `export`, and it does not perform booleans, so a run does not produce an assembled STEP body; see [docs/reports/stepExport_2026-09-20.md](docs/reports/stepExport_2026-09-20.md) for what it covers and what remains. A `rectangular` or `helical` channel needs `channelCornerRadius` above zero for it: the B-spline fit through a sharp corner rings.
 
-Generated `*Outputs/` directories are gitignored. The curated figures above are kept in [featureShowcase/](featureShowcase/); `docs/images/` holds only the GUI screenshots below.
+Generated `*Outputs/` directories are gitignored. The curated figures above are kept in [featureShowcase/](featureShowcase/), which is also where the documentation draws its figures from.
 
 ## Worked example: LOX/LH2 upper-stage nozzle
 
@@ -434,7 +435,8 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 | `radiativeCooling.py`                                     | Gas-to-wall radiation as an exact coefficient on its own potential, and the damped Newton solve for the wall temperature of an uncooled extension                                                                                                              |
 | `channelSections.py`                                       | What the thermal model reads about each channel family: flow area, perimeters, hydraulic diameter, the rib as a fin, the rectangular width and the helical spacing and loxodrome |
 | `channelGeometry.py`                                       | Cooling channel cross sections: the circular profile on a transport frame, and the rounded rectangle on frames built from the wall normal |
-| `channelSizing.py`                                         | The dynamic channel size solve: converging each station so the hot wall runs at the temperature it is allowed to |
+| `channelSizing.py`                                         | The channel size solve: converging each station so the hot wall runs at the temperature it is allowed to, or building it at the size a manual profile fixes |
+| `channelProfile.py`                                        | A manually fixed channel size distribution: the area ratio and jacket fraction keys, the reader, the interpolation and the profile a run records |
 | `regenChannels.py`                                         | The jacket build: the fillet and flare to each volute, the channel centerline and its wrap, the swept channels and the wall meshes |
 | `nozzleVolutes.py`                                        | The inlet and outlet scrolls, their walls sized against the coolant state, and their print supports                                                                                                                                                            |
 | `chamber.py`                                              | The combustion chamber and the converging section                                                                                                                                                                                                              |
@@ -490,12 +492,20 @@ Baselines are written to `tests/baselines/` and are carried in the repository, s
 - [arcSpline Overshoot at a Corner](docs/reports/arcSplineOvershoot_2026-09-08.md) -- why the arc-length resampler used to invent geometry outside its own input, what replaced it, and how far the contour moved.
 - [Contour Verification and Assessment](docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](docs/reports/nozzleContourEffort_2026-09-06.html).
 - [Nozzle Cooling](docs/NozzleCooling.md) -- regenerative cooling architecture and a worked example.
+- [Regen Cooling Architectures](docs/regenCoolingArchitectures.md) -- cooling circuit topology: pass count, flow direction, channel count along the nozzle, independent and multi-fluid circuits, what reference practice does, and the staged path for adding each.
+- [Regen Cooling Topology References](docs/references_regenCoolingTopologies_2026-10-02.md) -- annotated sources behind that document, from SP-8087 to current channel wall nozzle manufacturing.
 - [CEA Interface](docs/ceaInterface.md) -- combustion thermochemistry, result keys and units, propellant naming, thread safety.
 - [Plume Development State](experimental/plumeDevelopmentState.md) -- where the plume solver stands: what is validated, what is open, and the findings behind both.
 - [Internal Shock State](experimental/internalShockState.md) -- how the shock inside an optimized contour is detected and captured, where the weak-shock treatment stops being defensible, and what a rotational characteristics solve would cost.
 - [Plume Structure References](docs/references_plumeStructure_2026-09-04.md) -- annotated sources behind the plume correlations in `Nozzle.py`, and an explicit statement of what the correlations do and do not support.
 - [Nozzle Contour References](docs/references_nozzleContour_2026-09-06.md) -- annotated sources behind the contour generator, and what they do and do not establish about it.
 - [Thrust-Optimized Contour References](docs/references_thrustOptimizedContours_2026-09-13.md) -- annotated sources behind the optimized families: the direct-optimization method, the perfect-bell data set it is checked against, and what neither of them publishes.
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 ---
 

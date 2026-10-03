@@ -682,7 +682,7 @@ Here the only valid solution is the <span style="color:green">green</span> point
 
 *[Figure: Axisymmetric Method of Characteristics Wall Point Query]*
 
-![Truncated ideal nozzle contour](./contourImages/contourSegmentsVisualization.png)
+![Truncated ideal nozzle contour](../featureShowcase/contour.png)
 
 *Generated truncated ideal contour, split into the regeneratively cooled portion and the uncooled nozzle extension. LOX/LH2 100 [kN] upper stage example case*
 
@@ -736,7 +736,7 @@ $$
 
 This part covers the design of the regenerative cooling architecture applied to the contour from Part I and the combustion chamber upstream of it. Together they are treated here as the hot wall: channel centerlines are parallel offsets of it, and the exhaust-side heat transfer coefficient is evaluated using the local Mach number and area ratio along it.
 
-![Near-wall exhaust properties](./contourImages/nearWallProperties.png)
+![Near-wall exhaust properties](../featureShowcase/nearWallState.png)
 
 *Near-wall exhaust velocity, Mach number, static temperature, and static pressure along the nozzle
 axis. These distributions are the exhaust-side boundary condition for the heat transfer model in
@@ -978,10 +978,27 @@ $$
 r = {R \sin(\pi/N) \over 1 - \sin(\pi/N)} - {t_{infill} \over 2}, \qquad R = r_{wall} + t_{wall} - t_{infill}
 $$
 
+- **Any family:** the depth may not pass `maxChannelDepth` where one is given. A section's depth is twice its half-extent in every family, so a circle's depth is its diameter, and this is the only thing bounding a circle from above apart from the room between its neighbors.
 - **Rectangular:** the depth may reach `maxChannelAspectRatio` times the width, and `maxChannelDepth` where one is given.
 - **Helical:** the width may reach the pass spacing less the minimum rib, and the depth follows it through `channelAspectRatio`, again within `maxChannelDepth`.
 
 Below, every family is held to the smallest the process can build: `minChannelRadius` for a circle or a rectangle's half-depth, `minChannelWidth` for a helix. Before the march starts, the throat is checked: if the channel that fits there is smaller than the minimum, `nChannel` is reduced until it is not.
+
+The two kinds of bound are not treated alike. A station held at an upper bound leaves its wall cooler than the limit, which is a jacket with margin to spare, so the search accepts it and reports the temperature it came out at. A station held at the lower bound with its wall still over the limit has nothing left to try, because only a smaller channel cools harder, so it stops the run and names the station, the wall it reached, and what would fix it.
+
+Leaving `maxChannelDepth` unset has a consequence worth knowing. Both the objective and the wall temperature constraint improve as a channel grows: a larger channel drops less pressure and the wall only runs hotter, which is free wherever the wall is nowhere near its limit. So where the heat flux is low the search grows the channel until it fills its pitch. On the shipped nozzle that puts 45 of 60 stations on the packing bound, with the aft channels 33 mm across carrying hydrogen at about 0.9 m/s. The depth limit is what makes the problem bounded from above.
+
+What the coolant is worth when it leaves is a separate question from the wall, and it is asked separately. `minCoolantExitPressure` and `minCoolantExitTemperature` are checked once the jacket is solved, because a jacket can hold every wall at its limit and still arrive at the injector with nothing left to inject with. Each is ignored where the configuration set no limit.
+
+#### Fixing the size by hand
+
+The search is the honest way to size a jacket and it is not cheap: seven or so passes of the thermal model per station, where marching a known geometry takes one. That is a poor trade when the jacket is already decided and something else is being changed, so `channelSizingMode` offers the other half of the loop. Set it to `manual` and the half-extent comes from `manualChannelProfile` instead, one pass per station, and the wall temperature, the pressure drop and the coolant exit state come out as results. Nothing holds the wall anywhere: the run prints the hottest station and its margin against `maxWallTemperature` and leaves the judgement to the reader.
+
+A profile is a half-extent in meters for a constant channel, or a list of `[key, half-extent]` control points, linear in the key between points and flat at the nearest point outside them. `manualChannelProfileKey` picks the coordinate: `areaRatio` is the local area ratio signed negative upstream of the throat, so the throat is -1 on the converging side and +1 on the diverging side and nothing sits between them, and `jacketFraction` is the meridional distance from the injector face as a fraction of the whole jacket. The first is the key to write a profile in by hand, anchored to the throat rather than to the length of one particular jacket; the second is the key a recorded profile is written in, because a constant radius barrel holds a single area ratio over its whole length and a profile keyed on area ratio cannot vary along it.
+
+The bounds are the same ones the search respects, and here they are hard. A station whose requested size will not fit between its neighbors, or falls below the smallest the process can build, stops the run and names the station, its axial position, its key, the size asked for and the bound. A channel count too high for its throat stops it too. The geometry would otherwise shrink the channel to what fits, which is the right answer for a search and the wrong one for a profile.
+
+Every run, in either mode, records the profile it built as the configuration entries that replay it: printed at the end of a search, and written to `<name>ChannelProfile.json` beside the exported geometry. A configuration may name that file as its `manualChannelProfile` rather than listing points. Replayed at the station count it was recorded at, it reproduces the jacket it came from bit for bit; at a different `numCrossSections` it carries the distribution rather than the numbers, since the key is a fraction of the jacket.
 
 ### Wrapping the channel
 
@@ -1020,9 +1037,9 @@ with $w$ the width across the wall, $d$ the depth outward from it, and $r_c$ the
 
 With one channel defined, the jacket is that channel patterned about the nozzle axis `nChannel` times.
 
-![Jacket](./regenDesignImages/jacket.png)
+![One channel against the cold wall](../featureShowcase/jacket.png)
 
-*A completed regen jacket*
+*One channel and its two neighbors swept against the cold wall, with the centerline and every cross-section called out on the middle one. The jacket is this channel patterned about the axis `nChannel` times. LOX/LH2 100 [kN] upper stage example case*
 
 ### Modeling the performance
 
@@ -1070,9 +1087,9 @@ The coolant then carries the heat it picked up to the next station, added to its
 
 The heat transfer model outputs plots of the coolant properties, both heat transfer coefficients and the hot wall temperature along the nozzle axis. These are a first pass: a design worth building should still go through three-dimensional conduction and CFD.
 
-![Heat Transfer Model Outputs](./regenDesignImages/heatTransferModel.png)
+![Heat Transfer Model Outputs](../featureShowcase/modelComparisonsJacket.png)
 
-*Sample heat transfer model outputs*
+*The reference jacket solved under each selectable model: hot wall temperature against its limit, coolant temperature, and the channel size the sizing march picked. Sixty circular channels, LOX/LH2 100 [kN] upper stage example case*
 
 ### How far can we trust it?
 
@@ -1138,15 +1155,15 @@ Equilibrium chamber properties, compared against CEARun for the same case:
 
 The characteristic mesh runs sonic at the throat and expands to roughly Mach 5 at the exit plane.
 
-![Mach number contours](./contourImages/machContours.png)
+![Mach number contours](../featureShowcase/fieldMach.png)
 
 *Mach number contours over the generated Mach net*
 
-![Static pressure contours](./contourImages/pressureContours.png)
+![Static pressure contours](../featureShowcase/fieldPressure.png)
 
 *Static pressure contours over the same mesh*
 
-![Static temperature contours](./contourImages/temperatureContours.png)
+![Static temperature contours](../featureShowcase/fieldTemperature.png)
 
 *Static temperature contours over the same mesh*
 

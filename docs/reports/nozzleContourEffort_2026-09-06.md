@@ -127,7 +127,7 @@ The wall is now cut where it reaches the requested area ratio, and the design ex
 | 40 | 0.70 | 40.0000 | 0.7000 | 0.0000 % |
 | 40 | 0.90 | 40.0000 | 0.9000 | 0.0000 % |
 
-![Contour verification](../../../featureShowcase/contourVerification.png)
+![Contour verification](../../featureShowcase/contourVerification.png)
 
 *The worked case against its references. The contour against the 15 degree cone of its own area ratio and against a Rao bell at the same design point; the delivered area ratio against the requested; the near-wall Mach against the one-dimensional relation, with the pressure and Mach arrays now consistent to zero; and the exit plane, which is the subject of the pressure-matching finding below.*
 
@@ -153,13 +153,13 @@ The disagreement grows as the bell shortens, from a quarter of a degree at 90 pe
 
 This is a comparison, not a validation. The reference is a different contour family and the chart is a digitization of a figure. Neither the sign nor the size of the difference is evidence that either contour is wrong.
 
-![Contour validation sweeps](../../../featureShowcase/contourValidation.png)
+![Contour validation sweeps](../../featureShowcase/contourValidation.png)
 
 *Delivered against requested across seven design points; wall angles against the Rao chart over area ratio and over percent bell; grid convergence; what an exit pressure residual could be built on; and the thrust coefficient against closed-form theory with and without the divergence factor at the delivered exit angle.*
 
 ### Overlaid on reference contours
 
-![Reference overlays](../../../featureShowcase/referenceOverlays.png)
+![Reference overlays](../../featureShowcase/referenceOverlays.png)
 
 *NOVA contours drawn on top of their references. Only the RS-25 publishes enough dimensional data to overlay, and its three quoted numbers disagree with each other, so both readings of the envelope are drawn. The Rao bell in the center follows exactly from its construction and is the only like-for-like shape comparison available. The right-hand panel is reconstructed: no wall coordinates are published for the F-1, Vulcain 2 or RL10, and the dashed curves there are Rao bells at each engine's published area ratio and an assumed length. Nothing in that panel is a dimensional claim about any of those engines.*
 
@@ -268,7 +268,7 @@ Every place a one-dimensional relation stands in for the solved field.
 
 The largest by far is the ratio of specific heats. A perfect-gas mesh at a single gamma is the aerodynamic core of the standard method with the chemistry removed, and the standard method uses equilibrium properties.
 
-![One dimensional against the mesh](../../../featureShowcase/oneDimensionalAgainstMesh.png)
+![One dimensional against the mesh](../../featureShowcase/oneDimensionalAgainstMesh.png)
 
 *What the characteristics mesh buys. The near-wall Mach number departs from the one-dimensional value at the same area by 42 percent just past the throat, where the wall turns before the core does, crosses over near 100 mm and settles about 5 percent below it through the rest of the nozzle. A design criterion applied at the wall is therefore not the same criterion applied to the flow, which is the whole of the pressure-matching finding in one picture.*
 
@@ -280,15 +280,15 @@ The chamber and converging section are subsonic. There is no characteristics mes
 
 Drawing that as a field makes it comparable with the solved half and makes the difference between them visible, which is the point. Each figure states on its face that it is one-dimensional, because they sit beside fields that are not.
 
-![Chamber field, Mach](../../../featureShowcase/chamberFieldMach.png)
+![Chamber field, Mach](../../featureShowcase/chamberFieldMach.png)
 
 *Mach number from the injector face to the throat plane. Flat across every section by construction: the radial structure of a real converging flow, and the curvature of its sonic line, are absent because nothing here is solved.*
 
-![Stitched field, Mach](../../../featureShowcase/stitchedFieldMach.png)
+![Stitched field, Mach](../../featureShowcase/stitchedFieldMach.png)
 
 *The same quantity from chamber to exit on one color scale, with the seam marked. The contrast between the two halves is the content: flat contours upstream where the answer is one number per station, and radial structure downstream where there is a state at every node.*
 
-![Stitched field, pressure](../../../featureShowcase/stitchedFieldPressure.png)
+![Stitched field, pressure](../../featureShowcase/stitchedFieldPressure.png)
 
 *Static pressure over the same domain, on a logarithmic scale because it falls three orders of magnitude. The radial gradient in the diverging section is the exit-plane non-uniformity that makes a wall-based pressure residual invalid, shown as a field rather than as a table.*
 
