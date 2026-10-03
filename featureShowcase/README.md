@@ -16,6 +16,7 @@ python featureShowcase/buildShowcase.py    # geometry, flowfield and material fi
 python featureShowcase/buildPlumeCases.py  # one plume figure per operating regime
 python featureShowcase/buildMocPlume.py    # experimental MOC plume interior
 python featureShowcase/buildPlumeMarch.py # the plume march, continued from the nozzle solution
+python featureShowcase/buildPlumeSweep.py # the same plume across its usable back pressures, animated
 python featureShowcase/verifyContour.py   # contour against its independent references
 python featureShowcase/buildContourValidation.py  # sweeps against the Rao chart, about 16 minutes
 python featureShowcase/buildContourFamilies.py    # the three families compared, about 40 minutes
@@ -54,6 +55,7 @@ python featureShowcase/buildReport.py             # renders the effort report to
 | `plumeExitHandover.png` | The exit plane the march starts from, against the source flow it replaces |
 | `plumeOperatingRange.png` | Overexpanded through underexpanded, with the cost of the isentropic lip |
 | `plumeOperatingEnvelope.png` | How far the march carries, over exit divergence and pressure ratio |
+| `plumeSweep.gif` | The nozzle and its plume over lip pressure ratios 0.75 to 1.8, shaded by Mach number, each frame carrying its own mass continuity error |
 | `mocPlumeInterior_*.png` | EXPERIMENTAL method-of-characteristics plume interior, shaded by Mach |
 | `mocShockCells_*.png` | EXPERIMENTAL shock cell structure of a mildly off-design jet |
 | `materialCurves.png` | Wall property curves behind the material selector, solid where a source measured it and dotted where a value is held flat |
@@ -174,10 +176,10 @@ per cent long. NASA TR R-6 separates the primary wavelength from the secondary a
 two differ, which shows here as well: over the first few cells the period runs about five per cent
 under Prandtl and settles as the march goes on.
 
-**A caution about the contoured case.** `plumeContinuousField.png` carries 2103 plume nodes on the
-current contour and still reports no mass conservation, because no line it builds spans the jet
-from the axis to the free boundary and there is nothing to measure a flux across. It is a near-lip
-field, not a plume.
+**A caution about the contoured case.** `plumeContinuousField.png` carries 1323 plume nodes over 33
+lines on the current contour and still reports no mass conservation, because no line it builds
+spans the jet from the axis to the free boundary and there is nothing to measure a flux across. It
+is a near-lip field, not a plume.
 
 It used to be worse. On the earlier contour the march reached sixteen lines, and before that a
 version of the figure showed a full plume with a 31 per cent mass error. Both of those were

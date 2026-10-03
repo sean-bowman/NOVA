@@ -387,13 +387,17 @@ NOVA contours drawn on the RS-25 envelope, on Rao bells, and on reconstructed en
 
 ### Plume
 
+The nozzle solution carried past the lip by the station marcher, swept across the back pressures the march covers: lip pressure ratios of 0.75 to 1.8, shaded by Mach number. Below 0.75 the march refuses; above about 1.8 the free boundary starts collapsing onto the axis. Each frame is drawn to six lip radii and labelled with what that reach costs in mass continuity, a few tenths of a percent at two radii and tens of a percent at six.
+
+![Plume across its usable back pressures](featureShowcase/plumeSweep.gif)
+
 ![Operating range](featureShowcase/plumeOperatingRange.png)
 
 Overexpanded through underexpanded, with the cost of the isentropic lip. The four `plume_*.png` figures show one regime each at equal aspect.
 
 ![Shock cell train](featureShowcase/plumeCellTrain.png)
 
-The shock cell train at a parallel exit, validated against Prandtl's cell length.
+The shock cell train at a parallel exit: 14 cells resolved, a period of 7.565 lip radii against Prandtl's 7.595, and 0.064 percent mass drift over the train.
 
 ### Materials
 
