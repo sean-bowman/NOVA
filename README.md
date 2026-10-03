@@ -391,13 +391,7 @@ The nozzle solution carried past the lip by the station marcher, swept across th
 
 ![Plume across its usable back pressures](featureShowcase/plumeSweep.gif)
 
-![Operating range](featureShowcase/plumeOperatingRange.png)
-
-Overexpanded through underexpanded, with the cost of the isentropic lip. The four `plume_*.png` figures show one regime each at equal aspect.
-
-![Shock cell train](featureShowcase/plumeCellTrain.png)
-
-The shock cell train at a parallel exit: 14 cells resolved, a period of 7.565 lip radii against Prandtl's 7.595, and 0.064 percent mass drift over the train.
+The shock cell train against Prandtl, the operating range and the four regime figures are in [featureShowcase/](featureShowcase/).
 
 ### Materials
 
