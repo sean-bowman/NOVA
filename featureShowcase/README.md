@@ -17,6 +17,7 @@ python featureShowcase/buildPlumeCases.py  # one plume figure per operating regi
 python featureShowcase/buildMocPlume.py    # experimental MOC plume interior
 python featureShowcase/buildPlumeMarch.py # the plume march, continued from the nozzle solution
 python featureShowcase/buildPlumeSweep.py # the same plume across its usable back pressures, animated
+python featureShowcase/buildPlumeThrottle.py # the plume across the engine's throttle range at one altitude
 python featureShowcase/verifyContour.py   # contour against its independent references
 python featureShowcase/buildContourValidation.py  # sweeps against the Rao chart, about 16 minutes
 python featureShowcase/buildContourFamilies.py    # the three families compared, about 40 minutes
@@ -56,6 +57,7 @@ python featureShowcase/buildReport.py             # renders the effort report to
 | `plumeOperatingRange.png` | Overexpanded through underexpanded, with the cost of the isentropic lip |
 | `plumeOperatingEnvelope.png` | How far the march carries, over exit divergence and pressure ratio |
 | `plumeSweep.gif` | The nozzle and its plume over lip pressure ratios 0.75 to 1.8, shaded by Mach number, each frame carrying its own mass continuity error |
+| `plumeThrottle.gif` | The same nozzle at a fixed altitude over its throttle range, down to the power level where it separates, with thrust and one-dimensional ideal specific impulse alongside |
 | `mocPlumeInterior_*.png` | EXPERIMENTAL method-of-characteristics plume interior, shaded by Mach |
 | `mocShockCells_*.png` | EXPERIMENTAL shock cell structure of a mildly off-design jet |
 | `materialCurves.png` | Wall property curves behind the material selector, solid where a source measured it and dotted where a value is held flat |

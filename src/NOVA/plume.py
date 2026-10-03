@@ -31,12 +31,14 @@ Author: Sean Bowman
 '''
 
 import bisect
+import copy
 import math
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
+from .errors import InvalidInputError
 from .gasDynamics import prandtlMeyerAngle, machFromPressureRatio
 
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -2323,6 +2325,79 @@ class PlumeContour:
     rNozzleWall:                     Any = None
     targetExitPressure:              Any = None
     xNozzleWall:                     Any = None
+
+# Every absolute pressure a PlumeContour carries. A power level scales all of them together or
+# none of them: scaling one leaves the contour describing two different engines at once.
+contourPressureFields = ('chamberPressure', 'nozzleNearWallPressure', 'targetExitPressure')
+
+def throttledContour(contour, throttleFraction: float):
+
+    '''
+
+    The same nozzle at a different power level.
+
+    Throttling a fixed-geometry engine scales the pressure field and leaves the geometry and the
+    Mach field alone: the area ratio sets the exit Mach number, and at a frozen ratio of specific
+    heats every static pressure in the nozzle keeps its ratio to the chamber. So a power level is
+    a multiplier on `contourPressureFields` and nothing else.
+
+    **Scaling only `chamberPressure` is the trap this function exists to close.**
+    `solvePlumeStructure` takes its exit pressure from `targetExitPressure` or from
+    `nozzleNearWallPressure`, neither of which is the chamber pressure, while it takes its nozzle
+    pressure ratio from the chamber directly. A contour with one scaled and the others not reports
+    a separation margin from the rated engine and a Mach disk from the throttled one. At a fixed
+    ambient the separation check would then never move at all, and the march would return an
+    attached plume for a nozzle that is separated.
+
+    `ceaOutput` is left alone deliberately. The plume path reads one number from it, `exitGamma`,
+    which is dimensionless and does not move at a frozen gas state. A model that re-runs the
+    thermochemistry per power level has to replace that object rather than scale it.
+
+    The returned contour carries no `nozzlePlumeStructure`. The one on the input was solved at the
+    input's pressures and would be silently reused by a field solve at a matching ambient.
+
+    Parameters:
+    -----------
+    contour : PlumeContour
+        The nozzle at its rated power level.
+    throttleFraction : float
+        Chamber pressure as a fraction of its rated value. Values above 1 are allowed: engines are
+        rated below the power they can reach, and CECE ran to 104 percent.
+
+    Returns:
+    --------
+    PlumeContour
+        A new contour. The input is not modified.
+
+    Raises:
+    -------
+    InvalidInputError
+        If the fraction is not a positive, finite number.
+
+    '''
+
+    fraction = float(throttleFraction)
+    if not math.isfinite(fraction) or fraction <= 0.0:
+        raise InvalidInputError(
+            f'A throttle fraction has to be a positive, finite number, not {throttleFraction!r}. '
+            f'It is the chamber pressure as a fraction of its rated value, so 0.2 is twenty '
+            f'percent power and 1.0 is rated power.',
+            parameterName = 'throttleFraction', value = throttleFraction,
+            validRange = 'greater than 0')
+
+    # A shallow copy rather than dataclasses.replace, because the field solve is duck typed on
+    # the contour and is exercised against stand-ins that are not PlumeContour. Nothing is
+    # mutated in place: each scaled pressure is a new object assigned onto the copy.
+    throttled = copy.copy(contour)
+    for name in contourPressureFields:
+        value = getattr(contour, name, None)
+        if value is None:
+            continue
+        setattr(throttled, name, np.asarray(value, dtype = float)*fraction
+                                 if np.ndim(value) else float(value)*fraction)
+    throttled.nozzlePlumeStructure = None
+
+    return throttled
 
 def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = None,
                    numBoundaryPoints: int = 400):

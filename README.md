@@ -391,6 +391,12 @@ The nozzle solution carried past the lip by the station marcher, swept across th
 
 ![Plume across its usable back pressures](featureShowcase/plumeSweep.gif)
 
+The same nozzle at a fixed altitude, with the engine as the variable instead. Power level walks down from rated in 5 percent steps against an ambient of 7.00 kPa, the pressure at which rated power sits at the top of the march's envelope, and the sweep stops where the nozzle separates. Thrust and one-dimensional ideal specific impulse run alongside.
+
+![Plume across the engine's throttle range](featureShowcase/plumeThrottle.gif)
+
+At this altitude the engine throttles 5:1 before its own nozzle separates at 20 percent power, so the nozzle binds rather than the combustion side: CECE demonstrated 17.6:1 on an RL10 derivative of the same propellants and cycle. [Throttled Plume Model](docs/plumeThrottleModel.md) covers what the model does and does not represent, including why a throttle sweep is a sequence of steady solutions.
+
 The shock cell train against Prandtl, the operating range and the four regime figures are in [featureShowcase/](featureShowcase/).
 
 ### Materials
@@ -496,6 +502,8 @@ Baselines are written to `tests/baselines/` and are carried in the repository, s
 - [Plume Development State](experimental/plumeDevelopmentState.md) -- where the plume solver stands: what is validated, what is open, and the findings behind both.
 - [Internal Shock State](experimental/internalShockState.md) -- how the shock inside an optimized contour is detected and captured, where the weak-shock treatment stops being defensible, and what a rotational characteristics solve would cost.
 - [Plume Structure References](docs/references_plumeStructure_2026-09-04.md) -- annotated sources behind the plume correlations in `Nozzle.py`, and an explicit statement of what the correlations do and do not support.
+- [Throttled Plume Model](docs/plumeThrottleModel.md) -- a plume driven by engine power level at fixed ambient: what is new physics in that change, the throttle range the reference engine has before its nozzle separates, and the staged path to building it.
+- [Throttling and Separation References](docs/references_nozzleThrottling_2026-10-03.md) -- annotated sources on how far engines throttle, what limits them, and where an overexpanded nozzle separates.
 - [Nozzle Contour References](docs/references_nozzleContour_2026-09-06.md) -- annotated sources behind the contour generator, and what they do and do not establish about it.
 - [Thrust-Optimized Contour References](docs/references_thrustOptimizedContours_2026-09-13.md) -- annotated sources behind the optimized families: the direct-optimization method, the perfect-bell data set it is checked against, and what neither of them publishes.
 

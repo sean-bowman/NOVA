@@ -425,3 +425,122 @@ def testABoundaryBelowMachOneIsRefusedBeforeTheShockCheck():
     march = solveStationMarch(flow, station, 4.0e6, maxLength = 1.0)
     assert march['stop'] == 'boundaryNotSupersonic'
     assert len(march['stations']) == 1
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Power level: the same nozzle solved at a fraction of rated chamber pressure -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testThrottlingScalesEveryPressureAndNothingElse():
+    '''
+    A fixed-geometry nozzle at a lower power level is the same geometry and the same Mach field
+    at a lower pressure. Scaling a subset of the pressures is the defect this function exists to
+    prevent, so every one of them is checked rather than just the chamber.
+    '''
+    from NOVA.plume import contourPressureFields, throttledContour
+
+    contour = _marchable(20000.0)
+    contour.nozzleNearWallPressure = np.array([80000.0, 60000.0, 40000.0])
+    throttled = throttledContour(contour, 0.25)
+
+    for name in contourPressureFields:
+        rated = np.asarray(getattr(contour, name), dtype = float)
+        assert np.allclose(np.asarray(getattr(throttled, name), dtype = float), 0.25*rated)
+
+    assert throttled.exitMachNumber == contour.exitMachNumber
+    assert np.array_equal(throttled.rNozzleWall, contour.rNozzleWall)
+    assert np.array_equal(throttled.allMachNumbers[0], contour.allMachNumbers[0])
+
+def testThrottlingLeavesTheRatedContourAlone():
+    '''The caller keeps its own nozzle: a sweep builds one contour per power level from one rated
+    contour, and the rated one has to survive the sweep.'''
+    from NOVA.plume import throttledContour
+
+    contour = _marchable(20000.0)
+    contour.nozzleNearWallPressure = np.array([80000.0, 40000.0])
+    throttledContour(contour, 0.1)
+
+    assert contour.chamberPressure == 4.0e6
+    assert contour.targetExitPressure == 40000.0
+    assert np.array_equal(contour.nozzleNearWallPressure, np.array([80000.0, 40000.0]))
+
+def testThrottlingClearsAStructureSolvedAtAnotherPowerLevel():
+    '''
+    `solveStationField` reuses a structure already on the contour when its ambient matches. A
+    structure solved at rated power carries the rated exit pressure, so carrying it onto a
+    throttled contour would report the rated separation margin for a throttled engine.
+    '''
+    from NOVA.plume import throttledContour
+
+    contour = _refusalContour(3.0, 1.5, 0.0, mesh = True)
+    assert contour.nozzlePlumeStructure is not None
+    assert throttledContour(contour, 0.5).nozzlePlumeStructure is None
+
+@pytest.mark.parametrize('fraction', [0.0, -0.5, float('nan'), float('inf')])
+def testAThrottleFractionHasToBeAPositiveNumber(fraction):
+    '''Zero power is not a plume, and a NaN fraction would scale every pressure to NaN and march
+    on silently.'''
+    from NOVA.errors import InvalidInputError
+    from NOVA.plume import throttledContour
+
+    with pytest.raises(InvalidInputError):
+        throttledContour(_marchable(20000.0), fraction)
+
+def testPowerAboveRatedIsAllowed():
+    '''Engines are rated below what they can reach; CECE ran to 104 percent.'''
+    from NOVA.plume import throttledContour
+
+    assert throttledContour(_marchable(20000.0), 1.04).chamberPressure == pytest.approx(4.16e6)
+
+def testTheStructureSeesTheThrottledEngine():
+    '''
+    The separation check reads `exitPressureRatio`, which is the exit pressure over the ambient.
+    Throttling to a fraction at a fixed ambient has to move it by that fraction. Before
+    `throttledContour` existed, scaling the chamber alone left this ratio exactly where it was,
+    so a fixed-ambient sweep could never trip the separation gate at any power level.
+    '''
+    from NOVA.plume import solvePlumeStructure, throttledContour
+
+    contour = _marchable(20000.0)
+    rated = solvePlumeStructure(contour, ambientPressure = 20000.0)
+    quarter = solvePlumeStructure(throttledContour(contour, 0.25), ambientPressure = 20000.0)
+
+    assert quarter.exitPressureRatio == pytest.approx(0.25*rated.exitPressureRatio, rel = 1e-12)
+    assert quarter.nozzlePressureRatio == pytest.approx(0.25*rated.nozzlePressureRatio, rel = 1e-12)
+
+def testThrottlingDownEventuallySeparatesTheNozzle():
+    '''
+    At a fixed ambient, throttling walks the nozzle from underexpanded to separated. The refusal
+    is the product of the model here: it is where a throttle sweep stops, and it has to name the
+    criterion rather than fail quietly.
+    '''
+    from NOVA.plume import separationPressureRatio, solvePlumeStructure, throttledContour
+
+    contour = _marchable(20000.0)
+    rated = solvePlumeStructure(contour, ambientPressure = 20000.0).exitPressureRatio
+    separating = 0.5*separationPressureRatio/rated
+
+    result = solveStationField(throttledContour(contour, separating), ambientPressure = 20000.0)
+
+    assert not result.solved
+    assert 'Summerfield' in ' '.join(result.notes)
+
+def testTheFieldDependsOnThePressureRatioAndNothingElse():
+    '''
+    The march carries one stagnation pressure and its relations are homogeneous in pressure, so
+    halving the chamber and the ambient together cannot move the answer. This is why a throttle
+    sweep at a frozen gas state is the ambient sweep relabelled, and it is the reason the model
+    earns its keep from the separation limit rather than from the field.
+    '''
+    from NOVA.plume import throttledContour
+
+    rated = solveStationField(_marchable(20000.0), ambientPressure = 20000.0, reach = 1.0)
+    half = solveStationField(throttledContour(_marchable(20000.0), 0.5),
+                             ambientPressure = 10000.0, reach = 1.0)
+    if not (rated.solved and half.solved):
+        pytest.skip('the synthetic contour did not march; covered by the shipped-case tests')
+
+    assert np.array_equal(rated.nodeX, half.nodeX)
+    assert np.array_equal(rated.nodeR, half.nodeR)
+    assert np.array_equal(rated.nodeMach, half.nodeMach)
+    assert np.array_equal(rated.boundaryR, half.boundaryR)
+    assert rated.massDriftWorst == half.massDriftWorst

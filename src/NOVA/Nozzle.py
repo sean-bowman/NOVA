@@ -116,7 +116,7 @@ except ImportError as error:
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
-                    PlumeFlow, PlumePoint, solvePlumeStructure,
+                    PlumeFlow, PlumePoint, solvePlumeStructure, throttledContour,
                     plumeCharacteristicSeed,
                     fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
                     obliqueShockDeflection, obliqueShockState,
@@ -1265,6 +1265,57 @@ class Nozzle:
             radialPoints = radialPoints, maxStations = maxStations)
 
         return self.nozzlePlumeField
+
+    def throttledPlumeField(self, throttleFraction: float, ambientPressure: float,
+                            reach: float = plumeFieldDefaultReach,
+                            radialPoints: int = plumeFieldRadialPoints,
+                            maxStations: int = 200000) -> 'PlumeField':
+
+        '''
+
+        Solve the plume at a fraction of rated chamber pressure, against a fixed ambient.
+
+        This is `plumeField` with the engine as the variable rather than the altitude. The nozzle
+        is fixed geometry, so throttling scales the pressure field and leaves the Mach field
+        alone, and `plume.throttledContour` is what applies that consistently.
+
+        **The field itself is a function of the pressure ratio and nothing else.** The march
+        carries one stagnation pressure and its relations are homogeneous in pressure, so this
+        returns the same field as `plumeField` at an ambient scaled by the same fraction. What
+        differs is the question: a throttle sweep at one altitude says how far an engine can be
+        throttled before its nozzle separates, which an ambient sweep at one power level cannot.
+
+        The gas state is held at its rated value. Chamber temperature, molecular weight and the
+        ratio of specific heats all move with chamber pressure through the equilibrium
+        composition, and none of that is represented here. See docs/plumeThrottleModel.md for the
+        size of what is left out and for why the throttle sweep is a sequence of steady solutions
+        rather than a transient.
+
+        Parameters:
+        -----------
+        throttleFraction : float
+            Chamber pressure as a fraction of its rated value.
+        ambientPressure : float
+            Pressure the plume expands into [Pa]. Held fixed across a throttle sweep.
+        reach : float
+            Axial distance to march, in lip radii.
+        radialPoints : int
+            Points across each station.
+        maxStations : int
+            Ceiling on the number of steps.
+
+        Returns:
+        --------
+        PlumeField
+            As `plumeField`. The result is returned rather than kept on the nozzle, because a
+            throttle sweep produces one per power level and none of them is this nozzle's state.
+
+        '''
+
+        return solveStationField(
+            throttledContour(self.plumeContour(), throttleFraction),
+            ambientPressure = ambientPressure, reach = reach,
+            radialPoints = radialPoints, maxStations = maxStations)
 
     def generateRegenChannels(self):
 
