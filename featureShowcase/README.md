@@ -34,6 +34,7 @@ python featureShowcase/buildReport.py             # renders the effort report to
 | `contour.png` | Wall contour with the generated combustion chamber, throat and chamber diameter called out |
 | `modelComparisonsModels.png` | What each selectable model does: the gas-side constant along the wall against Bartz's single value, what roughness buys on the coolant side, Prandtl-Meyer turning under local properties against two constant exponents, and the entrance and curvature corrections |
 | `modelComparisonsJacket.png` | The reference jacket solved under each model: hot wall temperature, coolant temperature and the channel the sizing march picked |
+| `jacket.png` | One cooling channel and its two neighbors swept against the cold wall, centerline and cross-sections called out on the middle one |
 | `nearWallState.png` | Near-wall static temperature, static pressure and Mach number along the axis |
 | `fieldMach.png` | Mach number over the characteristics mesh |
 | `fieldPressure.png` | Static pressure over the characteristics mesh |

@@ -77,6 +77,32 @@ def drawNearWall(nozzle):
     figure = figureModule.drawNearWallFigure(nozzle)
     return savePanel(figure, 'nearWallState.png') if figure is not None else None
 
+def drawJacket(nozzle):
+    '''
+    One cooling channel and its two neighbors against the cold wall.
+
+    The jacket is this channel patterned about the axis `nChannel` times, so a pair of neighbors
+    is enough to draw the rib to scale without building the pattern. The view is a plotly scene
+    rather than a Matplotlib panel, so it is written through kaleido with a fixed camera: a
+    figure that moves between runs cannot be compared against the one before it.
+    '''
+    figure = figureModule.channelMeshFigure(nozzle)
+    if figure is None:
+        print('  skipped jacket.png: no channel on this run')
+        return None
+    figure.update_layout(
+        width = 1600, height = 780,
+        scene_camera = dict(eye = dict(x = 1.25, y = -1.15, z = 0.62),
+                            center = dict(x = 0.0, y = 0.0, z = -0.18)),
+        title = {'text': 'One cooling channel and its neighbors against the cold wall',
+                 'x': 0.5, 'xanchor': 'center', 'y': 0.96, 'yanchor': 'top'},
+        margin = dict(l = 0, r = 0, t = 50, b = 0),
+        paper_bgcolor = background)
+    path = os.path.join(here, 'jacket.png')
+    figure.write_image(path, width = 1600, height = 780, scale = 1)
+    print('  wrote jacket.png')
+    return path
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Flowfield -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -241,6 +267,7 @@ def main():
     print('Rendering showcase figures')
     drawContour(nozzle)
     drawNearWall(nozzle)
+    drawJacket(nozzle)
     drawField(nozzle, 'mach', 'fieldMach.png')
     drawField(nozzle, 'pressure', 'fieldPressure.png')
     drawField(nozzle, 'temperature', 'fieldTemperature.png')
