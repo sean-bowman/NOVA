@@ -111,7 +111,7 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 from .fluidProperties import fluidProps
-from .errors import ConvergenceFailureError, NumericalInstabilityError
+from .errors import ConvergenceFailureError, NumericalInstabilityError, PressureDropError
 from .ablative import blowingCorrection
 from .channelSections import SECTIONFAMILIES, finEfficiency
 from .figures import regenHeatTransferModelPlots
@@ -1300,10 +1300,30 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         momentumPressureDrop = momentumLossCoef * coolantDensity[i] * coolantVelocity[i]**2 / 2
         totalPressureDrop    = frictionPressureDrop + momentumPressureDrop
 
+        # A jacket can spend more pressure than it has, and nothing downstream of that is
+        # meaningful: the station's own property calls are made at the pressure computed here,
+        # and a pressure at or below zero is not a state any equation of state answers for. It is
+        # caught here, while the drop that caused it is still in hand to report.
+        enteringPressure   = coolantPressure[i]
+        downstreamPressure = enteringPressure - totalPressureDrop
+
+        if downstreamPressure <= 0.0:
+            raise PressureDropError(
+                message = f'The coolant runs out of pressure at x = '
+                          f'{1e3*float(xHotWall3D[i]):.1f} mm. It arrives at '
+                          f'{1e-6*float(enteringPressure):.3f} MPa and the station spends '
+                          f'{1e-6*float(totalPressureDrop):.3f} MPa, of which '
+                          f'{1e-6*float(frictionPressureDrop):.3f} MPa is friction and '
+                          f'{1e-6*float(momentumPressureDrop):.3f} MPa is turning. The channel '
+                          f'there is too small for the flow it carries: fewer channels, a larger '
+                          f'maxChannelDepth or a higher inlet pressure give it room.',
+                pressureDrop = float(totalPressureDrop),
+                exitPressure = float(downstreamPressure))
+
         if i > 0:
-            coolantPressure[i-1] = coolantPressure[i] - totalPressureDrop
+            coolantPressure[i-1] = downstreamPressure
         if iterationMode == 'single':
-            coolantPressure[i] = coolantPressure[i] - totalPressureDrop
+            coolantPressure[i] = downstreamPressure
 
         # A NaN anywhere in the station's state means an upstream quantity is already bad, and
         # carrying on would bury the cause stations later. Object arrays hold the conductivity

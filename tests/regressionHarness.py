@@ -62,6 +62,9 @@ strippedToContour = {
     'numCSPointsChannel'            : 50,
     'material'                      : None,
     'channelType'                   : None,
+    'channelSizingMode'             : None,
+    'manualChannelProfile'          : None,
+    'manualChannelProfileKey'       : None,
     'nChannel'                      : None,
     'hotWallThickness'              : None,
     'shellThickness'                : None,
@@ -209,6 +212,23 @@ harnessCases = {
                       'channelHelixAngle': 45.0, 'channelAspectRatio': 1.0,
                       'minChannelWidth': 1.0e-3, 'channelCornerRadius': 0.2e-3,
                       'maxChannelDepth': 6.0e-3, 'maxWallTemperature': 650.0},
+    },
+    # The same jacket built from a manual size profile rather than from the search. The profile
+    # is keyed on the signed area ratio, nine control points with every station between them
+    # interpolated, and it holds one size over the whole barrel because the barrel holds one area
+    # ratio. Each point is 8 per cent under what regenCircle converged to at that station, which
+    # is the margin the case needs: regenCircle's aft stations sit on the largest channel that
+    # fits, and a profile above that bound is refused rather than built.
+    'regenManual': {
+        'config': 'NOVANozzle.json',
+        'description': 'Full jacket built from a manual channel size profile',
+        'overrides': {**regenOverrides, 'channelSizingMode': 'manual',
+                      'manualChannelProfileKey': 'areaRatio',
+                      'manualChannelProfile': [[-3.11, 0.00395], [-1.81, 0.00304],
+                                               [-1.04, 0.00210], [1.00, 0.00217],
+                                               [2.13, 0.00335], [6.40, 0.00614],
+                                               [13.71, 0.00922], [24.16, 0.01240],
+                                               [35.88, 0.01522]]},
     },
     # The other truncation rule: the jacket ends where the near-wall recovery temperature falls
     # to the configured value, which is the temperature the wall is driven by. Recovery

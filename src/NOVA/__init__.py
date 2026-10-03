@@ -117,8 +117,8 @@ from .figures import exportInteractiveFigures
 # Every failure NOVA raises deliberately is one of these
 
 from .errors import (ConvergenceFailureError, GeometricConstraintError, InvalidInputError,
-                     NumericalInstabilityError, PressureDropError, RegenGeometryError,
-                     ThermalConstraintError, VoluteGenerationError)
+                     NumericalInstabilityError, PressureDropError, REFPROPError,
+                     RegenGeometryError, ThermalConstraintError, VoluteGenerationError)
 
 # -- The facade -- #
 
@@ -177,7 +177,7 @@ __all__ = [
     'exportInteractiveFigures',
     # Errors
     'ConvergenceFailureError', 'GeometricConstraintError', 'InvalidInputError',
-    'NumericalInstabilityError', 'PressureDropError', 'RegenGeometryError',
+    'NumericalInstabilityError', 'PressureDropError', 'REFPROPError', 'RegenGeometryError',
     'ThermalConstraintError', 'VoluteGenerationError',
     # Metadata
     '__version__',

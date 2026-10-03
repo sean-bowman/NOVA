@@ -57,6 +57,7 @@ import warnings
 import numpy as np
 
 from .errors import InvalidInputError
+from .channelProfile import CHANNELSIZINGMODES, PROFILEKEYS
 from .channelSections import SECTIONFAMILIES
 from .voluteSections import SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS
 from .ceaInterface import CEA
@@ -116,7 +117,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
     Notes:
     ------
     - None/NaN values in dict input are automatically converted to np.nan for compatibility
-    - Some parameters (maxWallTemperature, infillThickness) are broadcast to arrays if scalar
+    - maxWallTemperature and infillThickness are single values, one per jacket, not per station
 
     Raises:
     -------
@@ -198,6 +199,22 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.material                       = inputsPath['material']
         nozzle.nChannel                       = inputsPath['nChannel']
         nozzle.channelType                    = inputsPath['channelType']
+        # How the channel size is arrived at. Absent or null is 'thermal', the search against
+        # the wall temperature limit, which is what every configuration written before the
+        # manual mode asked for without saying so. 'manual' reads the size off
+        # manualChannelProfile instead: a half-extent [m], a list of [key, half-extent] pairs,
+        # or a path to a profile a run recorded. See channelProfile.
+        # A null reads back as the NaN this reader makes of it, so each of the three is taken
+        # only when it arrived as the type it is meant to be, and is the default otherwise.
+        def nameOr(key, default):
+            value = inputsPath.get(key)
+            return value if isinstance(value, str) else default
+
+        nozzle.channelSizingMode              = nameOr('channelSizingMode', 'thermal')
+        nozzle.manualChannelProfileKey        = nameOr('manualChannelProfileKey', 'areaRatio')
+        nozzle.manualChannelProfile           = inputsPath.get('manualChannelProfile')
+        if isinstance(nozzle.manualChannelProfile, float) and np.isnan(nozzle.manualChannelProfile):
+            nozzle.manualChannelProfile       = None
         # How the gas-side correlation constant runs along the wall. Absent or null is 'uniform',
         # which is the single constant Bartz assumes and what every configuration written before
         # the measured distribution existed asked for without saying so.
@@ -425,6 +442,31 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
             parameterName = 'channelType',
             value = nozzle.channelType,
             validRange = ', '.join(SECTIONFAMILIES))
+
+    if nozzle.makeCoolingChannels == 'on' and nozzle.channelSizingMode not in CHANNELSIZINGMODES:
+        raise InvalidInputError(
+            message = f"channelSizingMode must be one of {', '.join(CHANNELSIZINGMODES)}.",
+            parameterName = 'channelSizingMode',
+            value = nozzle.channelSizingMode,
+            validRange = ', '.join(CHANNELSIZINGMODES))
+
+    # The profile carries the whole channel size distribution, so a manual run without one has
+    # nothing to build. Its contents are checked where it is read, in channelProfile.
+    if nozzle.makeCoolingChannels == 'on' and nozzle.channelSizingMode == 'manual':
+        if nozzle.manualChannelProfileKey not in PROFILEKEYS:
+            raise InvalidInputError(
+                message = f"manualChannelProfileKey must be one of {', '.join(PROFILEKEYS)}.",
+                parameterName = 'manualChannelProfileKey',
+                value = nozzle.manualChannelProfileKey,
+                validRange = ', '.join(PROFILEKEYS))
+        if nozzle.manualChannelProfile is None:
+            raise InvalidInputError(
+                message = 'A manual channel sizing run reads the channel size off '
+                          'manualChannelProfile, which is a half-extent [m], a list of '
+                          '[key, half-extent] pairs, or a path to a profile a run recorded.',
+                parameterName = 'manualChannelProfile',
+                value = None,
+                validRange = 'A number, a list of [key, half-extent] pairs, or a file path')
 
     # A printability support is a shape, not a flag: 'thick' and 'thin' draw different supports
     # and 'off' draws none, so a boolean cannot select one.

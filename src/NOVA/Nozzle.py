@@ -448,6 +448,9 @@ class Nozzle:
         # dynamicChannelRadii
         self.dcrData                                  = {}
         self.channelType                              = None     # [str]
+        self.channelSizingMode                        = 'thermal' # [str]
+        self.manualChannelProfile                     = None     # [m], or [key, m] pairs, or a path
+        self.manualChannelProfileKey                  = 'areaRatio' # [str]
         self.gasSideAxialModel                        = None     # [str]
         self.coolantGeometryCorrections               = None     # [bool]
         self.coolantRoughnessModel                    = None     # [str]
@@ -462,6 +465,8 @@ class Nozzle:
         self.channelRibThickness: np.ndarray | None   = None     # [m]
         self.channelWidth: np.ndarray | None          = None     # [m]
         self.channelDepth: np.ndarray | None          = None     # [m]
+        self.channelWallTemperature: np.ndarray | None = None    # [K]
+        self.channelProfilePoints: np.ndarray | None  = None     # [-], [m]
         self.maxChannelRadius                         = None     # [m]
         self.coolantExitPressure                      = None     # Pa
         self.coolantExitTemperature                   = None     # K

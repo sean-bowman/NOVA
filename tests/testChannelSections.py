@@ -324,3 +324,33 @@ class TestHelix:
 
         assert helicalSpacing(coldWall, count, helixAngle) - 1.0e-3 >= 1.0e-3
         assert helicalSpacing(coldWall, count + 1, helixAngle) - 1.0e-3 < 1.0e-3
+
+class TestDepthLimit:
+
+    '''The one size bound every family shares.'''
+
+    def testNoLimitIsNoLimit(self):
+
+        from NOVA.channelSections import depthLimitedHalfExtent
+
+        assert depthLimitedHalfExtent(None) == float('inf')
+        assert depthLimitedHalfExtent(float('nan')) == float('inf')
+        assert depthLimitedHalfExtent(float('inf')) == float('inf')
+
+    def testItIsHalfTheDepth(self):
+
+        from NOVA.channelSections import depthLimitedHalfExtent
+
+        # A section's depth is twice its half-extent in every family, so a circle's depth is its
+        # diameter and a 6 mm limit is a 3 mm radius
+        assert depthLimitedHalfExtent(6.0e-3) == 3.0e-3
+
+    def testItAgreesWithTheRectangularLimitWhereTheDepthBinds(self):
+
+        from NOVA.channelSections import depthLimitedHalfExtent, maxHalfExtent
+
+        # A wide rectangle whose aspect ratio allows more depth than the limit does
+        width = np.array([4.0e-3])
+        byDepth = maxHalfExtent('rectangular', width, maxAspectRatio = 8.0, maxDepth = 6.0e-3)
+
+        assert np.allclose(byDepth, depthLimitedHalfExtent(6.0e-3), rtol = 1e-15)

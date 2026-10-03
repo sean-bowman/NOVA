@@ -5,7 +5,7 @@
 
 Writing a finished nozzle out in the forms other tools read.
 
-Four kinds of thing come out of a run and each has its own consumer:
+Five kinds of thing come out of a run and each has its own consumer:
 
     contours      Text files of wall coordinates, in millimeters, which is what a CAD package
                   imports as a sketch.
@@ -13,6 +13,8 @@ Four kinds of thing come out of a run and each has its own consumer:
                   print preparation.
     exhaust       Near-wall gas properties along the wall, which is what a structural or thermal
                   analysis reads as a boundary condition.
+    the profile   The channel size distribution as a JSON profile, which a later run reads back
+                  to rebuild the same jacket without the sizing search.
     the run       The pickled nozzle, so a later session can reopen the result without re-solving.
 
 Everything is written into the run's own output directory, which the nozzle resolves through
@@ -39,10 +41,14 @@ Author: Sean Bowman
 
 '''
 
+import io
+import json
 import os
 import pickle
 
 import numpy as np
+
+from .channelProfile import profileDocument
 
 def exportData(nozzle, filename: str = 'default'):
 
@@ -86,6 +92,12 @@ def exportData(nozzle, filename: str = 'default'):
         writeFile(filename[:-4] + 'ChannelCenterline3D.txt', centerlineArray*1e3)
         py2cad(filename[:-4] + 'Channel.stl', nozzle.zChannel, nozzle.yChannel, -nozzle.xChannel)
 
+    # The channel size distribution the run built, which a later run rebuilds by naming this
+    # file as its manualChannelProfile instead of searching for the sizes again.
+    if cooledGeometry and nozzle.channelProfilePoints is not None:
+        print(f'Writing Channel Profile to .json')
+        writeChannelProfile(filename[:-4] + 'ChannelProfile.json', nozzle)
+
     # Volutes
     if nozzle.makeInletVolute == 'on':
         print(f'Exporting Inlet Volute Surface Mesh to .stl')
@@ -115,6 +127,46 @@ def exportData(nozzle, filename: str = 'default'):
     # Each geometry above is written as its own .stl. A single assembly file would be more
     # convenient to open, but py2cad writes one solid per call and a multi-solid STL needs a
     # writer that concatenates the facet lists under one header.
+
+def writeChannelProfile(filename: str, nozzle) -> None:
+
+    '''
+
+    Write the channel size distribution as a profile a later run can be built from.
+
+    The profile is keyed on the fraction along the jacket, and the stations it was solved at are
+    spaced by arc length, so a run at a different station count reads the same distribution. A
+    configuration replays it by naming this file as its `manualChannelProfile` with
+    `channelSizingMode` set to 'manual', which builds the same jacket at one pass of the thermal
+    model per station instead of the sizing search's seven.
+
+    The channel count, the station count and the wall temperatures are recorded beside the
+    points. Nothing reads them back; they are there so the file says what engine it came from.
+
+    Parameters:
+    -----------
+    filename : str
+        Destination path, ending in .json.
+    nozzle : Nozzle
+        A generated nozzle carrying `channelProfilePoints`.
+
+    '''
+
+    document = profileDocument(
+        nozzle.channelType, 'jacketFraction',
+        nozzle.channelProfilePoints[:, 0], nozzle.channelProfilePoints[:, 1],
+        notes = {
+            'channelSizingMode':      nozzle.channelSizingMode,
+            'nChannel':               int(nozzle.nChannel),
+            'numCrossSections':       int(nozzle.numCrossSections),
+            'maxWallTemperature':     float(np.max(nozzle.maxWallTemperature)),
+            'peakWallTemperature':    float(np.max(nozzle.channelWallTemperature)),
+            'coolantExitTemperature': float(nozzle.coolantExitTemperature),
+            'coolantExitPressure':    float(nozzle.coolantExitPressure),
+        })
+
+    with io.open(filename, 'w', encoding = 'utf-8', newline = '\n') as handle:
+        json.dump(document, handle, indent = 2)
 
 def exportExhaustPropertiesFEA(nozzle) -> None:
 

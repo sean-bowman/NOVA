@@ -8,7 +8,8 @@ about instead of guessing at exception types.
 
 'RegenGeometryError' is the common base. Its subclasses narrow it to why the geometry failed:
 a solver did not converge, a constraint could not be met, an input was invalid before any
-calculation ran. Catching the base class still catches every one of them.
+calculation ran. Catching the base class still catches every one of them, including the two that
+are not about geometry at all, 'VoluteGenerationError' and 'REFPROPError'.
 
 'createErrorContext' builds the dictionary a raise site attaches to the exception, so the state
 at the point of failure survives into the traceback rather than being lost to the stack unwinding
@@ -387,6 +388,58 @@ class NumericalInstabilityError(RegenGeometryError):
             context['value'] = value
         if operation is not None:
             context['operation'] = operation
+
+        super().__init__(message, context)
+
+class REFPROPError(RegenGeometryError):
+
+    '''
+
+    Exception raised when REFPROP cannot answer for a property it was asked for.
+
+    REFPROP reports a failure in two ways, and neither of them is an exception. It sets a
+    non-zero error code alongside a message, and it writes a marker into the output slot it had
+    no answer for: -9999990 where no value was calculated, -9999970 where the calculation
+    failed, -9999950 where the value lives in another field. A caller that reads the output
+    without looking at either takes the marker for a property and carries roughly minus ten
+    million through the physics until something unrelated trips over it.
+
+    A property failure is not a geometry failure, and this shares the geometry base only so that
+    one catch still covers everything the package raises on purpose.
+
+    Attributes:
+        species (str): Fluid the call was for
+        errorCode (int): REFPROP's own error code, zero where only a marker was returned
+        requested (str): Output types the call asked for
+
+    '''
+
+    def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
+                 species: Optional[str] = None, errorCode: Optional[int] = None,
+                 requested: Optional[str] = None):
+
+        '''
+
+        Initialize the REFPROPError exception.
+
+        Args:
+            message: Description of what REFPROP could not answer for
+            context: Error context dictionary
+            species: Fluid the call was for
+            errorCode: REFPROP's error code, or 0 where it returned a marker instead
+            requested: Space-delimited output types requested
+
+        '''
+
+        if context is None:
+            context = {}
+
+        if species is not None:
+            context['species'] = species
+        if errorCode is not None:
+            context['errorCode'] = errorCode
+        if requested is not None:
+            context['requested'] = requested
 
         super().__init__(message, context)
 

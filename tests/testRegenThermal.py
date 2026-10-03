@@ -622,7 +622,17 @@ class TestCoolantEnergyBalance:
 
 class TestModelSafeguards:
 
-    '''The adiabatic comparison balances its own heat, and a NaN stops the march where it appears.'''
+    '''
+
+    The adiabatic comparison balances its own heat, and a bad state stops the march where it
+    appears rather than stations later.
+
+    Two ways a station goes bad. A NaN in the coolant state means an upstream quantity is already
+    wrong, and the scan catches it before it spreads. A station that spends more pressure than
+    arrives at it leaves a pressure at or below zero, which no equation of state answers for: the
+    property call then fails somewhere that says nothing about the channel that was too small.
+
+    '''
 
     def inputs(self):
 
@@ -677,6 +687,54 @@ class TestModelSafeguards:
 
         with pytest.raises(NumericalInstabilityError, match = 'NaN'):
             regenHeatTransferModel(RegenThermalContext(), self.inputs())
+
+    def testAStationThatSpendsMorePressureThanItHasStopsTheMarch(self):
+
+        from NOVA.errors import PressureDropError
+
+        # A channel small enough that the station's own drop exceeds the pressure arriving at it.
+        # Carried on, the station computes its coolant temperature at a negative pressure, which
+        # no equation of state answers for, and the failure surfaces far from its cause.
+        inputs = self.inputs()
+        inputs.update({
+            'coolantInitialPressure': 2.0e5,
+            'flowArea'              : np.array([np.pi * 0.00012**2]),
+            'hydraulicDiameter'     : np.array([0.00024]),
+            'differentialPathLength': np.array([0.5]),
+        })
+
+        with pytest.raises(PressureDropError, match = 'runs out of pressure'):
+            regenHeatTransferModel(RegenThermalContext(), inputs)
+
+    def testTheReportNamesWhereTheDropWentAndWhatToChange(self):
+
+        from NOVA.errors import PressureDropError
+
+        inputs = self.inputs()
+        inputs.update({
+            'coolantInitialPressure': 2.0e5,
+            'flowArea'              : np.array([np.pi * 0.00012**2]),
+            'hydraulicDiameter'     : np.array([0.00024]),
+            'differentialPathLength': np.array([0.5]),
+        })
+
+        with pytest.raises(PressureDropError) as raised:
+            regenHeatTransferModel(RegenThermalContext(), inputs)
+
+        message = str(raised.value)
+
+        assert 'friction' in message
+        assert 'turning' in message
+        assert 'maxChannelDepth' in message
+        assert raised.value.context['exitPressure'] <= 0.0
+        assert raised.value.context['pressureDrop'] > 2.0e5
+
+    def testAStationWithPressureToSpareIsLeftAlone(self):
+
+        # The same station at the pressure the fixture normally runs, which it can afford
+        outputs, _ = regenHeatTransferModel(RegenThermalContext(), self.inputs())
+
+        assert outputs['coolantPressure'][0] > 0.0
 
 class TestRectangularDepth:
 

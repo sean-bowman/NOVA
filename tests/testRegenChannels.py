@@ -15,6 +15,12 @@ declaration there surfaces only when a run reaches that rule. Both directions ar
 the table names fields the state actually has, and that it rejects what it says it rejects. The
 checker behind it is tested in testValidation.py rather than through this module.
 
+**A failure has to survive being reported.** The wall temperature limit is one temperature for
+the whole jacket, and a limit that is not a usable number stops the sizing search from running
+at all rather than sizing anything conservatively, so it is checked before the solve reads it.
+The error a station raises when it will not converge is built from scalars here, because a
+handler that raises while reporting a failure loses the failure.
+
 Author: Sean Bowman
 
 '''
@@ -45,6 +51,7 @@ def workingInputs():
         hotWallThickness          = 1.0e-3,
         infillThickness           = 1.0e-3,
         channelType               = 'circle',
+        maxWallTemperature        = 800.0,
         coolant                   = 'Hydrogen',
         coolantMassFlow           = 3.4,
         coolantInitialPressure    = 1.2e7,
@@ -259,6 +266,59 @@ class TestValidator:
 
         with pytest.raises(Exception, match = 'channelType'):
             validateRegenChannelInputs(state)
+
+    def testAnUnsetSizingModeIsTheSearch(self):
+
+        # Every configuration written before the manual mode leaves the field out
+        validateRegenChannelInputs(workingInputs())
+
+    @pytest.mark.parametrize('mode', ['converge', 'auto', 'Manual'])
+    def testASizingModeTheSolveDoesNotBuildIsRejected(self, mode):
+
+        state = workingInputs()
+        state.channelSizingMode = mode
+
+        with pytest.raises(Exception, match = 'channelSizingMode'):
+            validateRegenChannelInputs(state)
+
+    def testManualSizingNeedsAProfile(self):
+
+        state = workingInputs()
+        state.channelSizingMode = 'manual'
+
+        with pytest.raises(Exception, match = 'manualChannelProfile'):
+            validateRegenChannelInputs(state)
+
+        state.manualChannelProfile = 1.5e-3
+        validateRegenChannelInputs(state)
+
+    def testAProfileKeyThePackageDoesNotBuildIsRejected(self):
+
+        state = workingInputs()
+        state.channelSizingMode = 'manual'
+        state.manualChannelProfile = 1.5e-3
+        state.manualChannelProfileKey = 'stationIndex'
+
+        with pytest.raises(Exception, match = 'manualChannelProfileKey'):
+            validateRegenChannelInputs(state)
+
+    @pytest.mark.parametrize('limit', [None, float('nan'), 0.0, -300.0])
+    def testAWallTemperatureLimitTheSolveCannotUseIsRejected(self, limit):
+
+        state = workingInputs()
+        state.maxWallTemperature = limit
+
+        with pytest.raises(Exception, match = 'maxWallTemperature'):
+            validateRegenChannelInputs(state)
+
+    def testAProfileIsOnlyAskedForInTheManualMode(self):
+
+        # A thermal run carrying no profile is the normal case and must not be stopped by one
+        state = workingInputs()
+        state.channelSizingMode = 'thermal'
+        state.manualChannelProfileKey = 'stationIndex'
+
+        validateRegenChannelInputs(state)
 
 class TestModuleIndependence:
 
@@ -529,3 +589,252 @@ class TestVoluteInterface:
         assert rUp[0] == pytest.approx(rUp.max())
         assert abs(rUp[-1] - self.radius) < self.sagitta()
         assert np.all(x[keep] > xUp[-1])
+
+class TestWallTemperatureLimit:
+
+    '''
+
+    The limit the jacket is sized against, and what happens when it is not a number.
+
+    The search compares the wall against the limit every iteration and takes its tolerance from
+    it, so with a NaN limit every comparison reads false. The loop leaves before its first
+    iteration, every station keeps the largest channel that fits, and the run reports a jacket
+    that was never checked against anything. Nothing in the output says so, so the limit is
+    checked before the solve reads it.
+
+    '''
+
+    def state(self, limit):
+
+        from NOVA.channelSizing import ChannelSizingState
+
+        return ChannelSizingState(maxWallTemperature = limit)
+
+    def testAUsableLimitComesBackAsAFloat(self):
+
+        from NOVA.channelSizing import wallTemperatureLimit
+
+        assert wallTemperatureLimit(self.state(800.0)) == 800.0
+        assert isinstance(wallTemperatureLimit(self.state(np.float64(650.0))), float)
+
+    @pytest.mark.parametrize('limit', [None, float('nan'), float('inf'), 0.0, -1.0, 'hot'])
+    def testALimitTheSolveCannotUseIsRejected(self, limit):
+
+        from NOVA.channelSizing import wallTemperatureLimit
+        from NOVA.errors import InvalidInputError
+
+        with pytest.raises(InvalidInputError, match = 'maxWallTemperature'):
+            wallTemperatureLimit(self.state(limit))
+
+    def testAnArrayOfLimitsIsRejected(self):
+
+        from NOVA.channelSizing import wallTemperatureLimit
+        from NOVA.errors import InvalidInputError
+
+        # One temperature for the whole jacket: the search's own comparisons are scalar, and an
+        # array would make `abs(error) > tolerance` raise part way through the march instead
+        with pytest.raises(InvalidInputError, match = 'maxWallTemperature'):
+            wallTemperatureLimit(self.state(np.full(60, 800.0)))
+
+class TestConvergenceFailureReport:
+
+    '''
+
+    The error a station raises when its size will not converge, built from scalars.
+
+    A handler that raises while reporting a failure loses the failure. The limit is one
+    temperature for the whole jacket, so every quantity in the context is a scalar and none of
+    them is subscripted.
+
+    '''
+
+    def failure(self, **overrides):
+
+        from NOVA.channelSizing import convergenceFailure
+
+        arguments = dict(
+            message           = 'Minimum channel radius reached at station 17',
+            stationIndex      = 17,
+            iterations        = 50,
+            radius            = 0.75e-3,
+            wallTemperature   = 912.5,
+            targetTemperature = 800.0,
+            tolerance         = 0.08)
+        arguments.update(overrides)
+
+        return convergenceFailure(**arguments)
+
+    def testItBuildsFromAScalarLimit(self):
+
+        from NOVA.errors import ConvergenceFailureError
+
+        failure = self.failure()
+
+        assert isinstance(failure, ConvergenceFailureError)
+        assert failure.context['targetTemperature'] == 800.0
+        assert failure.context['temperatureError'] == pytest.approx(112.5, rel = 1e-12)
+        assert failure.context['stationIndex'] == 17
+
+    def testTheResidualIsTheDistanceFromTheLimit(self):
+
+        assert self.failure(wallTemperature = 700.0).context['temperatureError'] \
+               == pytest.approx(100.0, rel = 1e-12)
+
+    def testTheSiteMayAddItsOwnContext(self):
+
+        failure = self.failure(minChannelRadius = 0.75e-3)
+
+        assert failure.context['minChannelRadius'] == 0.75e-3
+
+    def testTheMessageSurvivesRendering(self):
+
+        # The report is what a failed run leaves behind, so it has to render without raising
+        assert 'station 17' in str(self.failure())
+
+class TestWallTemperatureRefusal:
+
+    '''
+
+    The station that cannot be cooled, and why it is refused rather than accepted.
+
+    The wall temperature rises with channel size, so the smallest channel the process can build
+    gives the coolest wall a station can have. A wall over its limit there is not a search that
+    wants more iterations; it is a jacket that cannot be built as specified.
+
+    '''
+
+    def testItNamesTheStationTheWallAndTheLimit(self):
+
+        from NOVA.channelSizing import wallTemperatureExceeded
+        from NOVA.errors import ThermalConstraintError
+
+        failure = wallTemperatureExceeded(stationIndex = 31, wallTemperature = 1180.0,
+                                          limit = 800.0, halfExtent = 0.75e-3, tolerance = 0.08)
+
+        assert isinstance(failure, ThermalConstraintError)
+        assert failure.context['value'] == 1180.0
+        assert failure.context['limit'] == 800.0
+        assert failure.context['stationIndex'] == 31
+        assert 'Station 31' in str(failure)
+
+    def testItSaysWhatWouldFixIt(self):
+
+        from NOVA.channelSizing import wallTemperatureExceeded
+
+        # A message that only reports the violation leaves the reader with no next move
+        message = str(wallTemperatureExceeded(0, 1180.0, 800.0, 0.75e-3, 0.08))
+
+        assert 'more channels' in message
+        assert 'film' in message
+
+class TestCoolantExitState:
+
+    '''What the coolant leaving the jacket has to be worth to the rest of the engine.'''
+
+    def state(self, **overrides):
+
+        from NOVA.channelSizing import ChannelSizingState
+
+        arguments = dict(coolantInitialPressure    = 1.2e7,
+                         coolantExitPressure       = 1.18e7,
+                         coolantExitTemperature    = 252.7)
+        arguments.update(overrides)
+
+        return ChannelSizingState(**arguments)
+
+    def testNoLimitsPassAnything(self):
+
+        from NOVA.channelSizing import checkCoolantExitState
+
+        # Every configuration written before these were enforced leaves both unset
+        checkCoolantExitState(self.state())
+        checkCoolantExitState(self.state(minCoolantExitPressure = None,
+                                         minCoolantExitTemperature = float('nan')))
+
+    def testAMetPressureLimitPasses(self):
+
+        from NOVA.channelSizing import checkCoolantExitState
+
+        checkCoolantExitState(self.state(minCoolantExitPressure = 1.0e7))
+
+    def testAMissedPressureLimitIsRefused(self):
+
+        from NOVA.channelSizing import checkCoolantExitState
+        from NOVA.errors import PressureDropError
+
+        with pytest.raises(PressureDropError) as raised:
+            checkCoolantExitState(self.state(coolantExitPressure = 2.211e6,
+                                             minCoolantExitPressure = 8.0e6))
+
+        assert raised.value.context['exitPressure'] == 2.211e6
+        assert raised.value.context['minExitPressure'] == 8.0e6
+        assert raised.value.context['pressureDrop'] == pytest.approx(9.789e6, rel = 1e-9)
+
+    def testAMissedTemperatureLimitIsRefused(self):
+
+        from NOVA.channelSizing import checkCoolantExitState
+        from NOVA.errors import ThermalConstraintError
+
+        with pytest.raises(ThermalConstraintError) as raised:
+            checkCoolantExitState(self.state(minCoolantExitTemperature = 300.0))
+
+        assert raised.value.context['value'] == 252.7
+        assert raised.value.context['limit'] == 300.0
+
+    def testThePressureLimitIsCheckedBeforeTheTemperature(self):
+
+        from NOVA.channelSizing import checkCoolantExitState
+        from NOVA.errors import PressureDropError
+
+        # Both violated: the pressure is the one that makes the jacket unusable
+        with pytest.raises(PressureDropError):
+            checkCoolantExitState(self.state(coolantExitPressure = 1.0e6,
+                                             minCoolantExitPressure = 8.0e6,
+                                             minCoolantExitTemperature = 300.0))
+
+    def testBothLimitsAreDeclaredOnBothStates(self):
+
+        from NOVA.channelSizing import ChannelSizingState
+
+        # Reached by name from the rule table and from _sizingState, so a missing declaration
+        # surfaces only when a run gets there
+        for name in ('minCoolantExitPressure', 'minCoolantExitTemperature'):
+            assert name in ChannelSizingState.__dataclass_fields__
+            assert name in RegenChannelState.__dataclass_fields__
+
+class TestCoolantPastWallLimit:
+
+    '''
+
+    The other way a jacket fails the wall temperature limit.
+
+    The wall sits between the exhaust and the coolant, so it is hotter than the coolant behind
+    it. Coolant that has reached the wall's limit puts the wall over it whatever the channel
+    size is, and nothing downstream can be cooled either. Carried on unchecked, the station
+    solve balances with heat running from the coolant into the wall and the coolant cools,
+    station after station, off the end of every property range.
+
+    '''
+
+    def testItNamesTheStationAndBothTemperatures(self):
+
+        from NOVA.channelSizing import coolantPastWallLimit
+        from NOVA.errors import ThermalConstraintError
+
+        failure = coolantPastWallLimit(stationIndex = 24, coolantTemperature = 214.8,
+                                       limit = 200.0)
+
+        assert isinstance(failure, ThermalConstraintError)
+        assert failure.context['value'] == 214.8
+        assert failure.context['limit'] == 200.0
+        assert failure.context['stationIndex'] == 24
+        assert 'station 24' in str(failure)
+
+    def testItSaysWhyNoChannelSizeCanFixIt(self):
+
+        from NOVA.channelSizing import coolantPastWallLimit
+
+        message = str(coolantPastWallLimit(0, 214.8, 200.0))
+
+        assert 'no channel size' in message
+        assert 'downstream' in message

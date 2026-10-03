@@ -14,6 +14,12 @@ otherwise, so the same call site runs on a machine with or without a REFPROP lic
 'fluidView' builds carpet-plot sweeps of a property over two independent variables, with
 session and multi-user hooks for running a sweep as a background job rather than inline.
 
+Neither backend reports a failure the same way. CoolProp raises. REFPROP returns: it sets an
+error code and writes a marker into the output slot it could not fill, and the marker is a
+number, around minus ten million, that reads as a property to anything that does not check for
+it. 'checkREFPROPResult' is what checks, on every call, so a state REFPROP cannot evaluate stops
+the run where it happened instead of propagating a marker into the physics.
+
 Author: Sean Bowman
 
 '''
@@ -22,6 +28,17 @@ import os
 from typing import Any, Optional
 
 import numpy as np
+
+from .errors import REFPROPError
+
+# What REFPROP writes into an output slot it has no answer for. These are returned in place of a
+# property rather than raised, and the first two can arrive with the error code still zero, so a
+# caller that reads the output without checking takes roughly minus ten million for a property.
+REFPROPMARKERS = {
+    -9999990.0: 'no value was calculated for this input',
+    -9999970.0: 'the calculation failed',
+    -9999950.0: 'the value is stored in another field rather than the output',
+}
 
 # Permissive numeric-input alias: these helpers accept arrays, lists, or scalars
 # interchangeably. Using this keeps static analysis from flagging valid array-like
@@ -38,6 +55,66 @@ except:
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Property accessors -- #
 #--------------------------------------------------------------------------------------------------------------------------#
+
+def checkREFPROPResult(result, species: str, inputTypes: str, outputTypes: str,
+                       inputTypeFirst: float, inputTypeSecond: float) -> None:
+
+    '''
+
+    Refuse a REFPROP result that does not carry the properties it was asked for.
+
+    Two checks, because REFPROP reports a failure two ways. Its error code is positive on an
+    error and negative on a warning, and the message beside it already names the routine and the
+    reason, so an error is raised with REFPROP's own words. Separately, an output slot it could
+    not fill holds one of the markers in REFPROPMARKERS, which can arrive with the code still
+    zero: a property that does not apply at the state asked for comes back that way.
+
+    A phase request is the one case where a marker is the normal answer. REFPROP has no numeric
+    phase, so it writes -9999950 into the output and puts the descriptor in the units field,
+    which is what `refWrap` returns for that call. The marker check is skipped where the request
+    includes a phase, and the error code is still checked.
+
+    Parameters:
+    -----------
+    result : Any
+        What REFPROPdll returned, carrying `Output`, `ierr` and `herr`.
+    species : str
+        Fluid the call was for.
+    inputTypes, outputTypes : str
+        The call's input and output type strings.
+    inputTypeFirst, inputTypeSecond : float
+        The two state values the call was made at.
+
+    Raises:
+    -------
+    REFPROPError
+        If REFPROP set an error code, or returned a marker in place of a property.
+
+    '''
+
+    requested = outputTypes.split(' ')
+    state     = f'{inputTypes} = {inputTypeFirst}, {inputTypeSecond}'
+
+    errorCode = int(getattr(result, 'ierr', 0) or 0)
+    if errorCode > 0:
+        # REFPROP's own message ends with a period of its own more often than not
+        message = str(getattr(result, 'herr', '') or '').strip().rstrip('. ')
+        raise REFPROPError(
+            message = f'REFPROP could not evaluate {outputTypes} for {species} at {state}: '
+                      f'{message or "no message given"}.',
+            species = species, errorCode = errorCode, requested = outputTypes)
+
+    if 'PHASE' in (name.upper() for name in requested):
+        return
+
+    values = list(getattr(result, 'Output', [])[0:len(requested)])
+    for name, value in zip(requested, values):
+        if float(value) in REFPROPMARKERS:
+            raise REFPROPError(
+                message = f'REFPROP returned no value for {name} on {species} at {state}: '
+                          f'{REFPROPMARKERS[float(value)]}. The marker it returns in that slot '
+                          f'reads as a property if it is not checked for.',
+                species = species, errorCode = errorCode, requested = outputTypes)
 
 def refWrap(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: float, inputTypeSecond: float, mixtureRatio: list[float] = [1.0], units: bool = False) -> float | list[float] | str | list[str]:
 
@@ -136,15 +213,13 @@ def refWrap(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: flo
     For information about the unit system, full input list, and REFPROP output array see:
     https://refprop-docs.readthedocs.io/en/latest/DLL/high_level.html#f/_/REFPROPdll
 
-    *NOTE*:
-    - A value of -9999990 will be returned by REFPROP if no value is calculated
-      for a given input.
-    - A value of -9999970 will be returned by REFPROP if an error occurs during
-      calculation.
-    - A value of -9999950 will be returned by REFPROP if no value is stored in
-      the Output structure, but does have values stored in other fields (i.e.
-      when calling the phase of a fluid, the field hUnits contains the string
-      identifier for the phase, but the Output field will return an error).
+    *NOTE*: REFPROP marks an output slot it cannot fill rather than failing the call,
+    with -9999990 where no value was calculated for the input, -9999970 where the
+    calculation failed, and -9999950 where the value is stored in another field than
+    the Output structure. None of these reaches a caller: 'checkREFPROPResult' raises
+    'REFPROPError' on them, and on REFPROP's own error code, before anything is returned.
+    The one exception is a phase request, where -9999950 in the output is the normal
+    answer and the descriptor is read from hUnits instead.
 
     '''
 
@@ -175,6 +250,10 @@ def refWrap(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: flo
 
     # Structure the call to REFPROP
     x = RP.REFPROPdll(species,inputTypes,outputTypes,iUnits,iMass,iFlag,inputTypeFirst,inputTypeSecond,mixtureRatio)
+
+    # REFPROP answers a call it could not make by writing a marker into the output and setting an
+    # error code, not by raising, so the result is checked before any of it is returned.
+    checkREFPROPResult(x, species, inputTypes, outputTypes, inputTypeFirst, inputTypeSecond)
 
     # If only one value output is asked for, return it
     if (numOutputs == 1) and (outputTypesSplit[0] != 'PHASE') and (units is False):

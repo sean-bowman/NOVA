@@ -68,13 +68,15 @@ import numpy as np
 from tqdm import tqdm
 
 from .geometryTools import DCM, arcSpline, chunkInterpolate, intersection, parallelOffset
-from .channelSections import (SECTIONFAMILIES, helicalSpacing, loxodromeWrap, maxHalfExtent,
-                              rectangularWidth)
+from .channelProfile import CHANNELSIZINGMODES, PROFILEKEYS
+from .channelSections import (SECTIONFAMILIES, depthLimitedHalfExtent, helicalSpacing,
+                              loxodromeWrap, maxHalfExtent, rectangularWidth)
 from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
 from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
-from .validation import applyRules, arrayRule, choiceRule, integerRule, numericRule, read, textRule
+from .validation import (applyRules, arrayRule, choiceRule, integerRule, numericRule,
+                         presentRule, read, textRule)
 
 @dataclass
 class RegenChannelState:
@@ -95,6 +97,9 @@ class RegenChannelState:
 
     # -- What the build reads -- #
     channelType:                               Any = None
+    channelSizingMode:                         Any = None
+    manualChannelProfile:                      Any = None
+    manualChannelProfileKey:                   Any = None
     gasSideAxialModel:                         Any = None
     coolantGeometryCorrections:                Any = None
     coolantRoughnessModel:                     Any = None
@@ -145,12 +150,16 @@ class RegenChannelState:
     coolantInitialPressure:                    Any = None
     coolantInitialTemperature:                 Any = None
     coolantMassFlow:                           Any = None
+    minCoolantExitPressure:                    Any = None
+    minCoolantExitTemperature:                 Any = None
     minChannelRadius:                          Any = None
 
     # -- Read and written as the build proceeds -- #
     channelRadius:                             Any = None
     channelRibThickness:                       Any = None
     channelWidth:                              Any = None
+    channelWallTemperature:                    Any = None
+    channelProfilePoints:                      Any = None
     gammaRegenSectionTrimmed:                  Any = None
     gasConstantRegenSectionTrimmed:            Any = None
     molecularWeightRegenSectionTrimmed:        Any = None
@@ -253,6 +262,12 @@ def _isRectangularFamily(source):
 
     return read(source, 'channelType') in ('rectangular', 'helical')
 
+def _isManualSizing(source):
+
+    '''True when the channel size is read off a profile rather than converged.'''
+
+    return read(source, 'channelSizingMode') == 'manual'
+
 def _makesInletVolute(source):
 
     '''True when an inlet volute is asked for.'''
@@ -276,6 +291,14 @@ regenChannelRules = (
     # -- The channels themselves -- #
     choiceRule('channelType', 'Channel cross section', choices = SECTIONFAMILIES,
                note = 'Spirally fluted channels are kept in experimental/flutedChannels.py'),
+    choiceRule('channelSizingMode', 'Channel sizing mode', choices = CHANNELSIZINGMODES,
+               required = False,
+               note = 'Absent is the search against the wall temperature limit'),
+    choiceRule('manualChannelProfileKey', 'Manual channel profile key', choices = PROFILEKEYS,
+               required = False, when = _isManualSizing),
+    presentRule('manualChannelProfile', 'Manual channel profile', when = _isManualSizing,
+                note = 'A half-extent [m], a list of [key, half-extent] pairs, or a path to a '
+                       'recorded profile'),
     integerRule('nChannel', 'Number of channels', minimum = 10, exclusiveMinimum = False,
                 when = lambda source: not _isHelical(source)),
     integerRule('nChannel', 'Number of helical starts', minimum = 1, exclusiveMinimum = False,
@@ -286,6 +309,9 @@ regenChannelRules = (
                 minimum = 0.5e-3, exclusiveMinimum = False),
     numericRule('infillThickness', 'Rib thickness between channels', units = 'm',
                 minimum = 0.5e-3, exclusiveMinimum = False),
+    numericRule('maxWallTemperature', 'Maximum hot wall temperature', units = 'K', minimum = 0,
+                note = 'One temperature for the whole jacket. The sizing search converges '
+                       'against it and a manual profile is reported against it'),
 
     # -- A rectangle's and a helix's width, aspect ratio and depth limits -- #
     numericRule('minChannelWidth', 'Minimum channel width', units = 'm',
@@ -298,7 +324,9 @@ regenChannelRules = (
     numericRule('maxChannelAspectRatio', 'Maximum channel aspect ratio',
                 minimum = 0, maximum = 20, exclusiveMaximum = False, when = _isRectangular),
     numericRule('maxChannelDepth', 'Maximum channel depth', units = 'm', minimum = 0,
-                when = _isRectangularFamily, required = False),
+                required = False,
+                note = 'How far a channel may reach out from the wall, a circle\'s diameter '
+                       'included. Unset leaves a circle bounded only by its neighbors'),
     numericRule('channelCornerRadius', 'Channel corner radius', units = 'm', minimum = 0,
                 exclusiveMinimum = False, when = _isRectangularFamily, required = False),
 
@@ -308,6 +336,12 @@ regenChannelRules = (
     numericRule('coolantMassFlow', 'Coolant mass flow', units = 'kg/s', minimum = 0),
     numericRule('coolantInitialPressure', 'Coolant inlet pressure', units = 'Pa', minimum = 0),
     numericRule('coolantInitialTemperature', 'Coolant inlet temperature', units = 'K', minimum = 0),
+    numericRule('minCoolantExitPressure', 'Minimum coolant exit pressure', units = 'Pa',
+                minimum = 0, required = False,
+                note = 'Checked once the jacket is solved. Unset is no limit'),
+    numericRule('minCoolantExitTemperature', 'Minimum coolant exit temperature', units = 'K',
+                minimum = 0, required = False,
+                note = 'Checked once the jacket is solved. Unset is no limit'),
 
     # -- Where each volute leaves the wall -- #
     numericRule('inletVoluteAxialOffset', 'Inlet volute axial offset', units = 'm', minimum = 0,
@@ -490,6 +524,12 @@ def _sizingState(state) -> 'ChannelSizingState':
 
     return ChannelSizingState(
         channelType                        = state.channelType,
+        # Names and a profile rather than numbers, so none of the three goes through
+        # valueOrDefault. An absent mode is the search, which is what every configuration
+        # written before the manual mode existed asked for without saying so.
+        channelSizingMode                  = state.channelSizingMode if isinstance(state.channelSizingMode, str) else 'thermal',
+        manualChannelProfile               = state.manualChannelProfile,
+        manualChannelProfileKey            = state.manualChannelProfileKey if isinstance(state.manualChannelProfileKey, str) else 'areaRatio',
         # A name rather than a number, so it does not go through valueOrDefault
         gasSideAxialModel                  = state.gasSideAxialModel if isinstance(state.gasSideAxialModel, str) else 'uniform',
         coolantGeometryCorrections         = bool(state.coolantGeometryCorrections),
@@ -505,6 +545,10 @@ def _sizingState(state) -> 'ChannelSizingState':
         channelHelixAngle                  = valueOrDefault(state.channelHelixAngle, float('nan')),
         channelAspectRatio                 = valueOrDefault(state.channelAspectRatio, 1.0),
         maxWallTemperature                 = state.maxWallTemperature,
+        # Left as they arrived, because unset is a real value here: no limit to hold the
+        # coolant exit condition to, rather than a limit of zero.
+        minCoolantExitPressure             = state.minCoolantExitPressure,
+        minCoolantExitTemperature          = state.minCoolantExitTemperature,
         hotWallThickness                   = state.hotWallThickness,
         infillThickness                    = state.infillThickness,
         material                           = state.material,
@@ -868,8 +912,11 @@ def solveRegenChannels(state, thermal):
                                           geometry.maxChannelDepth)
             state.channelRadius = np.minimum(state.channelRadius, halfLimit)
         else:
+            # A circle answers to the room between its neighbors and to the depth limit every
+            # family shares, which is the only thing bounding it on a wide bell.
             for i in range(len(state.channelRadius)):
-                maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleInterfaced,i)
+                maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i),
+                                       depthLimitedHalfExtent(state.maxChannelDepth))
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
 
@@ -899,7 +946,8 @@ def solveRegenChannels(state, thermal):
             state.channelRadius = np.minimum(state.channelRadius, halfLimit)
         else:
             for i in range(len(state.channelRadius)):
-                maxChannelRadius = getMaxChannelRadius(state.rRegenNozzleInterfaced, i)
+                maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i),
+                                       depthLimitedHalfExtent(state.maxChannelDepth))
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
 

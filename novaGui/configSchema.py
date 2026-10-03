@@ -147,6 +147,9 @@ def _helicalChannels(config: dict) -> bool:
 def _rectangularOrHelicalChannels(config: dict) -> bool:
     return _rectangularChannels(config) or _helicalChannels(config)
 
+def _manualChannelSizing(config: dict) -> bool:
+    return _coolingOn(config) and config.get('channelSizingMode') == 'manual'
+
 def _anyVolute(config: dict) -> bool:
     return (config.get('makeInletVolute') in (True, 'on')
             or config.get('makeOutletVolute') in (True, 'on'))
@@ -332,6 +335,32 @@ groups = [
               help = 'Cooling channel cross-section family. Circular channels are sized by radius; '
                      'rectangular channels fill the pitch less the rib and are sized by depth; '
                      'helical channels run at a fixed angle and aspect ratio and are sized by width.'),
+        Field('channelSizingMode', 'Channel sizing', 'choice',
+              choices = [('Converge on the wall temperature limit', 'thermal'),
+                         ('Manual size profile', 'manual')],
+              default = 'thermal', showWhen = _coolingOn,
+              help = 'Converging runs a search at every station for the largest channel that '
+                     'holds the wall at its limit, at about seven passes of the thermal model '
+                     'per station. A manual profile fixes the size and marches once, so the '
+                     'wall temperature and the pressure drop come out as results. Every run '
+                     'prints the profile it built and writes it beside the exported geometry.'),
+        Field('manualChannelProfileKey', 'Profile key', 'choice',
+              choices = [('Area ratio through the throat', 'areaRatio'),
+                         ('Fraction along the jacket', 'jacketFraction')],
+              default = 'areaRatio', showWhen = _manualChannelSizing,
+              help = 'Coordinate the profile\'s control points are given in. Area ratio is '
+                     'negative upstream of the throat, so the throat is -1 on the converging '
+                     'side and +1 on the diverging side. It holds one value along a constant '
+                     'radius barrel; the jacket fraction, 0 at the injector face and 1 at the '
+                     'regen truncation, is the key a recorded profile is written in.'),
+        Field('manualChannelProfile', 'Manual size profile', 'text', default = None,
+              showWhen = _manualChannelSizing,
+              help = 'The radial half-extent to build: a circle\'s radius, half a rectangle\'s '
+                     'depth. One number in meters is a constant channel. A list of [key, '
+                     'half-extent] pairs, such as [[-2, 0.0015], [1, 0.0015], [3, 0.003]], is '
+                     'interpolated between the points and held flat outside them. A path is '
+                     'read as a profile a run recorded, such as '
+                     'runs/NOVANozzleOutputs/NOVANozzleChannelProfile.json.'),
         Field('channelHelixAngle', 'Channel helix angle', 'float', default = None, unit = 'deg',
               showWhen = _helicalChannels,
               help = 'Angle the helical channels run at from the meridian, 0 to 85 degrees. nChannel is the number of starts.'),
@@ -348,9 +377,10 @@ groups = [
               showWhen = _rectangularChannels,
               help = 'Depth a rectangular channel may reach, as a multiple of its width.'),
         Field('maxChannelDepth', 'Maximum channel depth', 'float', default = None, unit = 'm',
-              showWhen = _rectangularOrHelicalChannels,
-              help = 'Depth a rectangular or helical channel may reach outright. Blank leaves the aspect ratio, '
-                     'or for a helix the rib, to limit it.'),
+              showWhen = _coolingOn,
+              help = 'How far any channel may reach out from the wall, a circle\'s diameter included. Blank '
+                     'leaves the aspect ratio, or for a helix the rib, to limit a rectangle, and leaves a '
+                     'circle bounded only by the room between its neighbors.'),
         Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
         Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',
@@ -360,21 +390,29 @@ groups = [
               help = 'Rib between neighboring channels. A rectangular channel\'s rib is exactly this at the wall; '
                      'a helical channel\'s rib varies and never falls below it.'),
         Field('nChannel', 'Number of channels', 'int', default = None, showWhen = _coolingOn,
-              help = 'Fixed channel count. Leave blank to let the optimizer choose within the bounds below.'),
+              help = 'Channel count, or starts for a helix. Required. It is reduced at run time if the '
+                     'throat cannot hold the smallest channel the process can build, unless a manual '
+                     'size profile fixed it, in which case the run stops instead.'),
         Field('numCrossSections', 'Channel cross sections', 'int', default = 100, showWhen = _coolingOn,
               help = 'Number of cross sections swept along each channel.'),
         Field('numCSPointsChannel', 'Points per channel cross section', 'int', default = 50, showWhen = _coolingOn,
               help = 'Number of points defining each channel cross section.'),
         Field('maxWallTemperature', 'Max hot wall temperature', 'float', default = None, unit = 'K', showWhen = _coolingOn,
-              help = 'Hard cap on hot wall temperature. Leave blank to optimize between the bounds below.'),
+              help = 'Hot wall temperature the jacket is held to, one value for the whole jacket. '
+                     'Required whenever the jacket is built: the sizing search converges each station '
+                     'against it, and a manual size profile is reported against it.'),
         Field('maxWallTempUpperBound', 'Max wall temp upper bound', 'float', default = None, unit = 'K', showWhen = _coolingOn,
-              help = 'Upper bound for the wall temperature optimization.'),
+              help = 'Upper bound for a wall temperature search. Carried in the configuration and read '
+                     'by no solver: no search over the wall temperature is implemented.'),
         Field('maxWallTempLowerBound', 'Max wall temp lower bound', 'float', default = None, unit = 'K', showWhen = _coolingOn,
-              help = 'Lower bound for the wall temperature optimization.'),
+              help = 'Lower bound for a wall temperature search. Carried in the configuration and read '
+                     'by no solver: no search over the wall temperature is implemented.'),
         Field('nChannelUpperBound', 'Channel count upper bound', 'int', default = None, showWhen = _coolingOn,
-              help = 'Upper bound for the channel-count search.'),
+              help = 'Upper bound for a channel-count search. Carried in the configuration and read by '
+                     'no solver: no search over the channel count is implemented.'),
         Field('nChannelLowerBound', 'Channel count lower bound', 'int', default = None, showWhen = _coolingOn,
-              help = 'Lower bound for the channel-count search.'),
+              help = 'Lower bound for a channel-count search. Carried in the configuration and read by '
+                     'no solver: no search over the channel count is implemented.'),
         Field('coolantClass', 'Coolant class', 'choice',
               choices = [('Fuel', 'fuel'), ('Oxidizer', 'oxidizer')], default = 'fuel', showWhen = _coolingOn,
               help = 'Which propellant stream feeds the jacket.'),
@@ -387,9 +425,11 @@ groups = [
         Field('coolantMassFlow', 'Coolant mass flow', 'float', default = None, unit = 'kg/s', showWhen = _coolingOn,
               help = 'Coolant mass flow through the jacket. Leave blank to derive from O/F.'),
         Field('minCoolantExitPressure', 'Min coolant exit pressure', 'float', default = None, unit = 'Pa', showWhen = _coolingOn,
-              help = 'Lower limit on coolant pressure at the jacket exit.'),
+              help = 'Lower limit on coolant pressure at the jacket exit. Checked once the jacket is '
+                     'solved, and the run is refused below it. Blank is no limit.'),
         Field('minCoolantExitTemperature', 'Min coolant exit temperature', 'float', default = None, unit = 'K', showWhen = _coolingOn,
-              help = 'Lower limit on coolant temperature at the jacket exit.'),
+              help = 'Lower limit on coolant temperature at the jacket exit, for a cycle that needs the '
+                     'enthalpy. Checked once the jacket is solved. Blank is no limit.'),
     ], collapsed = True, expandWhen = _coolingOn),
 
     Group('Radiative Extension', [

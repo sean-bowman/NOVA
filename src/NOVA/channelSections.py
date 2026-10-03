@@ -303,6 +303,35 @@ def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
 
     raise ValueError(f"Unknown channel family '{family}'; the package builds {SECTIONFAMILIES}.")
 
+def depthLimitedHalfExtent(maxDepth: float = None) -> float:
+
+    '''
+
+    Largest radial half-extent a maximum channel depth allows, for any family [m].
+
+    A section's depth is how far it reaches out from the wall, which is twice its half-extent in
+    every family: a circle's depth is its diameter. So one depth limit bounds all three, and it
+    is the only thing that bounds a circle from above apart from the room between its neighbors.
+    Without it a circle grows until it fills its pitch, which on a wide bell end is a passage
+    tens of millimeters across carrying coolant at walking pace.
+
+    Parameters:
+    -----------
+    maxDepth : float
+        Depth a channel may reach [m]. None or non-finite is no limit.
+
+    Returns:
+    --------
+    float
+        Half-extent limit [m], infinite where no depth limit was given.
+
+    '''
+
+    if maxDepth is None or not np.isfinite(maxDepth):
+        return float('inf')
+
+    return 0.5*float(maxDepth)
+
 def maxHalfExtent(family: str, width, maxAspectRatio: float, maxDepth: float = None):
 
     '''
@@ -312,6 +341,9 @@ def maxHalfExtent(family: str, width, maxAspectRatio: float, maxDepth: float = N
     The depth is held to maxAspectRatio times the width, and to maxDepth where one is given. A
     helix passes the widest channel its pass spacing allows, the spacing less the minimum rib,
     as the width and its fixed aspect ratio as the ratio, so the same product bounds it.
+
+    A circle has no width to take a ratio against: the room between its neighbors bounds it, and
+    `depthLimitedHalfExtent` carries the depth limit that applies to every family.
 
     '''
 

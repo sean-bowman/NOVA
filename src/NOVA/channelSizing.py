@@ -20,9 +20,54 @@ monotone function: a larger channel runs its wall hotter, which tests/testRegenT
 rectangle's depth to. It is written as an adaptive secant with backtracking, overshoot damping
 and a step fraction that ramps with the distance from target.
 
-Three things bound the answer. The channel may not exceed the largest that fits between its
-neighbors at that station, it may not fall below the minimum the process can build, and where
-it is bounded the wall temperature is whatever it comes out as.
+Four things bound the answer. The channel may not exceed the largest that fits between its
+neighbors at that station, it may not reach past `maxChannelDepth` out from the wall, and it
+may not fall below the minimum the process can build. The two upper bounds are not the same kind
+of thing as the lower one. A channel held at an upper bound leaves the wall cooler than its
+limit, which is a jacket with margin to spare, so the wall temperature there is whatever it
+comes out as. A channel held at the lower bound with the wall still over its limit has nothing
+left to try, because only a smaller channel cools harder, so that station stops the run.
+
+The depth bound is the only thing limiting a circle's size apart from its neighbors, and it is
+what keeps the search from filling the whole pitch on a wide bell: unset, the aft end of a
+large nozzle takes a passage tens of millimeters across carrying coolant at walking pace. The
+objective and the wall temperature constraint both improve as a channel grows, so nothing else
+in the problem stops it.
+
+What the coolant is worth when it leaves is checked separately, against
+`minCoolantExitPressure` and `minCoolantExitTemperature`. A jacket can hold every wall at its
+limit and still arrive with no pressure to inject with.
+
+----------------------------------------------------------------------
+                            Two ways to size
+----------------------------------------------------------------------
+
+The search above is one of two modes, named by `channelSizingMode`:
+
+    thermal   The search. Every station converges its own half-extent against the wall
+              temperature limit, at about seven passes of the thermal model per station.
+
+    manual    The half-extent is read off a profile in channelProfile.py and the station is
+              marched once. One pass of the thermal model per station, so the wall temperature,
+              the pressure drop and the coolant exit state still come out; they are reported
+              rather than converged to, and the wall runs wherever the geometry puts it.
+
+The wall temperature limit is a constraint in the first and a yardstick in the second. A search
+that cannot hold a station under it has failed at the job it was given and says so; a profile
+that puts a station over it is a design decision the reader can see in the summary, which is why
+the manual mode reports the margin rather than refusing. The coolant exit limits are checked in
+both, because an unusable coolant condition is unusable however the geometry was arrived at.
+
+The two share everything except how the half-extent at a station is arrived at: the same
+centerline offset, the same wrap, the same cross sections and the same thermal model. What the
+manual mode does not share is the search's tolerance for a bound. A profile is a statement about
+geometry, so a station whose requested size will not fit between its neighbors, or falls below
+the process minimum, stops the run and names the station rather than quietly building something
+else. A channel count too high for its throat stops it too, where the search reduces the count
+instead.
+
+Every run records the profile it built, keyed on jacket fraction, so a search can be run once
+and its answer replayed as a manual profile for every later run that changes something else.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -61,11 +106,14 @@ from scipy.interpolate import interp1d
 from tqdm import tqdm
 
 from .geometryTools import DCM, parallelOffset
-from .errors import ConvergenceFailureError, createErrorContext, InvalidInputError
+from .errors import (ConvergenceFailureError, createErrorContext, GeometricConstraintError,
+                     InvalidInputError, PressureDropError, ThermalConstraintError)
 from .materials import wallMaterialCurves
 from .channelGeometry import generateCrossSections as buildCrossSections
-from .channelSections import (helicalSpacing, loxodromeWrap, maxHalfExtent, rectangularWidth,
-                              throatChannelCount)
+from .channelProfile import (CHANNELSIZINGMODES, evaluateProfile, profileConfigurationBlock,
+                             profileDocument, readProfile, stationKeys)
+from .channelSections import (depthLimitedHalfExtent, helicalSpacing, loxodromeWrap,
+                              maxHalfExtent, rectangularWidth, throatChannelCount)
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
@@ -132,6 +180,15 @@ class ChannelSizingState:
     channelType : str
         Cross-section family, one of channelSections.SECTIONFAMILIES. The sized quantity is the
         section's radial half-extent: a circle's radius, half a rectangle's depth.
+    channelSizingMode : str
+        'thermal' converges the half-extent against maxWallTemperature at every station.
+        'manual' reads it off manualChannelProfile and marches each station once.
+    manualChannelProfile : Any
+        The profile the manual mode reads: a half-extent [m], a list of [key, half-extent]
+        pairs, or a path to a recorded profile document. See channelProfile.
+    manualChannelProfileKey : str
+        Coordinate the profile's control points are keyed on, one of
+        channelProfile.PROFILEKEYS. A recorded profile names its own and that one wins.
     gasSideAxialModel : str
         'uniform' or 'measured', passed to the thermal model, which decides whether the gas-side
         correlation constant is held along the wall or follows the measured distribution.
@@ -151,6 +208,10 @@ class ChannelSizingState:
         A helix's angle from the meridian [deg] and its depth as a multiple of its width [-].
     maxWallTemperature : float
         Hot wall temperature the loop converges to [K].
+    minCoolantExitPressure, minCoolantExitTemperature : float
+        What the coolant leaving the jacket has to be worth to the rest of the engine [Pa], [K].
+        Each is checked after the march where the configuration set one, and ignored where it
+        did not.
     hotWallThickness, infillThickness : float
         Wall between coolant and exhaust, and material left between neighbors [m].
     material : str
@@ -197,6 +258,9 @@ class ChannelSizingState:
 
     # -- What the solve reads -- #
     channelType:                            str   = 'circle'
+    channelSizingMode:                      str   = 'thermal'
+    manualChannelProfile:                   Any   = None
+    manualChannelProfileKey:                str   = 'areaRatio'
     gasSideAxialModel:                      str   = 'uniform'
     coolantGeometryCorrections:             bool  = False
     coolantRoughnessModel:                  str   = 'dippreySabersky'
@@ -211,6 +275,8 @@ class ChannelSizingState:
     channelHelixAngle:                      float = float('nan')
     channelAspectRatio:                     float = 1.0
     maxWallTemperature:                     float = float('nan')
+    minCoolantExitPressure:                 Any   = None
+    minCoolantExitTemperature:              Any   = None
     hotWallThickness:                       float = 0.0
     infillThickness:                        float = 0.0
     material:                               str   = 'GRCop-42'
@@ -241,6 +307,8 @@ class ChannelSizingState:
     channelRadius:                          Any   = None   # [m], one per station
     channelWidth:                           Any   = None   # [m], one per station, rectangles and helices
     channelRibThickness:                    Any   = None   # [m], one per station, helices only
+    channelWallTemperature:                 Any   = None   # [K], hot wall, one per station
+    channelProfilePoints:                   Any   = None   # [-], [m], the profile built, keyed on jacket fraction
     coolantExitPressure:                    Any   = None   # [Pa]
     coolantExitTemperature:                 Any   = None   # [K]
     wallMaterialResolved:                   Any   = None   # the alloy actually used
@@ -254,10 +322,323 @@ class ChannelSizingState:
 # The outputs a solve hands back. Kept beside the class so that adding a field and forgetting to
 # surface it is a one-line fix rather than a silent drop.
 channelSizingOutputs = (
-    'channelRadius', 'channelRibThickness', 'channelWidth', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
+    'channelRadius', 'channelRibThickness', 'channelWidth', 'channelWallTemperature',
+    'channelProfilePoints', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
     'wallMaterialResolved', 'tempRangeKelvin', 'wallThermalConductivityData',
     'wallThermalConductivityInterpolator', 'wallCTEInterpolator',
     'wallYieldStrengthInterpolator', 'wallFractureStrainInterpolator')
+
+def wallTemperatureLimit(state) -> float:
+
+    '''
+
+    The hot wall temperature the jacket is held to, checked before the solve reads it.
+
+    One temperature for the whole jacket, not one per station. The search compares the wall
+    against it every iteration and stops when the difference falls inside a tolerance taken
+    from it, so a limit that is not a finite number makes every one of those comparisons
+    false: the search leaves its first iteration immediately, every station keeps the largest
+    channel that fits, and the run reports a jacket that was never checked against anything.
+    Nothing in the output would say so, which is why this is checked rather than trusted.
+
+    Parameters:
+    -----------
+    state : ChannelSizingState
+
+    Returns:
+    --------
+    float
+        The limit [K].
+
+    Raises:
+    -------
+    InvalidInputError
+        If the limit is absent, not a number, not finite, not a scalar, or not above zero.
+
+    '''
+
+    try:
+        limit  = np.asarray(state.maxWallTemperature, dtype = float)
+        usable = limit.ndim == 0 and bool(np.isfinite(limit)) and float(limit) > 0.0
+    except (TypeError, ValueError):
+        usable = False
+
+    if not usable:
+        raise InvalidInputError(
+            message = 'The jacket is sized against one hot wall temperature limit, so '
+                      'maxWallTemperature has to be a single finite temperature above zero. '
+                      'A limit left unset does not size a jacket conservatively: it stops the '
+                      'search from running at all.',
+            parameterName = 'maxWallTemperature',
+            value = state.maxWallTemperature,
+            validRange = 'One finite value greater than 0 [K]')
+
+    return float(limit)
+
+def convergenceFailure(message: str, stationIndex: int, iterations: int, radius: float,
+                       wallTemperature: float, targetTemperature: float, tolerance: float,
+                       **extra) -> ConvergenceFailureError:
+
+    '''
+
+    The error a station raises when its size will not converge on the wall temperature.
+
+    Built here rather than inline at the two places that raise it, so that the failure path can
+    be constructed and tested on its own. Every quantity it reports is a scalar, the limit
+    included: subscripting one of them raises from inside the handler and buries the failure it
+    was reporting.
+
+    Parameters:
+    -----------
+    message : str
+        What failed, naming the station.
+    stationIndex : int
+        Station the search gave up at, in march order.
+    iterations : int
+        Iterations it used.
+    radius : float
+        Half-extent it ended on [m].
+    wallTemperature, targetTemperature : float
+        Wall it reached and the limit it was aiming at [K].
+    tolerance : float
+        Temperature tolerance convergence was judged against [K].
+    extra : Any
+        Anything else worth reporting from the site that raises, such as the bound it sat on or
+        the coolant state it had reached.
+
+    Returns:
+    --------
+    ConvergenceFailureError
+        Ready to raise.
+
+    '''
+
+    residual = abs(float(wallTemperature) - float(targetTemperature))
+
+    return ConvergenceFailureError(
+        message = message,
+        context = createErrorContext(
+            stationIndex      = stationIndex,
+            iterationCount    = iterations,
+            channelRadius     = float(radius),
+            wallTemperature   = float(wallTemperature),
+            targetTemperature = float(targetTemperature),
+            temperatureError  = residual,
+            tempTolerance     = float(tolerance),
+            **extra),
+        iterations = iterations,
+        tolerance  = float(tolerance),
+        residual   = residual)
+
+def wallTemperatureExceeded(stationIndex: int, wallTemperature: float, limit: float,
+                            halfExtent: float, tolerance: float) -> ThermalConstraintError:
+
+    '''
+
+    The error a station raises when even its smallest channel leaves the wall over its limit.
+
+    The wall temperature rises with channel size, so the smallest channel the process can build
+    is the coolest wall that station can have. A wall over the limit there is not a search that
+    needs more iterations: it is a jacket that cannot be built as specified, and the fix is more
+    channels, a higher limit, more coolant, or a film.
+
+    Parameters:
+    -----------
+    stationIndex : int
+        Station that cannot be cooled, in march order from the coolant inlet.
+    wallTemperature, limit : float
+        Wall the smallest channel reached and the limit it had to meet [K].
+    halfExtent : float
+        Smallest half-extent the process can build at that station [m].
+    tolerance : float
+        Temperature tolerance the comparison allowed [K].
+
+    Returns:
+    --------
+    ThermalConstraintError
+        Ready to raise.
+
+    '''
+
+    return ThermalConstraintError(
+        message = f'Station {stationIndex} reaches {float(wallTemperature):.1f} K at the '
+                  f'{1e3*float(halfExtent):.3f} mm half-extent, which is the smallest the '
+                  f'process can build, so no channel there holds the wall at its '
+                  f'{float(limit):.1f} K limit. A smaller channel would cool harder and there '
+                  f'is none to be had: the jacket needs more channels, a higher limit, more '
+                  f'coolant flow, or a film over this station.',
+        context = createErrorContext(
+            stationIndex     = stationIndex,
+            wallTemperature  = float(wallTemperature),
+            minChannelRadius = float(halfExtent),
+            tempTolerance    = float(tolerance)),
+        thermalProperty = 'hotWallTemperature',
+        value           = float(wallTemperature),
+        limit           = float(limit))
+
+def coolantPastWallLimit(stationIndex: int, coolantTemperature: float,
+                         limit: float) -> ThermalConstraintError:
+
+    '''
+
+    The error the march raises when the coolant is no colder than the wall is allowed to be.
+
+    The wall sits between the exhaust and the coolant, so it is always hotter than the coolant
+    running behind it. Coolant that has reached the wall's temperature limit therefore puts the
+    wall over that limit by itself, whatever size the channel is, and no station downstream can
+    be cooled either.
+
+    This is the other way a jacket fails the wall temperature limit. The first is geometric: the
+    smallest channel the process can build still leaves the wall too hot. This one is thermal,
+    and it is what a limit set below the coolant's own temperature produces. Left unchecked the
+    march carries on with heat running from the coolant into the wall, which balances the station
+    solve and cools the coolant, station after station, until the temperature leaves the range
+    any property model can answer for.
+
+    Parameters:
+    -----------
+    stationIndex : int
+        Station whose coolant has reached the limit, in march order from the coolant inlet.
+    coolantTemperature, limit : float
+        Coolant leaving that station and the wall temperature limit [K].
+
+    Returns:
+    --------
+    ThermalConstraintError
+        Ready to raise.
+
+    '''
+
+    return ThermalConstraintError(
+        message = f'The coolant leaves station {stationIndex} at '
+                  f'{float(coolantTemperature):.1f} K, at or above the '
+                  f'{float(limit):.1f} K the wall is limited to. The wall is always hotter than '
+                  f'the coolant behind it, so no channel size holds it under that limit here or '
+                  f'anywhere downstream. The limit has to sit above the coolant temperature the '
+                  f'jacket reaches, which needs a higher limit, more coolant flow, or a shorter '
+                  f'jacket.',
+        context = createErrorContext(
+            stationIndex           = stationIndex,
+            coolantTemperature     = float(coolantTemperature),
+            maxWallTemperature     = float(limit)),
+        thermalProperty = 'coolantTemperature',
+        value           = float(coolantTemperature),
+        limit           = float(limit))
+
+def checkCoolantExitState(state) -> None:
+
+    '''
+
+    Hold the coolant leaving the jacket to the pressure and temperature it was promised.
+
+    The sizing solve minimizes the pressure drop subject to the wall temperature limit, so the
+    drop is whatever the geometry leaves it as. Nothing in that makes the result usable: a
+    jacket can hold every wall at its limit and still arrive at the injector with no pressure to
+    inject with. These are the two limits that say what the rest of the engine needs, and each
+    is checked only where the configuration set one.
+
+    Parameters:
+    -----------
+    state : ChannelSizingState
+        A solved state, with the coolant exit condition filled in.
+
+    Raises:
+    -------
+    PressureDropError
+        If the coolant leaves below minCoolantExitPressure.
+    ThermalConstraintError
+        If the coolant leaves below minCoolantExitTemperature.
+
+    '''
+
+    def limitOf(name):
+
+        '''The limit a configuration set, or None where it left it unset.'''
+
+        value = getattr(state, name, None)
+        if value is None:
+            return None
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        return value if np.isfinite(value) else None
+
+    exitPressure    = float(state.coolantExitPressure)
+    exitTemperature = float(state.coolantExitTemperature)
+    inletPressure   = float(state.coolantInitialPressure)
+
+    pressureLimit = limitOf('minCoolantExitPressure')
+    if pressureLimit is not None and exitPressure < pressureLimit:
+        raise PressureDropError(
+            message = f'The coolant leaves the jacket at {1e-6*exitPressure:.3f} MPa, below the '
+                      f'{1e-6*pressureLimit:.3f} MPa the configuration requires. It entered at '
+                      f'{1e-6*inletPressure:.3f} MPa, so the jacket spent '
+                      f'{1e-6*(inletPressure - exitPressure):.3f} MPa. Fewer channels, a larger '
+                      f'maxChannelDepth or a higher inlet pressure buy it back.',
+            pressureDrop    = inletPressure - exitPressure,
+            exitPressure    = exitPressure,
+            minExitPressure = pressureLimit)
+
+    temperatureLimit = limitOf('minCoolantExitTemperature')
+    if temperatureLimit is not None and exitTemperature < temperatureLimit:
+        raise ThermalConstraintError(
+            message = f'The coolant leaves the jacket at {exitTemperature:.1f} K, below the '
+                      f'{temperatureLimit:.1f} K the configuration requires. The jacket picked '
+                      f'up less heat than the cycle needs, so it wants a hotter wall limit, a '
+                      f'longer jacket or less coolant through it.',
+            thermalProperty = 'coolantExitTemperature',
+            value           = exitTemperature,
+            limit           = temperatureLimit)
+
+def reportSizingResult(state, results: dict) -> None:
+
+    '''
+
+    Print what the jacket came out as, and the profile that would rebuild it.
+
+    The summary is the same in both modes, because the same quantities decide whether a jacket
+    is usable: the range of channel sizes, the hottest wall and its margin against the limit,
+    and what the coolant leaves at. In the manual mode none of them were held, so the margin is
+    the only thing that says whether the profile works.
+
+    A thermal solve also prints the profile it converged to, as the configuration entries that
+    replay it. That is the whole saving available: the search costs about seven passes of the
+    thermal model per station and replaying its answer costs one.
+
+    Parameters:
+    -----------
+    state : ChannelSizingState
+        A solved state, with its profile and wall temperature filled in.
+    results : dict
+        The per-station thermal results, in nozzle order.
+
+    '''
+
+    wallTemperature = np.asarray(results['wallTemperature'], dtype = float)
+    halfExtent      = np.asarray(state.channelRadius, dtype = float)
+    limit           = float(np.max(state.maxWallTemperature))
+    hottest         = int(np.argmax(wallTemperature))
+    pressureDrop    = float(state.coolantInitialPressure) - float(state.coolantExitPressure)
+
+    print(f'\nChannel sizing, {state.channelSizingMode} mode:')
+    print(f'  half-extent {1e3*halfExtent.min():.3f} to {1e3*halfExtent.max():.3f} mm over '
+          f'{state.numCrossSections} stations, {state.nChannel} channels')
+    print(f'  peak hot wall {wallTemperature[hottest]:.1f} K at station {hottest}, '
+          f'{wallTemperature[hottest] - limit:+.1f} K against the {limit:.1f} K limit')
+    print(f'  coolant exit {float(state.coolantExitTemperature):.1f} K at '
+          f'{1e-6*float(state.coolantExitPressure):.3f} MPa, jacket drop '
+          f'{1e-6*pressureDrop:.3f} MPa')
+
+    if state.channelSizingMode != 'thermal':
+        return
+
+    document = profileDocument(state.channelType, 'jacketFraction',
+                               state.channelProfilePoints[:, 0], state.channelProfilePoints[:, 1])
+
+    print('  the profile it converged to, which rebuilds this jacket without the search:')
+    print(profileConfigurationBlock(document))
 
 def solveChannelRadii(state, geometry, thermal):
 
@@ -268,6 +649,9 @@ def solveChannelRadii(state, geometry, thermal):
     Marches from the coolant inlet, converging the radius at each station so the hot wall reaches
     the requested temperature, subject to the largest channel that fits there and the smallest the
     process can build.
+
+    Under `channelSizingMode = 'manual'` the radius is read off `manualChannelProfile` instead and
+    each station is marched once, and a station the profile's size will not fit at stops the run.
 
     Parameters:
     -----------
@@ -412,7 +796,10 @@ def solveChannelRadii(state, geometry, thermal):
                         tryMakeFit(xNozzle, rNozzle, channelRadius, xChannelCenterline2D, rChannelCenterline2D, xPathline2D, rPathline2D, i, nozzleArcSlice)
                 else:
                     if findMaxRadius:
-                        return channelRadius[i]
+                        # The room between neighbors is one of two limits on a circle. The other
+                        # is the depth limit every family answers to, which is what stops a
+                        # circle on a wide bell from filling its whole pitch.
+                        return min(channelRadius[i], depthLimitedHalfExtent(state.maxChannelDepth))
                     else:
                         break
                 iteration += 1
@@ -576,6 +963,162 @@ def solveChannelRadii(state, geometry, thermal):
         state.tempRangeKelvin           = wallTemperatureGrid
         state.wallThermalConductivityData = wallCurves['thermalConductivity']
 
+    def prepareChannelLayout(nChannel):
+
+        '''
+
+        The channel count and the smallest half-extent the process can build, before the march.
+
+        A count too high for the throat cannot be built: its channels there are narrower than the
+        process minimum. The thermal mode reduces the count to the most that fit, which is the
+        largest jacket it can then size. The manual mode refuses instead, because a profile was
+        written against a count and silently changing the count changes the flow each channel
+        carries and with it every number the profile was chosen for.
+
+        The two wrapped families have their station geometry laid out here as well, since neither
+        depends on the size being solved: a rectangle's width fills the pitch at the cold wall,
+        and a helix's loxodrome and pass spacing follow from its angle.
+
+        Parameters:
+        -----------
+        nChannel : int
+            Channels, or helical starts, the configuration asked for.
+
+        Returns:
+        --------
+        tuple
+            The channel count to build with, and the smallest half-extent [m].
+
+        Raises:
+        -------
+        GeometricConstraintError
+            In the manual mode, if the channel count is too high for the throat.
+
+        '''
+
+        # The smallest half-extent the process can build. A helix is bounded by its width
+        minHalfExtent = state.minChannelRadius
+        if state.channelType == 'helical':
+            minHalfExtent = 0.5*state.channelAspectRatio*state.minChannelWidth
+
+        def refuseOrReduce(reason, fitted):
+
+            '''Reduce the channel count to what fits, or refuse where a profile fixed it.'''
+
+            if state.channelSizingMode == 'manual':
+                raise GeometricConstraintError(
+                    message = f'nChannel is {nChannel} and {reason} A manual profile is built '
+                              f'against a fixed channel count, so the count is not reduced for '
+                              f'you: {fitted} is the most that fit at the throat.',
+                    constraintType = 'nChannel',
+                    value = float(nChannel),
+                    limit = float(fitted))
+
+            print(f'\nnChannel too high; {reason}')
+            state.nChannel = fitted
+            print(f'\nnChannel reduced to {fitted}.')
+
+            return fitted
+
+        # first check if nChannel is too high and reduce if so
+        if state.channelType == 'helical':
+            throatRadius   = min(rNozzle)
+            throatSpacing  = helicalSpacing(throatRadius + state.hotWallThickness, nChannel, state.channelHelixAngle)
+            if throatSpacing - state.infillThickness < state.minChannelWidth:
+                nChannel = refuseOrReduce(
+                    'helical passes at the throat will be too narrow.',
+                    throatChannelCount('helical', throatRadius, state.hotWallThickness,
+                                       state.infillThickness, state.minChannelWidth,
+                                       helixAngle = state.channelHelixAngle))
+
+            # The loxodrome and the pass spacing along the cold wall, in march order
+            xColdWall, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
+            xColdWall, rColdWall = np.flip(xColdWall), np.flip(rColdWall)
+            meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
+            state.dcrData['helicalWrap'] = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle)
+            state.dcrData['passSpacing'] = helicalSpacing(rColdWall, nChannel, state.channelHelixAngle)
+        elif state.channelType == 'rectangular':
+            throatRadius = min(rNozzle)
+            throatWidth  = rectangularWidth(throatRadius + state.hotWallThickness, nChannel, state.infillThickness)
+            if throatWidth < state.minChannelWidth:
+                nChannel = refuseOrReduce(
+                    'channel width at throat will be too small.',
+                    throatChannelCount('rectangular', throatRadius, state.hotWallThickness,
+                                       state.infillThickness, state.minChannelWidth))
+
+            # The width at every station fills the pitch at the cold wall, which is the hot wall
+            # offset by its thickness, so the rib at its root is the infill thickness. Held in
+            # march order, which is the order every station array in the solve is written in.
+            _, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
+            state.dcrData['channelWidth'] = np.flip(rectangularWidth(rColdWall, nChannel, state.infillThickness))
+        else:
+            throatRadius = min(rNozzle)
+            offsetHotWallThickness = state.hotWallThickness - state.infillThickness
+            arcAngle = 2*np.pi / nChannel
+            theta = arcAngle/2
+            R = throatRadius + offsetHotWallThickness
+            r = R*np.sin(theta) / (1 - np.sin(theta))
+            circleChannelThroatRadius = r - state.infillThickness / 2
+            if circleChannelThroatRadius < state.minChannelRadius:
+                nChannel = refuseOrReduce(
+                    'channel radius at throat will be too small.',
+                    throatChannelCount(state.channelType, throatRadius, state.hotWallThickness,
+                                       state.infillThickness, state.minChannelRadius))
+
+        return nChannel, minHalfExtent
+
+    def initialStationInputs():
+
+        '''
+
+        The run-level thermal inputs, and the arrays every station's result is written into.
+
+        The thermal model is called one station at a time, so the dictionary it reads carries the
+        run's scalars and a single station's arrays, and the station's own entries are written
+        over it at each call. The plot arrays are full length and in nozzle order, which is the
+        order the model's own figure and its coolant exit state are read in.
+
+        Returns:
+        --------
+        tuple
+            The station input dictionary, a copy of it before any station was written, and the
+            full-length result arrays.
+
+        '''
+
+        # instantiate base dictionary
+        heatTransferDict_i = {}
+        # the local dictionary constains scalars and arrays of length 1
+        heatTransferDict_i["numCrossSections"]                = 1
+        heatTransferDict_i["channelType"]                     = state.channelType
+        heatTransferDict_i["gasSideAxialModel"]               = state.gasSideAxialModel
+        heatTransferDict_i["coolantGeometryCorrections"]      = state.coolantGeometryCorrections
+        heatTransferDict_i["coolantRoughnessModel"]           = state.coolantRoughnessModel
+        heatTransferDict_i["channelSurfaceRoughness"]         = state.channelSurfaceRoughness
+        heatTransferDict_i["nChannel"]                        = state.nChannel
+        heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness
+        heatTransferDict_i["throatRadiusOfCurvature"]         = (state.throatInletCurvatureNonDimensional*state.nozzleScalingFactor + \
+                                                                 state.throatOutletCurvatureNonDimensional*state.nozzleScalingFactor) / 2
+        heatTransferDict_i["throatDiameter"]                  = 2 * min(rNozzle)
+        heatTransferDict_i["throatArea"]                      = np.pi * (min(rNozzle)**2)
+        heatTransferDict_i["coolant"]                         = state.coolant
+        heatTransferDict_i["mdot"]                            = state.coolantMassFlow / state.nChannel
+        heatTransferDict_i["chamberPressure"]                 = state.chamberPressure
+        heatTransferDict_i["coolantInitialTemperature"]       = state.coolantInitialTemperature
+        heatTransferDict_i["coolantInitialPressure"]          = state.coolantInitialPressure
+        heatTransferDict_i["theoreticalCharVel"]              = state.theoreticalCharacteristicVelocity
+
+        baseHeatTransferDict = heatTransferDict_i.copy()
+
+        # instantiate plot outputs dictionary
+        heatTransferPlots = {}
+        heatTransferPlots["xHotWall3D"] = xNozzle
+        heatTransferPlots["rHotWall3D"] = rNozzle
+        for key in THERMALPLOTKEYS:
+            heatTransferPlots[key] = np.zeros(state.numCrossSections)
+
+        return heatTransferDict_i, baseHeatTransferDict, heatTransferPlots
+
     # Create channel radii based on heat transfer
     def dynamicChannelRadii(maxWallTemperature, nChannel):
 
@@ -594,7 +1137,7 @@ def solveChannelRadii(state, geometry, thermal):
 
         | Parameter | Type | Description |
         |-----------|------|-------------|
-        | `maxWallTemperature` | `np.ndarray` | Maximum allowable wall temperature at each station [K] |
+        | `maxWallTemperature` | `float` | Hot wall temperature limit for the whole jacket [K] |
         | `nChannel` | `int` | Number of cooling channels |
 
         ### Returns
@@ -627,58 +1170,7 @@ def solveChannelRadii(state, geometry, thermal):
 
         '''
 
-        # The smallest half-extent the process can build. A helix is bounded by its width
-        minHalfExtent = state.minChannelRadius
-        if state.channelType == 'helical':
-            minHalfExtent = 0.5*state.channelAspectRatio*state.minChannelWidth
-
-        # first check if nChannel is too high and reduce if so
-        if state.channelType == 'helical':
-            throatRadius   = min(rNozzle)
-            throatSpacing  = helicalSpacing(throatRadius + state.hotWallThickness, nChannel, state.channelHelixAngle)
-            if throatSpacing - state.infillThickness < state.minChannelWidth:
-                print(f'\nnChannel too high; helical passes at the throat will be too narrow.')
-                nChannel = throatChannelCount('helical', throatRadius, state.hotWallThickness,
-                                              state.infillThickness, state.minChannelWidth,
-                                              helixAngle = state.channelHelixAngle)
-                state.nChannel = nChannel
-                print(f'\nnChannel reduced to {nChannel}.')
-
-            # The loxodrome and the pass spacing along the cold wall, in march order
-            xColdWall, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
-            xColdWall, rColdWall = np.flip(xColdWall), np.flip(rColdWall)
-            meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
-            state.dcrData['helicalWrap'] = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle)
-            state.dcrData['passSpacing'] = helicalSpacing(rColdWall, nChannel, state.channelHelixAngle)
-        elif state.channelType == 'rectangular':
-            throatRadius = min(rNozzle)
-            throatWidth  = rectangularWidth(throatRadius + state.hotWallThickness, nChannel, state.infillThickness)
-            if throatWidth < state.minChannelWidth:
-                print(f'\nnChannel too high; channel width at throat will be too small.')
-                nChannel = throatChannelCount('rectangular', throatRadius, state.hotWallThickness,
-                                              state.infillThickness, state.minChannelWidth)
-                state.nChannel = nChannel
-                print(f'\nnChannel reduced to {nChannel}.')
-
-            # The width at every station fills the pitch at the cold wall, which is the hot wall
-            # offset by its thickness, so the rib at its root is the infill thickness. Held in
-            # march order, which is the order every station array in the solve is written in.
-            _, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
-            state.dcrData['channelWidth'] = np.flip(rectangularWidth(rColdWall, nChannel, state.infillThickness))
-        else:
-            throatRadius = min(rNozzle)
-            offsetHotWallThickness = state.hotWallThickness - state.infillThickness
-            arcAngle = 2*np.pi / nChannel
-            theta = arcAngle/2
-            R = throatRadius + offsetHotWallThickness
-            r = R*np.sin(theta) / (1 - np.sin(theta))
-            circleChannelThroatRadius = r - state.infillThickness / 2
-            if circleChannelThroatRadius < state.minChannelRadius:
-                print(f'\nnChannel too high; channel radius at throat will be too small.')
-                nChannel = throatChannelCount(state.channelType, throatRadius, state.hotWallThickness,
-                                              state.infillThickness, state.minChannelRadius)
-                state.nChannel = nChannel
-                print(f'\nnChannel reduced to {nChannel}.')
+        nChannel, minHalfExtent = prepareChannelLayout(nChannel)
 
         # initialize arrays and values
         channelRadius = np.zeros(state.numCrossSections)
@@ -858,8 +1350,19 @@ def solveChannelRadii(state, geometry, thermal):
                     # A bound is the answer only when the wall is still on the far side of the
                     # target there: cold at the largest channel, hot at the smallest. Otherwise
                     # the root lies inside the bounds and the search goes on.
+                    #
+                    # The two bounds are not symmetric. Cold at the largest channel that fits is
+                    # a jacket with margin to spare, which is a usable answer. Hot at the
+                    # smallest channel the process can build is a wall over its limit with
+                    # nothing left to try, because a smaller channel is the only thing that
+                    # would cool it harder. That is refused rather than accepted.
                     atLargest = proposedRadius >= maxChannelRadius
-                    if minMaxed and ((atLargest and newError < 0) or (not atLargest and newError > 0)):
+                    if minMaxed and atLargest and newError < 0:
+                        newError = 0
+                    elif minMaxed and not atLargest and newError > 0:
+                        if newError > tempTolerance:
+                            raise wallTemperatureExceeded(i, newWallTemp, maxWallTemperature,
+                                                          minChannelRadius, tempTolerance)
                         newError = 0
 
                 # Overshoot / jitter damping: if error sign flipped, shrink next step size
@@ -936,83 +1439,44 @@ def solveChannelRadii(state, geometry, thermal):
 
             # If we exited due to iteration cap and radius is at minimum, terminate with fail state
             if iterationsUsed >= maxSolverIterations and currentRadius <= minChannelRadius:
-                raise ConvergenceFailureError(
-                    message=f"Minimum channel radius reached at station {i} without achieving temperature convergence",
-                    context=createErrorContext(
-                        stationIndex=i,
-                        iterationCount=iterationsUsed,
-                        channelRadius=currentRadius,
-                        minChannelRadius=minChannelRadius,
-                        wallTemperature=hotWallTemperature,
-                        targetTemperature=maxWallTemperature[i],
-                        temperatureError=abs(hotWallTemperature - maxWallTemperature[i]),
-                        tempTolerance=tempTolerance
-                    ),
-                    iterations=iterationsUsed,
-                    tolerance=tempTolerance,
-                    residual=abs(hotWallTemperature - maxWallTemperature)
-                )
+                raise convergenceFailure(
+                    f'Minimum channel radius reached at station {i} without achieving '
+                    f'temperature convergence',
+                    stationIndex      = i,
+                    iterations        = iterationsUsed,
+                    radius            = currentRadius,
+                    wallTemperature   = hotWallTemperature,
+                    targetTemperature = maxWallTemperature,
+                    tolerance         = tempTolerance,
+                    minChannelRadius  = float(minChannelRadius))
 
             # If we exited due to iteration cap without convergence, terminate with fail state
             if abs(hotWallTemperature - maxWallTemperature) > tempTolerance and iterationsUsed >= maxSolverIterations and not minMaxed:
-                raise ConvergenceFailureError(
-                    message=f"Temperature convergence failed at station {i} after {maxSolverIterations} iterations",
-                    context=createErrorContext(
-                        stationIndex=i,
-                        iterationCount=iterationsUsed,
-                        channelRadius=currentRadius,
-                        wallTemperature=hotWallTemperature,
-                        targetTemperature=maxWallTemperature,
-                        temperatureError=abs(hotWallTemperature - maxWallTemperature),
-                        tempTolerance=tempTolerance,
-                        coolantPressure=heatTransferDict_i['coolantInitialPressure'],
-                        coolantTemperature=heatTransferDict_i['coolantInitialTemperature']
-                    ),
-                    iterations=iterationsUsed,
-                    tolerance=tempTolerance,
-                    residual=abs(hotWallTemperature - maxWallTemperature)
-                )
+                raise convergenceFailure(
+                    f'Temperature convergence failed at station {i} after '
+                    f'{maxSolverIterations} iterations',
+                    stationIndex       = i,
+                    iterations         = iterationsUsed,
+                    radius             = currentRadius,
+                    wallTemperature    = hotWallTemperature,
+                    targetTemperature  = maxWallTemperature,
+                    tolerance          = tempTolerance,
+                    coolantPressure    = heatTransferDict_i['coolantInitialPressure'],
+                    coolantTemperature = heatTransferDict_i['coolantInitialTemperature'])
 
-            # Accept new coolant temperature and pressure as next station initial conditions
+            # Accept new coolant temperature and pressure as next station initial conditions.
+            # Coolant that has reached the wall's own limit puts the wall over it by itself, so
+            # it is caught here rather than carried into the next station's solve.
+            if heatTransferDict_i['newCoolantTemperature'] >= maxWallTemperature:
+                raise coolantPastWallLimit(i, heatTransferDict_i['newCoolantTemperature'],
+                                           maxWallTemperature)
             heatTransferDict_i['coolantInitialTemperature'] = heatTransferDict_i['newCoolantTemperature']
             heatTransferDict_i['coolantInitialPressure']    = heatTransferDict_i['newCoolantPressure']
 
             return heatTransferDict_i
         # -------------------------------------------------------------------------------------- #
 
-        # collapse dictionary instantiation
-        if True:
-
-            # instantiate base dictionary
-            heatTransferDict_i = {}
-            # the local dictionary constains scalars and arrays of length 1
-            heatTransferDict_i["numCrossSections"]                = 1
-            heatTransferDict_i["channelType"]                     = state.channelType
-            heatTransferDict_i["gasSideAxialModel"]               = state.gasSideAxialModel
-            heatTransferDict_i["coolantGeometryCorrections"]      = state.coolantGeometryCorrections
-            heatTransferDict_i["coolantRoughnessModel"]           = state.coolantRoughnessModel
-            heatTransferDict_i["channelSurfaceRoughness"]         = state.channelSurfaceRoughness
-            heatTransferDict_i["nChannel"]                        = state.nChannel
-            heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness
-            heatTransferDict_i["throatRadiusOfCurvature"]         = (state.throatInletCurvatureNonDimensional*state.nozzleScalingFactor + \
-                                                                     state.throatOutletCurvatureNonDimensional*state.nozzleScalingFactor) / 2
-            heatTransferDict_i["throatDiameter"]                  = 2 * min(rNozzle)
-            heatTransferDict_i["throatArea"]                      = np.pi * (min(rNozzle)**2)
-            heatTransferDict_i["coolant"]                         = state.coolant
-            heatTransferDict_i["mdot"]                            = state.coolantMassFlow / state.nChannel
-            heatTransferDict_i["chamberPressure"]                 = state.chamberPressure
-            heatTransferDict_i["coolantInitialTemperature"]       = state.coolantInitialTemperature
-            heatTransferDict_i["coolantInitialPressure"]          = state.coolantInitialPressure
-            heatTransferDict_i["theoreticalCharVel"]              = state.theoreticalCharacteristicVelocity
-
-            baseHeatTransferDict = heatTransferDict_i.copy()
-
-            # instantiate plot outputs dictionary
-            heatTransferPlots = {}
-            heatTransferPlots["xHotWall3D"] = xNozzle
-            heatTransferPlots["rHotWall3D"] = rNozzle
-            for key in THERMALPLOTKEYS:
-                heatTransferPlots[key] = np.zeros(state.numCrossSections)
+        heatTransferDict_i, baseHeatTransferDict, heatTransferPlots = initialStationInputs()
 
         # find max channel radius at each station
         for i in tqdm(range(state.numCrossSections), desc="Solving for channel radii", colour="#ABD038"):
@@ -1059,8 +1523,154 @@ def solveChannelRadii(state, geometry, thermal):
         return np.flip(channelRadius), np.flip(xChannelCenterline3D), np.flip(yChannelCenterline3D), np.flip(zChannelCenterline3D), \
             heatTransferPlots, baseHeatTransferDict
 
+    # Build the channel at the size a profile already decided
+    def manualChannelRadii(maxWallTemperature, halfExtent, profileKey, keyName, nChannel):
+
+        '''
+
+        Lay the channel out at the half-extent a manual profile asks for.
+
+        The same march as the thermal mode, with the search taken out: each station takes its
+        size from the profile, is wrapped, and is handed to the thermal model once. Nothing is
+        adjusted afterwards, so the wall temperature, the pressure drop and the coolant exit
+        state are results rather than targets.
+
+        A station whose requested size will not fit between its neighbors, or falls below the
+        smallest the process can build, stops the run. The geometry would otherwise shrink the
+        channel to what fits, which is the right answer for a search and the wrong one for a
+        profile: it would build a jacket the configuration does not describe.
+
+        Parameters:
+        -----------
+        maxWallTemperature : float
+            The wall temperature limit. Nothing here holds the wall to it, and it is reported
+            against rather than converged on. It still bounds the coolant: coolant that reaches
+            it puts the wall over it whatever the channel size is.
+        halfExtent : np.ndarray
+            Radial half-extent the profile asks for at each station, in nozzle order [m].
+        profileKey : np.ndarray
+            The profile key at each station, in nozzle order, quoted in the message when a
+            station's size is refused.
+        keyName : str
+            Name of that key, for the same message.
+        nChannel : int
+            Channels around the nozzle.
+
+        Returns:
+        --------
+        tuple
+            The half-extent distribution, the 3D centerline, the per-station thermal results
+            and the run-level thermal inputs, on the same convention dynamicChannelRadii uses.
+
+        Raises:
+        -------
+        GeometricConstraintError
+            If the profile asks for a size a station cannot carry.
+
+        '''
+
+        nChannel, minHalfExtent = prepareChannelLayout(nChannel)
+
+        # initialize arrays and values
+        channelRadius = np.zeros(state.numCrossSections)
+        xChannelCenterline2D, rChannelCenterline2D = [np.zeros((state.numCrossSections)) for _ in range(2)]
+        helixPath = np.zeros(state.numCrossSections)
+        xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D = [np.zeros((state.numCrossSections)) for _ in range(3)]
+
+        heatTransferDict_i, baseHeatTransferDict, heatTransferPlots = initialStationInputs()
+
+        def refuseStation(station, requested, bound, boundName, reason):
+
+            '''Stop the run, naming the station and the bound the profile ran into.'''
+
+            raise GeometricConstraintError(
+                message = f'The manual channel profile asks for a {1e3*requested:.3f} mm '
+                          f'half-extent at station {station} of {state.numCrossSections}, '
+                          f'x = {1e3*xNozzle[station]:.1f} mm, {keyName} '
+                          f'{profileKey[station]:.4g}. {reason} The {boundName} there is '
+                          f'{1e3*bound:.3f} mm.',
+                constraintType = 'channelRadius',
+                value = float(requested),
+                limit = float(bound))
+
+        for i in tqdm(range(state.numCrossSections), desc = 'Building channel radii', colour = '#ABD038'):
+
+            # The march runs from the coolant inlet, which is the last station in nozzle order.
+            station   = state.numCrossSections - 1 - i
+            requested = float(halfExtent[station])
+
+            maxChannelRadius = kineosAlgorithm_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, i, findMaxRadius=True)
+
+            if requested < minHalfExtent:
+                refuseStation(station, requested, minHalfExtent, 'smallest the process can build',
+                              'That is below the process minimum.')
+            if requested > maxChannelRadius:
+                refuseStation(station, requested, maxChannelRadius, 'largest that fits',
+                              'That does not fit between its neighbors.')
+
+            channelRadius[i] = requested
+
+            # Wrap
+            if i < state.numCrossSections - 1:
+                xChannelCenterline2D[i], rChannelCenterline2D[i] = (arr[0] if i == 0 else arr[1] for arr in findChannelCenterline_oneStation(xNozzle, rNozzle, channelRadius, xChannelCenterline2D, rChannelCenterline2D, i))
+                xChannelCenterline3D[i:i+2], yChannelCenterline3D[i:i+2], zChannelCenterline3D[i:i+2], channelRadius = \
+                    wrapSingleChannel_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D, i)
+            else:
+                xChannelCenterline2D[i], rChannelCenterline2D[i] = (arr[1] for arr in findChannelCenterline_oneStation(xNozzle, rNozzle, channelRadius, xChannelCenterline2D, rChannelCenterline2D, i))
+                xChannelCenterline3D[i], yChannelCenterline3D[i], zChannelCenterline3D[i], channelRadius = \
+                    wrapSingleChannel_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D, i)
+
+            # The wrap reduces a circular channel that fills more than its share of the
+            # circumference rather than reporting it. The bound above is the fixed point of a
+            # separate iteration, so a size right at it can still be nudged here, and a size
+            # that moved by more than rounding is one the station will not carry.
+            if abs(channelRadius[i] - requested) > 1e-9*requested:
+                refuseStation(station, requested, channelRadius[i], 'largest that fits',
+                              'The wrap could not lay that size on the wall.')
+
+            heatTransferDict_i, heatTransferPlots, hotWallTemperature = \
+                dcrGambit(heatTransferDict_i, heatTransferPlots, \
+                          xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D, channelRadius, state.channelType, i)
+
+            # Accept new coolant temperature and pressure as next station initial conditions.
+            # Coolant that has reached the wall's own limit puts the wall over it by itself, so
+            # it is caught here rather than carried into the next station's solve.
+            if heatTransferDict_i['newCoolantTemperature'] >= maxWallTemperature:
+                raise coolantPastWallLimit(i, heatTransferDict_i['newCoolantTemperature'],
+                                           maxWallTemperature)
+            heatTransferDict_i['coolantInitialTemperature'] = heatTransferDict_i['newCoolantTemperature']
+            heatTransferDict_i['coolantInitialPressure']    = heatTransferDict_i['newCoolantPressure']
+
+        # Nozzle order, so the exit is the first index. See the note in dynamicChannelRadii.
+        state.coolantExitPressure    = heatTransferPlots['pressure'][0]
+        state.coolantExitTemperature = heatTransferPlots['temperature'][0]
+
+        return np.flip(channelRadius), np.flip(xChannelCenterline3D), np.flip(yChannelCenterline3D), np.flip(zChannelCenterline3D), \
+            heatTransferPlots, baseHeatTransferDict
+
+    if state.channelSizingMode not in CHANNELSIZINGMODES:
+        raise InvalidInputError(
+            message = 'The channel size is either converged against the wall temperature limit '
+                      'or read off a profile.',
+            parameterName = 'channelSizingMode',
+            value = state.channelSizingMode,
+            validRange = 'One of ' + ', '.join(repr(mode) for mode in CHANNELSIZINGMODES))
+
+    # Checked in both modes: the search converges against it and the manual mode reports the
+    # margin against it, and neither can say anything useful about a limit that is not a number.
+    wallLimit = wallTemperatureLimit(state)
+
+    if state.channelSizingMode == 'manual':
+        profile     = readProfile(state.manualChannelProfile, state.manualChannelProfileKey,
+                                  state.channelType)
+        profileKey  = stationKeys(profile.keyName, xNozzle, rNozzle)
+        marchResult = manualChannelRadii(wallLimit, evaluateProfile(profile, profileKey),
+                                         profileKey, profile.keyName, state.nChannel)
+    else:
+        marchResult = dynamicChannelRadii(wallLimit, state.nChannel)
+
     channelRadius, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D, heatTransferPlots, heatTransferDict \
-        = dynamicChannelRadii(state.maxWallTemperature, state.nChannel)
+        = marchResult
 
     state.channelRadius = channelRadius.copy()
     if state.channelType == 'rectangular':
@@ -1069,11 +1679,33 @@ def solveChannelRadii(state, geometry, thermal):
         state.channelWidth        = 2*channelRadius/state.channelAspectRatio
         state.channelRibThickness = np.flip(state.dcrData['passSpacing']) - state.channelWidth
 
-    # Heat transfer plots, on the same switch the thermal model's own figures answer to
+    # The wall the jacket held, station by station. In the thermal mode this is the target
+    # wherever the search converged and the bound wherever it did not; in the manual mode it is
+    # the whole result, since nothing held it anywhere.
+    state.channelWallTemperature = heatTransferPlots['wallTemperature'].copy()
+
+    # The profile this run built, keyed on the fraction along the jacket rather than on area
+    # ratio: a constant radius barrel holds one area ratio over its whole length, so only the
+    # fraction can carry the variation along it. Stations are respaced by arc length before the
+    # jacket is laid out, so a profile recorded here replays at any station count.
+    state.channelProfilePoints = np.column_stack(
+        [stationKeys('jacketFraction', xNozzle, rNozzle), state.channelRadius])
+
+    reportSizingResult(state, heatTransferPlots)
+
+    # Reported first, then checked, so a run that fails on its coolant exit condition still
+    # says what jacket it built before it says why that jacket is not usable.
+    checkCoolantExitState(state)
+
+    # Heat transfer plots, on the same switch the thermal model's own figures answer to. The
+    # title says which mode drew them, because a wall that sits below its limit means a converged
+    # bound in one and a profile in the other.
     if thermal.plotsEnabled == 'on' or thermal.export == 'on':
+        titleFlare = (', manual profile results' if state.channelSizingMode == 'manual'
+                      else ', dcr( ) results')
         drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
                               results=heatTransferPlots, family=state.channelType,
-                              titleFlare=', dcr( ) results', xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
+                              titleFlare=titleFlare, xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
                               wallTemperatureLimit=state.maxWallTemperature)
 
     return state
