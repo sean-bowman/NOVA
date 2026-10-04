@@ -134,7 +134,20 @@ Chamber temperature, molecular weight and the ratio of specific heats all move w
 
 ## What remains
 
-**The gas state per power level.** Re-running the thermochemistry at each chamber pressure is straightforward; carrying it into the field is not. The characteristic mesh was solved at the rated $\gamma$, and reading its Mach numbers under a different one makes the state discontinuous at the plane the march starts from. Either the mesh is re-solved over the fixed wall, which is a direct problem NOVA does not currently solve, or the sweep falls back to the one-dimensional exit state and loses the mesh seeding. The measurement above is what says this is worth deferring rather than worth doing now.
+**The gas state per power level.** Re-running the thermochemistry at each chamber pressure is straightforward; carrying it into the field is not. The characteristic mesh was solved at the rated $\gamma$, and reading its Mach numbers under a different one makes the state discontinuous at the plane the march starts from. The mesh has to be re-solved over the fixed wall, which `directCharacteristics.marchPrescribedWall` already does for the `top` and `toc` families, against a throat kernel re-launched at the new $\gamma$. The work is the wiring and a second regression baseline, not a new solver. The measurement above is what says it is worth deferring rather than worth doing now.
+
+**Nothing else in the field moves with power level.** `CharacteristicGas` carries $\gamma$, the gas constant and the stagnation temperature, and `marchPrescribedWall` takes no chamber pressure at all, so the Mach and flow-angle field over a fixed wall is a function of geometry and $\gamma$ alone. Re-generating the mesh from the fixed throat at a different mass flow returns the same mesh by construction. Pressure enters afterward, as the multiplier that converts a solved Mach field into static pressures.
+
+**The boundary layer does move with power level, and the sweep does not carry it.** At a frozen gas state the near-wall Mach, temperature and velocity hold while the pressure scales, so the Reynolds number falls with the chamber and the layer thickens relative to the nozzle. Marched on the shipped contour at a 800 K wall:
+
+| Power level | Exit displacement thickness [mm] | Effective area ratio | Friction drag [N] |
+|---|---|---|---|
+| 100 % | 3.723 | 38.647 | 2016.7 |
+| 60 % | 4.124 | 38.548 | 1339.7 |
+| 40 % | 4.474 | 38.463 | 968.3 |
+| 20 % | 5.141 | 38.299 | 555.9 |
+
+Displacement thickness grows 38 percent and the exit skin friction coefficient 38 percent, against a geometric area ratio of 39.57. Two consequences. The effective area ratio falls 0.90 percent over the range, which shifts the exit pressure and so the power level at which separation is reported, by rather less than the 4.9 percent the frozen gas state already costs. And friction drag, which is 1.90 percent of thrust at rated power, is 2.85 percent at 20 percent power: **throttling makes the nozzle relatively draggier, by half as much again.** The plume sweep does not include either effect.
 
 **Separation as a model rather than a refusal.** Schmucker's criterion, `p_sep / p_a = (1.88 Ma_sep - 1)^-0.64`, evaluated along the wall locates the separation point instead of only declaring that one exists. The outputs that follow are the separation station, the area ratio there, the effective exit the jet actually leaves from, and the power level at which separation first enters the nozzle rather than sitting at the lip. The shipped contour is a truncated ideal contour, and truncated ideal and conical nozzles show free shock separation only; restricted shock separation belongs to thrust-optimized contours, so the `top` and `toc` families need checking before they take the same treatment. The plume downstream of a separated nozzle stays out of scope either way.
 
