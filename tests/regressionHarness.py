@@ -248,6 +248,14 @@ harnessCases = {
         'description': 'Circular channels with the measured gas-side axial distribution',
         'overrides': {**regenOverrides, 'gasSideAxialModel': 'measured'},
     },
+    # Ievlev's integral method on the same jacket. It depends on the wall upstream of a station, so
+    # the jacket is sized two or three times around an outer iteration on the wall temperature,
+    # and the case records where that iteration lands.
+    'regenIevlev': {
+        'config': 'NOVANozzle.json',
+        'description': "Circular channels with Ievlev's gas side, as RPA carries it",
+        'overrides': {**regenOverrides, 'gasSideAxialModel': 'ievlev'},
+    },
     # The coolant-side entrance and curvature corrections on the same jacket, which is where a
     # correlation written for a straight developed pipe is asked about neither. The wall target is
     # 900 K rather than the 800 K the other cases use: the entrance factor grows with the channel's

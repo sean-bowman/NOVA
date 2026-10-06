@@ -166,6 +166,134 @@ def sauerFlowParameterFor(gamma: float, throatRadius: float, throatVelocity: flo
                          f'A series that returns this has been taken outside its range.')
     return float(np.sqrt(8.0 * (throatVelocity - 1.0) / (gamma + 1.0)) / throatRadius**0)
 
+# Where the near-wall state upstream of the throat comes from.
+#
+#   'oneDimensional'  the isentropic area-Mach relation, which puts the sonic point at the
+#                     geometric throat on every streamline
+#   'transonic'       the transonic solution on the entrant arc, tapered back to one-dimensional
+#                     by the point where the arc meets the converging cone
+nearWallStateModels = ('oneDimensional', 'transonic')
+
+def transonicWallMach(axialPosition, wallRadius, gamma: float, inletCurvature: float,
+                      model: str = 'sauer') -> np.ndarray:
+
+    '''
+
+    Mach number on the wall near the throat, from the transonic solution the starting line uses.
+
+    Sauer's axisymmetric solution, with the flow parameter of the chosen model, gives both velocity
+    components about the sonic point:
+
+        u / a* = 1 + alpha (x - epsilon) + ((gamma + 1) / 4) alpha^2 r^2
+        v / a* = ((gamma + 1) / 2) alpha^2 r (x - epsilon) + ((gamma + 1)^2 / 16) alpha^3 r^3
+
+    with x measured from the geometric throat plane. On the wall at the throat plane v vanishes,
+    which is the wall being parallel to the axis there, and u is `transonicThroatVelocity`. Away
+    from it v is what keeps the velocity tangent to the arc, so the Mach number is taken from the
+    speed rather than from u alone.
+
+    **The wall streamline goes sonic upstream of the geometric throat.** The axial component
+    reaches the sonic speed on the wall at
+
+        x = epsilon - ((gamma + 1) / 4) alpha = -((gamma + 1) / 8) alpha
+
+    which for Sauer's alpha is sqrt((gamma + 1) / (32 R)) throat radii ahead of the throat, about a
+    fifth of a throat radius at R = 1.5, and the speed slightly further upstream still. Mass flux
+    per unit area is greatest where the flow is sonic, so on the wall it peaks there and not at the
+    minimum area, which is where a one-dimensional state puts it.
+
+    The solution is a local expansion. Far enough upstream its velocity stops falling, because the
+    radius term grows as the wall opens out, and there it is no longer a description of the flow.
+    `transonicConvergingWallMach` is what limits it to the arc.
+
+    Parameters:
+    -----------
+    axialPosition : array_like
+        Axial position from the geometric throat plane, over the throat radius [-].
+    wallRadius : array_like
+        Wall radius over the throat radius [-].
+    gamma : float
+        Ratio of specific heats [-].
+    inletCurvature : float
+        Entrant arc radius over the throat radius [-].
+    model : str
+        One of `transonicModels`.
+
+    Returns:
+    --------
+    numpy.ndarray : Mach number on the wall [-]
+
+    '''
+
+    throat = ThroatGeometry(gamma, 1.0, inletCurvature, transonicModel = model)
+    alpha, epsilon = throat.sauerFlowParameter, throat.sauerEpsilon
+    shifted = np.asarray(axialPosition, dtype = float) - epsilon
+    radius = np.asarray(wallRadius, dtype = float)
+
+    axial = 1.0 + alpha * shifted + ((gamma + 1.0) / 4.0) * alpha**2 * radius**2
+    radial = ((gamma + 1.0) / 2.0) * alpha**2 * radius * shifted + ((gamma + 1.0)**2 / 16.0) * alpha**3 * radius**3
+    speedRatio = np.hypot(axial, radial)
+
+    # From the speed over the sonic speed to the Mach number
+    return np.sqrt(2.0 * speedRatio**2 / ((gamma + 1.0) - (gamma - 1.0) * speedRatio**2))
+
+def transonicConvergingWallMach(axialPosition, wallRadius, oneDimensionalMach, gamma: float,
+                                inletCurvature: float, arcStart: float,
+                                model: str = 'sauer') -> np.ndarray:
+
+    '''
+
+    Converging-wall Mach number with the transonic solution over the entrant arc.
+
+    The departure of the wall flow from one-dimensional is driven by the wall's curvature, which
+    is the entrant arc's, and the transonic solution only describes it near the throat. So the
+    solution is used at the throat and tapered back to the one-dimensional state at the point
+    where the arc meets the straight cone, with a squared cosine in axial position that is one at
+    the throat and zero at the arc's start. Upstream of the arc the state is one-dimensional.
+
+    The taper is an engineering closure rather than a solution. A subsonic two-dimensional solve
+    of the chamber would replace it, and nothing in NOVA carries one. On the 40k calorimeter
+    chamber, tapering over half the arc instead moves the marched layer's heat flux peak by 2.0 mm
+    and its throat-to-barrel ratio by under 0.1 percent, which is the size of what is assumed.
+
+    Parameters:
+    -----------
+    axialPosition : array_like
+        Axial position from the geometric throat plane, over the throat radius [-]. Stations at
+        or downstream of the throat are returned unchanged.
+    wallRadius : array_like
+        Wall radius over the throat radius [-].
+    oneDimensionalMach : array_like
+        The one-dimensional Mach number at the same stations [-].
+    gamma : float
+        Ratio of specific heats [-].
+    inletCurvature : float
+        Entrant arc radius over the throat radius [-].
+    arcStart : float
+        Axial position of the arc's upstream end over the throat radius, negative [-].
+    model : str
+        One of `transonicModels`, the same one the starting line was drawn from.
+
+    Returns:
+    --------
+    numpy.ndarray : the blended Mach number [-]
+
+    '''
+
+    axialPosition = np.asarray(axialPosition, dtype = float)
+    blended = np.array(oneDimensionalMach, dtype = float, copy = True)
+    if arcStart >= 0.0:
+        raise ValueError(f'The entrant arc has to start upstream of the throat, not at {arcStart}.')
+
+    onArc = (axialPosition < 0.0) & (axialPosition > arcStart)
+    if np.any(onArc):
+        transonic = transonicWallMach(axialPosition[onArc], np.asarray(wallRadius, dtype = float)[onArc],
+                                      gamma, inletCurvature, model)
+        weight = np.cos(0.5 * np.pi * axialPosition[onArc] / arcStart)**2
+        blended[onArc] = blended[onArc] + weight * (transonic - blended[onArc])
+
+    return blended
+
 class ThroatGeometry:
 
     '''

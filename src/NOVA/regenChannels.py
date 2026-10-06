@@ -101,8 +101,14 @@ class RegenChannelState:
     manualChannelProfile:                      Any = None
     manualChannelProfileKey:                   Any = None
     gasSideAxialModel:                         Any = None
+    # Read by the 'ievlev' gas side, which solves the whole wall from the CEA state
+    ceaOutput:                                 Any = None
+    OFRatio:                                   Any = None
     coolantGeometryCorrections:                Any = None
     coolantRoughnessModel:                     Any = None
+    coolantPropertyCorrection:                 Any = None
+    thermalBarrierThickness:                   Any = None
+    thermalBarrierConductivity:                Any = None
     channelSurfaceRoughness:                   Any = None
     channelAspectRatio:                        Any = None
     channelCornerRadius:                       Any = None
@@ -176,6 +182,10 @@ class RegenChannelState:
     regenSectionFilmDrivingTemperatureTrimmed: Any = None
     regenSectionNearWallTemperatureTrimmed:    Any = None
     wrapAngles:                                Any = None
+    # The 'ievlev' gas side: the coefficient the jacket converged on, one per trimmed station
+    # [W/m^2 K], and the largest wall temperature change at each pass of the outer iteration [K]
+    gasCoefficientProfile:                     Any = None
+    gasSideIterationChanges:                   Any = None
     xChannel:                                  Any = None
     xChannelCenterline2D:                      Any = None
     xChannelCenterline3D:                      Any = None
@@ -534,6 +544,9 @@ def _sizingState(state) -> 'ChannelSizingState':
         gasSideAxialModel                  = state.gasSideAxialModel if isinstance(state.gasSideAxialModel, str) else 'uniform',
         coolantGeometryCorrections         = bool(state.coolantGeometryCorrections),
         coolantRoughnessModel              = state.coolantRoughnessModel if isinstance(state.coolantRoughnessModel, str) else 'dippreySabersky',
+        coolantPropertyCorrection          = state.coolantPropertyCorrection if isinstance(state.coolantPropertyCorrection, str) else 'none',
+        thermalBarrierThickness            = state.thermalBarrierThickness,
+        thermalBarrierConductivity         = state.thermalBarrierConductivity,
         channelSurfaceRoughness            = valueOrDefault(state.channelSurfaceRoughness, float('nan')),
         nChannel                           = state.nChannel,
         numCrossSections                   = state.numCrossSections,
@@ -573,7 +586,65 @@ def _sizingState(state) -> 'ChannelSizingState':
         regenSectionFilmDrivingTemperatureTrimmed = state.regenSectionFilmDrivingTemperatureTrimmed,
         regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumberTrimmed,
         regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressureTrimmed,
+        gasCoefficientProfile              = state.gasCoefficientProfile,
         dcrData                            = state.dcrData)
+
+# The 'ievlev' gas side's outer iteration: passes, and the wall temperature change that ends it [K]
+ievlevMaximumPasses   = 6
+ievlevWallTolerance   = 2.0
+
+def generateChannelRadiiIevlev(state, generateChannelRadii) -> None:
+
+    '''
+
+    Size the jacket under Ievlev's gas side, iterating on the wall temperature.
+
+    The gas side depends on the wall temperature all the way upstream, and the coolant marches from
+    the other end, so the two cannot be solved in one pass. The flux is solved over the whole wall
+    at a guessed wall temperature and handed to the stations as a prescribed coefficient, the
+    jacket is sized, and the wall temperature it lands on is the next guess. The coefficient
+    depends on the wall only through the defining temperature and the driving enthalpy, so the
+    change falls by about an order of magnitude a pass and two or three passes close it.
+
+    The first guess is the wall limit the sizing holds the jacket to, or 700 K without one.
+
+    Parameters:
+    -----------
+    state : RegenChannelState
+        The build state, worked on in place: its coefficient profile and the iteration record are
+        written to it.
+    generateChannelRadii : callable
+        The sizing step, which reads the coefficient profile off the state.
+
+    '''
+
+    from .ievlevHeatTransfer import ievlevGasProperties, ievlevJacketCoefficient
+
+    gas = ievlevGasProperties(state.ceaOutput, float(state.chamberPressure), float(state.OFRatio))
+    stations = np.asarray(state.xRegenNozzleTrimmed, dtype = float)
+    # Referred to the recovery temperature, so that a film, which the station applies through its
+    # own driving temperature, lowers the flux once rather than also inflating the coefficient
+    driving = np.asarray(state.regenSectionNearWallRecoveryTemperatureTrimmed, dtype = float)
+    limit = state.maxWallTemperature
+    guess = float(limit) if limit is not None and np.isfinite(float(limit)) else 700.0
+    wall = np.full(stations.size, guess)
+
+    changes = []
+    for _ in range(ievlevMaximumPasses):
+        state.gasCoefficientProfile = ievlevJacketCoefficient(
+            state.xRegenNozzle, state.rRegenNozzle, state.regenSectionNearWallMachNumber,
+            state.regenSectionNearWallTemperature, state.regenSectionNearWallPressure,
+            state.gammaRegenSection, state.gasConstantRegenSection, gas, stations, wall, driving)
+        generateChannelRadii()
+        solved = np.asarray(state.channelWallTemperature, dtype = float)
+        changes.append(float(np.max(np.abs(solved - wall))))
+        wall = solved
+        if changes[-1] < ievlevWallTolerance:
+            break
+
+    state.gasSideIterationChanges = changes
+    print(f'Ievlev gas side: {len(changes)} jacket passes, largest wall change on the last '
+          f'{changes[-1]:.2f} K')
 
 def solveRegenChannels(state, thermal):
 
@@ -772,7 +843,10 @@ def solveRegenChannels(state, thermal):
 
         state.channelSizingSolution = sizingSolution
 
-    generateChannelRadii()
+    if state.gasSideAxialModel == 'ievlev':
+        generateChannelRadiiIevlev(state, generateChannelRadii)
+    else:
+        generateChannelRadii()
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Generate channel centerline  -- #

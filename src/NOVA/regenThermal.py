@@ -59,8 +59,14 @@ dataset asks for more heat transfer and the other for less.
 
 The Dipprey and Sabersky fit was taken on water at Prandtl numbers of 1.2 to 5.94 in close-packed
 sand-grain roughness. Hydrogen in a printed channel is below that Prandtl range and rough in a
-different way. No wall-to-bulk property ratio correction is applied, and the coolant is taken as
-mixed across a tall channel.
+different way. The coolant is taken as mixed across a tall channel.
+
+**No wall-to-bulk property ratio correction is applied, and that is a measured choice rather than
+an omission.** Taylor's correction (NASA TN D-4332) is implemented behind
+`coolantPropertyCorrection` and defaults to off: switching it on puts 0 of Carlile and
+Quentmeyer's 13 measured throat wall temperatures inside the predicted band, against 13 of 13
+without it. Taylor is fitted on symmetrically heated tubes, and a cooling channel heated hard on
+one face is not that geometry.
 
 **The coolant energy balance is exact in enthalpy.** The heat a station passes into the coolant
 is added to its specific enthalpy, and the temperature carrying that enthalpy at the downstream
@@ -169,6 +175,105 @@ printedSurfaceRoughness = 35e-6
 #                       under it can be reproduced.
 COOLANTROUGHNESSMODELS = ('frictionOnly', 'dippreySabersky', 'fullCredit')
 
+# Whether the coolant-side correlation is corrected for the property variation between the bulk
+# and the wall.
+#
+#   'none'      every property at the bulk temperature, which is what a smooth-tube correlation
+#               is written for and what this model did before the option existed.
+#   'taylor'    the surface-to-bulk temperature ratio correction of NASA TN D-4332. **Refuted
+#               against the hardware this model is checked on, and kept only so the comparison
+#               can be reproduced.** See the validation note on taylorPropertyFactor.
+COOLANTPROPERTYCORRECTIONS = ('none', 'taylor')
+
+# Range Taylor's correlation was fitted over, from the summary of NASA TN D-4332. Outside it the
+# factor is still returned: the correlation is the best available and refusing a station over a
+# flux bound would refuse the throat of most real engines. What the range is for is the report.
+taylorTemperatureRatioRange = (1.1, 23.0)       # [-], surface over bulk
+taylorDiameterRatioRange    = (2.0, 252.0)      # [-], distance from entrance over diameter
+taylorReynoldsRange         = (7.5e3, 1.38e7)   # [-]
+taylorHeatFluxRange         = (0.059e6, 45.7e6) # [W/m^2]
+
+def taylorPropertyFactor(surfaceTemperature, bulkTemperature, diametersFromInlet):
+
+    '''
+
+    Taylor's wall-to-bulk property correction on a coolant-side Nusselt number.
+
+    A smooth-tube correlation evaluates every property at the bulk temperature, which is wrong
+    where the wall is much hotter than the fluid: the viscosity, conductivity and density in the
+    near-wall layer are not the bulk ones. Hydrogen against a hot copper wall is the case this
+    matters most for, and it is the case this tool is usually pointed at.
+
+    Taylor correlated 3674 local hydrogen coefficients from ten investigations in symmetrically
+    heated straight tubes (NASA TN D-4332, 1968) as
+
+        Nu_b = 0.023 Re_b^0.8 Pr_b^0.4 (T_s / T_b)^-(0.57 - 1.59 D/x)
+
+    and what is returned here is the ratio of that to the same correlation without the
+    temperature-ratio term, so it multiplies whichever Nusselt number the roughness model
+    produced rather than replacing it.
+
+    **The correction reduces the coolant-side coefficient**, because the surface is hotter than
+    the bulk and the exponent is negative, so a jacket solved with it runs a hotter wall.
+
+    **It is refuted against Carlile and Quentmeyer, and the default is off.** Predicting their 13
+    measured throat wall temperatures with it on puts 0 of 13 inside the band the unknowns span,
+    against 13 of 13 without it, and moves the mean signed error from +18.8 K to +479.5 K.
+    Replacing Gnielinski with Taylor's complete correlation rather than multiplying the ratio term
+    onto it is worse still, at 0 of 13 and +704.7 K. On the shipped jacket at fixed geometry the
+    peak wall goes from 800 K to 1727 K, past the melting point of the alloy it is built from.
+
+    The likely reason is what Taylor's surface temperature means. The fit is on **symmetrically
+    heated straight tubes**, where the surface is at one temperature all the way around. A rocket
+    cooling channel is heated hard on one face and the other three run far cooler, so handing the
+    correlation the hot-face temperature over-applies a correction whose own data never saw a
+    perimeter that non-uniform. A perimeter-averaged surface temperature would be the defensible
+    way to carry this term, and nothing here computes one.
+
+    Kept rather than deleted so the comparison above can be re-run, which is how
+    COOLANTROUGHNESSMODELS treats 'fullCredit' for the same reason.
+
+    The entrance term is the second half of the exponent. Near the inlet the exponent approaches
+    zero and the correction vanishes; far downstream it approaches -0.57, which is the asymptotic
+    form other tools quote on its own.
+
+    Taylor states the fit does not hold near the critical point: an inlet between 25 K and the
+    transposed critical temperature **and** a pressure between the critical pressure and 3.65 MPa
+    is the excluded region. Both conditions have to hold, so a jacket entering at 30 K and 12 MPa
+    is outside the exclusion on pressure.
+
+    Parameters:
+    -----------
+    surfaceTemperature : array_like
+        Coolant-side wall temperature [K].
+    bulkTemperature : array_like
+        Coolant bulk temperature [K].
+    diametersFromInlet : array_like
+        Distance from the channel inlet in hydraulic diameters, x/D [-].
+
+    Returns:
+    --------
+    numpy.ndarray or float
+        Multiplier on the Nusselt number [-].
+
+    '''
+
+    ratio = np.asarray(surfaceTemperature, dtype = float) \
+            / np.maximum(np.asarray(bulkTemperature, dtype = float), 1e-6)
+
+    # A surface below the bulk is not what the fit covers, and squaring it into an exponent would
+    # raise the coefficient rather than lower it. The correction is held off there.
+    ratio = np.maximum(ratio, 1.0)
+
+    # x/D below the fitted floor is the developing length, where the exponent would change sign
+    # and invert the correction. It is clamped to the floor instead.
+    diameters = np.maximum(np.asarray(diametersFromInlet, dtype = float),
+                           taylorDiameterRatioRange[0])
+
+    factor = ratio**(-(0.57 - 1.59/diameters))
+
+    return float(factor) if np.isscalar(surfaceTemperature) and factor.ndim == 0 else factor
+
 def swameeJainFriction(reynoldsNumber, relativeRoughness):
 
     '''Darcy friction factor from Swamee and Jain's explicit form of Colebrook.'''
@@ -254,7 +359,10 @@ def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
     friction it costs. 'fullCredit' puts the rough friction factor into Gnielinski, which buys
     heat transfer in proportion to the friction and is what no measurement supports.
 
-    Every property is at the bulk temperature, with no wall-to-bulk property ratio correction.
+    Every property is at the bulk temperature. A wall-to-bulk property ratio correction is
+    available through `coolantPropertyCorrection` and is off by default, because against the
+    hardware comparison it makes the predictions much worse rather than better; the note on
+    `taylorPropertyFactor` carries the numbers.
 
     Parameters:
     -----------
@@ -467,6 +575,10 @@ class StationWallSolution:
     heatTransfer : float
         Heat through the wall at this station, per channel [W]. A power, not a flux: the areas
         are already folded into the three resistances.
+    coatingInterfaceTemperature : float
+        Temperature of the metal's gas-side face [K]. Equal to `hotWallTemperature` when there is
+        no coating, and the temperature a metal wall limit applies to when there is one: the
+        point of a barrier coating is that its own surface runs hotter than the metal behind it.
     hotWallTemperature, coldWallTemperature : float
         The two faces of the wall [K].
     iterations : int
@@ -489,6 +601,7 @@ class StationWallSolution:
     heatTransfer:                 float
     hotWallTemperature:           float
     coldWallTemperature:          float
+    coatingInterfaceTemperature:  float
     iterations:                   int
     residual:                     float
     converged:                    bool
@@ -507,6 +620,10 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
                                 finHeight: float = 0.0, finThickness: float = 0.0,
                                 prescribedGasCoefficient: float = None,
                                 gasSideAxialModel: str = 'uniform',
+                                propertyCorrection: str = 'none',
+                                diametersFromInlet: float = None,
+                                coatingThickness: float = 0.0,
+                                coatingConductivity: float = 0.0,
                                 tolerance: float = 0.01,
                                 maximumIterations: int = 50) -> StationWallSolution:
 
@@ -592,7 +709,8 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         'uniform' carries one correlation constant along the whole wall, which is what Bartz
         assumes. 'measured' scales it by the constants measured along a LOX/GH2 chamber, which
         leaves the barrel alone and takes about 40 percent off the throat. Read only when no
-        coefficient is prescribed.
+        coefficient is prescribed. 'ievlev' has no station-local form, because it depends on the
+        wall upstream, so it arrives only as a prescribed coefficient and is refused without one.
     finHeight, finThickness : float
         The rib between channels, treated as a straight fin cooled on both faces with an
         adiabatic tip [m]. It adds 2 eta H of perimeter to the coolant side, with eta taken at
@@ -617,6 +735,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
 
     hotWallTemperatureGuess  = drivingTemperature
     coldWallTemperatureGuess = coolantTemperature
+    coatingInterfaceGuess    = drivingTemperature
     converged = False
     convergenceIteration = 0
     residual = float('nan')
@@ -632,7 +751,17 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
 
         wallConductivity = float(conductivityInterpolator(hotWallTemperatureGuess))
 
-        coolantConvectiveCoefficient = coolantThermalConductivity * coolantNusseltNumber \
+        # The property correction reads the surface temperature, which is what this loop is
+        # converging, so it is applied inside the loop rather than by the caller. At convergence
+        # the Nusselt number and the wall it was evaluated against are the same answer.
+        correctedNusseltNumber = coolantNusseltNumber
+        if propertyCorrection == 'taylor':
+            correctedNusseltNumber = coolantNusseltNumber * taylorPropertyFactor(
+                coldWallTemperatureGuess, coolantTemperature,
+                diametersFromInlet if diametersFromInlet is not None
+                else taylorDiameterRatioRange[0])
+
+        coolantConvectiveCoefficient = coolantThermalConductivity * correctedNusseltNumber \
                                        / hydraulicDiameter
 
         # The rib conducts heat into the coolant through both of its faces, less effectively
@@ -646,9 +775,27 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
             coolantArea   = coolantWettedArea + 2*ribEfficiency*finHeight*pathLength
         coolantConvectiveResistance = 1 / (coolantConvectiveCoefficient * coolantArea)
 
-        conductiveResistance = wallConductionResistance(hotWallThickness, wallRadius,
-                                                        wallConductivity, hotWallArea)
+        # A thermal barrier coating is a second shell inside the metal one, so it takes the same
+        # cylindrical form at the gas-side radius and the metal moves outboard behind it. The
+        # metal's conductivity is read at the metal's own hot face rather than at the coating
+        # surface, which with a coating are hundreds of kelvin apart.
+        coatingResistance = 0.0
+        metalRadius = wallRadius
+        metalArea   = hotWallArea
+        if coatingThickness > 0.0 and coatingConductivity > 0.0:
+            coatingResistance = wallConductionResistance(coatingThickness, wallRadius,
+                                                         coatingConductivity, hotWallArea)
+            metalRadius = wallRadius + coatingThickness
+            metalArea   = hotWallArea * metalRadius / wallRadius
+            wallConductivity = float(conductivityInterpolator(coatingInterfaceGuess))
 
+        conductiveResistance = coatingResistance                                + wallConductionResistance(hotWallThickness, metalRadius,
+                                                          wallConductivity, metalArea)
+
+        if prescribedGasCoefficient is None and gasSideAxialModel == 'ievlev':
+            raise ValueError("The 'ievlev' gas side depends on the wall upstream of the station, so "
+                             'it has to arrive as a prescribed coefficient solved over the whole '
+                             'wall; a station cannot form it alone.')
         if prescribedGasCoefficient is None:
             exhaustConvectiveCoefficient = bartzHeatTransferCoefficient(
                 gasStaticTemperature, gasMachNumber, gasGamma,
@@ -692,6 +839,9 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         hotWallTemperature  = gasSideTemperature - (heatTransfer * exhaustConvectiveResistance)
         coldWallTemperature = coolantTemperature + (heatTransfer * coolantConvectiveResistance)
 
+        # Without a coating the interface is the hot wall, so every result below is unchanged.
+        coatingInterfaceTemperature = hotWallTemperature - heatTransfer*coatingResistance
+
         residual = abs(hotWallTemperatureGuess - hotWallTemperature)
 
         if residual < tolerance:
@@ -699,6 +849,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         else:
             hotWallTemperatureGuess  = hotWallTemperature
             coldWallTemperatureGuess = coldWallTemperature
+            coatingInterfaceGuess    = coatingInterfaceTemperature
 
     return StationWallSolution(
         coolantConvectiveCoefficient = coolantConvectiveCoefficient,
@@ -713,6 +864,7 @@ def solveStationWallTemperature(drivingTemperature, gasStaticTemperature, gasMac
         heatTransfer                 = heatTransfer,
         hotWallTemperature           = hotWallTemperature,
         coldWallTemperature          = coldWallTemperature,
+        coatingInterfaceTemperature  = coatingInterfaceTemperature,
         iterations                   = convergenceIteration,
         residual                     = residual,
         converged                    = converged)
@@ -1113,6 +1265,12 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # One correlation constant along the whole wall, or the measured distribution over it
     gasSideAxialModel = inputsDict.get('gasSideAxialModel') or 'uniform'
 
+    # A gas-side coefficient solved over the whole wall rather than at the station, which is how a
+    # method that carries the wall's history reaches the station solve. Absent, Bartz runs.
+    prescribedGasCoefficient = inputsDict.get('prescribedGasCoefficient')
+    if prescribedGasCoefficient is not None:
+        prescribedGasCoefficient = np.atleast_1d(np.asarray(prescribedGasCoefficient, dtype = float))
+
     # The entrance and curvature corrections a coolant correlation written for a straight
     # developed passage needs where the passage is neither. The coolant enters at the last
     # station and marches toward the first, so distance from the inlet accumulates backwards.
@@ -1123,6 +1281,9 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         channelSurfaceRoughness = printedSurfaceRoughness
 
     coolantGeometryCorrections = bool(inputsDict.get('coolantGeometryCorrections'))
+    coolantPropertyCorrection  = inputsDict.get('coolantPropertyCorrection') or 'none'
+    thermalBarrierThickness    = float(inputsDict.get('thermalBarrierThickness') or 0.0)
+    thermalBarrierConductivity = float(inputsDict.get('thermalBarrierConductivity') or 0.0)
     distanceFromInlet = inputsDict.get('distanceFromInlet')
     if distanceFromInlet is None:
         distanceFromInlet = np.flip(np.cumsum(np.flip(np.asarray(differentialPathLength, dtype = float))))
@@ -1365,6 +1526,11 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                         coolantTemperature         = coolantTemperature[i],
                         coolantThermalConductivity = coolantThermalConductivity[i],
                         coolantNusseltNumber       = coolantNusseltNumber[i],
+                        propertyCorrection         = coolantPropertyCorrection,
+                        coatingThickness           = thermalBarrierThickness,
+                        coatingConductivity        = thermalBarrierConductivity,
+                        diametersFromInlet         = float(distanceFromInlet[i]
+                                                           / hydraulicDiameter[i]),
                         coolantSpecificHeat        = coolantSpecificHeat[i],
                         coolantMassFlow            = mdot,
                         hydraulicDiameter          = hydraulicDiameter[i],
@@ -1385,6 +1551,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                         wallEmissivity             = wallEmissivity,
                         gasEmissivity              = gasEmissivity[i],
                         gasSideAxialModel          = gasSideAxialModel,
+                        prescribedGasCoefficient   = (None if prescribedGasCoefficient is None
+                                                      else float(prescribedGasCoefficient[i])),
                         finHeight                  = finHeight[i],
                         finThickness               = finThickness[i],
                         tolerance                  = 0.01)
@@ -1425,6 +1593,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                             'residual': solution.residual,
                             'tolerance': 0.01,
                             'hotWallTemperature': solution.hotWallTemperature,
+                            'metalWallTemperature': solution.coatingInterfaceTemperature,
                             'heatTransfer': solution.heatTransfer,
                             'regenSectionNearWallTemperature': nearWallTemperature[i],
                             'coolantTemperature': coolantTemperature[i]

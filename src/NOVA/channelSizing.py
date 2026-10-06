@@ -101,6 +101,8 @@ Author: Sean Bowman
 from dataclasses import dataclass, field
 from typing import Any
 
+import math
+
 import numpy as np
 from scipy.interpolate import interp1d
 from tqdm import tqdm
@@ -116,6 +118,19 @@ from .channelSections import (depthLimitedHalfExtent, helicalSpacing, loxodromeW
                               maxHalfExtent, rectangularWidth, throatChannelCount)
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
+
+def _zeroIfUnset(value) -> float:
+
+    '''A value that was never given, as the number zero rather than as an absence.'''
+
+    if value is None:
+        return 0.0
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+    return 0.0 if not math.isfinite(number) else number
 
 def drivingTemperatureArray(state):
 
@@ -190,8 +205,12 @@ class ChannelSizingState:
         Coordinate the profile's control points are keyed on, one of
         channelProfile.PROFILEKEYS. A recorded profile names its own and that one wins.
     gasSideAxialModel : str
-        'uniform' or 'measured', passed to the thermal model, which decides whether the gas-side
-        correlation constant is held along the wall or follows the measured distribution.
+        'uniform', 'measured' or 'ievlev', passed to the thermal model, which decides whether the
+        gas-side correlation constant is held along the wall or follows the measured
+        distribution. 'ievlev' arrives as `gasCoefficientProfile` instead.
+    gasCoefficientProfile : array_like
+        Gas-side coefficient at each trimmed station, solved over the whole wall [W/m^2 K]. None
+        leaves each station to Bartz.
     nChannel : int
         Channels around the nozzle.
     numCrossSections : int
@@ -264,6 +283,9 @@ class ChannelSizingState:
     gasSideAxialModel:                      str   = 'uniform'
     coolantGeometryCorrections:             bool  = False
     coolantRoughnessModel:                  str   = 'dippreySabersky'
+    coolantPropertyCorrection:              str   = 'none'
+    thermalBarrierThickness:                Any   = None
+    thermalBarrierConductivity:             Any   = None
     channelSurfaceRoughness:                float = float('nan')
     nChannel:                               int   = 0
     numCrossSections:                       int   = 0
@@ -301,6 +323,9 @@ class ChannelSizingState:
     regenSectionFilmDrivingTemperatureTrimmed: Any = None
     regenSectionNearWallMachNumberTrimmed:  Any   = None
     regenSectionNearWallPressureTrimmed:    Any   = None
+    # A gas-side coefficient solved over the whole wall, one per trimmed station [W/m^2 K]. Set
+    # when the gas-side model carries the wall's history; None leaves each station to Bartz.
+    gasCoefficientProfile:                  Any   = None
     dcrData:                                dict  = field(default_factory = dict)
 
     # -- What the solve produces -- #
@@ -891,6 +916,8 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["nearWallTemperature"] = np.array([state.regenSectionNearWallTemperatureTrimmed [state.numCrossSections - 1 - i]])
         heatTransferDict_i["drivingTemperature"]  = np.array([drivingTemperatureArray(state)      [state.numCrossSections - 1 - i]])
         heatTransferDict_i["nearWallPressure"]    = np.array([state.regenSectionNearWallPressureTrimmed    [state.numCrossSections - 1 - i]])
+        if state.gasCoefficientProfile is not None:
+            heatTransferDict_i["prescribedGasCoefficient"] = np.array([state.gasCoefficientProfile[state.numCrossSections - 1 - i]])
 
         # get geometry properties for heat transfer
         # A helix's width follows the depth being tried, and its rib is what the pass spacing leaves
@@ -910,7 +937,12 @@ def solveChannelRadii(state, geometry, thermal):
         # run single station regen heat transfer model
         heatTransferOutputs, plotOutputs = solveRegenHeatTransfer(thermal, heatTransferDict_i, returnDict=True)
         # update local heat transfer dictionary
-        hotWallTemperature                          = heatTransferOutputs['hotWallTemperature']
+        # A wall limit is a limit on the metal, not on a ceramic coating over it: the point of a
+        # barrier coating is that its own surface runs hotter than the metal behind it. Without a
+        # coating the two are the same number, so an uncoated jacket converges on exactly what it
+        # always did.
+        hotWallTemperature                          = heatTransferOutputs.get(
+            'metalWallTemperature', heatTransferOutputs['hotWallTemperature'])
         heatTransferDict_i['newCoolantTemperature'] = heatTransferOutputs['coolantTemperature'][0]
         heatTransferDict_i['newCoolantPressure']    = heatTransferOutputs['coolantPressure'][0]
         # update global plot outputs
@@ -1094,6 +1126,12 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["gasSideAxialModel"]               = state.gasSideAxialModel
         heatTransferDict_i["coolantGeometryCorrections"]      = state.coolantGeometryCorrections
         heatTransferDict_i["coolantRoughnessModel"]           = state.coolantRoughnessModel
+        heatTransferDict_i["coolantPropertyCorrection"]       = state.coolantPropertyCorrection
+        # A coating that was not asked for is zero thickness, not an absent number: the thermal
+        # model guards its whole input dictionary against NaN, and an unset JSON key arrives here
+        # as one.
+        heatTransferDict_i["thermalBarrierThickness"]         = _zeroIfUnset(state.thermalBarrierThickness)
+        heatTransferDict_i["thermalBarrierConductivity"]      = _zeroIfUnset(state.thermalBarrierConductivity)
         heatTransferDict_i["channelSurfaceRoughness"]         = state.channelSurfaceRoughness
         heatTransferDict_i["nChannel"]                        = state.nChannel
         heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness

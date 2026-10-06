@@ -831,3 +831,243 @@ class TestPrescribedGasCoefficient:
         assert solution.exhaustConvectiveCoefficient == 40.0e3
         assert flux == pytest.approx(40.0e3 * (3400.0 - solution.hotWallTemperature), rel = 1e-12)
         assert solution.converged
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Taylor's wall-to-bulk property correction -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+class TestTaylorPropertyCorrection:
+
+    '''
+    NASA TN D-4332, the correction a smooth-tube correlation needs when the wall is much hotter
+    than the fluid. The direction is the point: it lowers the coolant-side coefficient, so a
+    jacket solved without it is not conservative.
+    '''
+
+    def testNoGradientIsNoCorrection(self):
+        '''A surface at the bulk temperature has no property variation to correct for.'''
+        from NOVA.regenThermal import taylorPropertyFactor
+        assert taylorPropertyFactor(300.0, 300.0, 100.0) == pytest.approx(1.0, rel = 1e-12)
+
+    def testAHotterSurfaceLowersTheCoefficient(self):
+        '''The exponent is negative, so the factor is below one wherever the wall is hotter.'''
+        from NOVA.regenThermal import taylorPropertyFactor
+        assert taylorPropertyFactor(600.0, 150.0, 100.0) < 1.0
+
+    def testTheFactorFallsAsTheWallGetsHotter(self):
+        '''Monotone in the temperature ratio, which is what makes it a correction and not a fudge.'''
+        from NOVA.regenThermal import taylorPropertyFactor
+        ratios = [taylorPropertyFactor(t, 150.0, 100.0) for t in (200.0, 400.0, 800.0)]
+        assert ratios[0] > ratios[1] > ratios[2]
+
+    def testFarFromTheInletTheExponentReachesItsAsymptote(self):
+        '''
+        The entrance term is 1.59 D/x, so a long channel approaches the bare -0.57 exponent that
+        other tools quote on its own. RPA's hydrogen correlation uses exactly that asymptote.
+        '''
+        from NOVA.regenThermal import taylorPropertyFactor
+        assert taylorPropertyFactor(600.0, 150.0, 1.0e6) == pytest.approx(4.0**-0.57, rel = 1e-5)
+
+    def testNearTheInletTheCorrectionIsWeaker(self):
+        '''
+        The entrance term subtracts from the exponent, so a station close to the inlet is
+        corrected less than one far downstream.
+        '''
+        from NOVA.regenThermal import taylorPropertyFactor
+        near = taylorPropertyFactor(600.0, 150.0, 3.0)
+        far  = taylorPropertyFactor(600.0, 150.0, 300.0)
+        assert near > far
+
+    def testASurfaceColderThanTheBulkIsHeldAtUnity(self):
+        '''
+        Outside the fit, and inverting the correction there would raise the coefficient where the
+        correlation has nothing to say.
+        '''
+        from NOVA.regenThermal import taylorPropertyFactor
+        assert taylorPropertyFactor(100.0, 300.0, 100.0) == pytest.approx(1.0, rel = 1e-12)
+
+    def testTheCorrectionIsOffByDefault(self):
+        '''
+        Off is both what reproduces every earlier result and what the hardware comparison
+        supports. Carlile and Quentmeyer's 13 measured throat wall temperatures land 13 of 13
+        inside the predicted band without this correction and 0 of 13 with it, so the default is
+        a measured choice and not merely a compatibility one. tests/testRegenValidation.py owns
+        that comparison; this pins the default it rests on.
+        '''
+        from NOVA.regenThermal import COOLANTPROPERTYCORRECTIONS
+        assert COOLANTPROPERTYCORRECTIONS[0] == 'none'
+
+    def testTheShippedConfigurationLeavesItOff(self):
+        '''A trap is only a trap if something walks into it. The reference nozzle does not.'''
+        import json, os
+        import NOVA
+
+        shipped = os.path.join(os.path.dirname(NOVA.__file__), 'assets', 'NOVANozzle.json')
+        config = json.load(open(shipped, encoding = 'utf-8'))
+        assert config['coolantPropertyCorrection'] == 'none'
+
+    def testAnUnknownCorrectionIsRefused(self):
+        '''A misspelled option must not fall through to no correction at all.'''
+        import json, os
+        import NOVA
+        from NOVA.config import setInputs
+        from NOVA.errors import InvalidInputError
+
+        shipped = os.path.join(os.path.dirname(NOVA.__file__), 'assets', 'NOVANozzle.json')
+        config = json.load(open(shipped, encoding = 'utf-8'))
+        config['coolantPropertyCorrection'] = 'siederTate'
+
+        with pytest.raises(InvalidInputError, match = 'coolantPropertyCorrection'):
+            setInputs(NOVA.Nozzle(), config)
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Thermal barrier coating -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+class TestThermalBarrierCoating:
+
+    '''
+    A ceramic layer inside the metal one. It raises its own gas-side surface temperature and
+    lowers the metal behind it, which is the whole point of fitting one, and it is the metal that
+    a wall temperature limit applies to.
+    '''
+
+    def station(self, coatingThickness = 0.0, coatingConductivity = 1.5):
+        '''One station of a copper wall, optionally behind a coating.'''
+        from NOVA.regenThermal import solveStationWallTemperature
+
+        return solveStationWallTemperature(
+            drivingTemperature = 3400.0, gasStaticTemperature = 3400.0, gasMachNumber = 1.0,
+            gasGamma = 1.2, gasConstant = 700.0, gasMolecularWeight = 12.0,
+            coolantTemperature = 150.0, coolantThermalConductivity = 0.12,
+            coolantNusseltNumber = 400.0, coolantSpecificHeat = 14000.0,
+            coolantMassFlow = 0.05, hydraulicDiameter = 0.002,
+            coolantWettedArea = 6.0e-5, hotWallArea = 6.0e-5,
+            hotWallThickness = 1.0e-3, wallRadius = 0.05, pathLength = 1.0e-3,
+            conductivityInterpolator = lambda temperature: 300.0,
+            chamberPressure = 6.9e6, characteristicVelocity = 2300.0, throatDiameter = 0.1,
+            throatRadiusOfCurvature = 0.1, throatArea = 0.00785, localArea = 0.00785,
+            prescribedGasCoefficient = 25000.0,
+            coatingThickness = coatingThickness, coatingConductivity = coatingConductivity)
+
+    def testNoCoatingLeavesTheInterfaceAtTheHotWall(self):
+        '''With no coating there is no interface, so the two temperatures are one number.'''
+        solution = self.station()
+        assert solution.coatingInterfaceTemperature == pytest.approx(solution.hotWallTemperature)
+
+    def testACoatingRaisesItsOwnSurfaceAndLowersTheMetal(self):
+        '''
+        Both halves matter. A coating that only raised the surface would be a liability; one that
+        only lowered the metal would be free. It does both, and the gap between them is the
+        temperature drop across the ceramic.
+        '''
+        bare    = self.station()
+        coated  = self.station(coatingThickness = 1.0e-4)
+
+        assert coated.hotWallTemperature > bare.hotWallTemperature
+        assert coated.coatingInterfaceTemperature < bare.hotWallTemperature
+        assert coated.hotWallTemperature > coated.coatingInterfaceTemperature
+
+    def testACoatingCutsTheHeatFlux(self):
+        '''Adding resistance in series with everything else lowers the heat the wall passes.'''
+        assert self.station(coatingThickness = 1.0e-4).heatTransfer \
+               < self.station().heatTransfer
+
+    def testAThickerCoatingProtectsTheMetalFurther(self):
+        '''Monotone in thickness, over the range a coating is actually applied in.'''
+        metal = [self.station(coatingThickness = t).coatingInterfaceTemperature
+                 for t in (2.5e-5, 5.0e-5, 1.0e-4)]
+        assert metal[0] > metal[1] > metal[2]
+
+    def testALowerConductivityCoatingProtectsFurther(self):
+        '''The resistance is thickness over conductivity, so the two trade against each other.'''
+        assert self.station(coatingThickness = 1.0e-4, coatingConductivity = 1.0) \
+                   .coatingInterfaceTemperature \
+               < self.station(coatingThickness = 1.0e-4, coatingConductivity = 3.0) \
+                   .coatingInterfaceTemperature
+
+    def testAZeroConductivityCoatingIsIgnoredRatherThanInfinite(self):
+        '''An unset conductivity must not divide by zero into an infinite resistance.'''
+        solution = self.station(coatingThickness = 1.0e-4, coatingConductivity = 0.0)
+        assert solution.converged
+        assert solution.coatingInterfaceTemperature == pytest.approx(solution.hotWallTemperature)
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Friction loss on the thrust coefficient -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+class TestFrictionLoss:
+
+    '''
+    The inviscid exit plane reports a thrust the wall was never charged for. This is the debit,
+    and the tests here are about the bookkeeping rather than the boundary layer itself, which
+    tests/testBoundaryLayer.py owns.
+    '''
+
+    def nozzleWithWall(self, stations = 40):
+        '''A bare nozzle carrying just enough for the friction stage to run.'''
+        import NOVA
+
+        nozzle = NOVA.Nozzle()
+        x = np.linspace(-0.2, 0.6, stations)
+        nozzle.xNozzleWall = x
+        nozzle.rNozzleWall = 0.05 + 0.08*np.clip(x, 0.0, None)
+        nozzle.nozzleNearWallMachNumber = np.linspace(1.05, 4.0, stations)
+        nozzle.nozzleNearWallTemperature = np.linspace(3000.0, 1400.0, stations)
+        nozzle.nozzleNearWallPressure = np.linspace(4.0e6, 2.0e4, stations)
+        nozzle.nozzleNearWallVelocity = np.linspace(1200.0, 4200.0, stations)
+        nozzle.chamberGamma = 1.2
+        nozzle.chamberRGasConstant = 700.0
+        nozzle.channelWallTemperature = np.full(stations, 800.0)
+        nozzle.thrustCoef = 1.8
+        nozzle.throatArea = np.pi*0.05**2
+        nozzle.chamberPressure = 6.9e6
+        return nozzle
+
+    def testTheLossIsAFractionOfIdealThrust(self):
+        '''The coefficient is the drag over the thrust the inviscid solve delivered.'''
+        nozzle = self.nozzleWithWall()
+        nozzle.solveFrictionLoss()
+
+        ideal = nozzle.thrustCoef * nozzle.throatArea * nozzle.chamberPressure
+        assert nozzle.frictionLossCoefficient == pytest.approx(nozzle.frictionDragForce / ideal)
+
+    def testTheCorrectedCoefficientIsBelowTheIdealOne(self):
+        '''Friction is a debit. A correction that raised the thrust coefficient would be a sign error.'''
+        nozzle = self.nozzleWithWall()
+        nozzle.solveFrictionLoss()
+
+        assert 0.0 < nozzle.frictionLossCoefficient < 0.1
+        assert nozzle.frictionCorrectedThrustCoef < nozzle.thrustCoef
+
+    def testNoWallTemperatureMeansNoMarch(self):
+        '''
+        Without a jacket there is no solved wall temperature, and a boundary layer marched against
+        an invented one would be a number with nothing behind it.
+        '''
+        nozzle = self.nozzleWithWall()
+        nozzle.channelWallTemperature = None
+        nozzle.solveFrictionLoss()
+
+        assert nozzle.frictionDragForce is None
+        assert nozzle.frictionCorrectedThrustCoef is None
+
+    def testNoContourMeansNoMarch(self):
+        '''A nozzle that has not been built yet reports nothing rather than raising.'''
+        import NOVA
+
+        nozzle = NOVA.Nozzle()
+        nozzle.solveFrictionLoss()
+        assert nozzle.frictionLossCoefficient is None
+
+    def testAJacketShorterThanTheWallIsCarriedNotExtrapolated(self):
+        '''
+        The jacket covers the cooled section only. Its temperature is resampled onto the wall
+        rather than the march being refused, and the result still runs.
+        '''
+        nozzle = self.nozzleWithWall()
+        nozzle.channelWallTemperature = np.full(12, 750.0)
+        nozzle.solveFrictionLoss()
+
+        assert nozzle.frictionDragForce is not None
+        assert nozzle.frictionDragForce > 0.0

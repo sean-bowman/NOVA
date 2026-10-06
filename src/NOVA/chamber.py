@@ -18,9 +18,13 @@ back around the closure behind it, lives in `experimental/sunkenNozzle.py`. It b
 outside the package because nothing has validated it as a design rather than because it cannot
 be drawn.
 
-The near-wall state along the converging wall is quasi one-dimensional: an area ratio at each
-station gives a subsonic Mach number, and the isentropic relations give the rest. That is the
-only flow model here. It is stated as one.
+The near-wall state along the converging wall is quasi one-dimensional by default: an area ratio
+at each station gives a subsonic Mach number, and the isentropic relations give the rest. With
+`nearWallStateModel` set to 'transonic', the entrant arc instead carries the transonic solution
+the characteristics net starts from, tapered back to one-dimensional where the arc meets the cone
+(`contourKernel.transonicConvergingWallMach`). The wall streamline then goes sonic ahead of the
+geometric throat, as it does in a real throat, and the state joins the starting line's without
+the jump a one-dimensional sonic throat leaves against it.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -33,9 +37,16 @@ is a closed-form check rather than a model, and the tests hold it to machine pre
 **The converging flow is quasi one-dimensional and unvalidated.** Every station is solved
 from its own area ratio as though the flow were uniform across it, which it is not: the wall
 turns, and a turning subsonic flow is faster on the inside of the turn than the one-dimensional
-value. Nothing here estimates that error. No reference is available for a converging section
-of this family. What can be said is that the solve is the isentropic relations applied
-consistently, and that it reproduces the throat condition at the throat.
+value. No reference is available for a converging section of this family. What can be said is
+that the solve is the isentropic relations applied consistently, and that it reproduces the
+throat condition at the throat.
+
+**The transonic option is verified against its closed forms and not validated.** On the arc it
+reproduces the throat-wall velocity of `transonicThroatVelocity` and the wall sonic point of
+Sauer's solution exactly, and it joins the characteristics net's first wall point. The taper
+back to one-dimensional is an engineering closure. No measured wall pressure in the reference
+set covers a throat of this kind; Back, Massier and Gier's conical-nozzle wall pressures are the
+reference that would close it.
 
 The area ratio has no subsonic solution below one, so a converging wall that dips inside the
 throat radius is a geometry error rather than a numerical one. It is reported as one.
@@ -72,6 +83,7 @@ from scipy.optimize import brentq, fsolve
 from .geometryTools import arcSpline, parallelOffset
 from .errors import GeometricConstraintError, InvalidInputError
 from .contour import divergingSectionFamily
+from .contourKernel import transonicConvergingWallMach
 from .gasDynamics import isentropicValues, machFromAreaRatio
 from .validation import (Overlay, applyRules, arrayRule, choiceRule, integerRule,
                          numericRule, presentRule, read)
@@ -196,10 +208,12 @@ class ConvergingSectionState:
     divergingSectionType:                    Any = None
     makeInletVolute:                         Any = None
     makeOutletVolute:                        Any = None
+    nearWallStateModel:                      Any = None
     nozzleScalingFactor:                     Any = None
     numContourPoints:                        Any = None
     throatInletCurvatureNonDimensional:      Any = None
     throatRadiusNonDimensional:              Any = None
+    transonicModel:                          Any = None
 
     # -- Extended in place, since the converging wall is prepended to the diverging one -- #
     chamberContractionRatio:                 Any = None
@@ -512,6 +526,18 @@ def solveConvergingSection(state, convergingSectionAngle: float = 'default', cha
 
         # Wall properties
         temperatureWall, pressureWall, velocityWall, machNumberWall = calculateConvergingFlowProperties(xConvergingSection, rConvergingSection)
+
+        # The wall streamline goes sonic ahead of the geometric throat, which a one-dimensional
+        # state cannot place. On request the entrant arc carries the transonic solution the
+        # characteristics net starts from, so the near-wall state is continuous across the throat
+        # where it would otherwise jump from the one-dimensional sonic value to the starting
+        # line's supersonic one. The throat sits at x = 0 on this section.
+        if state.nearWallStateModel == 'transonic':
+            throatRadius = state.rNozzleWall[0]
+            machNumberWall = transonicConvergingWallMach(
+                xConvergingSection / throatRadius, rConvergingSection / throatRadius, machNumberWall,
+                state.chamberGamma, state.throatInletCurvatureNonDimensional,
+                xConvergingThroat[0] / throatRadius, state.transonicModel or 'sauer')
 
         # Only the Mach number is interpolated onto the resampled contour. Temperature,
         # pressure and velocity are isentropic functions of it at fixed stagnation

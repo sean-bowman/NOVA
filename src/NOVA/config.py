@@ -62,10 +62,12 @@ from .channelSections import SECTIONFAMILIES
 from .voluteSections import SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS
 from .ceaInterface import CEA
 from .contour import divergingSectionFamily
-from .contourKernel import transonicModels
+from .contourKernel import nearWallStateModels, transonicModels
+from .gasSideHeatTransfer import GASSIDEAXIALMODELS
 from .contourOptimization import designVariableBounds, isMonotoneWall
 from .gasDynamics import effectiveGamma
-from .regenThermal import COOLANTROUGHNESSMODELS, printedSurfaceRoughness
+from .regenThermal import (COOLANTPROPERTYCORRECTIONS, COOLANTROUGHNESSMODELS,
+                           printedSurfaceRoughness)
 
 def setInputs(nozzle, inputsPath: str | dict) -> None:
 
@@ -224,6 +226,9 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.coolantGeometryCorrections     = inputsPath.get('coolantGeometryCorrections') in (True, 'on')
         # What a rough wall is allowed to do to the coolant-side heat transfer
         nozzle.coolantRoughnessModel          = inputsPath.get('coolantRoughnessModel') or 'dippreySabersky'
+        nozzle.coolantPropertyCorrection      = inputsPath.get('coolantPropertyCorrection') or 'none'
+        nozzle.thermalBarrierThickness        = inputsPath.get('thermalBarrierThickness')
+        nozzle.thermalBarrierConductivity     = inputsPath.get('thermalBarrierConductivity')
 
         # A rectangle's width and depth limits and a helix's angle and aspect ratio. Read with
         # defaults, so a configuration written for circular channels needs none of them; a null
@@ -427,12 +432,20 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
             value = nozzle.coolantRoughnessModel,
             validRange = ', '.join(COOLANTROUGHNESSMODELS))
 
-    if nozzle.makeCoolingChannels == 'on' and nozzle.gasSideAxialModel not in ('uniform', 'measured'):
+    if nozzle.makeCoolingChannels == 'on'        and nozzle.coolantPropertyCorrection not in COOLANTPROPERTYCORRECTIONS:
         raise InvalidInputError(
-            message = "gasSideAxialModel must be 'uniform' or 'measured'.",
+            message = f"coolantPropertyCorrection must be one of "
+                      f"{', '.join(COOLANTPROPERTYCORRECTIONS)}.",
+            parameterName = 'coolantPropertyCorrection',
+            value = nozzle.coolantPropertyCorrection,
+            validRange = ', '.join(COOLANTPROPERTYCORRECTIONS))
+
+    if nozzle.makeCoolingChannels == 'on' and nozzle.gasSideAxialModel not in GASSIDEAXIALMODELS:
+        raise InvalidInputError(
+            message = 'No gas-side model by that name.',
             parameterName = 'gasSideAxialModel',
             value = nozzle.gasSideAxialModel,
-            validRange = "'uniform' or 'measured'")
+            validRange = ' or '.join(repr(name) for name in GASSIDEAXIALMODELS))
 
     if nozzle.makeCoolingChannels == 'on' and nozzle.channelType not in SECTIONFAMILIES:
         parked = (' Spirally fluted channels are kept in experimental/flutedChannels.py.'
@@ -552,6 +565,19 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
                       'at the 1.0 SP-8120 prefers, so this choice is worth making deliberately.',
             parameterName = 'transonicModel', value = nozzle.transonicModel,
             validRange = ' or '.join(repr(name) for name in transonicModels))
+
+    # Where the converging near-wall state comes from. One-dimensional is what NOVA has always
+    # used and stays the default; 'transonic' carries the starting line's own solution over the
+    # entrant arc, so the wall goes sonic ahead of the throat as a real one does.
+    nozzle.nearWallStateModel = inputsPath.get('nearWallStateModel', None) or 'oneDimensional'
+    if nozzle.nearWallStateModel not in nearWallStateModels:
+        raise InvalidInputError(
+            message = 'No near-wall state model by that name. The one-dimensional state puts the '
+                      'sonic point at the geometric throat on every streamline; the transonic '
+                      'one moves it ahead of the throat on the wall, about a fifth of a throat '
+                      'radius at the conventional curvature.',
+            parameterName = 'nearWallStateModel', value = nozzle.nearWallStateModel,
+            validRange = ' or '.join(repr(name) for name in nearWallStateModels))
 
     # A sharp throat under a series written in inverse powers of the curvature is where that
     # series stops behaving, so say so rather than returning its answer.

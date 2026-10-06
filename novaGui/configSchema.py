@@ -249,6 +249,13 @@ groups = [
                      'first-order transonic solution and is the default. The second-order and '
                      'small-radius lines are the ones to reach for at a sharp throat, where the '
                      'Sauer expansion is weakest.'),
+        Field('nearWallStateModel', 'Near-wall state', 'choice',
+              choices = [('One-dimensional', 'oneDimensional'), ('Transonic', 'transonic')],
+              default = 'oneDimensional',
+              help = 'Where the converging wall state comes from. One-dimensional puts the sonic '
+                     'point at the geometric throat. Transonic carries the starting line's own '
+                     'solution over the entrant arc, so the wall goes sonic ahead of the throat '
+                     'and the state joins the characteristics net without a jump.'),
         Field('throatInletCurvature', 'Throat inlet curvature', 'float', default = 1.5,
               help = 'Radius of curvature of the throat inlet arc, as a multiple of the throat '
                      'radius. NASA SP-8120 takes this above 0.6.'),
@@ -305,12 +312,15 @@ groups = [
                      'heat transfer model; sampled properties are shown below.'),
         Field('gasSideAxialModel', 'Gas-side axial model', 'choice',
               choices = [('Uniform constant (Bartz)', 'uniform'),
-                         ('Measured distribution (TN D-2832)', 'measured')],
+                         ('Measured distribution (TN D-2832)', 'measured'),
+                         ('Integral method (Ievlev, as RPA)', 'ievlev')],
               default = 'uniform', showWhen = _coolingOn,
               help = 'Bartz carries one correlation constant along the whole wall. The measured '
                      'distribution scales it by constants measured along a LOX/GH2 chamber, which '
                      'leaves the barrel alone and takes about 40 percent off the throat. It is a '
-                     'calibration from one engine and injector, not a universal curve.'),
+                     'calibration from one engine and injector, not a universal curve. Ievlev's '
+                     'method integrates the energy equation along the wall, as RPA does; it '
+                     'depends on the wall upstream, so the jacket is solved two or three times.'),
         Field('coolantRoughnessModel', 'Coolant roughness model', 'choice',
               choices = [('Friction only (no heat transfer credit)', 'frictionOnly'),
                          ('Dipprey and Sabersky rough-wall heat transfer', 'dippreySabersky'),
@@ -320,6 +330,16 @@ groups = [
                      'raises the friction factor and the pressure drop under all three. Friction '
                      'only is the treatment the hardware comparisons support; full credit is what '
                      'runs the wall coolest and what no measurement supports.'),
+        Field('coolantPropertyCorrection', 'Coolant property correction', 'choice',
+              choices = [('None (every property at the bulk temperature)', 'none'),
+                         ('Taylor, surface to bulk temperature ratio', 'taylor')],
+              default = 'none', showWhen = _coolingOn,
+              help = 'Whether the coolant-side correlation is corrected for the property '
+                     'variation between the bulk and the hot wall. Leave it at none. Taylor is '
+                     'NASA TN D-4332, fitted on symmetrically heated tubes, and against the '
+                     'hardware comparison it puts 0 of 13 measured wall temperatures inside the '
+                     'band where none puts 13 of 13. It is kept only so that result can be '
+                     'reproduced.'),
         Field('channelSurfaceRoughness', 'Channel surface roughness', 'float', default = 3.5e-05,
               unit = 'm', showWhen = _coolingOn,
               help = 'Absolute roughness the coolant-side friction factor is built on. The '

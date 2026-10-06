@@ -115,6 +115,7 @@ except ImportError as error:
 # studies in experimental/, the showcase scripts and the test suite all reach for them through
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
+from .boundaryLayer import frictionPerformanceDebit, solveBoundaryLayer
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
                     PlumeFlow, PlumePoint, solvePlumeStructure, throttledContour,
                     plumeCharacteristicSeed,
@@ -377,6 +378,7 @@ class Nozzle:
         self.throatInletCurvatureNonDimensional       = 1.5      # [-] Non-dimensional
         self.throatOutletCurvatureNonDimensional      = 0.382    # [-] Non-dimensional
         self.transonicModel                           = 'sauer'  # [str] starting-line solution
+        self.nearWallStateModel                       = 'oneDimensional'  # [str] converging near-wall state
         self.initialWallAngleFraction                 = 0.25     # [-] of the design Prandtl-Meyer angle
         self.divergingSectionDesignVariables          = None     # [tuple] pins the searched wall
         self.nozzleScalingFactor: float | None        = None     # [-] Non-dimensional
@@ -1687,6 +1689,91 @@ class Nozzle:
 
     # -- Wrapper for running multiple public methods in series -- #
 
+    def solveFrictionLoss(self):
+
+        """
+
+        March the boundary layer along the finished wall and price the drag it costs.
+
+        Every contour NOVA builds is inviscid, so the exit plane reports a thrust the wall has not
+        been charged for. The momentum-integral march in `boundaryLayer` returns the drag that
+        wall carries, and what is added here is the step from a force to a performance figure:
+
+            xi_f = D_friction / (C_f A_t p_c),      phi_f = 1 - xi_f
+
+        with `C_f A_t p_c` the ideal thrust the inviscid solve delivered. That is the form NASA
+        SP-8120's reference practice and RPA both use, and it is a debit on the thrust coefficient
+        rather than a change to the contour: the displacement thickness that would move the wall
+        is reported alongside and not applied.
+
+        **The drag charged is the diverging section's.** The march covers the whole wall, because
+        the thickness arriving at the throat is set by the chamber upstream of it, but friction on
+        the subsonic wall does not reduce exit plane momentum and is not a thrust debit. On the
+        reference nozzle the chamber and converging section carry a further 213 N, which is
+        reported as `chamberDragForce` and left out of the coefficient.
+
+        The wall temperature is the jacket's own solved distribution where there is a jacket, so
+        a cold wall is charged the higher friction a cold wall really carries. Without a jacket
+        there is no wall temperature to use and the march is skipped rather than invented.
+
+        Sets `frictionDragForce`, `chamberDragForce`, `frictionLossCoefficient`,
+        `frictionCorrectedThrustCoef` and `boundaryLayerDisplacement`. All are None when the
+        march did not run.
+
+        """
+
+        self.frictionDragForce = None
+        self.chamberDragForce = None
+        self.frictionLossCoefficient = None
+        self.frictionCorrectedThrustCoef = None
+        self.boundaryLayerDisplacement = None
+
+        # Explicit None checks rather than `or`: these are numpy arrays, and the truth value of
+        # an array with more than one element is ambiguous.
+        wallRadius = getattr(self, 'rNozzleWall', None)
+        nearWallMach = getattr(self, 'nozzleNearWallMachNumber', None)
+        if wallRadius is None or nearWallMach is None:
+            return
+
+        wall = np.asarray(wallRadius, dtype = float)
+        mach = np.asarray(nearWallMach, dtype = float)
+        if wall.size < 3 or mach.size != wall.size:
+            return
+
+        wallTemperature = getattr(self, 'channelWallTemperature', None)
+        if wallTemperature is None:
+            return
+
+        # The jacket covers the cooled section only, so its temperature is carried forward over
+        # any uncooled extension rather than extrapolated into one.
+        wallTemperature = np.asarray(wallTemperature, dtype = float)
+        if wallTemperature.size != wall.size:
+            wallTemperature = np.interp(np.linspace(0.0, 1.0, wall.size),
+                                        np.linspace(0.0, 1.0, wallTemperature.size),
+                                        wallTemperature)
+
+        layer = solveBoundaryLayer(
+            np.asarray(self.xNozzleWall, dtype = float), wall, mach,
+            np.asarray(self.nozzleNearWallTemperature, dtype = float),
+            np.asarray(self.nozzleNearWallPressure, dtype = float),
+            np.asarray(self.nozzleNearWallVelocity, dtype = float),
+            float(self.chamberGamma), float(self.chamberRGasConstant),
+            wallTemperature = wallTemperature)
+
+        lossCoefficient, correctedCoefficient = frictionPerformanceDebit(
+            layer['divergingDragForce'], self.thrustCoef, self.throatArea, self.chamberPressure)
+        if lossCoefficient is None:
+            return
+
+        self.frictionDragForce = float(layer['divergingDragForce'])
+        self.chamberDragForce = float(layer['chamberDragForce'])
+        self.frictionLossCoefficient = lossCoefficient
+        self.frictionCorrectedThrustCoef = correctedCoefficient
+        self.boundaryLayerDisplacement = np.asarray(layer['displacementThickness'], dtype = float)
+
+        print(f'  friction drag {self.frictionDragForce:.1f} N over the diverging section, '
+              f'{self.frictionLossCoefficient:.2%} of ideal thrust')
+
     def generateNozzle(self, configPath: str = None):
 
         '''
@@ -1761,6 +1848,10 @@ class Nozzle:
             # Generate volute(s)
             if self.makeInletVolute == 'on' or self.makeOutletVolute == 'on':
                 self.generateRegenVolutes()
+
+        # -- Boundary Layer and the Friction It Costs -- #
+
+        self.solveFrictionLoss()
 
         # -- Radiation-Cooled Extension -- #
 

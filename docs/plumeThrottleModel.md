@@ -119,7 +119,7 @@ $$F(f) = f\,\dot m_r V_e + (f\,p_{e,r} - p_a)A_e$$
 
 with the pressure term going negative as the engine throttles into overexpansion. It is drawn only over the attached range: below separation the jet leaves from inside the nozzle and the geometric exit area is no longer the area that matters.
 
-## The gas state is frozen, and this is what that costs
+## Cost of the frozen gas state
 
 Chamber temperature, molecular weight and the ratio of specific heats all move with chamber pressure through the equilibrium composition. Holding them at their rated values is the model's largest approximation, so it is measured rather than asserted. Run at mixture ratio 5.5 on LOX/LH2 over a 5:1 throttle:
 
@@ -147,7 +147,7 @@ Chamber temperature, molecular weight and the ratio of specific heats all move w
 | 40 % | 4.474 | 38.463 | 968.3 |
 | 20 % | 5.141 | 38.299 | 555.9 |
 
-Displacement thickness grows 38 percent and the exit skin friction coefficient 38 percent, against a geometric area ratio of 39.57. Two consequences. The effective area ratio falls 0.90 percent over the range, which shifts the exit pressure and so the power level at which separation is reported, by rather less than the 4.9 percent the frozen gas state already costs. And friction drag, which is 1.90 percent of thrust at rated power, is 2.85 percent at 20 percent power: **throttling makes the nozzle relatively draggier, by half as much again.** The plume sweep does not include either effect.
+Displacement thickness grows 38 percent and the exit skin friction coefficient 38 percent, against a geometric area ratio of 39.57. Two consequences. The effective area ratio falls 0.95 percent over the range, which shifts the exit pressure and so the power level at which separation is reported, by rather less than the 4.9 percent the frozen gas state already costs. And friction drag, which is 2.02 percent of thrust at rated power, is 2.79 percent at 20 percent power: **throttling makes the nozzle relatively draggier, by 38 percent.** The plume sweep does not include either effect.
 
 **Separation as a model rather than a refusal.** Schmucker's criterion, `p_sep / p_a = (1.88 Ma_sep - 1)^-0.64`, evaluated along the wall locates the separation point instead of only declaring that one exists. The outputs that follow are the separation station, the area ratio there, the effective exit the jet actually leaves from, and the power level at which separation first enters the nozzle rather than sitting at the lip. The shipped contour is a truncated ideal contour, and truncated ideal and conical nozzles show free shock separation only; restricted shock separation belongs to thrust-optimized contours, so the `top` and `toc` families need checking before they take the same treatment. The plume downstream of a separated nozzle stays out of scope either way.
 

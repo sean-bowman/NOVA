@@ -12,7 +12,8 @@ station, so it lives here rather than inside any one of them.
 Two pieces. `bartzHeatTransferCoefficient` is the correlation itself, referenced to the throat and
 carrying one constant along the whole wall. `measuredAxialFactor` is the axial distribution taken
 from measured correlation constants, which that single constant does not have; a caller selects
-between them with `gasSideAxialModel`, `uniform` or `measured`.
+between them with `gasSideAxialModel`, `uniform` or `measured`. The third choice, `ievlev`, is a
+different method altogether and lives in `ievlevHeatTransfer`.
 
 ----------------------------------------------------------------------
                             Validation status
@@ -48,6 +49,16 @@ outright would import the property evaluation they were reduced with.
 throat and nothing here checks it in a subsonic barrel. On a straight barrel its coefficient varies
 only through the wall temperature, with no injector near field and no boundary layer start.
 
+**Its property shortcuts cancel on LOX/LH2.** On the 40k calorimeter chamber at 10.87 MPa and a
+mixture ratio of 6.0, the stagnation viscosity fit is 45 percent below CEA's, the specific heat
+gamma R / (gamma - 1) 25 percent above the equilibrium enthalpy difference to an 800 K wall over
+its temperature difference, and the Prandtl number 4 gamma / (9 gamma - 5) 22 percent above CEA's
+frozen value. Together they put the group mu^0.2 c_p / Pr^0.6 within 2 percent of the same group
+on CEA's viscosity, the equilibrium enthalpy difference and the frozen Prandtl number, and 16
+percent below it with the equilibrium Prandtl number. The agreement over a barrel rests on that
+cancellation, which nothing guarantees for another propellant. `docs/reports/calorimeter40k_2026-10-04.md` carries the comparison, and
+Ievlev's method, the third gas side, is in `ievlevHeatTransfer`.
+
 **The gas state a caller supplies is its own problem.** Nothing here forms a gas state. Where NOVA
 supplies one it comes from CEA at a one-dimensional station, while the near-wall Mach number the
 method of characteristics returns departs from the one-dimensional value by up to 42 percent near
@@ -61,12 +72,15 @@ Author: Sean Bowman
 
 import numpy as np
 
-# How the gas-side correlation constant is allowed to vary along the wall.
+# How the gas-side coefficient is allowed to vary along the wall.
 #
 #   'uniform'   one constant everywhere, which is what the Bartz form carries.
 #   'measured'  scaled by the constants measured along a LOX/GH2 chamber, which takes about
 #               40 percent off at the throat and leaves the barrel alone.
-GASSIDEAXIALMODELS = ('uniform', 'measured')
+#   'ievlev'    Ievlev's integral method as RPA carries it (`ievlevHeatTransfer`), which depends
+#               on the wall upstream of a station and so is solved over the whole wall and handed
+#               to each station as a prescribed coefficient.
+GASSIDEAXIALMODELS = ('uniform', 'measured', 'ievlev')
 
 # Correlation constants measured at five stations of a LOX/GH2 chamber, NASA TN D-2832 table on
 # p. 17, for St* Pr*^0.7 = C Re*_d^-0.2 with properties at Eckert's reference enthalpy. C is not a

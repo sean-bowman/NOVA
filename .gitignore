@@ -50,3 +50,6 @@ src/*.egg-info/
 *.egg-info/
 build/
 dist/
+
+# Licensed reference PDFs kept locally, not redistributed
+docs/scaling-techniques-for-design-development-and-test-2004.pdf

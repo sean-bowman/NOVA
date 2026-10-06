@@ -16,7 +16,9 @@ import pytest
 
 from NOVA.characteristics import CharacteristicGas
 from NOVA.contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
-                           limitingCharacteristicIntersection, throatIntersection)
+                           limitingCharacteristicIntersection, throatIntersection,
+                           transonicConvergingWallMach, transonicModels, transonicThroatVelocity,
+                           transonicWallMach)
 
 GAMMA, GAS_CONSTANT, STAGNATION_TEMPERATURE = 1.1475421191138746, 692.0, 3512.0
 
@@ -195,3 +197,71 @@ def testStartingLineIntersectionIsIndependentOfWhereTheCharacteristicStarted(gas
     first = limitingCharacteristicIntersection(gas, throat, 1.4, np.radians(3.0), 0.05, 0.85)
     second = limitingCharacteristicIntersection(gas, throat, 1.4, np.radians(3.0), 0.05, 0.60)
     assert first[0] != second[0]
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The transonic near-wall state on the entrant arc -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def machFromSpeedRatio(speedRatio: float) -> float:
+    return float(np.sqrt(2.0 * speedRatio**2 / ((GAMMA + 1.0) - (GAMMA - 1.0) * speedRatio**2)))
+
+@pytest.mark.parametrize('model', transonicModels)
+@pytest.mark.parametrize('curvature', [1.0, 1.5, 2.0])
+def testTheWallMachAtTheThroatIsTheThroatWallVelocity(model, curvature):
+    '''
+    At the geometric throat the wall is parallel to the axis, so the radial velocity has to vanish
+    and the speed has to be the throat-wall velocity every model writes down. Exactly, because the
+    flow parameter is inverted from that velocity.
+    '''
+    mach = float(transonicWallMach(0.0, 1.0, GAMMA, curvature, model))
+    assert mach == pytest.approx(machFromSpeedRatio(transonicThroatVelocity(GAMMA, curvature, model)),
+                                 rel = 1e-12)
+
+@pytest.mark.parametrize('curvature', [1.0, 1.5, 2.0])
+def testTheWallGoesSonicAheadOfTheThroatWhereSauerPutsIt(curvature):
+    '''
+    Sauer puts the point where the axial velocity on the wall reaches the sonic speed
+    sqrt((gamma + 1) / (32 R)) throat radii ahead of the geometric throat. The wall speed, which
+    carries the radial component as well, has to be sonic slightly further upstream, and
+    supersonic from there to the throat.
+    '''
+    throat = ThroatGeometry(GAMMA, 1.0, curvature)
+    alpha, epsilon = throat.sauerFlowParameter, throat.sauerEpsilon
+    offset = -np.sqrt((GAMMA + 1.0) / (32.0 * curvature))
+    axialVelocity = 1.0 + alpha * (offset - epsilon) + ((GAMMA + 1.0) / 4.0) * alpha**2
+    assert axialVelocity == pytest.approx(1.0, abs = 1e-12)
+
+    axial = np.linspace(-0.6, 0.0, 6001)
+    mach = transonicWallMach(axial, np.ones_like(axial), GAMMA, curvature)
+    sonic = float(np.interp(1.0, mach, axial))
+    assert offset - 0.1 < sonic < offset
+    assert np.all(mach[axial > sonic] > 1.0)
+
+def testTheBlendLeavesTheConeAndTheThroatPlaneAlone():
+    '''
+    Upstream of the arc the state stays one-dimensional, and the stations at and past the throat
+    plane are not the converging section's to change.
+    '''
+    curvature, arcStart = 1.5, -0.75
+    axial = np.array([-2.0, -1.0, arcStart, 0.0, 0.1])
+    oneDimensional = np.array([0.3, 0.5, 0.6, 1.0, 1.2])
+    blended = transonicConvergingWallMach(axial, np.ones_like(axial), oneDimensional, GAMMA,
+                                          curvature, arcStart)
+    assert blended == pytest.approx(oneDimensional, rel = 1e-14)
+
+def testTheBlendTendsToTheTransonicStateAtTheThroat():
+    '''
+    Approaching the throat the taper weight goes to one, so the blended state meets the transonic
+    one there: which is the starting line's throat-wall state, so the near-wall state is continuous
+    into the characteristics net rather than jumping from a sonic one-dimensional value.
+    '''
+    curvature, arcStart = 1.5, -0.75
+    near = np.array([-1e-6])
+    blended = transonicConvergingWallMach(near, np.ones(1), np.array([0.99]), GAMMA, curvature, arcStart)
+    throatWall = machFromSpeedRatio(transonicThroatVelocity(GAMMA, curvature, 'sauer'))
+    assert float(blended[0]) == pytest.approx(throatWall, rel = 1e-5)
+    assert throatWall > 1.15
+
+def testTheBlendRefusesAnArcThatStartsDownstream():
+    with pytest.raises(ValueError):
+        transonicConvergingWallMach(np.array([-0.1]), np.ones(1), np.array([0.9]), GAMMA, 1.5, 0.2)
