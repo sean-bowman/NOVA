@@ -9,7 +9,8 @@ import closes the launcher without a word. Every module is therefore imported he
 traceback is visible. The configuration tab builds the dictionary it hands the runner from
 `novaGui.configSchema` alone, and that module states that it carries every key of the shipped
 configuration exactly once; a key the backend reads and the schema lacks never reaches a GUI run.
-Neither check needs a Tk root.
+The window icon and the banner mark are images the GUI loads by path, so their files are checked
+too. None of these checks needs a Tk root.
 
 Author: Sean Bowman
 
@@ -52,6 +53,23 @@ def testTheSchemaCarriesEveryShippedKeyExactlyOnce():
     assert len(keys) == len(set(keys)), 'a key appears in more than one field'
     assert set(keys) - shipped == set(), 'the schema carries keys the shipped configuration does not'
     assert shipped - set(keys) == set(), 'the shipped configuration carries keys the schema does not'
+
+def testTheBrandingImagesShipAtEverySizeOnATransparentGround():
+    '''
+    Every icon frame the window hands Tk exists at its own size, the Windows icon file carries all
+    of them, and the icons and the banner mark are transparent at the corner, so they sit on the
+    taskbar and the header rather than on a painted square.
+    '''
+    from PIL import Image
+    from novaGui import branding
+    for size in branding.iconSizes:
+        with Image.open(os.path.join(branding.assetFolder, 'icon', f'icon{size}.png')) as image:
+            assert image.size == (size, size)
+            assert image.mode == 'RGBA' and image.getpixel((0, 0))[3] == 0
+    with Image.open(os.path.join(branding.assetFolder, 'plumeBanner.png')) as image:
+        assert image.mode == 'RGBA' and image.getpixel((0, 0))[3] == 0
+    with Image.open(os.path.join(branding.assetFolder, 'nova.ico')) as image:
+        assert set(image.info['sizes']) == {(size, size) for size in branding.iconSizes}
 
 def testEveryFixedChoiceDefaultIsOneOfItsChoices():
     '''A choice field that cannot be typed into has to default to a value its dropdown offers.'''

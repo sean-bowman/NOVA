@@ -17,7 +17,7 @@ import queue
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import theme
+from . import branding, theme
 from .widgets import ConsolePane
 from .runner import PipelineRunner
 from .tabs import ConfigTab, Geometry2DTab, Geometry3DTab, AnalysisTab, ExportTab
@@ -35,6 +35,8 @@ class NovaApp(tk.Tk):
         # Must precede the Tk root: Windows decides how to composite the window at
         # creation, and a root built without awareness is upscaled from 96 dpi and blurry.
         theme.enableDpiAwareness()
+        # Also before the root: the taskbar button takes its identity from the first window
+        branding.setAppUserModelId()
 
         super().__init__()
 
@@ -43,6 +45,7 @@ class NovaApp(tk.Tk):
         theme.applyTheme(self)
 
         self.title('NOVA Nozzle Designer')
+        self._iconImages = branding.applyWindowIcon(self)
         self.geometry(f'{theme.scaled(1180)}x{theme.scaled(820)}')
         self.minsize(theme.scaled(960), theme.scaled(680))
 
@@ -70,10 +73,15 @@ class NovaApp(tk.Tk):
         header = ttk.Frame(self, style = 'Elevated.TFrame', padding = (16, 10))
         header.pack(side = 'top', fill = 'x')
 
+        # The plume mark ahead of the wordmark; the header stands without it if it is missing
+        self._bannerImage = branding.bannerImage(self, theme.scaled(30))
+        if self._bannerImage is not None:
+            ttk.Label(header, image = self._bannerImage, background = theme.surface2).pack(side = 'left',
+                                                                                          padx = (0, 10))
         ttk.Label(header, text = 'NOVA', style = 'Wordmark.TLabel',
                   background = theme.surface2).pack(side = 'left')
         ttk.Label(header, text = 'Nozzle Optimization for Variable Applications',
-                  style = 'SurfaceMuted.TLabel').pack(side = 'left', padx = 12)
+                  style = 'SurfaceMuted.TLabel', background = theme.surface2).pack(side = 'left', padx = 12)
 
     def _buildBottom(self) -> None:
 
