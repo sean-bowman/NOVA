@@ -253,7 +253,7 @@ groups = [
               choices = [('One-dimensional', 'oneDimensional'), ('Transonic', 'transonic')],
               default = 'oneDimensional',
               help = 'Where the converging wall state comes from. One-dimensional puts the sonic '
-                     'point at the geometric throat. Transonic carries the starting line's own '
+                     'point at the geometric throat. Transonic carries the starting line\'s own '
                      'solution over the entrant arc, so the wall goes sonic ahead of the throat '
                      'and the state joins the characteristics net without a jump.'),
         Field('throatInletCurvature', 'Throat inlet curvature', 'float', default = 1.5,
@@ -318,7 +318,7 @@ groups = [
               help = 'Bartz carries one correlation constant along the whole wall. The measured '
                      'distribution scales it by constants measured along a LOX/GH2 chamber, which '
                      'leaves the barrel alone and takes about 40 percent off the throat. It is a '
-                     'calibration from one engine and injector, not a universal curve. Ievlev's '
+                     'calibration from one engine and injector, not a universal curve. Ievlev\'s '
                      'method integrates the energy equation along the wall, as RPA does; it '
                      'depends on the wall upstream, so the jacket is solved two or three times.'),
         Field('coolantRoughnessModel', 'Coolant roughness model', 'choice',
@@ -403,6 +403,13 @@ groups = [
                      'circle bounded only by the room between its neighbors.'),
         Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
+        Field('thermalBarrierThickness', 'Thermal barrier thickness', 'float', default = None, unit = 'm',
+              showWhen = _coolingOn,
+              help = 'Ceramic coating over the hot wall. Blank for none. With a coating the wall '
+                     'temperature limit applies to the metal behind it, not to the coating surface.'),
+        Field('thermalBarrierConductivity', 'Thermal barrier conductivity', 'float', default = None,
+              unit = 'W/m-K', showWhen = _coolingOn,
+              help = 'Conductivity of the coating. Yttria-stabilized zirconia is about 1.5 W/m-K.'),
         Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',
               showWhen = _coolingOn, help = 'Outer structural shell thickness.'),
         Field('infillThickness', 'Rib thickness', 'float', default = None, unit = 'm',
