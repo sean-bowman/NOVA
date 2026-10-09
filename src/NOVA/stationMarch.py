@@ -748,6 +748,10 @@ def solveStationField(contour, ambientPressure: float, reach: float = plumeField
     result.seededFromMesh = True
 
     station = stationFromLine(exitLine, radialPoints)
+    # The lip's own static pressure over ambient: the ratio that sets how the boundary turns at
+    # the lip, which the one-dimensional Pe/Pa above does not, because a truncated contour's exit
+    # plane is far from uniform
+    result.lipPressureRatio = flow.staticPressure(float(station.mach[-1]))/ambientPressure
     march = solveStationMarch(flow, station, ambientPressure, maxLength = reach,
                               maxStations = maxStations)
     result.boundaryMach = march['boundaryMach']

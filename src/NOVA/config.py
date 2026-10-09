@@ -180,6 +180,10 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.thrust                     = inputsPath['thrust']
         nozzle.targetExitPressure         = inputsPath['targetExitPressure']
         nozzle.plumeAmbientPressure       = inputsPath['plumeAmbientPressure']
+        # Lip radii the plume march is carried past the exit plane. A configuration that does not
+        # name one gets the correlated structure alone, as configurations written before the march
+        # ran in the pipeline did.
+        nozzle.plumeFieldReach            = inputsPath.get('plumeFieldReach')
         nozzle.lengthFraction             = inputsPath['lengthFraction']
         nozzle.expansionRatio             = inputsPath['expansionRatio']
         nozzle.numCharacteristicsRequested = inputsPath.get('numCharacteristics', 50)
@@ -422,6 +426,25 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
                 value = value,
                 validRange = 'a finite number')
         nozzle.regenTruncationValue = float(value)
+
+    # The plume march's reach. Unset skips the march; a set value has to be a positive length,
+    # because the march has nowhere to go otherwise.
+    reach = nozzle.plumeFieldReach
+    if reach is None or (isinstance(reach, float) and np.isnan(reach)):
+        nozzle.plumeFieldReach = None
+    else:
+        try:
+            reach = float(reach)
+        except (TypeError, ValueError):
+            reach = float('nan')
+        if not reach > 0.0:
+            raise InvalidInputError(
+                message = 'plumeFieldReach is the distance the plume march is carried past the exit '
+                          'plane, in lip radii, and has to be positive. Leave it null to skip the march.',
+                parameterName = 'plumeFieldReach',
+                value = nozzle.plumeFieldReach,
+                validRange = 'a positive number of lip radii, or null')
+        nozzle.plumeFieldReach = reach
 
     # Which cross section the jacket is built from. Checked only when there is a jacket, because a
     # contour-only configuration has no reason to name one.

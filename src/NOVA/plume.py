@@ -351,6 +351,7 @@ class PlumeField:
 
     exitMach: float = 0.0                 # [-], at the lip
     exitPressureRatio: float = 0.0        # [-], Pe / Pa
+    lipPressureRatio: float = float('nan')  # [-], static pressure at the lip of the marched exit station over Pa
     boundaryMach: float = 0.0             # [-], constant along the free boundary
     lipTurnAngle: float = 0.0             # [rad], Prandtl-Meyer turning at the lip, positive outward
     lipX: float = 0.0                     # [m]

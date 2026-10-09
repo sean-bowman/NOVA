@@ -350,6 +350,7 @@ class Nozzle:
         # Set 2:
         self.targetExitPressure: float | None         = None     # [Pa]
         self.plumeAmbientPressure                     = None     # [Pa] ambient the plume is drawn against
+        self.plumeFieldReach                          = None     # [-] lip radii the plume march runs; None skips it
         self.expansionRatio                           = None     # [-]
 
         # Additional optional properties
@@ -1817,12 +1818,18 @@ class Nozzle:
         # unrecognized value raises rather than quietly building a truncated ideal contour.
         match divergingSectionFamily(self.divergingSectionType):
             case 'conical':
+                print(f'Generating a conical nozzle contour to area ratio {self.expansionRatio:.3f}.')
                 self.conicalNozzle()
             case 'truncatedIdeal':
+                # The contour solve prints its own banner, which names the mode it runs in
                 self.solveTruncatedIdealDesignPoint(self.lengthFraction)
             case 'thrustOptimizedParabola':
+                print(f'Generating a thrust-optimized parabolic nozzle contour to area ratio '
+                      f'{self.expansionRatio:.3f} at a length fraction of {self.lengthFraction}.')
                 self.thrustOptimizedParabolicContour(self.lengthFraction)
             case 'thrustOptimizedContour':
+                print(f'Generating a thrust-optimized nozzle contour to area ratio {self.expansionRatio:.3f} '
+                      f'at a length fraction of {self.lengthFraction}.')
                 # A pinned vector skips the search. Absent, this searches as it always has.
                 self.thrustOptimizedContour(
                     self.lengthFraction,
@@ -1860,9 +1867,19 @@ class Nozzle:
 
         # -- Exhaust Plume -- #
 
-        # Correlated structure only; see plumeStructure() for what is and is not modeled.
+        # The correlated structure first: it carries the jet scale and the Mach disk, which the
+        # march cannot produce, and the march reads it. Then, when a reach is given, the station
+        # march solves the boundary and the interior; see plumeField() for its envelope.
         if not np.isnan(np.float64(self.plumeAmbientPressure if self.plumeAmbientPressure not in ([], None) else np.nan)):
             self.plumeStructure(float(self.plumeAmbientPressure))
+            if self.plumeFieldReach is not None:
+                print(f'Marching the exhaust plume {self.plumeFieldReach:.1f} lip radii past the exit plane.')
+                field = self.plumeField(float(self.plumeAmbientPressure), reach = float(self.plumeFieldReach))
+                if field.solved:
+                    print(f'  lip pressure ratio {field.lipPressureRatio:.3f}, worst mass continuity error '
+                          f'{field.massDriftWorst:+.2f} %' + ('' if field.trustworthy else ', past the trusted bound'))
+                else:
+                    print(f'  plume march declined: {field.notes[-1] if field.notes else "no reason given"}')
 
         # -- Export -- #
 

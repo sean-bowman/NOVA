@@ -544,3 +544,52 @@ def testTheFieldDependsOnThePressureRatioAndNothingElse():
     assert np.array_equal(rated.nodeMach, half.nodeMach)
     assert np.array_equal(rated.boundaryR, half.boundaryR)
     assert rated.massDriftWorst == half.massDriftWorst
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The lip pressure ratio and the reach the pipeline marches -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testTheLipRatioIsTheLipsOwnStaticOverAmbient():
+    '''
+    The lip ratio is read off the station the march starts from, so it carries the lip's static
+    pressure, which does not depend on the ambient: halving the ambient doubles the ratio.
+    '''
+    contour = _marchable(20000.0)
+    near = solveStationField(contour, ambientPressure = 20000.0)
+    far = solveStationField(contour, ambientPressure = 10000.0)
+    assert np.isfinite(near.lipPressureRatio) and near.lipPressureRatio > 0.0
+    assert far.lipPressureRatio == pytest.approx(2.0 * near.lipPressureRatio, rel = 1e-12)
+
+def _shippedInputs(**overrides):
+
+    '''The shipped configuration read into a Nozzle, with keys replaced or removed (None).'''
+
+    import json
+    from NOVA import Nozzle
+
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        'src', 'NOVA', 'assets', 'NOVANozzle.json')
+    with open(path, encoding = 'utf-8') as handle:
+        config = json.load(handle)
+    for key, value in overrides.items():
+        if value is None:
+            config.pop(key, None)
+        else:
+            config[key] = value
+    nozzle = Nozzle()
+    nozzle.setInputs(inputsPath = config)
+    return nozzle
+
+def testTheShippedNozzleMarchesItsPlumeTheConservativeReach():
+    '''The shipped configuration asks for the march, at the reach where mass continuity holds.'''
+    assert _shippedInputs().plumeFieldReach == plumeFieldDefaultReach
+
+def testAConfigurationWithoutAReachKeepsTheCorrelationsAlone():
+    '''A configuration written before the march joined the pipeline runs as it always did.'''
+    assert _shippedInputs(plumeFieldReach = None).plumeFieldReach is None
+
+@pytest.mark.parametrize('reach', [0.0, -1.0, 'far'])
+def testAReachHasToBeAPositiveLength(reach):
+    from NOVA.errors import InvalidInputError
+    with pytest.raises(InvalidInputError, match = 'plumeFieldReach'):
+        _shippedInputs(plumeFieldReach = reach)

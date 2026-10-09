@@ -2283,7 +2283,9 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
     # Single specific length fraction is requested
     if isinstance(lengthFraction, float):
 
-        print(f'''Generating a pressure-matched truncated ideal nozzle contour to a target exit pressure of {nozzle.targetExitPressure:.2f} [Pa] at a length fraction of {lengthFraction:.5f}.''')
+        print(f'Generating a truncated ideal nozzle contour cut at area ratio {nozzle.expansionRatio:.3f} at a '
+              f'length fraction of {lengthFraction:.5f}; the one-dimensional exit pressure there is '
+              f'{nozzle.targetExitPressure:.2f} [Pa].')
 
         convergeToExitPressure(lengthFraction)
 
@@ -2292,7 +2294,8 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
     # User has requested to find the ideal length fraction that maximizes thrust coefficient
     elif isinstance(lengthFraction, str):
 
-            print(f'Optimizing nozzle length fraction to maximize thrust coefficient at a target exit pressure of {nozzle.targetExitPressure:.2f} [Pa]:')
+            print(f'Optimizing the length fraction of a truncated ideal nozzle contour cut at area ratio '
+                  f'{nozzle.expansionRatio:.3f} to maximize thrust coefficient:')
 
             optimizedLengthFraction = minimize_scalar(convergeToExitPressure,
                                                       args = (True),
