@@ -71,11 +71,11 @@ if headlessPlots():
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import plotly.colors
 import plotly.graph_objects as go
 from plotly.express.colors import sample_colorscale
 from plotly.offline import plot as _writePlotlyFigure
 
+from . import palette as figurePalette
 from .geometryTools import DCM, revolveContour
 
 def showFigure(figure) -> None:
@@ -109,31 +109,16 @@ def showFigure(figure) -> None:
 
     figure.show()
 
-# Palette shared with the GUI theme. Duplicated rather than imported because this module belongs
-# to the solver package and must not depend on the front end; both derive from the same style
-# guide, so a change to one belongs in the other.
-palette = {
-    'background': '#1a1e2a',
-    'surface':    '#22273a',
-    'border':     '#3a4055',
-    'text':       '#d8e0ec',
-    'muted':      '#8a95a8',
-    'accent':     '#E0975A',
-    'green':      '#86C06C',
-    'blue':       '#7baee8',
-}
+def _color(name: str) -> str:
 
-# Palette for the Matplotlib PNGs, kept separate from the plotly palette above since the two
-# renderings are tuned independently against their own backgrounds.
-mplPalette = {
-    'background': '#1a1e2a',
-    'panel':      '#222735',
-    'copper':     '#E0975A',
-    'green':      '#86C06C',
-    'ink':        '#E8E6E1',
-    'muted':      '#8B93A7',
-    'blue':       '#6BA3D6',
-}
+    '''
+
+    A color of the mode figures are being drawn in, by its name in `NOVA.palette`. Read at draw
+    time rather than bound at import, so a change of mode reaches every figure drawn after it.
+
+    '''
+
+    return figurePalette.colors()[name]
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Figure descriptions -- #
@@ -210,7 +195,7 @@ class FieldFigure:
     wallX: np.ndarray                              # [m]
     wallR: np.ndarray                              # [m]
     label: str = ''
-    colorscale: str = 'Viridis'
+    colorscale: str = 'mach'                       # a NOVA.palette colormap name
     title: str = ''
 
 @dataclass
@@ -411,9 +396,9 @@ def plumeFigure(nozzle):
 
 # Quantity key -> (Nozzle attribute, color bar label, plotly colorscale, figure title)
 fieldDefinitions = {
-    'mach':        ('allMachNumbers',  'Mach number [-]',  'Viridis', 'Mach contours'),
-    'pressure':    ('allPressures',    'Pressure [Pa]',    'RdBu_r',  'Pressure contours'),
-    'temperature': ('allTemperatures', 'Temperature [K]',  'Plasma',  'Temperature contours'),
+    'mach':        ('allMachNumbers',  'Mach number [-]',  'mach',        'Mach contours'),
+    'pressure':    ('allPressures',    'Pressure [Pa]',    'pressure',    'Pressure contours'),
+    'temperature': ('allTemperatures', 'Temperature [K]',  'temperature', 'Temperature contours'),
 }
 
 def fieldFigure(nozzle, quantity: str):
@@ -469,20 +454,20 @@ def _baseLayout(title: str, xLabel: str, yLabel: str) -> dict:
 
     '''
 
-    Dark layout matching the GUI, with the color bar laid horizontally under the plot so a
+    Layout in the active figure mode, with the color bar laid horizontally under the plot so a
     wide axisymmetric figure keeps the full figure width.
 
     '''
 
     return dict(
-        title = dict(text = title, font = dict(color = palette['text'], size = 16)),
-        paper_bgcolor = palette['surface'],
-        plot_bgcolor = palette['background'],
-        font = dict(color = palette['text'], family = 'Segoe UI, Inter, sans-serif'),
-        xaxis = dict(title = xLabel, gridcolor = palette['border'], zerolinecolor = palette['border'],
-                     linecolor = palette['border']),
-        yaxis = dict(title = yLabel, gridcolor = palette['border'], zerolinecolor = palette['border'],
-                     linecolor = palette['border']),
+        title = dict(text = title, font = dict(color = _color('text'), size = 16)),
+        paper_bgcolor = _color('surface'),
+        plot_bgcolor = _color('bg'),
+        font = dict(color = _color('text'), family = 'Segoe UI, Inter, sans-serif'),
+        xaxis = dict(title = xLabel, gridcolor = _color('border'), zerolinecolor = _color('border'),
+                     linecolor = _color('border')),
+        yaxis = dict(title = yLabel, gridcolor = _color('border'), zerolinecolor = _color('border'),
+                     linecolor = _color('border')),
         margin = dict(l = 70, r = 30, t = 60, b = 60),
     )
 
@@ -499,33 +484,33 @@ def plotlyContour(data: ContourFigure):
 
     figure = go.Figure()
     figure.add_trace(go.Scatter(x = data.x, y = data.r, mode = 'lines', name = 'Wall contour',
-                                line = dict(color = palette['accent'], width = 2),
+                                line = dict(color = _color('accent'), width = 2),
                                 hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<extra></extra>'))
     figure.add_trace(go.Scatter(x = data.x, y = -data.r, mode = 'lines', showlegend = False,
-                                line = dict(color = palette['accent'], width = 2),
+                                line = dict(color = _color('accent'), width = 2),
                                 hoverinfo = 'skip'))
     if data.xRegen.size:
         figure.add_trace(go.Scatter(x = data.xRegen, y = data.rRegen, mode = 'lines',
                                     name = 'Regen-cooled portion',
-                                    line = dict(color = palette['green'], width = 3)))
+                                    line = dict(color = _color('green'), width = 3)))
         figure.add_trace(go.Scatter(x = data.xRegen, y = -data.rRegen, mode = 'lines',
                                     showlegend = False, hoverinfo = 'skip',
-                                    line = dict(color = palette['green'], width = 3)))
+                                    line = dict(color = _color('green'), width = 3)))
 
-    figure.add_vline(x = data.throatX, line = dict(color = palette['muted'], width = 1, dash = 'dash'))
+    figure.add_vline(x = data.throatX, line = dict(color = _color('textMuted'), width = 1, dash = 'dash'))
     figure.add_annotation(x = data.throatX, y = data.throatRadius,
                           text = f'throat r = {data.throatRadius * 1e3:.1f} mm',
-                          showarrow = False, yshift = 18, font = dict(color = palette['muted'], size = 11))
+                          showarrow = False, yshift = 18, font = dict(color = _color('textMuted'), size = 11))
     figure.add_annotation(x = data.x[-1], y = data.exitRadius,
                           text = f'exit r = {data.exitRadius * 1e3:.1f} mm',
                           showarrow = False, yshift = 18, xanchor = 'right',
-                          font = dict(color = palette['muted'], size = 11))
+                          font = dict(color = _color('textMuted'), size = 11))
 
     layout = _baseLayout(f'{data.title}   (length {data.length * 1e3:.0f} mm)',
                          'Nozzle axis [m]', 'Radius [m]')
     layout['yaxis']['scaleanchor'] = 'x'
     layout['yaxis']['scaleratio'] = 1
-    layout['legend'] = dict(bgcolor = palette['surface'], bordercolor = palette['border'], borderwidth = 1)
+    layout['legend'] = dict(bgcolor = _color('surface'), bordercolor = _color('border'), borderwidth = 1)
     figure.update_layout(**layout)
     return figure
 
@@ -545,26 +530,26 @@ def plotlyNearWall(data: NearWallFigure):
     figure = make_subplots(rows = 3, cols = 1, shared_xaxes = True, vertical_spacing = 0.05,
                            subplot_titles = ('Static temperature', 'Static pressure', 'Mach number'))
     figure.add_trace(go.Scatter(x = data.axis, y = data.temperature, mode = 'lines', name = 'T',
-                                line = dict(color = palette['accent'])), row = 1, col = 1)
+                                line = dict(color = _color('accent'))), row = 1, col = 1)
     figure.add_trace(go.Scatter(x = data.axis, y = data.pressure / 1e5, mode = 'lines', name = 'P',
-                                line = dict(color = palette['blue'])), row = 2, col = 1)
+                                line = dict(color = _color('blue'))), row = 2, col = 1)
     figure.add_trace(go.Scatter(x = data.axis, y = data.mach, mode = 'lines', name = 'M',
-                                line = dict(color = palette['green'])), row = 3, col = 1)
+                                line = dict(color = _color('green'))), row = 3, col = 1)
 
     figure.update_yaxes(title_text = 'T [K]', row = 1, col = 1)
     figure.update_yaxes(title_text = 'P [bar]', row = 2, col = 1)
     figure.update_yaxes(title_text = 'Mach [-]', row = 3, col = 1)
     figure.update_xaxes(title_text = 'Nozzle axis [m]', row = 3, col = 1)
-    figure.update_xaxes(gridcolor = palette['border'], linecolor = palette['border'])
-    figure.update_yaxes(gridcolor = palette['border'], linecolor = palette['border'])
+    figure.update_xaxes(gridcolor = _color('border'), linecolor = _color('border'))
+    figure.update_yaxes(gridcolor = _color('border'), linecolor = _color('border'))
     figure.update_layout(
-        title = dict(text = data.title, font = dict(color = palette['text'], size = 16)),
-        paper_bgcolor = palette['surface'], plot_bgcolor = palette['background'],
-        font = dict(color = palette['text'], family = 'Segoe UI, Inter, sans-serif'),
+        title = dict(text = data.title, font = dict(color = _color('text'), size = 16)),
+        paper_bgcolor = _color('surface'), plot_bgcolor = _color('bg'),
+        font = dict(color = _color('text'), family = 'Segoe UI, Inter, sans-serif'),
         showlegend = False, margin = dict(l = 70, r = 30, t = 70, b = 60), height = 780,
     )
     for annotation in figure.layout.annotations:
-        annotation.font.color = palette['text']
+        annotation.font.color = _color('text')
     return figure
 
 def plotlyRevolved(data: RevolvedFigure):
@@ -585,7 +570,7 @@ def plotlyRevolved(data: RevolvedFigure):
     figure = go.Figure()
     figure.add_trace(go.Surface(
         x = xGrid, y = rGrid * np.cos(thetaGrid), z = rGrid * np.sin(thetaGrid),
-        surfacecolor = rGrid, colorscale = [[0.0, palette['accent']], [1.0, palette['blue']]],
+        surfacecolor = rGrid, colorscale = [[0.0, _color('accent')], [1.0, _color('blue')]],
         showscale = False, opacity = 0.85, name = 'Wall',
         hovertemplate = 'x %{x:.3f} m<extra></extra>',
     ))
@@ -597,22 +582,22 @@ def plotlyRevolved(data: RevolvedFigure):
         zLines = data.channelZ.reshape(lines.shape)
         for index in range(lines.shape[0]):
             figure.add_trace(go.Scatter3d(
-                x = np.abs(lines[index]), y = yLines[index], z = zLines[index],
-                mode = 'lines', line = dict(color = palette['green'], width = 3),
+                x = lines[index], y = yLines[index], z = zLines[index],
+                mode = 'lines', line = dict(color = _color('green'), width = 3),
                 showlegend = index == 0, name = 'Channel centerlines',
             ))
 
     figure.update_layout(
-        title = dict(text = data.title, font = dict(color = palette['text'], size = 16)),
-        paper_bgcolor = palette['surface'],
-        font = dict(color = palette['text'], family = 'Segoe UI, Inter, sans-serif'),
+        title = dict(text = data.title, font = dict(color = _color('text'), size = 16)),
+        paper_bgcolor = _color('surface'),
+        font = dict(color = _color('text'), family = 'Segoe UI, Inter, sans-serif'),
         scene = dict(
-            xaxis = dict(title = 'Axis [m]', backgroundcolor = palette['background'],
-                         gridcolor = palette['border'], color = palette['text']),
-            yaxis = dict(title = 'Y [m]', backgroundcolor = palette['background'],
-                         gridcolor = palette['border'], color = palette['text']),
-            zaxis = dict(title = 'Z [m]', backgroundcolor = palette['background'],
-                         gridcolor = palette['border'], color = palette['text']),
+            xaxis = dict(title = 'Axis [m]', backgroundcolor = _color('bg'),
+                         gridcolor = _color('border'), color = _color('text')),
+            yaxis = dict(title = 'Y [m]', backgroundcolor = _color('bg'),
+                         gridcolor = _color('border'), color = _color('text')),
+            zaxis = dict(title = 'Z [m]', backgroundcolor = _color('bg'),
+                         gridcolor = _color('border'), color = _color('text')),
             aspectmode = 'data',
         ),
         margin = dict(l = 0, r = 0, t = 60, b = 0),
@@ -647,11 +632,11 @@ def plotlyField(data: FieldFigure):
     for sign in (1.0, -1.0):
         figure.add_trace(go.Scattergl(
             x = x, y = sign * r, mode = 'markers',
-            marker = dict(size = 3, color = values, colorscale = data.colorscale,
+            marker = dict(size = 3, color = values, colorscale = figurePalette.plotlyColorscale(data.colorscale),
                           showscale = sign > 0,
                           colorbar = dict(title = dict(text = data.label, side = 'bottom'),
                                           orientation = 'h', y = -0.22, thickness = 14,
-                                          outlinecolor = palette['border'])),
+                                          outlinecolor = _color('border'))),
             hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
                             + ' %{marker.color:.4g}<extra></extra>',
             showlegend = False,
@@ -660,7 +645,7 @@ def plotlyField(data: FieldFigure):
     if data.wallX.size:
         for sign in (1.0, -1.0):
             figure.add_trace(go.Scatter(x = data.wallX, y = sign * data.wallR, mode = 'lines',
-                                        line = dict(color = palette['text'], width = 2),
+                                        line = dict(color = _color('text'), width = 2),
                                         hoverinfo = 'skip', showlegend = False))
 
     layout = _baseLayout(data.title, 'Nozzle axis [m]', 'Nozzle radius [m]')
@@ -725,7 +710,7 @@ def plotlyPlume(data):
         axialGrid, radialGrid, machGrid = grid
         figure.add_trace(go.Contour(
             x = axialGrid, y = radialGrid, z = machGrid, ncontours = 40,
-            colorscale = 'Viridis', connectgaps = False,
+            colorscale = figurePalette.plotlyColorscale('mach'), connectgaps = False,
             contours = dict(coloring = 'fill', showlines = False),
             colorbar = dict(title = 'Mach', thickness = 14, len = 0.7),
             name = 'Mach field', hoverinfo = 'skip'))
@@ -733,7 +718,7 @@ def plotlyPlume(data):
     if data.wallX.size:
         for sign in (1.0, -1.0):
             figure.add_trace(go.Scatter(x = data.wallX, y = sign * data.wallR, mode = 'lines',
-                                        line = dict(color = palette['accent'], width = 2),
+                                        line = dict(color = _color('accent'), width = 2),
                                         name = 'Nozzle wall', showlegend = sign > 0,
                                         hoverinfo = 'skip'))
 
@@ -742,29 +727,29 @@ def plotlyPlume(data):
     for sign in (1.0, -1.0):
         figure.add_trace(go.Scatter(
             x = data.boundaryX, y = sign * data.boundaryR, mode = 'lines',
-            line = dict(color = palette['blue'], width = 2,
+            line = dict(color = _color('yellow'), width = 2,
                         dash = 'solid' if solved else 'dot'),
             name = boundaryName, showlegend = sign > 0,
             hovertemplate = 'x %{x:.3f} m<br>r %{y:.3f} m<extra></extra>'))
 
     for index, cellPosition in enumerate(np.asarray(data.cellX, dtype = float)):
         figure.add_vline(x = float(cellPosition),
-                         line = dict(color = palette['muted'], width = 1, dash = 'dash'),
+                         line = dict(color = _color('textMuted'), width = 1, dash = 'dash'),
                          annotation_text = 'shock cells' if index == 0 else None,
-                         annotation_font = dict(color = palette['muted'], size = 10))
+                         annotation_font = dict(color = _color('textMuted'), size = 10))
 
     if data.machDiskPresent and data.machDiskDiameter > 0.0:
         halfHeight = data.machDiskDiameter / 2.0
         figure.add_trace(go.Scatter(
             x = [data.machDiskX, data.machDiskX], y = [-halfHeight, halfHeight],
-            mode = 'lines', line = dict(color = palette['green'], width = 6),
+            mode = 'lines', line = dict(color = _color('orange'), width = 6),
             name = f'Mach disk ({data.machDiskDiameter * 1e3:.0f} mm)',
             hovertemplate = 'Mach disk<br>x %{x:.3f} m<extra></extra>'))
 
     layout = _baseLayout(f'{data.title}   --   {data.summary}', 'Nozzle axis [m]', 'Radius [m]')
     layout['yaxis']['scaleanchor'] = 'x'
     layout['yaxis']['scaleratio'] = 1
-    layout['legend'] = dict(bgcolor = palette['surface'], bordercolor = palette['border'], borderwidth = 1)
+    layout['legend'] = dict(bgcolor = _color('surface'), bordercolor = _color('border'), borderwidth = 1)
     figure.update_layout(**layout)
 
     # The drift goes on the figure whatever it is, in the colour that says whether to believe the
@@ -777,14 +762,14 @@ def plotlyPlume(data):
                     f'{data.reachMarched:.1f} lip radii  --  {verdict}'),
             xref = 'paper', yref = 'paper', x = 0.0, y = 1.06, showarrow = False,
             align = 'left', xanchor = 'left',
-            font = dict(color = palette['green'] if data.trustworthy else palette['accent'],
+            font = dict(color = _color('green') if data.trustworthy else _color('yellow'),
                         size = 11))
 
     if data.notes:
         figure.add_annotation(
             text = '<br>'.join(f'- {note}' for note in data.notes),
             xref = 'paper', yref = 'paper', x = 0.0, y = -0.30, showarrow = False,
-            align = 'left', xanchor = 'left', font = dict(color = palette['muted'], size = 10))
+            align = 'left', xanchor = 'left', font = dict(color = _color('textMuted'), size = 10))
         figure.update_layout(margin = dict(l = 70, r = 30, t = 80, b = 230))
 
     return figure
@@ -797,12 +782,9 @@ def _applyMplStyle() -> None:
 
     '''Themed rcParams for every Matplotlib figure this module draws.'''
 
+    plt.rcParams.update(figurePalette.matplotlibStyle())
     plt.rcParams.update({
-        'figure.facecolor': mplPalette['background'], 'axes.facecolor': mplPalette['panel'],
-        'savefig.facecolor': mplPalette['background'], 'text.color': mplPalette['ink'],
-        'axes.labelcolor': mplPalette['ink'], 'axes.edgecolor': mplPalette['muted'],
-        'xtick.color': mplPalette['muted'], 'ytick.color': mplPalette['muted'],
-        'grid.color': '#333A4D', 'axes.grid': True, 'grid.alpha': 0.4, 'font.size': 9,
+        'axes.grid': True, 'grid.alpha': 0.6, 'font.size': 9,
         'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
     })
 
@@ -826,25 +808,25 @@ def drawContourFigure(nozzle):
     _applyMplStyle()
     figure, axes = plt.subplots(figsize = (11, 4.2))
     x, r = np.asarray(data.x) * 1e3, np.asarray(data.r) * 1e3
-    axes.plot(x, r, color = mplPalette['copper'], lw = 1.8)
-    axes.plot(x, -r, color = mplPalette['copper'], lw = 1.8)
-    axes.fill_between(x, r, -r, color = mplPalette['copper'], alpha = 0.08)
+    axes.plot(x, r, color = _color('accent'), lw = 1.8)
+    axes.plot(x, -r, color = _color('accent'), lw = 1.8)
+    axes.fill_between(x, r, -r, color = _color('accent'), alpha = 0.08)
 
     if len(data.xRegen):
         xRegen, rRegen = np.asarray(data.xRegen) * 1e3, np.asarray(data.rRegen) * 1e3
-        axes.plot(xRegen, rRegen, color = mplPalette['green'], lw = 1.2, label = 'regen jacket')
-        axes.plot(xRegen, -rRegen, color = mplPalette['green'], lw = 1.2)
+        axes.plot(xRegen, rRegen, color = _color('green'), lw = 1.2, label = 'regen jacket')
+        axes.plot(xRegen, -rRegen, color = _color('green'), lw = 1.2)
 
-    axes.axvline(data.throatX * 1e3, color = mplPalette['muted'], ls = '--', lw = 0.9)
+    axes.axvline(data.throatX * 1e3, color = _color('textMuted'), ls = '--', lw = 0.9)
     axes.annotate(f'throat  r = {data.throatRadius * 1e3:.1f} mm',
                   (data.throatX * 1e3, 0.0), textcoords = 'offset points',
-                  xytext = (6, 6), color = mplPalette['muted'], fontsize = 8)
+                  xytext = (6, 6), color = _color('textMuted'), fontsize = 8)
 
     chamberDiameter = getattr(nozzle, 'chamberDiameter', None)
     if chamberDiameter:
         axes.annotate(f'chamber D = {chamberDiameter * 1e3:.0f} mm',
                       (x[0], chamberDiameter * 0.5e3), textcoords = 'offset points',
-                      xytext = (8, 6), color = mplPalette['blue'], fontsize = 8)
+                      xytext = (8, 6), color = _color('blue'), fontsize = 8)
 
     axes.set_xlabel('Axial station [mm]')
     axes.set_ylabel('Radius [mm]')
@@ -874,10 +856,10 @@ def drawNearWallFigure(nozzle):
     figure, axesList = plt.subplots(4, 1, figsize = (9, 9), sharex = True)
     axis = np.asarray(data.axis) * 1e3
 
-    panels = ((axesList[0], data.velocity, 'Velocity [m/s]', mplPalette['blue'], 1.0),
-              (axesList[1], data.temperature, 'Static temperature [K]', mplPalette['copper'], 1.0),
-              (axesList[2], data.pressure, 'Static pressure [MPa]', mplPalette['green'], 1e-6),
-              (axesList[3], data.mach, 'Mach number [-]', mplPalette['blue'], 1.0))
+    panels = ((axesList[0], data.velocity, 'Velocity [m/s]', _color('blue'), 1.0),
+              (axesList[1], data.temperature, 'Static temperature [K]', _color('accent'), 1.0),
+              (axesList[2], data.pressure, 'Static pressure [MPa]', _color('green'), 1e-6),
+              (axesList[3], data.mach, 'Mach number [-]', _color('blue'), 1.0))
     for axes, values, label, color, scale in panels:
         axes.plot(axis, np.asarray(values) * scale, color = color, lw = 1.6)
         axes.set_ylabel(label)
@@ -930,10 +912,10 @@ def drawFieldFigure(nozzle, quantity: str):
     vs = np.concatenate(vs) * scale
 
     mesh = axes.tricontourf(np.concatenate([xs, xs]), np.concatenate([rs, -rs]),
-                            np.concatenate([vs, vs]), levels = 80, cmap = 'viridis')
+                            np.concatenate([vs, vs]), levels = 80, cmap = figurePalette.colormap(quantity))
     wallX, wallR = np.asarray(data.wallX) * 1e3, np.asarray(data.wallR) * 1e3
-    axes.plot(wallX, wallR, color = mplPalette['copper'], lw = 1.4)
-    axes.plot(wallX, -wallR, color = mplPalette['copper'], lw = 1.4)
+    axes.plot(wallX, wallR, color = _color('accent'), lw = 1.4)
+    axes.plot(wallX, -wallR, color = _color('accent'), lw = 1.4)
     # The contour is a truncated ideal nozzle, so the characteristics mesh extends past the
     # delivered wall to the full ideal exit. Clip to the wall that is actually built.
     axes.set_xlim(wallX.min(), wallX.max())
@@ -956,15 +938,40 @@ def drawFieldFigure(nozzle, quantity: str):
 # -- 3D assembly renderers, plotly only -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-def _cyclicHSVColors(count: int):
+def _solid(color: str) -> list:
 
-    '''Per-station wireframe colors around the HSV wheel, cycled every 5 stations.'''
+    '''A one-color plotly colorscale, for a surface drawn flat.'''
 
-    base = sample_colorscale(plotly.colors.cyclical.HSV, list(np.linspace(0, 1, int(np.ceil(count / 5)))))
-    colors = np.array(base)
-    for _ in range(5):
-        colors = np.append(colors, base)
-    return colors
+    return [[0, color], [1, color]]
+
+def _sceneLayout() -> dict:
+
+    '''
+
+    Layout for a 3D plotly scene in the active figure mode: page and font colors, and each axis
+    box filled with the panel color and ruled in the border color.
+
+    '''
+
+    named = figurePalette.colors()
+    axis = dict(backgroundcolor = named['surface'], gridcolor = named['border'],
+                zerolinecolor = named['border'], color = named['textMuted'])
+
+    return dict(paper_bgcolor = named['bg'], font = dict(color = named['text']),
+                scene = dict(xaxis = axis, yaxis = dict(axis), zaxis = dict(axis)))
+
+def _stationColors(count: int) -> list:
+
+    '''
+
+    Per-station wireframe colors, stepping along the steel ramp from the first station to the
+    last, so a station's color says where along the part it sits.
+
+    '''
+
+    positions = list(np.linspace(0.0, 1.0, max(int(count), 2)))
+
+    return sample_colorscale(figurePalette.plotlyColorscale('mach'), positions)
 
 def _addVoluteBranch(figure, nozzle, arrayPrefix: str, voluteName: str, colors) -> None:
 
@@ -997,16 +1004,16 @@ def _addVoluteBranch(figure, nozzle, arrayPrefix: str, voluteName: str, colors) 
             figure.add_trace(go.Scatter3d(x = x[i, :], y = y[i, :], z = z[i, :], mode = 'lines',
                                           line = dict(color = colors[i], width = 5)))
 
-    addSurface('', 'cyan', 0.8)
+    addSurface('', _color('cyan'), 0.8)
 
     if volute.wallThickness is not None:
-        addSurface('Shell', 'yellow', 0.35)
+        addSurface('Shell', _color('yellow'), 0.35)
 
     if volute.circlePrintability in ('thin', 'thick'):
-        addSurface('SupportWall', 'magenta', 0.35)
-        addSurface('SupportUpper', 'magenta', 0.35)
+        addSurface('SupportWall', _color('purple'), 0.35)
+        addSurface('SupportUpper', _color('purple'), 0.35)
     if volute.circlePrintability == 'thick':
-        addSurface('SupportLower', 'magenta', 0.35)
+        addSurface('SupportLower', _color('purple'), 0.35)
 
 def volutesFigure(nozzle):
 
@@ -1015,8 +1022,8 @@ def volutesFigure(nozzle):
     The nozzle wall and shell, the print bed, and both volutes with their shells and print
     supports, in one 3D assembly.
 
-    A representative channel is highlighted in red so the outlet volute's smallest cross
-    section can be checked by eye against the channel flare it attaches to.
+    A representative channel is highlighted in the accent so the outlet volute's smallest
+    cross section can be checked by eye against the channel flare it attaches to.
 
     Returns:
     --------
@@ -1043,7 +1050,7 @@ def volutesFigure(nozzle):
         [0.5 * nozzle.chamberDiameter, 0.5 * nozzle.chamberDiameter])
 
     figure = go.Figure()
-    grey = [[0, 'darkgrey'], [1, 'darkgrey']]
+    grey = _solid(_color('textDim'))
     figure.add_trace(go.Surface(x = printZ, y = printX, z = printY, colorscale = grey,
                                 opacity = 0.15, showscale = False))
     figure.add_trace(go.Surface(x = nozzle.xNozzleHotWallMesh, y = nozzle.yNozzleHotWallMesh,
@@ -1053,10 +1060,10 @@ def volutesFigure(nozzle):
                                 z = nozzle.zNozzleShellMesh, colorscale = grey, opacity = 0.7,
                                 showscale = False))
     figure.add_trace(go.Surface(x = channelX, y = channelY, z = channelZ,
-                                colorscale = [[0, 'red'], [1, 'red']], opacity = 1,
+                                colorscale = _solid(_color('accent')), opacity = 1,
                                 showscale = False))
 
-    colors = _cyclicHSVColors(nozzle.numCSVolute)
+    colors = _stationColors(nozzle.numCSVolute)
     if nozzle.makeInletVolute == 'on':
         _addVoluteBranch(figure, nozzle, 'Inlet', 'inletVolute', colors)
     if nozzle.makeOutletVolute == 'on':
@@ -1066,7 +1073,8 @@ def volutesFigure(nozzle):
         scene = dict(xaxis_title = 'Nozzle Radius [m]', yaxis_title = 'Nozzle Axis [m]',
                     zaxis_title = 'Nozzle Radius [m]'),
         title = {'text': 'Volutes', 'x': 0.5, 'xanchor': 'center', 'y': 0.9, 'yanchor': 'top'},
-        scene_aspectmode = 'data', template = 'plotly_dark', showlegend = False)
+        scene_aspectmode = 'data', showlegend = False)
+    figure.update_layout(**_sceneLayout())
     return figure
 
 def _printBedTrace(nozzle):
@@ -1075,7 +1083,7 @@ def _printBedTrace(nozzle):
 
     x, y, z = revolveContour([min(nozzle.xRegenNozzle), max(nozzle.xRegenNozzle)],
                              [0.5 * nozzle.chamberDiameter, 0.5 * nozzle.chamberDiameter])
-    return go.Surface(x = y, y = z, z = x, colorscale = [[0, 'darkgrey'], [1, 'darkgrey']],
+    return go.Surface(x = y, y = z, z = x, colorscale = _solid(_color('textDim')),
                       opacity = 0.3, showscale = False)
 
 def channelMeshFigure(nozzle):
@@ -1101,27 +1109,27 @@ def channelMeshFigure(nozzle):
     if channel is None or np.ndim(channel) < 2 or np.size(channel) == 0:
         return None
 
-    colors = _cyclicHSVColors(nozzle.numCrossSections)
+    colors = _stationColors(nozzle.numCrossSections)
     figure = go.Figure()
     figure.add_trace(_printBedTrace(nozzle))
     figure.add_trace(go.Surface(x = nozzle.zNozzleColdWallMesh, y = nozzle.xNozzleColdWallMesh,
                                 z = nozzle.yNozzleColdWallMesh,
-                                colorscale = [[0, 'darkgrey'], [1, 'darkgrey']], opacity = 0.8,
+                                colorscale = _solid(_color('textDim')), opacity = 0.8,
                                 showscale = False))
 
     pitch = 2*np.pi / nozzle.nChannel
-    for rollAngle, color in ((-pitch, 'cyan'), (pitch, 'magenta')):
+    for rollAngle, color in ((-pitch, _color('blue')), (pitch, _color('purple'))):
         yNeighbor = nozzle.yChannel*np.cos(rollAngle) - nozzle.zChannel*np.sin(rollAngle)
         zNeighbor = nozzle.yChannel*np.sin(rollAngle) + nozzle.zChannel*np.cos(rollAngle)
         figure.add_trace(go.Surface(x = zNeighbor, y = nozzle.xChannel, z = yNeighbor,
-                                    colorscale = [[0, color], [1, color]], opacity = 1,
+                                    colorscale = _solid(color), opacity = 1,
                                     showscale = False))
     figure.add_trace(go.Surface(x = nozzle.zChannel, y = nozzle.xChannel, z = nozzle.yChannel,
-                                colorscale = [[0, 'yellow'], [1, 'yellow']], opacity = 0.975,
+                                colorscale = _solid(_color('accent')), opacity = 0.975,
                                 showscale = False))
     figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
                                   z = nozzle.yChannelCenterline3D, mode = 'lines',
-                                  line = dict(color = 'red', width = 10)))
+                                  line = dict(color = _color('yellow'), width = 10)))
     for i in range(nozzle.numCrossSections):
         figure.add_trace(go.Scatter3d(x = nozzle.zChannel[:, i], y = nozzle.xChannel[:, i],
                                       z = nozzle.yChannel[:, i], mode = 'lines', opacity = 0.8,
@@ -1132,7 +1140,8 @@ def channelMeshFigure(nozzle):
                     zaxis_title = 'Nozzle Radius [m]'),
         title = {'text': 'Channel Mesh View', 'x': 0.5, 'xanchor': 'center', 'y': 0.9,
                 'yanchor': 'top'},
-        scene_aspectmode = 'data', template = 'plotly_dark', showlegend = False)
+        scene_aspectmode = 'data', showlegend = False)
+    figure.update_layout(**_sceneLayout())
     return figure
 
 def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None,
@@ -1214,9 +1223,9 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
 
         # Legend
         colors = {
-                label: 'magenta',
-                'Wall temperature limit': 'red',
-                'Nozzle': 'grey'
+                label: _color('accent'),
+                'Wall temperature limit': _color('red'),
+                'Nozzle': _color('textMuted')
         }
         if wallTemperatureLimit is None:
             del colors['Wall temperature limit']
@@ -1234,31 +1243,31 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
         # -- Titles -- #
 
         # Coolant Pressure
-        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor=_color('border'))
         # Coolant Temperature
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor=_color('border'))
         # Wall Temperature
         if wallTemperatureLimit is not None:
             add_trace(1, 3, xHotWall3D, wallTemperatureLimit * np.ones(len(xHotWall3D)), 'Wall temperature limit', colors['Wall temperature limit'], dash='solid')
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=3, secondary_y=False, gridcolor=_color('border'))
         # Velocity
-        fig.update_yaxes(title_text=r'$\text {Velocity [m/s]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Velocity [m/s]}$', row=2, col=1, secondary_y=False, gridcolor=_color('border'))
         # Mach
-        fig.update_yaxes(title_text=r'$\text {Mach Number [-]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Mach Number [-]}$', row=2, col=2, secondary_y=False, gridcolor=_color('border'))
         # Heat Transfer
-        fig.update_yaxes(title_text=r'$\text {Heat Transfer [W]}$', row=2, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Heat Transfer [W]}$', row=2, col=3, secondary_y=False, gridcolor=_color('border'))
         # Density
-        fig.update_yaxes(title_text=r'$\rho \text{ [kg/m}^{3} \text{]}$', row=3, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\rho \text{ [kg/m}^{3} \text{]}$', row=3, col=1, secondary_y=False, gridcolor=_color('border'))
         # Viscosity
-        fig.update_yaxes(title_text=r'$\mu \text{ [Pa*s]}$', row=3, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\mu \text{ [Pa*s]}$', row=3, col=2, secondary_y=False, gridcolor=_color('border'))
         # Specific Heat
-        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=3, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=3, col=3, secondary_y=False, gridcolor=_color('border'))
         # Nusselt
-        fig.update_yaxes(title_text=r'$\text {Nu [-]}$', row=4, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Nu [-]}$', row=4, col=1, secondary_y=False, gridcolor=_color('border'))
         # Heat Transfer Coef
-        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=4, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=4, col=2, secondary_y=False, gridcolor=_color('border'))
         # Reynolds
-        fig.update_yaxes(title_text=r'$\text {Re [-]}$', row=4, col=3, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Re [-]}$', row=4, col=3, secondary_y=False, gridcolor=_color('border'))
 
         # -- Data -- #
 
@@ -1289,7 +1298,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
             row = (i - 1) // 3 + 1
             col = (i - 1) % 3 + 1
 
-            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$' if row == 4 else '', row=row, col=col, gridcolor='#4a4a4a', tickfont=dict(color='white' if row == 4 else 'rgba(0,0,0,0)'))
+            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$' if row == 4 else '', row=row, col=col, gridcolor=_color('border'), tickfont=dict(color=_color('textMuted') if row == 4 else 'rgba(0,0,0,0)'))
 
             # Add secondary y-axis for Nozzle Radius only on rightmost plots - OUTSIDE the loop
             fig.update_yaxes(title_text=r'$\text {Nozzle Radius [m]}$' if col == 3 else '', row = row, col = col, secondary_y=True, title_font=dict(color=colors['Nozzle'] if col == 3 else 'rgba(0,0,0,0)'), tickfont=dict(color=colors['Nozzle'] if col == 3 else 'rgba(0,0,0,0)'), showgrid=False)
@@ -1302,9 +1311,9 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
             title_x=0.5,  # Center the main title
             autosize=True,
             title_font=dict(size=24),
-            plot_bgcolor='black',
-            paper_bgcolor='black',
-            font=dict(color='white', family = "Computer Modern"),
+            plot_bgcolor=_color('surface'),
+            paper_bgcolor=_color('bg'),
+            font=dict(color=_color('text'), family = "Computer Modern"),
             legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
         )
 
@@ -1335,8 +1344,8 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
 
         # Legend
         colors = {
-                label: 'magenta',
-                'Nozzle': 'grey'
+                label: _color('accent'),
+                'Nozzle': _color('textMuted')
         }
         for name, color in colors.items():
             fig.add_trace(go.Scatter(x=[None], y=[None], mode='lines', line=dict(color=color), name=name, showlegend=True))
@@ -1349,13 +1358,13 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
         # -- Titles -- #
 
         # Coolant Pressure
-        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Pressure [MPa]}$', row=1, col=1, secondary_y=False, gridcolor=_color('border'))
         # Coolant Temperature
-        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {Temperature [K]}$', row=1, col=2, secondary_y=False, gridcolor=_color('border'))
         # Specific Heat
-        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=2, col=1, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text {C_P [J/kg*K]}$', row=2, col=1, secondary_y=False, gridcolor=_color('border'))
         # Heat Transfer Coef
-        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=2, col=2, secondary_y=False, gridcolor='#4a4a4a')
+        fig.update_yaxes(title_text=r'$\text{ h [W/(m}^{2}\text{*K)]}$', row=2, col=2, secondary_y=False, gridcolor=_color('border'))
 
         # -- Data -- #
 
@@ -1367,8 +1376,8 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
         # Update layout for all subplots
         for i in [1,2]:
 
-            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$', row=2, col=i, gridcolor='#4a4a4a', tickfont=dict(color='white'))
-            fig.update_xaxes(title_text= '',                          row=1, col=i, gridcolor='#4a4a4a', tickfont=dict(color='rgba(0,0,0,0)'))
+            fig.update_xaxes(title_text=r'$\text {Nozzle Axis [m]}$', row=2, col=i, gridcolor=_color('border'), tickfont=dict(color=_color('textMuted')))
+            fig.update_xaxes(title_text= '',                          row=1, col=i, gridcolor=_color('border'), tickfont=dict(color='rgba(0,0,0,0)'))
 
             # Add secondary y-axis for Nozzle Radius only on rightmost plots - OUTSIDE the loop
             fig.update_yaxes(title_text=r'$\text {Nozzle Radius [m]}$', row = i, col = 2, secondary_y=True, title_font=dict(color=colors['Nozzle']), tickfont=dict(color=colors['Nozzle']), showgrid=False)
@@ -1382,9 +1391,9 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
             title_x=0.5,  # Center the main title
             autosize=True,
             title_font=dict(size=24),
-            plot_bgcolor='black',
-            paper_bgcolor='black',
-            font=dict(color='white', family = "Computer Modern"),
+            plot_bgcolor=_color('surface'),
+            paper_bgcolor=_color('bg'),
+            font=dict(color=_color('text'), family = "Computer Modern"),
             legend=dict(bgcolor='rgba(0,0,0,0)', font=dict(size=12))
         )
 
