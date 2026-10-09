@@ -23,11 +23,22 @@ python featureShowcase/buildContourValidation.py  # sweeps against the Rao chart
 python featureShowcase/buildContourFamilies.py    # the three families compared, about 40 minutes
 python featureShowcase/buildSubfamilyStudy.py     # searched quadratic against cubic, about 2 hours
 python featureShowcase/buildReferenceOverlays.py  # contours on their references, about 5 minutes
+python featureShowcase/buildFamilyShowcase.py     # the shipped nozzle once per diverging family
 python featureShowcase/buildStitchedField.py      # chamber to exit in one frame
 python featureShowcase/buildChamberField.py       # chamber and converging section, one dimensional
 python featureShowcase/buildModelComparisons.py    # the selectable thermal and gas models, about 4 minutes
+python featureShowcase/buildFamiliesReportFigures.py  # figures for the contour families report
+python featureShowcase/buildCalorimeter40k.py figures # figures for the 40k calorimeter report
 python featureShowcase/buildReport.py             # renders the effort report to HTML
+python featureShowcase/buildGuiGraphic.py         # the GUI's plume graphic, banner and icon
+python featureShowcase/buildGuiScreenshots.py     # the GUI walkthrough screenshots in docs/images/gui
 ```
+
+The five slow studies cache what they solve (`contourValidation.npz`, `contourFamilies.npz`, `subfamilyStudy.npz`, `referenceOverlays.npz`, `family_*.pkl`) and take `--draw` to redraw their figures from the cache in seconds.
+
+## Palette
+
+Every figure here draws from `showcasePalette.py`: the Engineering Flat Metal palette in its dark mode, read from `NOVA.palette`, so the showcase, the reports, the figures a run writes and the GUI share one set of colors. Mach number takes the steel ramp, a single cool hue whose lightness rises with Mach; temperature takes gunmetal through bronze to brass; pressure takes a diverging blued steel to rust. `showcasePalette.restyleHtml` sets an HTML report's CSS variables to the same palette, which `buildReport.py` applies to the page documentProcessor writes.
 
 ## Figures
 
@@ -47,6 +58,9 @@ python featureShowcase/buildReport.py             # renders the effort report to
 | `plume_separated.png` | Correlated plume structure, Pe/Pa 0.3, equal aspect |
 | `plumeContinuousField.png` | Nozzle interior and plume as one solution; near empty, see the caution below |
 | `contourVerification.png` | The worked case against its references: length, area ratio, near-wall consistency, exit plane |
+| `contourFamilies.png` | The three diverging families compared on one engine: truncated ideal, thrust-optimized parabola and searched thrust-optimized contour |
+| `subfamilyStudy.png` | The searched thrust-optimized contour, quadratic against cubic wall |
+| `familyShowcase_*.png` | The shipped nozzle built once per diverging family: chamber and contour, flow field, jacket and plume |
 | `contourValidation.png` | Sweeps over area ratio, percent bell and mesh resolution, against the Rao chart |
 | `chamberFieldMach.png`, `chamberFieldPressure.png`, `chamberFieldTemperature.png` | Chamber and converging section, ONE DIMENSIONAL |
 | `oneDimensionalAgainstMesh.png` | What the characteristics mesh buys over a one-dimensional solve |

@@ -29,6 +29,12 @@ NOVA is a computational toolset for generating and analyzing rocket nozzle geome
   - [Installation](#installation)
   - [Quickstart: API](#quickstart-api)
   - [Quickstart: GUI](#quickstart-gui)
+    - [Design](#design)
+    - [Generate](#generate)
+    - [View](#view)
+    - [Analyze](#analyze)
+    - [Export](#export)
+    - [Light mode](#light-mode)
   - [Configuration reference](#configuration-reference)
     - [Contour definition](#contour-definition)
     - [Combustion](#combustion)
@@ -99,7 +105,7 @@ from NOVA import gasDynamics, materials, fluidProps
 
 ## Quickstart: GUI
 
-[novaGui/](novaGui/) is a Tkinter front end over the same pipeline. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` on a background thread, and presents the result across five tabs. The main window opens without loading the scientific stack; NumPy, SciPy, Matplotlib and rocketcea are imported on the first run.
+[novaGui/](novaGui/) is a Tkinter front end over the same pipeline. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` on a background thread, and presents the result across four tabs. The main window opens without loading the scientific stack; NumPy, SciPy, Matplotlib and rocketcea are imported on the first run.
 
 ```bash
 python -m novaGui          # from the repository root
@@ -108,15 +114,61 @@ python novaGui/run.py      # the same thing
 
 On Windows, `novaGui.bat` launches it with no console window. Run `python -m novaGui` from a terminal when a startup traceback needs to be visible.
 
-| Tab         | What it holds                                                                                                                                                                                                                                          |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Config      | Every field in the schema, grouped into collapsible sections. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. |
-| 2D Geometry | Wall contour, near-wall exhaust state, plume structure, and the Mach, pressure and temperature field figures written during the run.                                                                                                                   |
-| 3D Geometry | A revolved surface of the contour rendered inline, with the interactive channel-mesh, jacket and volute views embedded through`tkinterweb`.                                                                                                          |
-| Analysis    | Sizing, chamber geometry, delivered performance, station thermochemistry, and the regenerative cooling summary when a jacket was built.                                                                                                                |
-| Export      | The output location and the files the last run produced. Double-click a row to open it.                                                                                                                                                                |
+### Design
 
-[novaGui/README.md](novaGui/README.md) covers the run pipeline, the plotting split between Matplotlib and plotly, display scaling and the progress model.
+The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Every field in the schema sits in a collapsible section. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, and **Reset to example** returns to the shipped nozzle.
+
+![Design tab](docs/images/gui/designDark.png)
+
+Every field carries an (i) icon. Hovering it gives the field's meaning and, for a choice field, its options.
+
+![Field help](docs/images/gui/designHelp.png)
+
+### Generate
+
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`. The bar follows the pipeline's own stages, and the run log beside it carries the full output. The shipped nozzle builds a full cooling jacket, both volutes and the marched plume, and takes about two minutes.
+
+### View
+
+When the run finishes the window turns to View: one figure at a time, picked from a sidebar of contour, flow, plume, cooling and 3D views. Each is drawn from the `Nozzle` object in the window's theme, and **Open interactive** opens its plotly companion in the browser.
+
+![Mach field](docs/images/gui/viewMach.png)
+
+The plume view draws the station march carried past the lip, with the correlated shock cells and Mach disk where they fall inside the frame.
+
+![Plume](docs/images/gui/viewPlume.png)
+
+The heat transfer view draws the hot wall temperature against the alloy's limit, with the gas recovery temperature and the channel size along the jacket.
+
+![Heat transfer](docs/images/gui/viewHeatTransfer.png)
+
+The channel mesh and the revolved contour are 3D panes that rotate with the mouse.
+
+| Channel mesh | Revolved contour |
+| --- | --- |
+| ![Channel mesh](docs/images/gui/viewChannelMesh.png) | ![Revolved contour](docs/images/gui/viewRevolved.png) |
+
+### Analyze
+
+The numbers behind the figures in one table: sizing, the combustion chamber, delivered performance, CEA thermochemistry at the chamber, throat and exit, the cooling summary, and the plume's lip pressure ratio, march reach and mass continuity error.
+
+![Analyze tab](docs/images/gui/analyze.png)
+
+### Export
+
+The output location and every file the run wrote: figures, interactive HTML, contour text files, STL geometry and the pickled `Nozzle`. Double-click a row to open it.
+
+![Export tab](docs/images/gui/export.png)
+
+### Light mode
+
+The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette. The window restyles in place, a run in progress keeps going, and the choice persists between sessions.
+
+| Design | Plume |
+| --- | --- |
+| ![Design tab, light](docs/images/gui/designLight.png) | ![Plume, light](docs/images/gui/viewPlumeLight.png) |
+
+[novaGui/README.md](novaGui/README.md) covers the run pipeline, the theme engine, the plotting split between Matplotlib and plotly, display scaling and the progress model.
 
 ## Configuration reference
 
@@ -145,7 +197,7 @@ Grouped by section, matching the order in the config file.
 | `divergingSectionDesignVariables`       | deg, deg, --, -- | Pins a`toc` wall instead of searching for one: inflection angle, exit angle, inflection tension, exit tension. `null` searches                     |
 | `gammaModel`                            | --    | `chamber` (default) or `effective`: which ratio of specific heats the constant-gamma contour solve runs in                                             |
 
-`L*` is measured over the whole chamber volume, so the converging cone counts toward it and the barrel takes up the remainder. Chamber length, volume, delivered L* and contraction ratio are reported on the analysis tab of the GUI.
+`L*` is measured over the whole chamber volume, so the converging cone counts toward it and the barrel takes up the remainder. Chamber length, volume, delivered L* and contraction ratio are reported on the Analyze tab of the GUI.
 
 ### Combustion
 
@@ -160,6 +212,7 @@ Grouped by section, matching the order in the config file.
 | `expansionRatio`                                         | --   | Mutually exclusive with`targetExitPressure`                                                                                      |
 | `targetExitPressure`                                     | Pa   | Mutually exclusive with`expansionRatio`                                                                                          |
 | `plumeAmbientPressure`                                   | Pa   | Ambient the exhaust plume is drawn against. Sets the jet regime, shock cell spacing and Mach disk. Leave`null` to skip the plume |
+| `plumeFieldReach`                                        | --   | Lip radii past the exit plane the station march carries the plume boundary and interior. Mass continuity holds within 1 % to about 2 lip radii; `null` skips the march and keeps the correlations |
 
 ### Regenerative cooling jacket
 
