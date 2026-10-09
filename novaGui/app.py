@@ -3,9 +3,9 @@
 
 '''
 
-Main window: a five-tab notebook (config, 2D geometry, 3D geometry, analysis,
-export) over a shared run bar and collapsible log. The run bar hands the config
-form to a background PipelineRunner and fans the result out to every tab.
+Main window: a header with the NOVA mark, the configuration loader and the theme switch; a four-tab
+notebook (Design, View, Analyze, Export); and a shared run bar with a collapsible log. The run bar
+hands the Design form to a background PipelineRunner and fans the result out to every tab.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -17,10 +17,10 @@ import queue
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from . import branding, theme
-from .widgets import ConsolePane
+from . import branding, settings, theme
+from .widgets import ConsolePane, Tooltip
 from .runner import PipelineRunner
-from .tabs import ConfigTab, Geometry2DTab, Geometry3DTab, AnalysisTab, ExportTab
+from .tabs import ConfigTab, ViewTab, AnalysisTab, ExportTab
 
 class NovaApp(tk.Tk):
 
@@ -42,7 +42,11 @@ class NovaApp(tk.Tk):
 
         # applyTheme reads the real screen DPI and sets theme.uiScale, so the window
         # geometry below has to come after it.
-        theme.applyTheme(self)
+        self._settings = settings.load()
+        theme.applyTheme(self, self._settings['themeMode'])
+        self._pendingMatplotlib = False
+        # Combobox drop-downs are windows Tk builds itself; round each as it opens
+        self.bind_class('ComboboxPopdown', '<Map>', lambda event: theme.popdownMapped(self, str(event.widget)), add = '+')
 
         self.title('NOVA Nozzle Designer')
         self._iconImages = branding.applyWindowIcon(self)
@@ -59,9 +63,13 @@ class NovaApp(tk.Tk):
         self._buildHeader()
         self._buildBottom()
         self._buildNotebook()
-        self._buildMenu()
+
+        # The title bar takes the theme's colors only once the window has a frame to paint
+        self.after(80, lambda: theme.styleTitleBar(self))
 
         self.bind('<Control-r>', lambda _e: self._generate())
+        self.bind('<Control-o>', lambda _e: self.configTab.loadConfig())
+        self.bind('<Control-s>', lambda _e: self.configTab.saveConfig())
         self.protocol('WM_DELETE_WINDOW', self._onClose)
 
         self.after(120, self._drain)
@@ -70,46 +78,57 @@ class NovaApp(tk.Tk):
 
     def _buildHeader(self) -> None:
 
-        header = ttk.Frame(self, style = 'Elevated.TFrame', padding = (16, 10))
+        header = ttk.Frame(self, style = 'Header.TFrame', padding = (theme.scaled(16), theme.scaled(10)))
         header.pack(side = 'top', fill = 'x')
 
         # The plume mark ahead of the wordmark; the header stands without it if it is missing
-        self._bannerImage = branding.bannerImage(self, theme.scaled(30))
+        self._bannerImage = branding.bannerImage(self, theme.scaled(30), theme.mode)
+        self._banner = ttk.Label(header, image = self._bannerImage, style = 'Header.TLabel')
         if self._bannerImage is not None:
-            ttk.Label(header, image = self._bannerImage, background = theme.surface2).pack(side = 'left',
-                                                                                          padx = (0, 10))
-        ttk.Label(header, text = 'NOVA', style = 'Wordmark.TLabel',
-                  background = theme.surface2).pack(side = 'left')
+            self._banner.pack(side = 'left', padx = (0, theme.scaled(10)))
+        theme.addListener(self._refreshBanner)
+        ttk.Label(header, text = 'NOVA', style = 'Wordmark.Header.TLabel').pack(side = 'left')
         ttk.Label(header, text = 'Nozzle Optimization for Variable Applications',
-                  style = 'SurfaceMuted.TLabel', background = theme.surface2).pack(side = 'left', padx = 12)
+                  style = 'Muted.Header.TLabel').pack(side = 'left', padx = theme.scaled(12))
+
+        about = ttk.Button(header, text = 'About', style = 'Small.Header.TButton', command = self._about)
+        about.pack(side = 'right')
+        self._themeButton = ttk.Button(header, style = 'Toggle.Header.TButton', command = self._toggleTheme)
+        self._themeButton.pack(side = 'right', padx = theme.scaled(8))
+        Tooltip(self._themeButton, lambda: 'Switch to the light theme' if theme.mode == 'dark'
+                else 'Switch to the dark theme')
+        load = ttk.Button(header, text = 'Load config', style = 'Header.TButton',
+                          command = lambda: self.configTab.loadConfig())
+        load.pack(side = 'right')
+        Tooltip(load, 'Load a JSON configuration into the Design tab.  Ctrl+O')
 
     def _buildBottom(self) -> None:
 
         bottom = ttk.Frame(self, style = 'TFrame')
         bottom.pack(side = 'bottom', fill = 'x')
 
-        runBar = ttk.Frame(bottom, style = 'TFrame', padding = (14, 10))
+        runBar = ttk.Frame(bottom, style = 'TFrame', padding = (theme.scaled(14), theme.scaled(10)))
         runBar.pack(side = 'top', fill = 'x')
 
-        self._runButton = ttk.Button(runBar, text = '  Generate Nozzle  ', style = 'Accent.TButton',
+        self._runButton = ttk.Button(runBar, text = 'Generate Nozzle', style = 'Accent.TButton',
                                      command = self._generate)
         self._runButton.pack(side = 'left')
+        Tooltip(self._runButton, 'Run the design on the Design tab.  Ctrl+R')
 
         self._logButton = ttk.Button(runBar, text = 'Show log', command = self._toggleConsole, width = 10)
         self._logButton.pack(side = 'right')
 
         self._progress = ttk.Progressbar(runBar, mode = 'determinate', maximum = 1000,
                                          length = theme.scaled(160))
-        self._progress.pack(side = 'right', padx = 12)
+        self._progress.pack(side = 'right', padx = theme.scaled(12))
 
         self._status = ttk.Label(runBar, text = 'Idle', style = 'Muted.TLabel')
         self._status.pack(side = 'right')
 
-        # The pipeline's own output, one line at a time, so the run is legible without
-        # opening the log. Packed last on the left so it takes the remaining width.
-        self._activity = ttk.Label(runBar, text = '', style = 'Muted.TLabel', anchor = 'w')
-        self._activity.configure(font = theme.fontMono, foreground = theme.textDim)
-        self._activity.pack(side = 'left', fill = 'x', expand = True, padx = 14)
+        # The pipeline's own output, one line at a time, so the run is legible without opening the
+        # log. Packed last on the left so it takes the remaining width.
+        self._activity = ttk.Label(runBar, text = '', style = 'Activity.TLabel', anchor = 'w')
+        self._activity.pack(side = 'left', fill = 'x', expand = True, padx = theme.scaled(14))
 
         self._console = ConsolePane(bottom, height = 11)
         # Packed on demand by _toggleConsole.
@@ -117,49 +136,53 @@ class NovaApp(tk.Tk):
     def _buildNotebook(self) -> None:
 
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(side = 'top', fill = 'both', expand = True, padx = 6, pady = 6)
+        self.notebook.pack(side = 'top', fill = 'both', expand = True, padx = theme.scaled(6),
+                           pady = (theme.scaled(4), 0))
 
         self.configTab = ConfigTab(self.notebook, self)
-        self.geometry2dTab = Geometry2DTab(self.notebook, self)
-        self.geometry3dTab = Geometry3DTab(self.notebook, self)
+        self.viewTab = ViewTab(self.notebook, self)
         self.analysisTab = AnalysisTab(self.notebook, self)
         self.exportTab = ExportTab(self.notebook, self)
 
-        self.notebook.add(self.configTab, text = '  Config  ')
-        self.notebook.add(self.geometry2dTab, text = '  2D Geometry  ')
-        self.notebook.add(self.geometry3dTab, text = '  3D Geometry  ')
-        self.notebook.add(self.analysisTab, text = '  Analysis  ')
-        self.notebook.add(self.exportTab, text = '  Export  ')
+        self.notebook.add(self.configTab, text = 'Design')
+        self.notebook.add(self.viewTab, text = 'View')
+        self.notebook.add(self.analysisTab, text = 'Analyze')
+        self.notebook.add(self.exportTab, text = 'Export')
 
-        self._tabs = (self.configTab, self.geometry2dTab, self.geometry3dTab,
-                      self.analysisTab, self.exportTab)
+        self._tabs = (self.configTab, self.viewTab, self.analysisTab, self.exportTab)
 
-    def _buildMenu(self) -> None:
+    # -- Theme -- #
 
-        menubar = tk.Menu(self)
+    def _refreshBanner(self) -> None:
 
-        fileMenu = tk.Menu(menubar, tearoff = 0)
-        fileMenu.add_command(label = 'Load config...', command = self.configTab._loadJson)
-        fileMenu.add_command(label = 'Save config...', command = self.configTab._saveJson)
-        fileMenu.add_separator()
-        fileMenu.add_command(label = 'Open output folder', command = self.exportTab._openFolder)
-        fileMenu.add_separator()
-        fileMenu.add_command(label = 'Exit', command = self._onClose)
-        menubar.add_cascade(label = 'File', menu = fileMenu)
+        '''Swap the header mark for the one drawn for the new mode.'''
 
-        runMenu = tk.Menu(menubar, tearoff = 0)
-        runMenu.add_command(label = 'Generate Nozzle\tCtrl+R', command = self._generate)
-        menubar.add_cascade(label = 'Run', menu = runMenu)
+        image = branding.bannerImage(self, theme.scaled(30), theme.mode)
+        if image is not None:
+            self._bannerImage = image
+            self._banner.configure(image = image)
 
-        viewMenu = tk.Menu(menubar, tearoff = 0)
-        viewMenu.add_command(label = 'Toggle run log', command = self._toggleConsole)
-        menubar.add_cascade(label = 'View', menu = viewMenu)
+    def _toggleTheme(self) -> None:
 
-        helpMenu = tk.Menu(menubar, tearoff = 0)
-        helpMenu.add_command(label = 'About', command = self._about)
-        menubar.add_cascade(label = 'Help', menu = helpMenu)
+        '''
 
-        self.config(menu = menubar)
+        Switch between the dark and light modes and remember the choice. While a run is drawing
+        its figures on the worker thread, Matplotlib's global settings are left alone until it
+        finishes.
+
+        '''
+
+        newMode = 'light' if theme.mode == 'dark' else 'dark'
+        busy = self.runner.busy
+        self.configure(cursor = 'watch')
+        self.update_idletasks()
+        try:
+            theme.setMode(self, newMode, matplotlib = not busy)
+        finally:
+            self.configure(cursor = '')
+        self._pendingMatplotlib = busy
+        self._settings['themeMode'] = newMode
+        settings.save(self._settings)
 
     # -- Run control -- #
 
@@ -242,8 +265,7 @@ class NovaApp(tk.Tk):
             text = f'{bar.group(1)}%  {bar.group(2).strip()}'
         if len(text) > 110:
             text = text[:107] + '...'
-        self._activity.configure(text = text,
-                                 foreground = theme.red if isError else theme.textDim)
+        self._activity.configure(text = text, style = 'ActivityError.TLabel' if isError else 'Activity.TLabel')
 
     def _applyProgress(self, fraction: float, ceiling: float, label: str) -> None:
 
@@ -308,6 +330,9 @@ class NovaApp(tk.Tk):
 
         self._setRunningState(False)
         self.runResult = result
+        if self._pendingMatplotlib:
+            theme.applyMatplotlib()
+            self._pendingMatplotlib = False
 
         if not result.ok:
             self._console.append(f'run failed: {result.error}', 'err')
@@ -320,7 +345,7 @@ class NovaApp(tk.Tk):
                 tab.refresh(result)
             except Exception as exc:                     # noqa: BLE001 -- one bad tab must not sink the rest
                 self._console.append(f'{type(tab).__name__}.refresh failed: {exc}', 'err')
-        self.notebook.select(self.geometry2dTab)
+        self.notebook.select(self.viewTab)
 
     # -- Misc -- #
 
@@ -339,9 +364,10 @@ class NovaApp(tk.Tk):
         messagebox.showinfo(
             'About NOVA Nozzle Designer',
             'NOVA -- Nozzle Optimization for Variable Applications\n\n'
-            'Tkinter front end for the NOVA suite: builds a config, runs the '
-            'contour, cooling and heat transfer pipeline on a background thread, and shows the '
-            'resulting geometry and analysis.\n\n'
+            'Tkinter front end for the NOVA suite: designs a nozzle on the Design tab, runs the '
+            'contour, cooling, heat transfer and plume pipeline on a background thread, and shows '
+            'the result on the View and Analyze tabs.\n\n'
+            'Shortcuts: Ctrl+R generate, Ctrl+O load a configuration, Ctrl+S save one.\n\n'
             f'GUI version {__import__("novaGui").__version__}',
         )
 

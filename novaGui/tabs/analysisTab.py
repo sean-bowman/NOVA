@@ -1,23 +1,22 @@
 
-# -- Analysis Tab -- #
+# -- Analyze Tab -- #
 
 '''
 
-Scalar results from the run: sizing, delivered performance, station
-thermochemistry from CEA, and the regenerative cooling summary when a jacket was
-built. The heat transfer figure is shown alongside when it exists.
+Scalar results from the run: sizing, the chamber, delivered performance, station thermochemistry
+from CEA, the regenerative cooling summary when a jacket was built, and the plume. The figures that
+go with them are on the View tab.
 
 Author: Sean Bowman
 Date:   08/28/2026
 
 '''
 
-import os
 import math
 from tkinter import ttk
 
-from .. import runner
-from ..plotting import MplPane
+from .. import theme
+from ..widgets import card
 
 def _num(value):
 
@@ -41,40 +40,32 @@ class AnalysisTab(ttk.Frame):
 
     '''
 
-    Grouped result table with the heat transfer figure when available.
+    Grouped result table.
 
     '''
 
     def __init__(self, master, app):
 
-        super().__init__(master, style = 'TFrame')
+        super().__init__(master, style = 'TFrame', padding = theme.scaled(8))
 
         self._app = app
 
-        header = ttk.Frame(self, style = 'TFrame', padding = (10, 8))
+        header = ttk.Frame(self, style = 'TFrame', padding = (theme.scaled(4), 0, theme.scaled(4), theme.scaled(6)))
         header.pack(fill = 'x')
         ttk.Label(header, text = 'RESULTS', style = 'Eyebrow.TLabel').pack(side = 'left')
         self._summary = ttk.Label(header, text = '', style = 'Muted.TLabel')
-        self._summary.pack(side = 'left', padx = 12)
+        self._summary.pack(side = 'left', padx = theme.scaled(12))
 
-        body = ttk.Panedwindow(self, orient = 'horizontal')
-        body.pack(fill = 'both', expand = True, padx = 8, pady = (0, 8))
-
-        treeWrap = ttk.Frame(body, style = 'Surface.TFrame')
+        treeWrap = card(self, fill = 'both', expand = True)
         self._tree = ttk.Treeview(treeWrap, columns = ('value',), show = 'tree headings', height = 24)
         self._tree.heading('#0', text = 'Quantity')
         self._tree.heading('value', text = 'Value')
-        self._tree.column('#0', width = 260, anchor = 'w')
-        self._tree.column('value', width = 160, anchor = 'e')
-        scroll = ttk.Scrollbar(treeWrap, orient = 'vertical', command = self._tree.yview)
+        self._tree.column('#0', width = theme.scaled(340), anchor = 'w')
+        self._tree.column('value', width = theme.scaled(220), anchor = 'e')
+        scroll = ttk.Scrollbar(treeWrap, orient = 'vertical', command = self._tree.yview, style = 'Card.Vertical.TScrollbar')
         self._tree.configure(yscrollcommand = scroll.set)
         scroll.pack(side = 'right', fill = 'y')
         self._tree.pack(side = 'left', fill = 'both', expand = True)
-        body.add(treeWrap, weight = 1)
-
-        self._pane = MplPane(body, toolbar = True)
-        body.add(self._pane, weight = 1)
-        self._pane.message('Generate a nozzle to see the heat transfer figure.')
 
         self._placeholder()
 
@@ -82,14 +73,13 @@ class AnalysisTab(ttk.Frame):
 
         self._tree.delete(*self._tree.get_children())
         node = self._tree.insert('', 'end', text = 'No run yet', open = True)
-        self._tree.insert(node, 'end', text = 'Generate a nozzle from the config tab', values = ('',))
+        self._tree.insert(node, 'end', text = 'Generate a nozzle from the Design tab', values = ('',))
 
     def refresh(self, runResult) -> None:
 
         nozzle = getattr(runResult, 'nozzle', None)
         if nozzle is None:
             self._placeholder()
-            self._pane.message('Generate a nozzle to see the heat transfer figure.')
             return
 
         self._tree.delete(*self._tree.get_children())
@@ -126,7 +116,7 @@ class AnalysisTab(ttk.Frame):
         row(sizing, 'Expansion ratio (1D)', getattr(nozzle, 'expansionRatio', None))
         row(sizing, 'Geometric area ratio', getattr(nozzle, 'exitExpansionRatio', None))
         row(sizing, 'Contraction ratio', getattr(nozzle, 'inletContractionRatio', None))
-        row(sizing, 'Target exit pressure', getattr(nozzle, 'targetExitPressure', None), '{:.0f}', 'Pa')
+        row(sizing, 'Exit pressure (1D)', getattr(nozzle, 'targetExitPressure', None), '{:.0f}', 'Pa')
 
         chamberGeometry = section('Combustion Chamber')
         row(chamberGeometry, 'Barrel length', self._mm(getattr(nozzle, 'chamberBarrelLength', None)), '{:.1f}', 'mm')
@@ -175,6 +165,32 @@ class AnalysisTab(ttk.Frame):
                 getattr(nozzle, 'coolantExitPressure', None), '{:.0f}', 'Pa')
             row(cooling, 'Coolant mass flow', getattr(nozzle, 'coolantMassFlow', None), '{:.3f}', 'kg/s')
 
+        # The march's own numbers first, because they say whether its picture can be used, then
+        # the correlated quantities the march cannot produce
+        structure = getattr(nozzle, 'nozzlePlumeStructure', None)
+        field = getattr(nozzle, 'nozzlePlumeField', None)
+        if structure is not None or field is not None:
+            plume = section('Plume')
+            row(plume, 'Ambient pressure', getattr(nozzle, 'plumeAmbientPressure', None), '{:.0f}', 'Pa')
+            if field is not None and field.solved:
+                row(plume, 'Lip pressure ratio', field.lipPressureRatio, '{:.3f}')
+                row(plume, 'Boundary Mach', field.boundaryMach, '{:.3f}')
+                if field.lipRadius:
+                    row(plume, 'Marched reach', (field.solvedTo - field.lipX) / field.lipRadius, '{:.2f}', 'lip radii')
+                row(plume, 'Mass continuity error', field.massDriftWorst, '{:+.2f}', '%')
+                row(plume, 'Within the trusted bound', 'yes' if field.trustworthy else 'no, shorten the reach')
+            elif field is not None:
+                row(plume, 'March', 'declined')
+                row(plume, 'Reason', (field.notes[-1] if field.notes else '--')[:140])
+            if structure is not None:
+                row(plume, 'Shock cell length (correlated)', getattr(structure, 'shockCellLength', 0.0) * 1e3,
+                    '{:.1f}', 'mm')
+                if getattr(structure, 'machDiskPresent', False) and getattr(structure, 'lipRadius', 0.0):
+                    row(plume, 'Mach disk (correlated)',
+                        (structure.machDiskX - structure.lipX) / structure.lipRadius, '{:.1f}', 'lip radii downstream')
+                else:
+                    row(plume, 'Mach disk (correlated)', 'none')
+
         thrust = _num(getattr(nozzle, 'thrust', None))
         isp = performance.get('idealISP[s]')
         parts = []
@@ -187,12 +203,6 @@ class AnalysisTab(ttk.Frame):
         if fuel and ox:
             parts.append(f'{ox}/{fuel}')
         self._summary.configure(text = '   '.join(parts))
-
-        figure = runner.findOutputs(getattr(runResult, 'outputDir', ''), '').get('figures', {}).get('heatTransfer')
-        if figure and os.path.isfile(figure):
-            self._pane.showImage(figure, 'Heat transfer model')
-        else:
-            self._pane.message('The heat transfer figure is written only when cooling channels are enabled.')
 
     @staticmethod
     def _mm(value):

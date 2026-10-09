@@ -270,6 +270,10 @@ class PipelineRunner:
         nozzleModule = importlib.import_module('NOVA.Nozzle')
         from NOVA import Nozzle as nozzleClass
 
+        # The figures the run writes, saved and interactive, in the mode the window is showing
+        from NOVA import palette as figurePalette
+        figurePalette.setFigureMode(theme.mode)
+
         # Silence progress bars in every NOVA module that binds tqdm by name.
         for moduleName in ('NOVA.Nozzle', 'NOVA.Volute'):
             module = sys.modules.get(moduleName)
@@ -290,7 +294,7 @@ class PipelineRunner:
 
         '''
 
-        Override program-option flags so the geometry and analysis tabs have the
+        Override program-option flags so the View and Analyze tabs have the
         files they read. Returns the list of keys that were changed.
 
         '''

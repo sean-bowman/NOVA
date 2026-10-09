@@ -16,15 +16,20 @@ radius.
 
 One solve feeds every image, all written to `novaGui/assets/`:
 
-    plumeGraphic.png    horizontal, 3200 px across, for documents and splash use
-    plumeBanner.png     horizontal, 192 px tall, with lines heavy enough to survive the GUI
-                        shrinking it to the banner's height
-    icon/icon<N>.png    vertical, nozzle at the top and plume running down, one square frame per
-                        icon size, each drawn at its own size so its lines stay visible
-    nova.ico            the same frames in one Windows icon file, for shortcuts
+    plumeGraphic.png       horizontal, 3200 px across, for documents and splash use
+    plumeBanner.png        horizontal, 192 px tall, for the dark header; lines heavy enough to
+    plumeBannerLight.png   survive the GUI shrinking it to the banner's height, and the same for
+                           the light header
+    icon/icon<N>.png       vertical, nozzle at the top and plume running down, one square frame per
+                           icon size, each drawn at its own size so its lines stay visible
+    nova.ico               the same frames in one Windows icon file, for shortcuts
+    nozzleOutline.json     the wall, normalized, which the GUI's section markers are drawn from
 
-The images carry no axes, title or color bar. They use the viridis map the GUI uses for its Mach
-plots and fade out over the last part of the plume they show. Each frame is drawn at four times its
+The images carry no axes, title or color bar. They are drawn in the Engineering Flat Metal palette
+(NOVA.palette): the Mach field in its steel ramp, the wall in aged copper and the plume boundary in
+brass, so the three read apart by hue as well as by value. The icons use the middle of the steel
+ramp, which holds against a light taskbar and a dark one alike, and leave the boundary out. Every
+image fades out over the last part of the plume it shows. Each frame is drawn at four times its
 size and reduced, which antialiases the small icons far better than drawing them directly.
 
 Run it from the NOVA root, after `python featureShowcase/runBaseCase.py` has written the pickle:
@@ -51,7 +56,12 @@ root = os.path.dirname(here)
 sys.path.insert(0, os.path.join(root, 'src'))
 sys.path.insert(0, here)
 
+import json
+
+from matplotlib.colors import LinearSegmentedColormap
+
 from buildPlumeSweep import chamberField, interiorField, lipPressureOf
+from NOVA import palette
 from NOVA.plume import plumeCharacteristicSeed
 from NOVA.stationMarch import solveStationField
 
@@ -62,8 +72,18 @@ RADIALPOINTS = 121         # [-], points across each station
 SUPERSAMPLE = 4            # [-], drawn at this multiple of the final size, then reduced
 ICONSIZES = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)    # [px]
 
-copper      = '#E0975A'    # novaGui.theme.accent
-boundaryInk = '#d8e0ec'    # novaGui.theme.text
+def styleFor(mode: str) -> dict:
+
+    '''The wall, boundary and field colors of a palette mode.'''
+
+    named = palette.colors(mode)
+
+    return {'wall': named['accent'], 'boundary': named['yellow'], 'cmap': palette.colormap('mach', mode)}
+
+# The icon has to read on a light taskbar and a dark one, so it takes the middle of the dark steel
+# ramp rather than either end, which would vanish into one of them
+iconStyle = {'wall': palette.colors('dark')['accent'], 'boundary': palette.colors('dark')['yellow'],
+             'cmap': LinearSegmentedColormap.from_list('novaIconSteel', list(palette.colormapStops['dark']['mach'][2:5]))}
 
 assetFolder = os.path.join(root, 'novaGui', 'assets')
 
@@ -124,7 +144,7 @@ def solveScene() -> dict:
 #----------------------------------------------------------------------#
 
 def render(scene: dict, size: tuple, orientation: str, reach: float, wallWidth: float,
-           boundaryWidth: float, fadeLength: float, margin: float = 0.0) -> Image.Image:
+           boundaryWidth: float, fadeLength: float, style: dict, margin: float = 0.0) -> Image.Image:
 
     '''
 
@@ -144,6 +164,8 @@ def render(scene: dict, size: tuple, orientation: str, reach: float, wallWidth: 
         Line widths in the final image [px]. A boundary width of zero leaves the boundary undrawn.
     fadeLength : float
         Lip radii over which the plume fades out, ending a little short of `reach` [-].
+    style : dict
+        'wall' and 'boundary' colors and the field's 'cmap', from `styleFor` or `iconStyle`.
     margin : float
         Clear border on every side, as a fraction of the shorter side [-].
 
@@ -193,7 +215,7 @@ def render(scene: dict, size: tuple, orientation: str, reach: float, wallWidth: 
     u, v = screen(np.concatenate([scene['axial'], scene['axial']]),
                   np.concatenate([scene['radial'], -scene['radial']]))
     shading = axes.tricontourf(u, v, np.concatenate([scene['mach'], scene['mach']]), levels = scene['levels'],
-                               cmap = 'viridis', extend = 'both')
+                               cmap = style['cmap'], extend = 'both')
     clip = Polygon(np.column_stack(screen(outlineAxial, outlineRadial)), closed = True, transform = axes.transData,
                    facecolor = 'none', edgecolor = 'none')
     axes.add_patch(clip)
@@ -201,9 +223,9 @@ def render(scene: dict, size: tuple, orientation: str, reach: float, wallWidth: 
 
     for sign in (1.0, -1.0):
         if boundaryWidth > 0.0:
-            axes.plot(*screen(boundaryX, sign * boundaryR), color = boundaryInk, alpha = 0.8, zorder = 3,
+            axes.plot(*screen(boundaryX, sign * boundaryR), color = style['boundary'], alpha = 0.9, zorder = 3,
                       lw = boundaryWidth * SUPERSAMPLE * pointsPerPixel)
-        axes.plot(*screen(wallX, sign * wallR), color = copper, solid_capstyle = 'round', zorder = 4,
+        axes.plot(*screen(wallX, sign * wallR), color = style['wall'], solid_capstyle = 'round', zorder = 4,
                   lw = wallWidth * SUPERSAMPLE * pointsPerPixel)
 
     axes.set_xlim(*limitsU)
@@ -234,6 +256,28 @@ def render(scene: dict, size: tuple, orientation: str, reach: float, wallWidth: 
 # -- The images -- #
 #----------------------------------------------------------------------#
 
+def writeOutline(scene: dict, path: str, points: int = 80) -> None:
+
+    '''
+
+    Write the wall, injector face to lip, normalized so the length runs 0 to 1 and the lip radius
+    is 1, resampled to evenly spaced axial points, with the length in lip radii so a drawing of it
+    can keep the nozzle's proportions.
+
+    '''
+
+    wallX, wallR = np.asarray(scene['wallX']), np.asarray(scene['wallR'])
+    inside = wallX <= 0.0
+    axial = (wallX[inside] - wallX[inside].min()) / (0.0 - wallX[inside].min())
+    order = np.argsort(axial)
+    stations = np.linspace(0.0, 1.0, points)
+    radius = np.interp(stations, axial[order], wallR[inside][order])
+    with open(path, 'w', encoding = 'utf-8') as handle:
+        json.dump({'description': 'NOVA nozzle wall, injector face to lip; axial 0 to 1, lip radius 1',
+                   'lengthInLipRadii': round(float(-wallX[inside].min()), 5),
+                   'points': [[round(float(a), 5), round(float(r), 5)] for a, r in zip(stations, radius)]},
+                  handle, indent = 1)
+
 def horizontalSize(scene: dict, height: int, reach: float) -> tuple:
 
     '''The width a horizontal image needs at a given height to show the scene edge to edge.'''
@@ -261,22 +305,24 @@ def build() -> list:
 
     graphicHeight = horizontalSize(scene, 1000, REACH)
     graphic = render(scene, (3200, int(round(3200 * graphicHeight[1] / graphicHeight[0]))), 'horizontal', REACH,
-                     wallWidth = 7.0, boundaryWidth = 3.0, fadeLength = 1.1)
+                     wallWidth = 7.0, boundaryWidth = 3.0, fadeLength = 1.1, style = styleFor('dark'))
     written.append(os.path.join(assetFolder, 'plumeGraphic.png'))
     graphic.save(written[-1])
 
-    # Shrunk to a banner about 30 to 60 px tall, these widths land near 1.5 px for the wall
-    banner = render(scene, horizontalSize(scene, 192, REACH), 'horizontal', REACH,
-                    wallWidth = 7.0, boundaryWidth = 3.5, fadeLength = 1.1)
-    written.append(os.path.join(assetFolder, 'plumeBanner.png'))
-    banner.save(written[-1])
+    # Shrunk to a banner about 30 to 60 px tall, these widths land near 1.5 px for the wall. One
+    # per header, because the dark mode's fastest flow is nearly the light header's color
+    for mode, name in (('dark', 'plumeBanner.png'), ('light', 'plumeBannerLight.png')):
+        banner = render(scene, horizontalSize(scene, 192, REACH), 'horizontal', REACH,
+                        wallWidth = 7.0, boundaryWidth = 3.5, fadeLength = 1.1, style = styleFor(mode))
+        written.append(os.path.join(assetFolder, name))
+        banner.save(written[-1])
 
     # Each icon at its own size, the wall never thinner than a pixel. The boundary line is left out:
     # on a shape this small it reads as a halo where the plume fades.
     frames = []
     for size in ICONSIZES:
         frame = render(scene, (size, size), 'vertical', ICONREACH, wallWidth = max(1.0, size / 36.0),
-                       boundaryWidth = 0.0, fadeLength = 0.9, margin = 0.03)
+                       boundaryWidth = 0.0, fadeLength = 0.9, style = iconStyle, margin = 0.03)
         written.append(os.path.join(assetFolder, 'icon', f'icon{size}.png'))
         frame.save(written[-1])
         frames.append(frame)
@@ -286,11 +332,19 @@ def build() -> list:
     frames[-1].save(written[-1], format = 'ICO', sizes = [(size, size) for size in ICONSIZES],
                     append_images = frames[:-1], bitmap_format = 'bmp')
 
+    # The wall from the injector face to the lip, axial 0 to 1 and the lip radius 1, for the section
+    # markers the GUI draws at the heading font's size
+    written.append(os.path.join(assetFolder, 'nozzleOutline.json'))
+    writeOutline(scene, written[-1])
+
     print(f'  lip static pressure {scene["lipPressure"]:.0f} Pa, ambient {scene["ambient"]:.0f} Pa '
           f'at lip ratio {LIPRATIO:.2f}')
     print(f'  mass continuity error {scene["drift"]:+.2f} % at {REACH:.0f} lip radii')
     print(f'  Mach {scene["levels"][0]:.2f} to {scene["levels"][-1]:.2f}')
     for path in written:
+        if path.endswith('.json'):
+            print(f'  wrote {os.path.relpath(path, root)}')
+            continue
         with Image.open(path) as image:
             print(f'  wrote {os.path.relpath(path, root)}, {image.size[0]} x {image.size[1]} px')
 

@@ -101,6 +101,27 @@ def testTheBrandingImagesShipAtEverySizeOnATransparentGround():
     with Image.open(os.path.join(branding.assetFolder, 'nova.ico')) as image:
         assert set(image.info['sizes']) == {(size, size) for size in branding.iconSizes}
 
+def testAFreshFormIsTheShippedNozzle():
+    '''
+    The form's defaults are the shipped configuration's values, key for key, so a fresh form and
+    Reset to example build the nozzle `generateNozzle()` builds with no configuration given.
+    '''
+    with open(configSchema.shippedConfigPath, encoding = 'utf-8') as handle:
+        shipped = {key: value for key, value in json.load(handle).items() if not key.startswith('_')}
+    assert configSchema.defaultConfig() == shipped
+
+def testSwitchesAreReadByMeaningNotByTruthiness():
+    '''NOVA writes switches as 'on' and 'off', and an 'off' has to load as off.'''
+    from novaGui.widgets import FieldRow
+    for value, expected in (('off', False), ('on', True), ('Off', False), ('true', True), ('false', False),
+                            (True, True), (False, False), (None, False), (0, False), (1, True)):
+        assert FieldRow._asBool(value) is expected, value
+
+def testTheLengthFractionCanCarryTheOptimizeRequest():
+    '''A text length fraction asks the backend to search for the best one, so the field keeps text.'''
+    spec = next(field for field in configSchema.allFields() if field.key == 'lengthFraction')
+    assert spec.kind == 'floatText'
+
 def testEveryFixedChoiceDefaultIsOneOfItsChoices():
     '''A choice field that cannot be typed into has to default to a value its dropdown offers.'''
     for field in configSchema.allFields():

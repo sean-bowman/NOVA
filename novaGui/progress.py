@@ -44,7 +44,8 @@ def _contourStages() -> list:
 
     return [
         Stage(r'run config written',                      0.02, 0.06, 'writing run config'),
-        Stage(r'pressure-matched truncated ideal|Generating a conical', 0.08, 0.62, 'solving nozzle contour'),
+        Stage(r'Generating a (truncated ideal|conical|thrust-optimized)|Optimizing the length fraction',
+              0.08, 0.62, 'solving nozzle contour'),
         Stage(r'Generating Traditional Converging Section', 0.64, 0.68, 'converging section'),
         Stage(r'Generating Combustion Chamber',           0.70, 0.72, 'combustion chamber'),
         Stage(r'Truncating Nozzle Regen Section',         0.74, 0.78, 'regen truncation'),
@@ -66,11 +67,21 @@ def _voluteStages() -> list:
         Stage(r'Generating Outlet Volute',                0.96, 0.97, 'outlet volute'),
     ]
 
+def _plumeStages(cooling: bool) -> list:
+
+    # The march takes seconds against a jacket solve of minutes, but a large share of a
+    # contour-only run, so its slice depends on which run it sits in
+    start, ceiling = (0.970, 0.975) if cooling else (0.80, 0.95)
+
+    return [
+        Stage(r'Marching the exhaust plume',              start, ceiling, 'marching the plume'),
+    ]
+
 def _outputStages() -> list:
 
     return [
-        Stage(r'Saving .* to \.html',                     0.97, 0.98, 'writing interactive views'),
-        Stage(r'Exporting .* to \.stl|Pickling|Writing',  0.98, 0.99, 'exporting geometry'),
+        Stage(r'Saving .* to \.html',                     0.975, 0.985, 'writing interactive views'),
+        Stage(r'Exporting .* to \.stl|Pickling|Writing',  0.985, 0.99, 'exporting geometry'),
     ]
 
 class StageTracker:
@@ -88,11 +99,15 @@ class StageTracker:
         volutes = (config.get('makeInletVolute') in (True, 'on')
                    or config.get('makeOutletVolute') in (True, 'on'))
 
+        plume = config.get('plumeAmbientPressure') is not None and config.get('plumeFieldReach') is not None
+
         self.stages = _contourStages()
         if cooling:
             self.stages += _coolingStages()
             if volutes:
                 self.stages += _voluteStages()
+        if plume:
+            self.stages += _plumeStages(cooling)
         self.stages += _outputStages()
 
         self._index = -1

@@ -5,7 +5,7 @@
 The plume graphic as the window icon and as the mark beside the NOVA wordmark.
 
 The images are drawn by `featureShowcase/buildGuiGraphic.py` into `novaGui/assets/`: one vertical
-icon frame per size under `icon/`, and a horizontal banner mark. Nothing here is required to run:
+icon frame per size under `icon/`, and a horizontal banner mark for each theme mode. Nothing here is required to run:
 a missing image leaves the window with Tk's own icon or the header with its wordmark alone.
 
 Windows groups a taskbar button under the process's application id, and a GUI started through
@@ -67,11 +67,11 @@ def applyWindowIcon(root: tk.Tk) -> list:
 
     return images
 
-def bannerImage(master: tk.Misc, height: int):
+def bannerImage(master: tk.Misc, height: int, mode: str = 'dark'):
 
     '''
 
-    The horizontal plume mark at a given height, for the header.
+    The horizontal plume mark at a given height, for the header in a theme mode.
 
     The mark is drawn once at 192 px tall with lines heavy enough to survive the reduction, and
     reduced here to the header's height for the display it opens on. Pillow does the reduction,
@@ -83,6 +83,9 @@ def bannerImage(master: tk.Misc, height: int):
         Any widget of the window the image is shown in.
     height : int
         Display height [px].
+    mode : str
+        'dark' or 'light': the light header gets a mark drawn in the light palette, because the
+        dark one's fastest flow is nearly the light header's color.
 
     Returns:
     --------
@@ -90,7 +93,9 @@ def bannerImage(master: tk.Misc, height: int):
 
     '''
 
-    path = os.path.join(assetFolder, 'plumeBanner.png')
+    path = os.path.join(assetFolder, 'plumeBannerLight.png' if mode == 'light' else 'plumeBanner.png')
+    if not os.path.exists(path):
+        path = os.path.join(assetFolder, 'plumeBanner.png')
     if not os.path.exists(path):
         return None
     try:

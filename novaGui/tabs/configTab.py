@@ -1,11 +1,11 @@
 
-# -- Config Tab -- #
+# -- Design Tab -- #
 
 '''
 
-The configuration form. Renders every field in configSchema as a labeled
-editor inside collapsible sections, round-trips the values to and from JSON in
-the NOVANozzle schema, and runs light cross-field checks before a solve.
+The Design tab: the configuration form. Renders every field in configSchema as a labeled editor
+inside collapsible section cards, round-trips the values to and from JSON in the NOVANozzle schema,
+and runs light cross-field checks before a solve. A fresh form is the shipped nozzle.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -17,7 +17,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from .. import configSchema
 from .. import theme
-from ..widgets import ScrollableFrame, CollapsibleSection, FieldRow, MaterialInfoPanel
+from ..widgets import ScrollableFrame, CollapsibleSection, FieldRow, MaterialInfoPanel, Tooltip
 
 def _designVector(entry) -> list | None:
 
@@ -102,36 +102,51 @@ class ConfigTab(ttk.Frame):
         self._suspendDynamics = False
         self._materialPanel = None            # sampled-property panel in the cooling section
 
-        toolbar = ttk.Frame(self, style = 'TFrame', padding = (10, 8))
-        toolbar.pack(fill = 'x')
-        ttk.Label(toolbar, text = 'CONFIGURATION', style = 'Eyebrow.TLabel').pack(side = 'left')
-        ttk.Button(toolbar, text = 'Load JSON', command = self._loadJson).pack(side = 'right', padx = 3)
-        ttk.Button(toolbar, text = 'Save JSON', command = self._saveJson).pack(side = 'right', padx = 3)
-        ttk.Button(toolbar, text = 'Reset to example', command = self._resetToExample).pack(side = 'right', padx = 3)
+        # A slim strip: loading lives in the header and saving at the foot of the form, so the
+        # form starts close under the tabs
+        strip = ttk.Frame(self, style = 'TFrame', padding = (theme.scaled(12), theme.scaled(4),
+                                                             theme.scaled(12), theme.scaled(2)))
+        strip.pack(fill = 'x')
+        ttk.Label(strip, text = 'DESIGN', style = 'Eyebrow.TLabel').pack(side = 'left')
+        resetButton = ttk.Button(strip, text = 'Reset to example', style = 'Small.TButton',
+                                 command = self._resetToExample)
+        resetButton.pack(side = 'right')
+        Tooltip(resetButton, 'Replace the form with the shipped nozzle, the design NOVA builds '
+                             'when it is given no configuration.')
 
         self._warning = ttk.Label(self, text = '', style = 'Warn.TLabel', wraplength = theme.scaled(900),
-                                  padding = (12, 0, 12, 4))
+                                  padding = (theme.scaled(12), 0, theme.scaled(12), theme.scaled(4)))
         self._warning.pack(fill = 'x')
 
         scroller = ScrollableFrame(self)
         scroller.pack(fill = 'both', expand = True)
+        self._scrollBody = scroller.body
 
         for group in configSchema.groups:
             section = CollapsibleSection(scroller.body, group.title, group.collapsed, group.note)
-            section.pack(fill = 'x', pady = (0, 6))
             self._sections[group.title] = section
             self._orderedSections.append((group, section))
             self._groupVisible[group.title] = True
 
-            grid = ttk.Frame(section.body, style = 'TFrame')
+            grid = ttk.Frame(section.body, style = 'Surface.TFrame')
             grid.pack(fill = 'x')
-            grid.columnconfigure(1, weight = 1)
+            # The label column takes the slack, so the editors line up at a fixed width
+            grid.columnconfigure(0, weight = 0, minsize = theme.scaled(280))
+            grid.columnconfigure(3, weight = 1)
             for rowIndex, fieldSpec in enumerate(group.fields):
                 self._rows[fieldSpec.key] = FieldRow(grid, fieldSpec, rowIndex)
 
             if group.title == 'Cooling Channels':
                 self._materialPanel = MaterialInfoPanel(section.body)
-                self._materialPanel.pack(fill = 'x', pady = (8, 0))
+                self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0))
+
+        # Saving sits at the foot of the form, after the last section
+        self._footer = ttk.Frame(scroller.body, style = 'TFrame', padding = (theme.scaled(10), theme.scaled(4),
+                                                                            theme.scaled(10), theme.scaled(12)))
+        saveButton = ttk.Button(self._footer, text = 'Save config', command = self.saveConfig)
+        saveButton.pack(side = 'right')
+        Tooltip(saveButton, 'Write the form to a JSON configuration NOVA can run directly.  Ctrl+S')
+        self._relayoutSections()
 
         # React to every edit: re-run dependency visibility and the cross-field checks.
         for row in self._rows.values():
@@ -183,7 +198,7 @@ class ConfigTab(ttk.Frame):
         if self._materialPanel is not None:
             if configSchema._coolingOn(config):
                 if not self._materialPanel.winfo_manager():
-                    self._materialPanel.pack(fill = 'x', pady = (8, 0))
+                    self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0))
                 self._materialPanel.setMaterial(config.get('material') or 'GRCop-42')
             elif self._materialPanel.winfo_manager():
                 self._materialPanel.pack_forget()
@@ -210,9 +225,11 @@ class ConfigTab(ttk.Frame):
 
         for _, section in self._orderedSections:
             section.pack_forget()
+        self._footer.pack_forget()
         for group, section in self._orderedSections:
             if self._groupVisible[group.title]:
-                section.pack(fill = 'x', pady = (0, 6))
+                section.pack(fill = 'x', padx = theme.scaled(10), pady = (0, theme.scaled(8)))
+        self._footer.pack(fill = 'x')
 
     # -- Public API -- #
 
@@ -341,7 +358,9 @@ class ConfigTab(ttk.Frame):
             if row.spec.label.lower() in flagged:
                 row.highlight(True)
 
-    def _loadJson(self) -> None:
+    def loadConfig(self) -> None:
+
+        '''Ask for a JSON configuration and load it into the form.'''
 
         path = filedialog.askopenfilename(
             title = 'Load NOVA config',
@@ -357,7 +376,9 @@ class ConfigTab(ttk.Frame):
             return
         self.setConfig(config)
 
-    def _saveJson(self) -> None:
+    def saveConfig(self) -> None:
+
+        '''Write the form to a JSON configuration chosen by the user.'''
 
         try:
             config = self.getConfig()
@@ -377,6 +398,6 @@ class ConfigTab(ttk.Frame):
 
     def _resetToExample(self) -> None:
 
-        if not messagebox.askokcancel('Reset form', 'Replace the current form with the schema defaults?'):
+        if not messagebox.askokcancel('Reset form', 'Replace the current form with the shipped nozzle?'):
             return
         self.setConfig(configSchema.defaultConfig())

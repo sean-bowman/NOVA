@@ -28,8 +28,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The Tkinter front end. Tkinter itself ships with CPython.
-gui = ['tkinterweb>=4.0']
+# The Tkinter front end. Tkinter itself ships with CPython; Pillow draws its controls and icons.
+gui = ['pillow>=9.1']
 # REFPROP-backed fluid properties, which need a licensed REFPROP installation.
 refprop = ['ctREFPROP>=0.10.5']
 # Static image export of plotly figures, for regenerating the README's screenshots. Needs a

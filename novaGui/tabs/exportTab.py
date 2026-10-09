@@ -21,6 +21,7 @@ from tkinter import ttk, filedialog
 
 from .. import theme
 from .. import runner
+from ..widgets import card
 
 def _formatSize(byteCount: int) -> str:
 
@@ -40,7 +41,7 @@ class ExportTab(ttk.Frame):
 
     def __init__(self, master, app):
 
-        super().__init__(master, style = 'TFrame')
+        super().__init__(master, style = 'TFrame', padding = theme.scaled(8))
 
         self._app = app
         self._result = None
@@ -51,42 +52,42 @@ class ExportTab(ttk.Frame):
         defaultBase = os.path.join(repositoryRoot, 'runs')
         self._baseDir = tk.StringVar(value = defaultBase)
 
-        picker = ttk.Frame(self, style = 'TFrame', padding = (10, 10))
+        picker = ttk.Frame(self, style = 'TFrame', padding = (theme.scaled(4), theme.scaled(4)))
         picker.pack(fill = 'x')
         picker.columnconfigure(1, weight = 1)
 
         ttk.Label(picker, text = 'Output location', style = 'TLabel').grid(row = 0, column = 0, sticky = 'w')
-        ttk.Entry(picker, textvariable = self._baseDir).grid(row = 0, column = 1, sticky = 'ew', padx = 8)
+        ttk.Entry(picker, textvariable = self._baseDir).grid(row = 0, column = 1, sticky = 'ew', padx = theme.scaled(8))
         ttk.Button(picker, text = 'Browse', command = self._browse).grid(row = 0, column = 2)
 
         self._resolved = ttk.Label(picker, text = '', style = 'Muted.TLabel')
-        self._resolved.grid(row = 1, column = 1, sticky = 'w', padx = 8, pady = (4, 0))
+        self._resolved.grid(row = 1, column = 1, sticky = 'w', padx = theme.scaled(8), pady = (theme.scaled(4), 0))
         self._baseDir.trace_add('write', lambda *_: self._updateResolved())
 
         ttk.Label(
-            self, style = 'Muted.TLabel', wraplength = 900, padding = (12, 4),
-            text = ('Runs always execute with data export enabled so the geometry and analysis '
-                    'tabs have files to read. The export flag in the config form is overridden.'),
+            self, style = 'Muted.TLabel', wraplength = theme.scaled(900), padding = (theme.scaled(8), theme.scaled(4)),
+            text = ('Runs always execute with data export enabled so the View and Analyze tabs have '
+                    'files to read. The export flag on the Design tab is overridden.'),
         ).pack(fill = 'x')
 
-        listWrap = ttk.Frame(self, style = 'Surface.TFrame')
-        listWrap.pack(fill = 'both', expand = True, padx = 8, pady = (4, 8))
+        listWrap = card(self, fill = 'both', expand = True, pady = (theme.scaled(4), 0))
 
-        actions = ttk.Frame(listWrap, style = 'Elevated.TFrame')
-        actions.pack(fill = 'x')
-        ttk.Label(actions, text = 'PRODUCED FILES', style = 'Eyebrow.TLabel',
-                  background = theme.surface2).pack(side = 'left', padx = 10, pady = 4)
-        ttk.Button(actions, text = 'Open folder', command = self._openFolder).pack(side = 'right', padx = 4, pady = 3)
-        ttk.Button(actions, text = 'Refresh', command = self._populateFiles).pack(side = 'right', padx = 4, pady = 3)
+        actions = ttk.Frame(listWrap, style = 'Surface.TFrame')
+        actions.pack(fill = 'x', pady = (0, theme.scaled(6)))
+        ttk.Label(actions, text = 'PRODUCED FILES', style = 'Eyebrow.Card.TLabel').pack(side = 'left')
+        ttk.Button(actions, text = 'Open folder', command = self.openFolder,
+                   style = 'Small.Card.TButton').pack(side = 'right', padx = (theme.scaled(4), 0))
+        ttk.Button(actions, text = 'Refresh', command = self._populateFiles,
+                   style = 'Small.Card.TButton').pack(side = 'right')
 
         self._tree = ttk.Treeview(listWrap, columns = ('type', 'size'), show = 'tree headings')
         self._tree.heading('#0', text = 'File')
         self._tree.heading('type', text = 'Type')
         self._tree.heading('size', text = 'Size')
-        self._tree.column('#0', width = 380, anchor = 'w')
-        self._tree.column('type', width = 90, anchor = 'w')
-        self._tree.column('size', width = 90, anchor = 'e')
-        scroll = ttk.Scrollbar(listWrap, orient = 'vertical', command = self._tree.yview)
+        self._tree.column('#0', width = theme.scaled(380), anchor = 'w')
+        self._tree.column('type', width = theme.scaled(90), anchor = 'w')
+        self._tree.column('size', width = theme.scaled(90), anchor = 'e')
+        scroll = ttk.Scrollbar(listWrap, orient = 'vertical', command = self._tree.yview, style = 'Card.Vertical.TScrollbar')
         self._tree.configure(yscrollcommand = scroll.set)
         scroll.pack(side = 'right', fill = 'y')
         self._tree.pack(side = 'left', fill = 'both', expand = True)
@@ -146,7 +147,10 @@ class ExportTab(ttk.Frame):
             size = _formatSize(os.path.getsize(path))
             self._tree.insert('', 'end', text = name, values = (extension, size), tags = (path,))
 
-    def _openFolder(self) -> None:
+    def openFolder(self) -> None:
+
+        '''Open the run's output folder in the system file browser.'''
+
 
         outputDir = self._outputDir()
         if os.path.isdir(outputDir):

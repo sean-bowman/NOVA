@@ -18,14 +18,16 @@ Each field is a Field record:
                string is shorthand for a pair with the same label and value. The
                form shows the labels; get() returns the backend value.
     editable   for 'choice': True lets the user type a value outside the list
-    default    backend value pre-filled on a fresh form (None renders blank)
+    default    backend value pre-filled on a fresh form (None renders blank). The
+               shipped NOVANozzle.json overrides it at import, so a fresh form is
+               the shipped nozzle; the value written here is the fallback for a
+               key that file leaves out.
     unit       short unit string appended to the label, or ''
     help       one-line tooltip
     showWhen   predicate over the current config dict; the row is hidden when it
                returns False
-    synthetic  True for a form-only helper that does not map to a config key.
-               The config tab folds these into a real key on the way out and
-               unpacks them on the way in (see the truncation fields).
+    synthetic  True for a form-only helper that does not map to a config key; the
+               config tab drops it on the way out. No field is one at present.
 
 Groups carry `collapsed`, `showWhen` (hide the whole section) and `expandWhen`
 (auto-open the section when the predicate first becomes true).
@@ -35,7 +37,13 @@ Date:   08/28/2026
 
 '''
 
+import json
+import os
 from dataclasses import dataclass, field
+
+# The configuration NOVA ships and `Nozzle().generateNozzle()` builds when given no path
+shippedConfigPath = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 'src', 'NOVA', 'assets', 'NOVANozzle.json')
 
 @dataclass
 class Field:
@@ -128,7 +136,7 @@ class Group:
 
 # -- Program option flags forced on for every GUI run -- #
 
-# The geometry and analysis tabs read the PNG and HTML files NOVA only writes
+# The View and Analyze tabs read the PNG and HTML files NOVA only writes
 # when plots and export are enabled, so the runner overrides these regardless
 # of the form.
 forcedFlags = ('export', 'plotsEnabled')
@@ -235,9 +243,11 @@ groups = [
         Field('chamberLength', 'Chamber barrel length', 'float', default = None, unit = 'm',
               help = 'Cylindrical chamber length, specified directly instead of through L*. '
                      'Leave blank to derive it from L*; set to 0 for no barrel.'),
-        Field('lengthFraction', 'Length fraction', 'float', default = 0.8,
+        Field('lengthFraction', 'Length fraction', 'floatText', default = 0.8,
               help = 'Truncated ideal contour length as a fraction of a 15 deg conical nozzle of '
-                     'the same area ratio, which is how NASA SP-8120 defines percent bell.'),
+                     'the same area ratio, which is how NASA SP-8120 defines percent bell. Any '
+                     'text instead of a number, such as optimize, searches for the length fraction '
+                     'that maximizes the thrust coefficient.'),
         Field('numCharacteristics', 'Characteristics', 'int', default = 50,
               help = 'Characteristics launched from the throat arc, which sets the mesh resolution '
                      'of the whole solve. At the default the exit wall angle carries about 2 '
@@ -256,6 +266,18 @@ groups = [
                      'point at the geometric throat. Transonic carries the starting line\'s own '
                      'solution over the entrant arc, so the wall goes sonic ahead of the throat '
                      'and the state joins the characteristics net without a jump.'),
+        Field('gammaModel', 'Ratio of specific heats', 'choice',
+              choices = [('Chamber value', 'chamber'),
+                         ('Effective, fitted to the design point', 'effective')],
+              default = 'chamber',
+              help = 'A real exhaust recombines as it expands and has no single ratio of '
+                     'specific heats, so the contour solve picks one. The chamber value is '
+                     'the default. The effective '
+                     'value is fitted so the pressure ratio and the area ratio agree with '
+                     'the thermochemistry at the design point: it cuts the pressure error '
+                     'threefold and biases the gas temperature cold, which undersizes a '
+                     'cooling jacket. Choose it for contour and performance work, not for '
+                     'a jacket. Both values are reported either way.'),
         Field('throatInletCurvature', 'Throat inlet curvature', 'float', default = 1.5,
               help = 'Radius of curvature of the throat inlet arc, as a multiple of the throat '
                      'radius. NASA SP-8120 takes this above 0.6.'),
@@ -297,9 +319,21 @@ groups = [
               help = 'One-dimensional CEA area ratio. Specify this OR target exit pressure, leave the other blank.'),
         Field('targetExitPressure', 'Target exit pressure', 'float', default = None, unit = 'Pa',
               help = 'Design exit static pressure. Specify this OR expansion ratio, leave the other blank.'),
-        Field('plumeAmbientPressure', 'Plume ambient pressure', 'float', default = 101325.0, unit = 'Pa',
-              help = 'Ambient static pressure the exhaust plume is drawn against. Sets the jet regime, '
-                     'shock cell spacing and Mach disk. Leave blank to skip the plume figures.'),
+    ]),
+
+    Group('Plume', [
+        Field('plumeAmbientPressure', 'Ambient pressure', 'float', default = 101325.0, unit = 'Pa',
+              help = 'Ambient static pressure the exhaust plume expands into: the altitude the plume is '
+                     'solved at. It sets the lip pressure ratio, and with it how the boundary turns at the '
+                     'lip, the shock cell spacing and whether a Mach disk stands. Above about 2.5 times the '
+                     'one-dimensional exit pressure the nozzle separates internally (Summerfield) and the '
+                     'plume is not solved. Leave blank to skip the plume.'),
+        Field('plumeFieldReach', 'March reach', 'float', default = 2.0, unit = 'lip radii',
+              help = 'How far past the exit plane the plume boundary and interior are marched, in lip '
+                     'radii. Mass continuity holds within 1 percent to about two lip radii, which is the '
+                     'trusted reach; past about six the march draws a shape whose numbers are not to be '
+                     'used. The error is reported either way. Leave blank to keep only the correlated '
+                     'structure.'),
     ]),
 
     Group('Cooling Channels', [
@@ -512,21 +546,6 @@ groups = [
                      'conservative reading of an unknown one.'),
     ], collapsed = True, expandWhen = _radiativeExtensionOn),
 
-    Group('Gas Model', [
-        Field('gammaModel', 'Ratio of specific heats', 'choice',
-              choices = [('Chamber value', 'chamber'),
-                         ('Effective, fitted to the design point', 'effective')],
-              default = 'chamber',
-              help = 'A real exhaust recombines as it expands and has no single ratio of '
-                     'specific heats, so the contour solve picks one. The chamber value is '
-                     'the default and the one the solve has always used. The effective '
-                     'value is fitted so the pressure ratio and the area ratio agree with '
-                     'the thermochemistry at the design point: it cuts the pressure error '
-                     'threefold and biases the gas temperature cold, which undersizes a '
-                     'cooling jacket. Choose it for contour and performance work, not for '
-                     'a jacket. Both values are reported either way.'),
-    ], collapsed = True),
-
     Group('Film Cooling', [
         Field('filmCooling', 'Film cooling', 'bool', default = False,
               help = 'Inject a sheet of coolant along the wall. It lowers the temperature '
@@ -683,14 +702,39 @@ def allFields() -> list:
 
     return [f for group in groups for f in group.fields]
 
+def _applyShippedDefaults() -> None:
+
+    '''
+
+    Make the shipped nozzle the form's default.
+
+    A fresh form, and Reset to example, then build exactly the design the backend builds with no
+    configuration given, rather than a second nozzle maintained by hand beside it. A key the file
+    leaves out keeps the default written in its Field, and an unreadable file leaves every default
+    as written.
+
+    '''
+
+    try:
+        with open(shippedConfigPath, encoding = 'utf-8') as handle:
+            shipped = json.load(handle)
+    except (OSError, ValueError):
+        return
+
+    for spec in allFields():
+        if not spec.synthetic and spec.key in shipped:
+            spec.default = shipped[spec.key]
+
+_applyShippedDefaults()
+
 def defaultConfig() -> dict:
 
     '''
 
-    A complete config dictionary with every real key set to its schema default.
-    Blank numeric and text fields resolve to None, which NOVA reads as
-    'not specified'. Choice fields hold their backend value, not the label.
-    Synthetic form-only helpers are excluded; the config tab folds them in.
+    A complete config dictionary with every real key set to its default, which is the shipped
+    nozzle's value. Blank numeric and text fields resolve to None, which NOVA reads as 'not
+    specified'. Choice fields hold their backend value, not the label. Synthetic form-only
+    helpers are excluded.
 
     '''
 

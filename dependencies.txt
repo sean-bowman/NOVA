@@ -30,10 +30,9 @@ matplotlib>=3.10
 plotly>=5.0
 
 # -- GUI -- #
-# tkinter ships with CPython. tkinterweb embeds the interactive plotly HTML
-# views in the 3D geometry tab; without it that tab falls back to the revolved
-# contour plus an "open in browser" button.
-tkinterweb>=4.0
+# tkinter ships with CPython. Pillow draws the GUI's rounded controls, icons and banner;
+# Matplotlib already depends on it, so it is listed for the GUI's direct import.
+pillow>=9.1
 
 # -- Units -- #
 # The registry behind NOVA/units.py. Every conversion factor and physical constant in the
