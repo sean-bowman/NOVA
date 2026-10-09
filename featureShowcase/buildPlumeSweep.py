@@ -31,6 +31,8 @@ import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
+
+import showcasePalette
 from matplotlib.animation import FuncAnimation, PillowWriter
 from matplotlib.patches import Polygon
 
@@ -49,19 +51,19 @@ NEARREACH = 2.0            # [-], the reach the solver defaults to, reported alo
 RADIALPOINTS = 121         # [-], points across each station
 FRAMEMS = 170              # [ms], frame duration
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
 })
 
@@ -211,7 +213,7 @@ def build():
 
     figure, axes = plt.subplots(figsize = (13.0, 5.0))
     figure.subplots_adjust(left = 0.06, right = 0.98, top = 0.80, bottom = 0.16)
-    scalar = plt.cm.ScalarMappable(cmap = 'viridis',
+    scalar = plt.cm.ScalarMappable(cmap = showcasePalette.machMap,
                                    norm = plt.Normalize(vmin = machLow, vmax = machHigh))
     bar = figure.colorbar(scalar, ax = axes, pad = 0.01, fraction = 0.030)
     bar.set_label('Mach number [-]', fontsize = 9)
@@ -226,7 +228,7 @@ def build():
         axes.tricontourf(np.concatenate([axial, axial]),
                          np.concatenate([radial, -radial]),
                          np.concatenate([frame['mach'], frame['mach']]),
-                         levels = levels, cmap = 'viridis', extend = 'both')
+                         levels = levels, cmap = showcasePalette.machMap, extend = 'both')
 
         # The chamber and the diverging section are shaded separately because they are different
         # answers: one dimensional upstream of the throat, where nothing is solved, and the
@@ -236,7 +238,7 @@ def build():
             patch = axes.tricontourf(np.concatenate([blockX, blockX]),
                                      np.concatenate([blockR, -blockR]),
                                      np.concatenate([blockMach, blockMach]),
-                                     levels = levels, cmap = 'viridis', extend = 'both')
+                                     levels = levels, cmap = showcasePalette.machMap, extend = 'both')
             clip = Polygon(outline, closed = True, transform = axes.transData,
                            facecolor = 'none', edgecolor = 'none')
             axes.add_patch(clip)

@@ -28,6 +28,8 @@ matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 from NOVA.gasDynamics import (areaMachRelation, machFromAreaRatio, staticPressureRatio,
@@ -35,20 +37,20 @@ from NOVA.gasDynamics import (areaMachRelation, machFromAreaRatio, staticPressur
 from NOVA.contour import raoWallAngles, raoParabolicContour, wallAnglesFromContour
 from NOVA.contourKernel import ThroatGeometry
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
-blue       = '#6BA3D6'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
+blue       = showcasePalette.blue
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
     'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })

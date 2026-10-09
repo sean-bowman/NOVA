@@ -20,7 +20,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(root), 'documentProcessor'))
 
 from documentProcessor import DocumentProcessor
 
-reports = os.path.join(root, 'src', 'NOVA', 'docs', 'reports')
+import showcasePalette
+
+reports = os.path.join(root, 'docs', 'reports')
 documents = [
     ('nozzleContourEffort_2026-09-06.md', 'NOVA', 'Contour verification and assessment'),
 ]
@@ -39,8 +41,9 @@ def main():
         processor.fromMarkdownFile(source)
 
         target = os.path.join(reports, name.replace('.md', '.html'))
+        # documentProcessor writes the report style's own dark palette; the report takes NOVA's
         with open(target, 'w', encoding = 'utf-8') as handle:
-            handle.write(processor.toHtml())
+            handle.write(showcasePalette.restyleHtml(processor.toHtml()))
         print(f'  wrote {os.path.basename(target)}   '
               f'{os.path.getsize(target) / 1024 / 1024:.1f} MB')
 

@@ -24,23 +24,25 @@ from matplotlib.colors import LogNorm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 from NOVA.characteristics import CharacteristicGas
 from NOVA.contour import quasiOneDimensionalField
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
     'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
@@ -49,9 +51,9 @@ plt.rcParams.update({
 # logarithmic. Pressure falls by three orders of magnitude between the chamber and the exit, so a
 # linear scale renders the entire diverging section as one flat black and says nothing about it.
 quantities = {
-    'mach':        ('allMachNumbers',  'Mach number',        '[-]',   1.0,  'viridis', False),
-    'pressure':    ('allPressures',    'Static pressure',    '[MPa]', 1e-6, 'magma',   True),
-    'temperature': ('allTemperatures', 'Static temperature', '[K]',   1.0,  'inferno', False),
+    'mach':        ('allMachNumbers',  'Mach number',        '[-]',   1.0,  showcasePalette.machMap, False),
+    'pressure':    ('allPressures',    'Static pressure',    '[MPa]', 1e-6, showcasePalette.pressureMap,   True),
+    'temperature': ('allTemperatures', 'Static temperature', '[K]',   1.0,  showcasePalette.temperatureMap, False),
 }
 
 def mirrored(x, r, values):

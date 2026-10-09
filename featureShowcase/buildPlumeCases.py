@@ -14,21 +14,23 @@ matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-blue       = '#6BA3D6'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+blue       = showcasePalette.blue
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': True, 'grid.alpha': 0.35, 'font.size': 9,
     'axes.titlesize': 12, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
@@ -87,7 +89,7 @@ def drawCase(nozzle, slug, label, pressureRatio, exitPressure):
                   'Correlation out of range: the cell amplitude implies a swell wider than the '
                   'lip radius, so the drawn\nboundary understates the plume width. Cell spacing '
                   'and Mach disk location remain valid.',
-                  transform = axes.transAxes, fontsize = 7.5, color = '#E8A0A0', va = 'bottom')
+                  transform = axes.transAxes, fontsize = 7.5, color = showcasePalette.warn, va = 'bottom')
 
     axes.set_xlim(wallX.min(), boundaryX.max())
     axes.set_aspect('equal', adjustable = 'box')

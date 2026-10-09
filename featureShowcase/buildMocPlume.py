@@ -14,6 +14,8 @@ import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
+
+import showcasePalette
 from matplotlib.patches import Polygon
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -22,19 +24,19 @@ sys.path.insert(0, os.path.join(root, 'experimental'))
 
 import tnd2327 as moc
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
     'axes.titlesize': 12, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
@@ -94,7 +96,7 @@ def drawInterior(machJet, thetaNDeg, staticRatio, slug, targetRadius, targetAxia
     ])
 
     field = axes.tricontourf(np.concatenate([x, x]), np.concatenate([y, -y]),
-                             np.concatenate([mach, mach]), levels = 100, cmap = 'viridis')
+                             np.concatenate([mach, mach]), levels = 100, cmap = showcasePalette.machMap)
     clip = Polygon(outline, closed = True, transform = axes.transData,
                    facecolor = 'none', edgecolor = 'none')
     axes.add_patch(clip)
@@ -174,7 +176,7 @@ def drawCells(machJet, staticRatio, slug, numRays = 40, numLeading = 200):
         np.column_stack([boundaryX[::-1], boundaryY[::-1]]),
     ])
     field = axes.tricontourf(np.concatenate([x, x]), np.concatenate([y, -y]),
-                             np.concatenate([mach, mach]), levels = 120, cmap = 'turbo')
+                             np.concatenate([mach, mach]), levels = 120, cmap = showcasePalette.machMap)
     clip = Polygon(outline, closed = True, transform = axes.transData,
                    facecolor = 'none', edgecolor = 'none')
     axes.add_patch(clip)

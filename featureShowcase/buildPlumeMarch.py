@@ -16,6 +16,8 @@ import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
+
+import showcasePalette
 from matplotlib.patches import Polygon
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -25,20 +27,20 @@ from NOVA.Nozzle import (PlumeFlow, PlumePoint, plumeExitLine, solvePlumeMarch, 
                     fullyExpandedDiameter, machFromPressureRatio, prandtlCellCoefficient)
 from NOVA import figures as figureModule                                                       # noqa: E402
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
-blue       = '#6BA3D6'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
+blue       = showcasePalette.blue
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
     'axes.titlesize': 12, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
@@ -145,7 +147,7 @@ def drawContinuousField(nozzle):
     interiorField = axes.tricontourf(np.concatenate([innerX, innerX]),
                                      np.concatenate([innerR, -innerR]),
                                      np.concatenate([innerMach, innerMach]),
-                                     levels = levels, cmap = 'viridis')
+                                     levels = levels, cmap = showcasePalette.machMap)
     wallOutline = np.vstack([np.column_stack([wallX, wallR]),
                              np.column_stack([wallX[::-1], -wallR[::-1]])])
     wallClip = Polygon(wallOutline, closed = True, transform = axes.transData,
@@ -156,7 +158,7 @@ def drawContinuousField(nozzle):
     field = axes.tricontourf(np.concatenate([plumeX, plumeX]),
                              np.concatenate([plumeR, -plumeR]),
                              np.concatenate([plumeMach, plumeMach]),
-                             levels = levels, cmap = 'viridis')
+                             levels = levels, cmap = showcasePalette.machMap)
     lastLine = net['lines'][-1]
     scaled = [PlumePoint(point.x * 1e3, point.r * 1e3, point.mach, point.flowAngle, flow)
               for point in lastLine]
@@ -227,7 +229,7 @@ def drawCellTrain():
     field = axes[0].tricontourf(np.concatenate([x[keep], x[keep]]),
                                 np.concatenate([r[keep], -r[keep]]),
                                 np.concatenate([mach[keep], mach[keep]]),
-                                levels = 120, cmap = 'turbo')
+                                levels = 120, cmap = showcasePalette.machMap)
     clipToSolved(axes[0], field, boundaryX, boundaryR, net['lines'][-1])
     axes[0].plot(boundaryX, boundaryR, color = ink, lw = 1.0)
     axes[0].plot(boundaryX, -boundaryR, color = ink, lw = 1.0)
@@ -361,7 +363,7 @@ def drawOperatingRange():
         boundaryX = np.array([point.x for point in net['boundary']])
         boundaryR = np.array([point.r for point in net['boundary']])
         field = panel.tricontourf(np.concatenate([x, x]), np.concatenate([r, -r]),
-                                  np.concatenate([mach, mach]), levels = 90, cmap = 'turbo')
+                                  np.concatenate([mach, mach]), levels = 90, cmap = showcasePalette.machMap)
         clipToSolved(panel, field, boundaryX, boundaryR, net['lines'][-1])
         panel.plot(boundaryX, boundaryR, color = ink, lw = 1.0)
         panel.plot(boundaryX, -boundaryR, color = ink, lw = 1.0)
@@ -450,7 +452,7 @@ def drawOperatingEnvelope():
             budgeted[row, column] = net['stop'] == 'maxLines'
 
     figure, axes = plt.subplots(figsize = (9.5, 4.6))
-    mesh = axes.imshow(reach, origin = 'lower', aspect = 'auto', cmap = 'magma',
+    mesh = axes.imshow(reach, origin = 'lower', aspect = 'auto', cmap = showcasePalette.temperatureMap,
                        extent = [-0.5, len(angles) - 0.5, -0.5, len(ratios) - 0.5])
     axes.set_xticks(range(len(angles)))
     axes.set_xticklabels([f'{a:.0f}' for a in angles])
@@ -466,7 +468,7 @@ def drawOperatingEnvelope():
                 label = f'{value:.1f}' + ('+' if budgeted[row, column] else '')
                 dark = value > 0.55 * bright
             axes.text(column, row, label, ha = 'center', va = 'center', fontsize = 9,
-                      color = '#20141f' if dark else ink, fontweight = 'bold')
+                      color = showcasePalette.background if dark else ink, fontweight = 'bold')
     axes.set_xlabel('Exit wall angle [deg]')
     axes.set_ylabel('Pe / Pa')
     axes.set_title('How far the march carries, in shock cell lengths')

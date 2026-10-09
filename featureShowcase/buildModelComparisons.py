@@ -29,6 +29,8 @@ import os
 import sys
 
 import numpy as np
+
+import showcasePalette
 import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
@@ -40,25 +42,25 @@ os.environ.setdefault('NOVA_HEADLESS', '1')
 
 from NOVA.equilibriumExpansion import EquilibriumGas, expansionTable
 from NOVA.gasDynamics import prandtlMeyerAngle
-from NOVA.regenThermal import (COOLANTROUGHNESSMODELS, MEASUREDAXIALCONSTANTS,
-                               MEASUREDBARRELCONSTANT, coolantFrictionAndNusselt,
-                               entranceEnhancementFactor, itoCurvatureFactor,
-                               measuredAxialFactor)
+from NOVA.gasSideHeatTransfer import (MEASUREDAXIALCONSTANTS, MEASUREDBARRELCONSTANT,
+                                      measuredAxialFactor)
+from NOVA.regenThermal import (COOLANTROUGHNESSMODELS, coolantFrictionAndNusselt,
+                               entranceEnhancementFactor, itoCurvatureFactor)
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
-blue       = '#6BA3D6'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
+blue       = showcasePalette.blue
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
     'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })

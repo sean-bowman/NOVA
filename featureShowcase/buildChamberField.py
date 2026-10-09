@@ -26,31 +26,33 @@ import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 from NOVA.characteristics import CharacteristicGas
 from NOVA.contour import quasiOneDimensionalField
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
     'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
 
 quantities = {
-    'mach':        ('Mach number', '[-]', 1.0, 'viridis'),
-    'pressure':    ('Static pressure', '[MPa]', 1e-6, 'magma'),
+    'mach':        ('Mach number', '[-]', 1.0, showcasePalette.machMap),
+    'pressure':    ('Static pressure', '[MPa]', 1e-6, showcasePalette.pressureMap),
     'temperature': ('Static temperature', '[K]', 1.0, 'inferno'),
 }
 

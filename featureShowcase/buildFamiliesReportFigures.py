@@ -20,6 +20,8 @@ import sys
 import matplotlib
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 sys.path.insert(0, os.path.join(root, 'src'))
@@ -32,14 +34,14 @@ from NOVA.Nozzle import Nozzle                                          # noqa: 
 from NOVA.boundaryLayer import offsetWall, solveBoundaryLayer           # noqa: E402
 from NOVA.contourKernel import transonicModels, transonicThroatVelocity  # noqa: E402
 
-outputFolder = os.path.join(root, 'src', 'NOVA', 'docs', 'reports', 'contourFamilies_2026-09-15')
+outputFolder = os.path.join(root, 'docs', 'reports', 'contourFamilies_2026-09-15')
 os.makedirs(outputFolder, exist_ok = True)
 
 # The report palette, so the figures sit inside the page rather than on top of it.
-BG, SURFACE, BORDER = '#1a1e2a', '#22273a', '#3a4055'
-TEXT, MUTED = '#d8e0ec', '#8a95a8'
-ACCENT, GREEN, BLUE = '#E0975A', '#86C06C', '#7baee8'
-PURPLE, RED, YELLOW = '#aa84d8', '#e08080', '#d4b86a'
+BG, SURFACE, BORDER = showcasePalette.background, showcasePalette.panel, showcasePalette.border
+TEXT, MUTED = showcasePalette.ink, showcasePalette.muted
+ACCENT, GREEN, BLUE = showcasePalette.copper, showcasePalette.green, showcasePalette.blue
+PURPLE, RED, YELLOW = showcasePalette.purple, showcasePalette.red, showcasePalette.yellow
 
 plt.rcParams.update({
     'figure.facecolor': BG, 'axes.facecolor': SURFACE, 'savefig.facecolor': BG,

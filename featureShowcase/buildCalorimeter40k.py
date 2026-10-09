@@ -45,6 +45,8 @@ import sys
 
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 sys.path.insert(0, os.path.join(root, 'tests'))
@@ -675,12 +677,13 @@ def figures() -> None:
 
     folder = os.path.join(root, 'docs', 'reports', 'calorimeter40k_2026-10-04')
     os.makedirs(folder, exist_ok = True)
-    background, panel = '#1a1e2a', '#222735'
-    copper, green, ink, muted, warn, blue = '#E0975A', '#86C06C', '#E8E6E1', '#8B93A7', '#E8A0A0', '#6BA3D6'
+    background, panel = showcasePalette.background, showcasePalette.panel
+    copper, green, ink = showcasePalette.copper, showcasePalette.green, showcasePalette.ink
+    muted, warn, blue = showcasePalette.muted, showcasePalette.warn, showcasePalette.blue
     plt.rcParams.update({'figure.facecolor': background, 'axes.facecolor': panel,
                          'savefig.facecolor': background, 'text.color': ink, 'axes.labelcolor': ink,
                          'axes.edgecolor': muted, 'xtick.color': muted, 'ytick.color': muted,
-                         'grid.color': '#333A4D', 'font.size': 9})
+                         'grid.color': showcasePalette.gridColor, 'font.size': 9})
 
     gas = case.gasState('measured')
     options = consistentProperties(gas)

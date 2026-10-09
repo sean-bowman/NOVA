@@ -18,7 +18,8 @@ completed, which were refused and why, and what would have to be built to close 
 
 Run it from the NOVA root:
 
-    python featureShowcase/buildFamilyShowcase.py
+    python featureShowcase/buildFamilyShowcase.py           # builds all four and writes the report
+    python featureShowcase/buildFamilyShowcase.py --draw    # redraws the figures from the last build
 
 Author: Sean Bowman
 
@@ -35,6 +36,8 @@ import matplotlib
 matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
+
+import showcasePalette
 from matplotlib.patches import Polygon
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -51,20 +54,20 @@ AMBIENT = 5000.0           # [Pa], the ambient the shipped configuration names
 REACH = 2.0                # [-], lip radii of plume drawn, the solver default
 MILLIMETRES = 1e3
 
-background = '#1a1e2a'
-panel      = '#222735'
-copper     = '#E0975A'
-green      = '#86C06C'
-blue       = '#7FB3D5'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
-warn       = '#E8A0A0'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+copper     = showcasePalette.copper
+green      = showcasePalette.green
+blue       = showcasePalette.blue
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
+warn       = showcasePalette.warn
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': False, 'font.size': 9,
 })
 def buildFamily(name):
@@ -232,7 +235,7 @@ def drawFamily(name, nozzle, row):
         patch = axes.tricontourf(np.concatenate([blockX, blockX])*MILLIMETRES,
                                  np.concatenate([blockR, -blockR])*MILLIMETRES,
                                  np.concatenate([blockMach, blockMach]),
-                                 levels = levels, cmap = 'viridis', extend = 'both')
+                                 levels = levels, cmap = showcasePalette.machMap, extend = 'both')
         clip = Polygon(outline, closed = True, transform = axes.transData,
                        facecolor = 'none', edgecolor = 'none')
         axes.add_patch(clip)
@@ -243,7 +246,7 @@ def drawFamily(name, nozzle, row):
         # and handed to tricontourf rather than resampled onto a grid.
         for sign in (1.0, -1.0):
             patch = axes.tricontourf(plume[0]*MILLIMETRES, sign*plume[1]*MILLIMETRES, plume[2],
-                                     levels = levels, cmap = 'viridis', extend = 'both')
+                                     levels = levels, cmap = showcasePalette.machMap, extend = 'both')
         boundaryX = np.asarray(field.boundaryX, dtype = float)*MILLIMETRES
         boundaryR = np.asarray(field.boundaryR, dtype = float)*MILLIMETRES
         for sign in (1.0, -1.0):
@@ -506,7 +509,27 @@ def writeReport(rows, figures, path):
 
     return path
 
-if __name__ == '__main__':
+def redraw() -> None:
+
+    '''
+
+    Redraw every family's figure from the nozzles the last full run pickled, without building them
+    again or rewriting the report.
+
+    '''
+
+    for name in FAMILIES:
+        path = os.path.join(here, f'family_{name}.pkl')
+        if not os.path.exists(path):
+            print(f'   {name}: no cached nozzle; run without --draw first')
+            continue
+        with open(path, 'rb') as handle:
+            nozzle = pickle.load(handle)
+        print('   wrote', drawFamily(name, nozzle, capabilities(name, nozzle)), flush = True)
+
+if __name__ == '__main__' and '--draw' in sys.argv:
+    redraw()
+elif __name__ == '__main__':
     rows, figures = [], []
     for name in FAMILIES:
         print(f'=== {name} ===', flush = True)

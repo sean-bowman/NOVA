@@ -36,6 +36,8 @@ import time
 import matplotlib
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 sys.path.insert(0, os.path.join(root, 'src'))
@@ -243,7 +245,7 @@ def draw(payload) -> None:
         values = [normalized(payload, quadraticTag, incumbent = True),
                   normalized(payload, quadraticTag),
                   normalized(payload, cubicTag)]
-        panel.bar(labels, values, color = ['#8a8a8a', '#E0975A', '#86C06C'], alpha = 0.9)
+        panel.bar(labels, values, color = [showcasePalette.muted, showcasePalette.copper, showcasePalette.green], alpha = 0.9)
         finite = [v for v in values if np.isfinite(v)]
         if finite:
             span = max(finite) - min(finite)

@@ -16,6 +16,8 @@ matplotlib.use('Agg', force = True)
 import matplotlib.pyplot as plt
 import numpy as np
 
+import showcasePalette
+
 here = os.path.dirname(os.path.abspath(__file__))
 root = os.path.dirname(here)
 from NOVA import figures as figureModule
@@ -25,32 +27,34 @@ from NOVA import materials as materialModule
 # -- Palette -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-background = '#1a1e2a'
-panel      = '#222735'
-ink        = '#E8E6E1'
-muted      = '#8B93A7'
+background = showcasePalette.background
+panel      = showcasePalette.panel
+ink        = showcasePalette.ink
+muted      = showcasePalette.muted
 
-# One hue per wall alloy. A sampled colormap put the four copper alloys within a few
+# One color per wall alloy. A sampled colormap put the four copper alloys within a few
 # degrees of each other, which is unreadable on a ten-series axis, so the assignment is
-# explicit: warm for the coppers, cool for everything else.
+# explicit: the palette's warm metals for the coppers, its cool ones for everything else.
+# The palette's orange and cyan sit too close to its copper and green to tell apart on a thin
+# line, so the second alloy of each family takes a lighter step of the first's hue instead.
 materialColors = {
-    'GRCop-42':    '#E0975A',
-    'CuCrZr':      '#F4C95D',
-    'OFHC Copper': '#FF7043',
-    'NARloy-Z':    '#B5651D',
-    'AlSi10Mg':    '#6BA3D6',
-    'Al 6061-T6':  '#9BD1E5',
-    'Inconel 718': '#86C06C',
-    'Inconel 625': '#4F9D69',
-    '316L':        '#C792EA',
-    'Ti-6Al-4V':   '#D8DEE9',
+    'GRCop-42':    showcasePalette.copper,
+    'CuCrZr':      showcasePalette.yellow,
+    'OFHC Copper': showcasePalette.mix(showcasePalette.copper, showcasePalette.ink, 0.5),
+    'NARloy-Z':    showcasePalette.red,
+    'AlSi10Mg':    showcasePalette.blue,
+    'Al 6061-T6':  showcasePalette.mix(showcasePalette.blue, showcasePalette.ink, 0.55),
+    'Inconel 718': showcasePalette.green,
+    'Inconel 625': showcasePalette.muted,
+    '316L':        showcasePalette.purple,
+    'Ti-6Al-4V':   showcasePalette.ink,
 }
 
 plt.rcParams.update({
     'figure.facecolor': background, 'axes.facecolor': panel,
     'savefig.facecolor': background, 'text.color': ink,
     'axes.labelcolor': ink, 'axes.edgecolor': muted,
-    'xtick.color': muted, 'ytick.color': muted, 'grid.color': '#333A4D',
+    'xtick.color': muted, 'ytick.color': muted, 'grid.color': showcasePalette.gridColor,
     'axes.grid': True, 'grid.alpha': 0.4, 'font.size': 9,
     'axes.titlesize': 11, 'axes.titleweight': 'bold', 'legend.framealpha': 0.0,
 })
