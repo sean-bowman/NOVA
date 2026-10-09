@@ -1096,7 +1096,9 @@ def channelMeshFigure(nozzle):
 
     '''
 
-    if getattr(nozzle, 'xChannel', None) is None:
+    # A run without a jacket leaves the channel as an empty array rather than None
+    channel = getattr(nozzle, 'xChannel', None)
+    if channel is None or np.ndim(channel) < 2 or np.size(channel) == 0:
         return None
 
     colors = _cyclicHSVColors(nozzle.numCrossSections)

@@ -54,6 +54,36 @@ def testTheSchemaCarriesEveryShippedKeyExactlyOnce():
     assert set(keys) - shipped == set(), 'the schema carries keys the shipped configuration does not'
     assert shipped - set(keys) == set(), 'the shipped configuration carries keys the schema does not'
 
+def testTheRunnerLoadsNovaAndRedirectsItsOutput(tmp_path):
+    '''
+    The runner patches names it expects NOVA's modules to carry, so a name that moves inside NOVA
+    breaks the GUI at the first press of Generate and nowhere else. Loading NOVA the way the runner
+    does catches it here. The loader patches the Nozzle class, a module's tqdm and matplotlib's
+    settings for the whole process, so each is put back for the tests that follow.
+    '''
+    import queue
+    import matplotlib
+    from NOVA import Nozzle
+    from novaGui.runner import PipelineRunner
+
+    # The class's own binding, if it has one rather than inheriting the method
+    savedOutputRoot = Nozzle.__dict__.get('_getOutputRoot')
+    try:
+        with matplotlib.rc_context():
+            _, nozzleClass = PipelineRunner(queue.Queue())._loadNova(str(tmp_path))
+        assert nozzleClass is Nozzle
+        assert Nozzle._getOutputRoot(None) == str(tmp_path)
+    finally:
+        if savedOutputRoot is not None:
+            Nozzle._getOutputRoot = savedOutputRoot
+        elif '_getOutputRoot' in Nozzle.__dict__:
+            del Nozzle._getOutputRoot
+        # The patched tqdm is a partial over the original, so the original is its func
+        volute = sys.modules.get('NOVA.Volute')
+        if volute is not None and getattr(volute, '_novaGuiTqdmPatched', False):
+            volute.tqdm = volute.tqdm.func
+            del volute._novaGuiTqdmPatched
+
 def testTheBrandingImagesShipAtEverySizeOnATransparentGround():
     '''
     Every icon frame the window hands Tk exists at its own size, the Windows icon file carries all

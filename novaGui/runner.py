@@ -29,9 +29,10 @@ import importlib
 import threading
 import traceback
 
-# Set before NOVA is imported anywhere. The patch in _loadNova only reaches the plot name
-# bound in NOVA.Nozzle, and three other modules bind it themselves; this reaches all of
-# them, and selects the matplotlib backend at the moment that choice is still free.
+# Set before NOVA is imported anywhere. While it is set NOVA writes every figure and opens none
+# of them: plotly writes its HTML without opening a browser tab per figure, and NOVA.figures
+# selects a non-interactive matplotlib backend at import, while that choice is still free.
+# Exporting NOVA_HEADLESS=0 before launching puts the windows back.
 os.environ.setdefault('NOVA_HEADLESS', '1')
 
 from . import theme
@@ -52,7 +53,6 @@ figureFiles = {
 }
 htmlFiles = {
     'channelMesh':  'threeChannelMeshViewInterfaced.html',
-    'jacket':       'regenJacketView.html',
     'volute':       'VoluteView.html',
     'heatTransfer': 'heatTransferModelOutput.html',
     # Plotly companions written by figures.exportInteractiveFigures.
@@ -269,12 +269,6 @@ class PipelineRunner:
         # fetched by name rather than read off the package.
         nozzleModule = importlib.import_module('NOVA.Nozzle')
         from NOVA import Nozzle as nozzleClass
-
-        # plotly.offline.plot defaults to opening a browser tab per figure.
-        if not getattr(nozzleModule, '_novaGuiPlotPatched', False):
-            realPlot = nozzleModule.plot
-            nozzleModule.plot = functools.partial(realPlot, auto_open = False)
-            nozzleModule._novaGuiPlotPatched = True
 
         # Silence progress bars in every NOVA module that binds tqdm by name.
         for moduleName in ('NOVA.Nozzle', 'NOVA.Volute'):
