@@ -116,7 +116,7 @@ On Windows, `novaGui.bat` launches it with no console window. Run `python -m nov
 
 ### Design
 
-The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Every field in the schema sits in a collapsible section. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, and **Reset to example** returns to the shipped nozzle.
+The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, and **Reset to example** returns to the shipped nozzle.
 
 ![Design tab](docs/images/gui/designDark.png)
 

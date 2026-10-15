@@ -28,6 +28,17 @@ Each field is a Field record:
                returns False
     synthetic  True for a form-only helper that does not map to a config key; the
                config tab drops it on the way out. No field is one at present.
+    advanced   True puts the field in its group's Advanced settings fold, which
+               opens on demand. Every advanced field defaults to the shipped
+               nozzle's value, so a design can be made from the main fields alone.
+
+A Selector is one form row standing for several keys that are alternatives to one
+another: thrust or engine mass flow, an area ratio or an exit pressure. Its first
+column picks an Option, the second takes that option's value and the third its
+unit. Choosing an option writes the value to the option's key, any constants the
+option fixes (a truncation mode), and None to every other key the row holds, so
+two alternatives cannot both be set. The Fields a Selector holds are its members;
+they carry the keys, kinds, help and defaults as any other field does.
 
 Groups carry `collapsed`, `showWhen` (hide the whole section) and `expandWhen`
 (auto-open the section when the predicate first becomes true).
@@ -64,6 +75,7 @@ class Field:
     editable: bool = False
     showWhen: object = None
     synthetic: bool = False
+    advanced: bool = False
     dimension: object = None      # set in __post_init__ from `unit`; drives the unit dropdown
 
     def __post_init__(self):
@@ -119,11 +131,79 @@ class Field:
         return '' if value is None else str(value)
 
 @dataclass
+class Option:
+
+    '''
+
+    One choice in a Selector row.
+
+    '''
+
+    label: str                    # what the first column shows
+    key: str = None               # config key the entered value is written to; None takes no value
+    unit: str = None              # unit of the entered value; None takes the member field's own
+    sets: dict = field(default_factory = dict)    # config keys the choice fixes, such as a mode
+
+@dataclass
+class Selector:
+
+    '''
+
+    One form row for several alternative config keys: an option dropdown, a value and its unit.
+
+    '''
+
+    name: str                     # what messages call the row
+    members: list                 # the Fields the row holds
+    options: list                 # Option records, in dropdown order
+    help: str = ''
+    blank: str = ''               # option shown when a config sets none of the row's values
+    required: bool = True         # False lets the chosen option's value stay blank
+    advanced: bool = False
+    showWhen: object = None
+
+    def member(self, key: str) -> Field:
+
+        '''
+
+        The member Field for a config key.
+
+        '''
+
+        for spec in self.members:
+            if spec.key == key:
+                return spec
+        raise KeyError(key)
+
+    def unitFor(self, option: Option) -> str:
+
+        '''
+
+        The unit an option's value is entered in: its own, else its member field's, else none.
+
+        '''
+
+        if option.unit is not None:
+            return option.unit
+        return self.member(option.key).unit if option.key else ''
+
+    def keys(self) -> list:
+
+        '''
+
+        Every config key the row writes, in member order.
+
+        '''
+
+        return [spec.key for spec in self.members]
+
+@dataclass
 class Group:
 
     '''
 
-    A titled, collapsible block of fields in the config tab.
+    A titled, collapsible block of fields in the config tab. `fields` holds Field and Selector
+    records in form order; advanced ones go to the group's Advanced settings fold.
 
     '''
 
@@ -172,9 +252,6 @@ def _entrainmentModelOn(config: dict) -> bool:
     return _filmCoolingOn(config) \
            and config.get('filmCoolingModel') == 'sp8124Entrainment'
 
-def _truncationNeedsValue(config: dict) -> bool:
-    return config.get('regenTruncationType') in ('temp', 'er')
-
 def _searchedContour(config: dict) -> bool:
     return config.get('divergingSectionType') in ('top', 'toc')
 
@@ -215,8 +292,6 @@ materialChoices = [
 groups = [
 
     Group('Contour Definition', [
-        Field('numContourPoints', 'Contour points', 'int', default = 100,
-              help = 'Number of points in the resampled wall contour.'),
         Field('divergingSectionType', 'Diverging section type', 'choice',
               choices = [('Truncated ideal contour (tic)', 'tic'),
                          ('Thrust-optimized parabola (top)', 'top'),
@@ -225,48 +300,65 @@ groups = [
               help = 'tic and top are method-of-characteristics contours evaluated directly; toc '
                      'searches over them for the shortest length at the requested performance. '
                      'cone is a straight 15 degree half-angle cone.'),
-        Field('divergingSectionDesignVariables', 'Design vector', 'text', default = None,
-              showWhen = _searchedContour,
-              help = 'Pins a thrust-optimized wall instead of searching for one: four numbers, '
-                     'the inflection and exit wall angles in degrees then the inflection and '
-                     'exit tensions, separated by commas. Blank runs the search.'),
         Field('chamberDiameter', 'Chamber outer diameter', 'float', default = 0.18, unit = 'm',
               help = 'Outer diameter of the chamber wall at the converging inlet. Sets the contraction ratio.'),
-        Field('convergingSectionAngle', 'Converging wall angle at throat', 'float', default = 30.0, unit = 'deg',
-              help = 'Wall angle of the converging section where it meets the throat.'),
-        Field('Lstar', 'Characteristic length L*', 'float', default = 1.0, unit = 'm',
-              help = 'Chamber volume over throat area, injector face to throat. Sets the cylindrical '
-                     'barrel length after the converging section volume is subtracted. Mutually '
-                     'exclusive with chamber barrel length. The contour is resampled at equal arc '
-                     'length, so a long barrel takes points from the diverging section: raise the '
-                     'contour point count to compensate.'),
-        Field('chamberLength', 'Chamber barrel length', 'float', default = None, unit = 'm',
-              help = 'Cylindrical chamber length, specified directly instead of through L*. '
-                     'Leave blank to derive it from L*; set to 0 for no barrel.'),
-        Field('lengthFraction', 'Length fraction', 'floatText', default = 0.8,
+        Selector('Chamber length', [
+            Field('Lstar', 'Characteristic length L*', 'float', default = 1.0, unit = 'm',
+                  help = 'Chamber volume over throat area, injector face to throat. Sets the cylindrical '
+                         'barrel length after the converging section volume is subtracted. The contour '
+                         'is resampled at equal arc length, so a long barrel takes points from the '
+                         'diverging section: raise the contour point count to compensate.'),
+            Field('chamberLength', 'Chamber barrel length', 'float', default = None, unit = 'm',
+                  help = 'Cylindrical barrel length, given directly instead of through L*. Zero or '
+                         'blank builds no barrel.'),
+            ], options = [
+                Option('Characteristic length L*', key = 'Lstar'),
+                Option('Chamber barrel length', key = 'chamberLength'),
+            ], blank = 'Chamber barrel length', required = False,
+            help = 'The cylindrical chamber barrel ahead of the converging section, sized through '
+                   'the characteristic length L* or given as a length directly. Blank builds no barrel.'),
+        Field('lengthFraction', 'Length fraction', 'floatText', advanced = True, default = 0.8,
               help = 'Truncated ideal contour length as a fraction of a 15 deg conical nozzle of '
                      'the same area ratio, which is how NASA SP-8120 defines percent bell. Any '
                      'text instead of a number, such as optimize, searches for the length fraction '
                      'that maximizes the thrust coefficient.'),
-        Field('numCharacteristics', 'Characteristics', 'int', default = 50,
+        Field('divergingSectionDesignVariables', 'Design vector', 'text', advanced = True,
+              default = None, showWhen = _searchedContour,
+              help = 'Pins a thrust-optimized wall instead of searching for one: four numbers, '
+                     'the inflection and exit wall angles in degrees then the inflection and '
+                     'exit tensions, separated by commas. Blank runs the search.'),
+        Field('convergingSectionAngle', 'Converging wall angle at throat', 'float', advanced = True,
+              default = 30.0, unit = 'deg',
+              help = 'Wall angle of the converging section where it meets the throat.'),
+        Field('throatInletCurvature', 'Throat inlet curvature', 'float', advanced = True,
+              default = 1.5,
+              help = 'Radius of curvature of the throat inlet arc, as a multiple of the throat '
+                     'radius. NASA SP-8120 takes this above 0.6.'),
+        Field('throatOutletCurvature', 'Throat outlet curvature', 'float', advanced = True,
+              default = 0.382,
+              help = 'Radius of curvature of the throat outlet arc, as a multiple of the throat '
+                     'radius. The default is the Rao value.'),
+        Field('numContourPoints', 'Contour points', 'int', advanced = True, default = 100,
+              help = 'Number of points in the resampled wall contour.'),
+        Field('numCharacteristics', 'Characteristics', 'int', advanced = True, default = 50,
               help = 'Characteristics launched from the throat arc, which sets the mesh resolution '
                      'of the whole solve. At the default the exit wall angle carries about 2 '
                      'percent of mesh error and the thrust coefficient about 1 percent.'),
-        Field('transonicModel', 'Transonic model', 'choice',
+        Field('transonicModel', 'Transonic model', 'choice', advanced = True,
               choices = [('Sauer', 'sauer'), ('Second order', 'secondOrder'),
                          ('Small radius', 'smallRadius')], default = 'sauer',
               help = 'Which starting line the characteristics net is launched from. Sauer is the '
                      'first-order transonic solution and is the default. The second-order and '
                      'small-radius lines are the ones to reach for at a sharp throat, where the '
                      'Sauer expansion is weakest.'),
-        Field('nearWallStateModel', 'Near-wall state', 'choice',
+        Field('nearWallStateModel', 'Near-wall state', 'choice', advanced = True,
               choices = [('One-dimensional', 'oneDimensional'), ('Transonic', 'transonic')],
               default = 'oneDimensional',
               help = 'Where the converging wall state comes from. One-dimensional puts the sonic '
                      'point at the geometric throat. Transonic carries the starting line\'s own '
                      'solution over the entrant arc, so the wall goes sonic ahead of the throat '
                      'and the state joins the characteristics net without a jump.'),
-        Field('gammaModel', 'Ratio of specific heats', 'choice',
+        Field('gammaModel', 'Ratio of specific heats', 'choice', advanced = True,
               choices = [('Chamber value', 'chamber'),
                          ('Effective, fitted to the design point', 'effective')],
               default = 'chamber',
@@ -278,24 +370,6 @@ groups = [
                      'threefold and biases the gas temperature cold, which undersizes a '
                      'cooling jacket. Choose it for contour and performance work, not for '
                      'a jacket. Both values are reported either way.'),
-        Field('throatInletCurvature', 'Throat inlet curvature', 'float', default = 1.5,
-              help = 'Radius of curvature of the throat inlet arc, as a multiple of the throat '
-                     'radius. NASA SP-8120 takes this above 0.6.'),
-        Field('throatOutletCurvature', 'Throat outlet curvature', 'float', default = 0.382,
-              help = 'Radius of curvature of the throat outlet arc, as a multiple of the throat '
-                     'radius. The default is the Rao value.'),
-        Field('regenTruncationType', 'Regen truncation method', 'choice',
-              choices = [('None (full contour)', 'none'), ('Wall temperature', 'temp'), ('Area ratio', 'er')],
-              default = 'none',
-              help = 'Split the regen-cooled section from a radiation-cooled extension by near-wall '
-                     'gas temperature or by area ratio. The cut point is entered below; ignored when '
-                     'the method is none.'),
-        Field('regenTruncationValue', 'Truncation value', 'float', default = None,
-              showWhen = _truncationNeedsValue,
-              help = 'Near-wall recovery temperature [K] where the regen section ends if the '
-                     'method is temperature, or the local area ratio if the method is area '
-                     'ratio. Recovery temperature stays near the stagnation temperature along a '
-                     'nozzle, so it spans only a few hundred kelvin over the whole bell.'),
     ]),
 
     Group('Combustion', [
@@ -307,18 +381,34 @@ groups = [
               help = "Oxidizer to fuel mass ratio, or 'maxisp' to let CEA optimize it."),
         Field('chamberPressure', 'Chamber pressure', 'float', default = 6894757.0, unit = 'Pa',
               help = 'Chamber stagnation pressure. 6.895 MPa is 1000 psia.'),
-        Field('fuelInitialTemperature', 'Fuel inlet temperature', 'float', default = 20.27, unit = 'K',
+        Selector('Engine size', [
+            Field('thrust', 'Thrust', 'float', default = 100000.0, unit = 'N',
+                  help = 'Thrust the engine is sized to deliver.'),
+            Field('engineMassFlow', 'Engine mass flow', 'float', default = None, unit = 'kg/s',
+                  help = 'Total propellant mass flow the engine is sized to pass.'),
+            ], options = [
+                Option('Thrust', key = 'thrust'),
+                Option('Engine mass flow', key = 'engineMassFlow'),
+            ], blank = 'Thrust',
+            help = 'What sizes the engine: the thrust it delivers or the propellant flow it passes.'),
+        Selector('Nozzle expansion', [
+            Field('expansionRatio', 'Expansion ratio', 'float', default = 40.0,
+                  help = 'One-dimensional CEA area ratio the wall is cut at.'),
+            Field('targetExitPressure', 'Target exit pressure', 'float', default = None, unit = 'Pa',
+                  help = 'Design exit static pressure. CEA resolves it to the area ratio that '
+                         'delivers it, and the wall is cut there.'),
+            ], options = [
+                Option('Expansion ratio', key = 'expansionRatio'),
+                Option('Target exit pressure', key = 'targetExitPressure'),
+            ], blank = 'Expansion ratio',
+            help = 'Where the nozzle is cut: at a one-dimensional area ratio, or at the area ratio '
+                   'that expands to a design exit pressure.'),
+        Field('fuelInitialTemperature', 'Fuel inlet temperature', 'float', advanced = True,
+              default = 20.27, unit = 'K',
               help = 'Fuel temperature at the injector.'),
-        Field('oxidizerInitialTemperature', 'Oxidizer inlet temperature', 'float', default = 90.17, unit = 'K',
+        Field('oxidizerInitialTemperature', 'Oxidizer inlet temperature', 'float', advanced = True,
+              default = 90.17, unit = 'K',
               help = 'Oxidizer temperature at the injector.'),
-        Field('thrust', 'Thrust', 'float', default = 100000.0, unit = 'N',
-              help = 'Target thrust. Specify this OR engine mass flow, leave the other blank.'),
-        Field('engineMassFlow', 'Engine mass flow', 'float', default = None, unit = 'kg/s',
-              help = 'Total propellant mass flow. Specify this OR thrust, leave the other blank.'),
-        Field('expansionRatio', 'Expansion ratio', 'float', default = 40.0,
-              help = 'One-dimensional CEA area ratio. Specify this OR target exit pressure, leave the other blank.'),
-        Field('targetExitPressure', 'Target exit pressure', 'float', default = None, unit = 'Pa',
-              help = 'Design exit static pressure. Specify this OR expansion ratio, leave the other blank.'),
     ]),
 
     Group('Plume', [
@@ -336,9 +426,30 @@ groups = [
                      'structure.'),
     ]),
 
-    Group('Cooling Channels', [
+    Group('Regenerative Cooling', [
         Field('makeCoolingChannels', 'Generate cooling channels', 'bool', default = False,
               help = 'Build the regenerative cooling jacket and run the heat transfer model.'),
+        Selector('Regen truncation', [
+            Field('regenTruncationType', 'Regen truncation method', 'choice',
+                  choices = [('None (full contour)', 'none'), ('Wall temperature', 'temp'), ('Area ratio', 'er')],
+                  default = 'none',
+                  help = 'How the regen-cooled section is cut from a radiation-cooled extension: not at '
+                         'all, by near-wall recovery temperature, or by area ratio.'),
+            Field('regenTruncationValue', 'Truncation value', 'float', default = None,
+                  help = 'Near-wall recovery temperature [K] where the regen section ends if the '
+                         'method is temperature, or the local area ratio if the method is area '
+                         'ratio. Recovery temperature stays near the stagnation temperature along a '
+                         'nozzle, so it spans only a few hundred kelvin over the whole bell.'),
+            ], options = [
+                Option('No truncation (full contour)', sets = {'regenTruncationType': 'none'}),
+                Option('Truncate at recovery temperature', key = 'regenTruncationValue', unit = 'K',
+                       sets = {'regenTruncationType': 'temp'}),
+                Option('Truncate at area ratio', key = 'regenTruncationValue', unit = '',
+                       sets = {'regenTruncationType': 'er'}),
+            ], blank = 'No truncation (full contour)',
+            help = 'Where the regeneratively cooled section ends and a radiation-cooled extension '
+                   'takes over: at the full contour, where the near-wall recovery temperature falls '
+                   'to a value, or at a local area ratio.'),
         Field('material', 'Wall material', 'choice',
               choices = materialChoices, default = 'GRCop-42', editable = True,
               showWhen = _coolingOn,
@@ -696,11 +807,16 @@ def allFields() -> list:
 
     '''
 
-    Every Field across all groups, in form order, including synthetic helpers.
+    Every Field across all groups, in form order, including synthetic helpers and the members of
+    each Selector.
 
     '''
 
-    return [f for group in groups for f in group.fields]
+    flat = []
+    for group in groups:
+        for item in group.fields:
+            flat += item.members if isinstance(item, Selector) else [item]
+    return flat
 
 def _applyShippedDefaults() -> None:
 

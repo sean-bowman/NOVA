@@ -12,9 +12,18 @@ no gradients, no glows. Each picture is drawn at four times its size and reduced
 in premultiplied alpha, so its curved edges are antialiased without the ringing a sharper filter
 leaves on a flat edge.
 
-A transparent corner shows the ttk style's background, not the widget behind it, so every style
-built on these images has to carry the color of the container it sits on. `theme.py` does that by
-container prefix.
+Every picture is flattened onto the color of the container it sits on, its ground, so it has no
+transparency left. Tk 8.6 on Windows draws a photo image with partial transparency by reading the
+screen back and blending it in software, on every expose; an opaque one is a plain copy. On the
+Design form that blend was two thirds of the cost of a scroll step. A ground is a fixed color, so
+an element that appears on two containers has an image for each, and `theme.py` registers each
+under its container prefix ('' on the page, 'Card' on a card, 'Header' on the header).
+
+The pictures behind controls and cards are also drawn wide. ttk fills a widget by tiling the
+middle once per middle-width, and each tile is a separate draw: a field one tile wide draws in a
+fraction of the time of one five tiles wide. They are widened by stretching the flat middle and
+edges of a small drawing (`_widen`), which is exact for a flat fill and avoids supersampling a
+large picture.
 
 `buildImages` returns every image a mode needs as Tk PhotoImages, keyed by role. They are kept
 referenced on the Tk root, because an image element whose picture is collected draws nothing.
@@ -42,6 +51,53 @@ def _rgba(color: str, alpha: int = 255) -> tuple:
     color = color.lstrip('#')
 
     return tuple(int(color[index:index + 2], 16) for index in (0, 2, 4)) + (alpha,)
+
+def _flatten(image: Image.Image, ground: str) -> Image.Image:
+
+    '''An image composited onto a solid ground color, with no transparency left.'''
+
+    flat = Image.new('RGBA', image.size, _rgba(ground))
+    flat.alpha_composite(image.convert('RGBA'))
+
+    return flat.convert('RGB')
+
+def _widen(image: Image.Image, border, width: int, height: int) -> Image.Image:
+
+    '''
+
+    A nine-slice picture at a larger size: corners kept, edges and middle stretched. Exact for a
+    picture whose edges are uniform along their length and whose middle is one color, which every
+    flat rounded rectangle here is.
+
+    Parameters:
+    -----------
+    image : PIL.Image.Image
+        The small drawing.
+    border : int or tuple
+        The nine-slice border, one value or (left, top, right, bottom) [px].
+    width, height : int
+        The size wanted [px]; a size smaller than the drawing's keeps the drawing's.
+
+    '''
+
+    left, top, right, bottom = (border,) * 4 if isinstance(border, int) else border
+    sourceWidth, sourceHeight = image.size
+    width, height = max(width, sourceWidth), max(height, sourceHeight)
+
+    columns = ((0, left, 0, left), (left, sourceWidth - right, left, width - right),
+               (sourceWidth - right, sourceWidth, width - right, width))
+    rows = ((0, top, 0, top), (top, sourceHeight - bottom, top, height - bottom),
+            (sourceHeight - bottom, sourceHeight, height - bottom, height))
+
+    wide = Image.new(image.mode, (width, height))
+    for sourceLeft, sourceRight, left0, right0 in columns:
+        for sourceTop, sourceBottom, top0, bottom0 in rows:
+            piece = image.crop((sourceLeft, sourceTop, sourceRight, sourceBottom))
+            if piece.size != (right0 - left0, bottom0 - top0):
+                piece = piece.resize((right0 - left0, bottom0 - top0), Image.NEAREST)
+            wide.paste(piece, (left0, top0))
+
+    return wide
 
 def _reduce(image: Image.Image) -> Image.Image:
 
@@ -278,6 +334,7 @@ def _sizes(scale: float) -> dict:
 
     return {'px': px, 'control': control, 'card': card, 'line': max(1, int(scale)),
             'side': 2 * (control + 1) + px(64), 'cardSide': 2 * (card + 1) + px(160),
+            'controlWide': px(560), 'navWide': px(320), 'cardWide': (px(1400), px(480)),
             'tabPadX': px(4), 'tabPadY': px(2), 'barWidth': px(48), 'barHeight': px(8)}
 
 def elementBorders(scale: float) -> dict:
@@ -303,6 +360,12 @@ def elementBorders(scale: float) -> dict:
         'cardMinimum':    2 * cardCorner + 2,
         'tabMinimum':     (2 * (corner + sizes['tabPadX']) + 2, 2 * (corner + sizes['tabPadY']) + 2),
     }
+
+def _role(prefix: str, name: str) -> str:
+
+    '''An image role under a container prefix: thumb, cardThumb, headerThumb.'''
+
+    return name if not prefix else prefix + name[0].upper() + name[1:]
 
 def drawImages(colors: dict, scale: float) -> dict:
 
@@ -332,69 +395,93 @@ def drawImages(colors: dict, scale: float) -> dict:
     hover = _mix(colors['surface2'], colors['text'], 0.08)
     hoverHeader = _mix(colors['surface'], colors['text'], 0.06)
 
-    images = {
-        # Buttons on the page and on cards, and on the header strip, where the page fill would vanish
-        'button':              roundedRect(side, side, control, colors['surface2'], colors['border'], line),
-        'button.active':       roundedRect(side, side, control, hover, colors['border'], line),
-        'button.pressed':      roundedRect(side, side, control, colors['border'], colors['border'], line),
-        'button.disabled':     roundedRect(side, side, control, colors['surface'], colors['border'], line),
-        'headerButton':        roundedRect(side, side, control, colors['surface'], colors['border'], line),
-        'headerButton.active': roundedRect(side, side, control, hoverHeader, colors['border'], line),
-        'headerButton.pressed': roundedRect(side, side, control, colors['border'], colors['border'], line),
-        'accent':              roundedRect(side, side, control, colors['accent'], colors['accent'], line),
-        'accent.active':       roundedRect(side, side, control, colors['accentDim'], colors['accentDim'], line),
-        'accent.disabled':     roundedRect(side, side, control, colors['surface2'], colors['border'], line),
+    bg, surface, surface2, edge = colors['bg'], colors['surface'], colors['surface2'], colors['border']
+    borders = elementBorders(scale)
+    cardWidth, cardHeight = sizes['cardWide']
+    wideControl = (sizes['controlWide'], side, borders['control'])
+    wideNav = (sizes['navWide'], side, borders['control'])
+    wideCard = (cardWidth, cardHeight, borders['card'])
 
-        # Fields: filled with the page color on a card, with the card color on the page
-        'field':               roundedRect(side, side, control, colors['surface'], colors['border'], line),
-        'field.hover':         roundedRect(side, side, control, colors['surface'], colors['textDim'], line),
-        'field.focus':         roundedRect(side, side, control, colors['surface'], colors['accent'], line),
-        'field.disabled':      roundedRect(side, side, control, colors['bg'], colors['border'], line),
-        'cardField':           roundedRect(side, side, control, colors['bg'], colors['border'], line),
-        'cardField.hover':     roundedRect(side, side, control, colors['bg'], colors['textDim'], line),
-        'cardField.focus':     roundedRect(side, side, control, colors['bg'], colors['accent'], line),
-        'cardField.disabled':  roundedRect(side, side, control, colors['surface'], colors['border'], line),
-        'arrow':               chevron(px(14), colors['textMuted']),
-        'arrow.active':        chevron(px(14), colors['accent']),
-        'arrowUp':             chevron(px(14), colors['textMuted']).rotate(180),
-        'arrowUp.active':      chevron(px(14), colors['accent']).rotate(180),
+    def rect(fill, outline = None):
+        return roundedRect(side, side, control, fill, outline, line)
 
-        # Cards and the inset panel inside one
-        'card':                roundedRect(cardSide, cardSide, card, colors['surface'], colors['border'], line),
-        'inset':               roundedRect(cardSide, cardSide, card, colors['bg'], colors['border'], line),
+    def thumb(fill, vertical = True):
+        if vertical:
+            return roundedRect(px(10), px(18), px(3), fill, None, inset = (px(2), px(1), px(2), px(1)))
+        return roundedRect(px(18), px(10), px(3), fill, None, inset = (px(1), px(2), px(1), px(2)))
 
-        # Notebook tabs and the View tab's navigation: pills with transparent gaps around them
-        'tab':                 roundedRect(tabWidth, tabHeight, control, None, None, inset = tabInset),
-        'tab.active':          roundedRect(tabWidth, tabHeight, control, colors['surface2'], None, inset = tabInset),
-        'tab.selected':        roundedRect(tabWidth, tabHeight, control, colors['accentMuted'], None, inset = tabInset),
-        'nav':                 roundedRect(side, side, control, None, None),
-        'nav.active':          roundedRect(side, side, control, colors['surface2'], None),
-        'nav.selected':        roundedRect(side, side, control, colors['accentMuted'], None),
+    def check(fill, outline, mark = None, dash = False):
+        return checkbox(px(16), fill, outline, mark, dash = dash, gap = px(6))
 
-        # Progress bar trough and bar, scrollbar thumbs
-        'trough':              roundedRect(barWidth, barHeight, px(4), colors['surface2'], None),
-        'bar':                 roundedRect(barWidth, barHeight, px(4), colors['accent'], None),
-        'thumb':               roundedRect(px(10), px(18), px(3), colors['border'], None, inset = (px(2), px(1), px(2), px(1))),
-        'thumb.active':        roundedRect(px(10), px(18), px(3), colors['textDim'], None, inset = (px(2), px(1), px(2), px(1))),
-        'hthumb':              roundedRect(px(18), px(10), px(3), colors['border'], None, inset = (px(1), px(2), px(1), px(2))),
-        'hthumb.active':       roundedRect(px(18), px(10), px(3), colors['textDim'], None, inset = (px(1), px(2), px(1), px(2))),
+    # Each drawing with the ground it is flattened onto (None keeps its transparency) and the size it
+    # is widened to (None keeps its own). A family that appears on more than one container is drawn
+    # once and flattened onto each.
+    entries = []
 
-        # Check indicators
-        'check':               checkbox(px(16), colors['bg'], colors['border'], gap = px(6)),
-        'check.active':        checkbox(px(16), colors['bg'], colors['accent'], gap = px(6)),
-        'check.selected':      checkbox(px(16), colors['accent'], colors['accent'], colors.get('onAccent', colors['bg']),
-                                        gap = px(6)),
-        'check.alternate':     checkbox(px(16), colors['bg'], colors['border'], colors['textMuted'], dash = True, gap = px(6)),
-        'check.disabled':      checkbox(px(16), colors['surface'], colors['border'], gap = px(6)),
+    buttons = {'': rect(surface2, edge), '.active': rect(hover, edge), '.pressed': rect(edge, edge),
+               '.disabled': rect(surface, edge)}
+    for state, drawing in buttons.items():
+        entries += [('button' + state, drawing, bg, wideControl),
+                    ('cardButton' + state, drawing, surface, wideControl)]
+    headerButtons = {'': rect(surface, edge), '.active': rect(hoverHeader, edge), '.pressed': rect(edge, edge)}
+    for state, drawing in headerButtons.items():
+        entries.append(('headerButton' + state, drawing, surface2, wideControl))
+    accents = {'': rect(colors['accent'], colors['accent']), '.active': rect(colors['accentDim'], colors['accentDim']),
+               '.disabled': rect(surface2, edge)}
+    for state, drawing in accents.items():
+        entries.append(('accent' + state, drawing, bg, wideControl))
 
-        # Icons
-        'info':                infoIcon(px(14), colors['textMuted']),
-        'info.hover':          infoIcon(px(14), colors['accent']),
-        'sun':                 sunIcon(px(18), colors['textMuted']),
-        'moon':                moonIcon(px(18), colors['textMuted']),
-        'glyph.closed':        nozzleGlyph(px(18), colors['accent']),
-        'glyph.open':          nozzleGlyph(px(18), colors['accent'], vertical = True),
-    }
+    # Fields: filled with the card color on the page, with the page color on a card. A dropdown
+    # arrow sits on the field's fill.
+    for role, fill, ground in (('field', surface, bg), ('cardField', bg, surface)):
+        entries += [(role, rect(fill, edge), ground, wideControl),
+                    (role + '.hover', rect(fill, colors['textDim']), ground, wideControl),
+                    (role + '.focus', rect(fill, colors['accent']), ground, wideControl),
+                    (role + '.disabled', rect(ground, edge), ground, wideControl)]
+    for role, ground in (('arrow', surface), ('cardArrow', bg)):
+        entries += [(role, chevron(px(14), colors['textMuted']), ground, None),
+                    (role + '.active', chevron(px(14), colors['accent']), ground, None)]
+
+    # Cards on the page, and the inset panel inside a card
+    entries += [('card', roundedRect(cardSide, cardSide, card, surface, edge, line), bg, wideCard),
+                ('inset', roundedRect(cardSide, cardSide, card, bg, edge, line), surface, wideCard)]
+
+    # Notebook tabs on the page and the View tab's navigation on its card: pills, with gaps around
+    # the tabs so neighbors do not touch
+    for state, fill in (('', None), ('.active', surface2), ('.selected', colors['accentMuted'])):
+        entries += [('tab' + state, roundedRect(tabWidth, tabHeight, control, fill, None, inset = tabInset), bg, None),
+                    ('nav' + state, roundedRect(side, side, control, fill, None), surface, wideNav)]
+
+    # Progress bar trough and bar on the run bar, scrollbar thumbs on the page and on cards
+    entries += [('trough', roundedRect(barWidth, barHeight, px(4), surface2, None), bg, None),
+                ('bar', roundedRect(barWidth, barHeight, px(4), colors['accent'], None), bg, None)]
+    for prefix, ground in (('', bg), ('card', surface)):
+        for state, fill in (('', edge), ('.active', colors['textDim'])):
+            entries += [(_role(prefix, 'thumb') + state, thumb(fill), ground, None),
+                        (_role(prefix, 'hthumb') + state, thumb(fill, vertical = False), ground, None)]
+
+    # Check indicators on the page, on cards and on the header
+    checks = {'': check(bg, edge), '.active': check(bg, colors['accent']),
+              '.selected': check(colors['accent'], colors['accent'], colors.get('onAccent', bg)),
+              '.alternate': check(bg, edge, colors['textMuted'], dash = True), '.disabled': check(surface, edge)}
+    for prefix, ground in (('', bg), ('card', surface), ('header', surface2)):
+        for state, drawing in checks.items():
+            entries.append((_role(prefix, 'check') + state, drawing, ground, None))
+
+    # Icons on cards. The theme switch's icon keeps its transparency: it sits on a button whose fill
+    # changes under the pointer, and it is one widget outside the form.
+    entries += [('info', infoIcon(px(14), colors['textMuted']), surface, None),
+                ('info.hover', infoIcon(px(14), colors['accent']), surface, None),
+                ('glyph.closed', nozzleGlyph(px(18), colors['accent']), surface, None),
+                ('glyph.open', nozzleGlyph(px(18), colors['accent'], vertical = True), surface, None),
+                ('sun', sunIcon(px(18), colors['textMuted']), None, None),
+                ('moon', moonIcon(px(18), colors['textMuted']), None, None)]
+
+    images = {}
+    for role, drawing, ground, wide in entries:
+        if wide is not None:
+            drawing = _widen(drawing, wide[2], wide[0], wide[1])
+        images[role] = drawing if ground is None else _flatten(drawing, ground)
 
     return images
 

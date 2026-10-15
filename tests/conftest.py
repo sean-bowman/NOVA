@@ -22,6 +22,8 @@ thing being debugged is a plot.
 imported pyplot already, before this file is read, in which case the environment variable arrives
 too late to choose the backend and only forcing it works.
 
+It also holds the fixtures more than one test module uses: a hidden Tk root for the GUI tests.
+
 Author: Sean Bowman
 
 '''
@@ -54,3 +56,33 @@ def closeFiguresAfterEveryTest():
     yield
 
     plt.close('all')
+
+@pytest.fixture
+def tkRoot():
+
+    '''
+
+    A hidden Tk root for the GUI tests, skipped where no display is available. The GUI theme is
+    put back to its default mode afterwards, since the theme module holds the active palette.
+
+    On Windows, creating a Tcl interpreter right after another was destroyed now and then fails
+    to find init.tcl, which says nothing about the display. The root is tried a few times before
+    the test is skipped, so a passing suite has run every GUI test.
+
+    '''
+
+    import tkinter as tk
+
+    for attempt in range(4):
+        try:
+            window = tk.Tk()
+            break
+        except tk.TclError as error:
+            if attempt == 3:
+                pytest.skip(f'no display for a Tk root: {error}')
+    window.withdraw()
+    yield window
+
+    from novaGui import theme
+    theme._bindPalette('dark')
+    window.destroy()

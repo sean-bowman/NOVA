@@ -7,6 +7,10 @@ The Design tab: the configuration form. Renders every field in configSchema as a
 inside collapsible section cards, round-trips the values to and from JSON in the NOVANozzle schema,
 and runs light cross-field checks before a solve. A fresh form is the shipped nozzle.
 
+Each section shows the fields a design is made from, then an Advanced settings fold, closed until
+opened, holding the rest at the shipped nozzle's values. Alternative inputs (thrust or mass flow,
+L* or barrel length) share one selector row, so only one of them can be set.
+
 Author: Sean Bowman
 Date:   08/28/2026
 
@@ -17,7 +21,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from .. import configSchema
 from .. import theme
-from ..widgets import ScrollableFrame, CollapsibleSection, FieldRow, MaterialInfoPanel, Tooltip
+from ..widgets import ScrollableFrame, CollapsibleSection, FieldRow, SelectorRow, MaterialInfoPanel, Tooltip
 
 def _designVector(entry) -> list | None:
 
@@ -95,6 +99,8 @@ class ConfigTab(ttk.Frame):
 
         self._app = app
         self._rows = {}                       # key -> FieldRow
+        self._selectors = []                  # SelectorRow, in form order
+        self._grids = []                      # every row grid, so their label columns match
         self._sections = {}                   # group title -> CollapsibleSection
         self._orderedSections = []            # [(Group, CollapsibleSection)] in form order
         self._groupVisible = {}               # group title -> bool
@@ -128,17 +134,25 @@ class ConfigTab(ttk.Frame):
             self._orderedSections.append((group, section))
             self._groupVisible[group.title] = True
 
-            grid = ttk.Frame(section.body, style = 'Surface.TFrame')
-            grid.pack(fill = 'x')
-            # The label column takes the slack, so the editors line up at a fixed width
-            grid.columnconfigure(0, weight = 0, minsize = theme.scaled(280))
-            grid.columnconfigure(3, weight = 1)
-            for rowIndex, fieldSpec in enumerate(group.fields):
-                self._rows[fieldSpec.key] = FieldRow(grid, fieldSpec, rowIndex)
+            mainGrid = self._grid(section.body)
+            advancedGrid = None
+            if any(item.advanced for item in group.fields):
+                fold = CollapsibleSection(section.body, 'Advanced settings', collapsed = True, nested = True)
+                fold.pack(fill = 'x', pady = (theme.scaled(6), 0))
+                advancedGrid = self._grid(fold.body)
 
-            if group.title == 'Cooling Channels':
+            for item in group.fields:
+                grid = advancedGrid if item.advanced else mainGrid
+                rowIndex = grid.grid_size()[1]
+                if isinstance(item, configSchema.Selector):
+                    self._selectors.append(SelectorRow(grid, item, rowIndex))
+                else:
+                    self._rows[item.key] = FieldRow(grid, item, rowIndex)
+
+            if group.title == 'Regenerative Cooling':
                 self._materialPanel = MaterialInfoPanel(section.body)
-                self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0))
+                self._materialAnchor = mainGrid
+                self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0), after = mainGrid)
 
         # Saving sits at the foot of the form, after the last section
         self._footer = ttk.Frame(scroller.body, style = 'TFrame', padding = (theme.scaled(10), theme.scaled(4),
@@ -148,11 +162,44 @@ class ConfigTab(ttk.Frame):
         Tooltip(saveButton, 'Write the form to a JSON configuration NOVA can run directly.  Ctrl+S')
         self._relayoutSections()
 
+        # One label column width and one editor width for every grid, the widest of each, so the
+        # editors of every section and fold line up in one column and end at one edge
+        self.update_idletasks()
+        labelWidth = max([theme.scaled(280)] + [row.labelWidth for row in self._allRows()])
+        editorWidth = max(row.editorWidth for row in self._allRows())
+        for grid in self._grids:
+            grid.columnconfigure(0, minsize = labelWidth)
+            grid.columnconfigure(1, minsize = editorWidth)
+
         # React to every edit: re-run dependency visibility and the cross-field checks.
-        for row in self._rows.values():
-            row._var.trace_add('write', lambda *_: self._onChange())
+        for row in self._allRows():
+            for variable in row.variables:
+                variable.trace_add('write', lambda *_: self._onChange())
         self._applyDynamics()
         self._refreshWarnings()
+
+    def _grid(self, master) -> ttk.Frame:
+
+        '''
+
+        A grid for a block of rows. The last column takes the slack, so the editors keep their own
+        width rather than stretching across the card.
+
+        '''
+
+        grid = ttk.Frame(master, style = 'Surface.TFrame')
+        grid.pack(fill = 'x')
+        grid.columnconfigure(0, weight = 0, minsize = theme.scaled(280))
+        grid.columnconfigure(3, weight = 1)
+        self._grids.append(grid)
+
+        return grid
+
+    def _allRows(self) -> list:
+
+        '''Every row in the form, field rows and selector rows alike.'''
+
+        return list(self._rows.values()) + self._selectors
 
     # -- Dynamic form behavior -- #
 
@@ -178,6 +225,11 @@ class ConfigTab(ttk.Frame):
                 result[key] = row.get()
             except ValueError:
                 result[key] = None
+        for row in self._selectors:
+            try:
+                result.update(row.get())
+            except ValueError:
+                result.update({key: None for key in row.spec.keys()})
         return result
 
     def _applyDynamics(self) -> None:
@@ -191,14 +243,14 @@ class ConfigTab(ttk.Frame):
 
         config = self._safeConfig()
 
-        for row in self._rows.values():
+        for row in self._allRows():
             predicate = row.spec.showWhen
             row.setVisible(predicate is None or bool(predicate(config)))
 
         if self._materialPanel is not None:
             if configSchema._coolingOn(config):
                 if not self._materialPanel.winfo_manager():
-                    self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0))
+                    self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0), after = self._materialAnchor)
                 self._materialPanel.setMaterial(config.get('material') or 'GRCop-42')
             elif self._materialPanel.winfo_manager():
                 self._materialPanel.pack_forget()
@@ -244,12 +296,12 @@ class ConfigTab(ttk.Frame):
 
         '''
 
-        raw = {key: row.get() for key, row in self._rows.items()}
-        # Drop any synthetic helper; none are currently defined, but a future
-        # one is folded into its real key the same way truncation used to be.
-        for fieldSpec in configSchema.allFields():
-            if fieldSpec.synthetic:
-                raw.pop(fieldSpec.key, None)
+        values = {key: row.get() for key, row in self._rows.items()}
+        for row in self._selectors:
+            values.update(row.get())
+        # In the schema's order, which is the shipped file's, and without any synthetic helper;
+        # none are currently defined
+        raw = {spec.key: values[spec.key] for spec in configSchema.allFields() if not spec.synthetic}
         # The design vector is one text entry in the form and a list of numbers in the config
         raw['divergingSectionDesignVariables'] = _designVector(raw.get('divergingSectionDesignVariables'))
         return raw
@@ -269,13 +321,13 @@ class ConfigTab(ttk.Frame):
                 config['divergingSectionDesignVariables'])
 
         defaults = configSchema.defaultConfig()
+        merged = {**defaults, **config}
         self._suspendDynamics = True
         try:
             for key, row in self._rows.items():
-                if key in config:
-                    row.set(config[key])
-                else:
-                    row.set(defaults.get(key, row.spec.default))
+                row.set(merged.get(key, row.spec.default))
+            for row in self._selectors:
+                row.set(merged)
         finally:
             self._suspendDynamics = False
         # A freshly loaded config may switch on a section that was collapsed;
@@ -302,19 +354,15 @@ class ConfigTab(ttk.Frame):
         def isSet(key) -> bool:
             return config.get(key) not in (None, '')
 
-        if isSet('thrust') == isSet('engineMassFlow'):
-            problems.append("Specify exactly one of 'Thrust' or 'Engine mass flow'.")
-        if isSet('expansionRatio') == isSet('targetExitPressure'):
-            problems.append("Specify exactly one of 'Expansion ratio' or 'Target exit pressure'.")
+        # A selector writes only the option chosen, so alternatives cannot both be set; what is
+        # left to check is that a required one was given a value
+        for row in self._selectors:
+            option = next(option for option in row.spec.options if option.label == row.selectedLabel)
+            if row.spec.required and row.visible and option.key is not None and not isSet(option.key):
+                problems.append(f"'{option.label}' needs a value.")
 
-        if isSet('Lstar') and isSet('chamberLength'):
-            problems.append("Specify at most one of 'Characteristic length L*' or 'Chamber barrel length'.")
         if isSet('Lstar') and float(config['Lstar']) <= 0:
             problems.append("'Characteristic length L*' must be positive.")
-
-        regenTruncationType = self._rows['regenTruncationType'].get()
-        if regenTruncationType in ('temp', 'er') and self._rows['regenTruncationValue'].get() is None:
-            problems.append("Truncation method needs a 'Truncation value'.")
 
         if config.get('makeCoolingChannels') in (True, 'on'):
             needed = ['hotWallThickness', 'shellThickness', 'coolantInitialTemperature', 'coolantInitialPressure']
@@ -351,12 +399,10 @@ class ConfigTab(ttk.Frame):
         else:
             self._warning.configure(text = '')
 
-        for key, row in self._rows.items():
-            row.highlight(False)
         flagged = ' '.join(problems).lower()
-        for key, row in self._rows.items():
-            if row.spec.label.lower() in flagged:
-                row.highlight(True)
+        for row in self._allRows():
+            label = row.selectedLabel if isinstance(row, SelectorRow) else row.spec.label
+            row.highlight(f"'{label.lower()}'" in flagged)
 
     def loadConfig(self) -> None:
 

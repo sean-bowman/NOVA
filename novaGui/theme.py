@@ -10,8 +10,9 @@ fixed meaning in both: green is pass and complete only, red error, yellow warnin
 Each mode is its own ttk theme, built once on top of 'clam' and switched with `theme_use`, which
 restyles every ttk widget in place. Buttons, fields, check indicators, tabs, cards, the progress
 bar and scrollbar thumbs are image elements drawn by `themeImages`, which is how they get rounded
-corners. A transparent corner shows the style's own background rather than whatever is behind the
-widget, so every style is named for the container it sits on:
+corners. Each image is flattened onto the color of the container it sits on, because Tk blends a
+semi-transparent image in software on every redraw and that blend made scrolling stutter. So every
+style is named for the container it sits on, and an element on two containers has two images:
 
     (no prefix)   the page, `bg`               TButton, TEntry, TLabel ...
     Card.         a card, `surface`            Card.TButton, Card.TEntry, Muted.Card.TLabel ...
@@ -383,9 +384,12 @@ def _createElements(style, img: dict) -> None:
         style.element_create(name, 'image', img[base], *states, border = border, sticky = 'nsew',
                              width = width, height = height)
 
-    element('Nova.Button.border', 'button',
-            ('disabled', img['button.disabled']), ('pressed', '!disabled', img['button.pressed']),
-            ('active', '!disabled', img['button.active']))
+    # Each image is flattened onto the container it sits on, so an element that appears on two
+    # containers is registered once for each, under the container's prefix
+    for prefix, base in (('Nova', 'button'), ('NovaCard', 'cardButton')):
+        element(f'{prefix}.Button.border', base,
+                ('disabled', img[f'{base}.disabled']), ('pressed', '!disabled', img[f'{base}.pressed']),
+                ('active', '!disabled', img[f'{base}.active']))
     element('NovaHeader.Button.border', 'headerButton',
             ('pressed', '!disabled', img['headerButton.pressed']), ('active', '!disabled', img['headerButton.active']))
     element('NovaAccent.Button.border', 'accent',
@@ -398,8 +402,9 @@ def _createElements(style, img: dict) -> None:
                     ('disabled', img[f'{base}.disabled']), ('focus', img[f'{base}.focus']),
                     ('hover', img[f'{base}.hover']))
 
-    style.element_create('Nova.Combobox.downarrow', 'image', img['arrow'],
-                         ('pressed', img['arrow.active']), ('active', img['arrow.active']), sticky = '')
+    for prefix, base in (('Nova', 'arrow'), ('NovaCard', 'cardArrow')):
+        style.element_create(f'{prefix}.Combobox.downarrow', 'image', img[base],
+                             ('pressed', img[f'{base}.active']), ('active', img[f'{base}.active']), sticky = '')
 
     element('Nova.Card.border', 'card', border = borders['card'],
             width = borders['cardMinimum'], height = borders['cardMinimum'])
@@ -414,16 +419,18 @@ def _createElements(style, img: dict) -> None:
                          border = borders['bar'], sticky = 'nsew')
     style.element_create('Nova.Horizontal.Progressbar.pbar', 'image', img['bar'],
                          border = borders['bar'], sticky = 'nsew')
-    style.element_create('Nova.Vertical.Scrollbar.thumb', 'image', img['thumb'],
-                         ('pressed', img['thumb.active']), ('active', img['thumb.active']),
-                         border = borders['thumb'], sticky = 'nsew')
-    style.element_create('Nova.Horizontal.Scrollbar.thumb', 'image', img['hthumb'],
-                         ('pressed', img['hthumb.active']), ('active', img['hthumb.active']),
-                         border = borders['thumb'], sticky = 'nsew')
+    for prefix, base in (('Nova', ''), ('NovaCard', 'card')):
+        for orient, name in (('Vertical', 'thumb'), ('Horizontal', 'hthumb')):
+            role = themeImages._role(base, name)
+            style.element_create(f'{prefix}.{orient}.Scrollbar.thumb', 'image', img[role],
+                                 ('pressed', img[f'{role}.active']), ('active', img[f'{role}.active']),
+                                 border = borders['thumb'], sticky = 'nsew')
 
-    style.element_create('Nova.Checkbutton.indicator', 'image', img['check'],
-                         ('disabled', img['check.disabled']), ('selected', img['check.selected']),
-                         ('alternate', img['check.alternate']), ('active', img['check.active']), sticky = '')
+    for prefix, base in (('Nova', ''), ('NovaCard', 'card'), ('NovaHeader', 'header')):
+        role = themeImages._role(base, 'check')
+        style.element_create(f'{prefix}.Checkbutton.indicator', 'image', img[role],
+                             ('disabled', img[f'{role}.disabled']), ('selected', img[f'{role}.selected']),
+                             ('alternate', img[f'{role}.alternate']), ('active', img[f'{role}.active']), sticky = '')
 
     # -- Layouts -- #
 
@@ -432,6 +439,7 @@ def _createElements(style, img: dict) -> None:
             ('Button.padding', {'sticky': 'nswe', 'children': [('Button.label', {'sticky': 'nswe'})]})]})]
 
     style.layout('TButton', buttonLayout('Nova.Button.border'))
+    style.layout('Card.TButton', buttonLayout('NovaCard.Button.border'))
     style.layout('Header.TButton', buttonLayout('NovaHeader.Button.border'))
     style.layout('Accent.TButton', buttonLayout('NovaAccent.Button.border'))
 
@@ -439,7 +447,7 @@ def _createElements(style, img: dict) -> None:
         style.layout(f'{stylePrefix}TEntry', [(f'{prefix}.Entry.field', {'sticky': 'nswe', 'children': [
             ('Entry.padding', {'sticky': 'nswe', 'children': [('Entry.textarea', {'sticky': 'nswe'})]})]})])
         style.layout(f'{stylePrefix}TCombobox', [(f'{prefix}.Combobox.field', {'sticky': 'nswe', 'children': [
-            ('Nova.Combobox.downarrow', {'side': 'right', 'sticky': 'ns'}),
+            (f'{prefix}.Combobox.downarrow', {'side': 'right', 'sticky': 'ns'}),
             ('Combobox.padding', {'sticky': 'nswe', 'children': [('Combobox.textarea', {'sticky': 'nswe'})]})]})])
 
     style.layout('Card.TFrame', [('Nova.Card.border', {'sticky': 'nswe'})])
@@ -454,15 +462,15 @@ def _createElements(style, img: dict) -> None:
     style.layout('Horizontal.TProgressbar', [('Nova.Horizontal.Progressbar.trough', {'sticky': 'nswe', 'children': [
         ('Nova.Horizontal.Progressbar.pbar', {'side': 'left', 'sticky': 'ns'})]})])
 
-    for prefix in ('', 'Card.'):
-        style.layout(f'{prefix}Vertical.TScrollbar', [('Vertical.Scrollbar.trough', {'sticky': 'ns', 'children': [
-            ('Nova.Vertical.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
-        style.layout(f'{prefix}Horizontal.TScrollbar', [('Horizontal.Scrollbar.trough', {'sticky': 'ew', 'children': [
-            ('Nova.Horizontal.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
+    for stylePrefix, prefix in (('', 'Nova'), ('Card.', 'NovaCard')):
+        style.layout(f'{stylePrefix}Vertical.TScrollbar', [('Vertical.Scrollbar.trough', {'sticky': 'ns', 'children': [
+            (f'{prefix}.Vertical.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
+        style.layout(f'{stylePrefix}Horizontal.TScrollbar', [('Horizontal.Scrollbar.trough', {'sticky': 'ew', 'children': [
+            (f'{prefix}.Horizontal.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
 
-    for prefix in ('', 'Card.', 'Header.'):
-        style.layout(f'{prefix}TCheckbutton', [('Checkbutton.padding', {'sticky': 'nswe', 'children': [
-            ('Nova.Checkbutton.indicator', {'side': 'left', 'sticky': ''}),
+    for stylePrefix, prefix in (('', 'Nova'), ('Card.', 'NovaCard'), ('Header.', 'NovaHeader')):
+        style.layout(f'{stylePrefix}TCheckbutton', [('Checkbutton.padding', {'sticky': 'nswe', 'children': [
+            (f'{prefix}.Checkbutton.indicator', {'side': 'left', 'sticky': ''}),
             ('Checkbutton.label', {'side': 'left', 'sticky': 'nswe'})]})])
 
 def _configureStyles(style, img: dict) -> None:
@@ -544,6 +552,9 @@ def _configureStyles(style, img: dict) -> None:
             style.map(f'{container}{widget}', foreground = [('disabled', textDim)],
                       selectbackground = [('readonly', 'focus', accentMuted)],
                       selectforeground = [('readonly', 'focus', selectedText)])
+
+    # A selector row's option, flagged by validation
+    style.configure('FieldError.Card.TCombobox', foreground = red)
 
     style.configure('TSpinbox', fieldbackground = surface, background = bg, foreground = text,
                     bordercolor = border, arrowcolor = textMuted)
