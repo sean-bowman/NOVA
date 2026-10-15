@@ -13,7 +13,14 @@ Before the first run the loader:
     saved figures match the rest of the window,
   - stops plotly.offline.plot from opening a browser tab,
   - silences the tqdm progress bars (tqdm 4.65 predates TQDM_DISABLE),
-  - redirects the output folder to the location chosen in the export tab.
+  - sends the outputs to the session's staging folder rather than to wherever NOVA
+    would put them.
+
+Every run writes all of NOVA's outputs, figures and data files alike, into the
+staging folder (`stagingFolder`), where the View tab reads them. The Export tab
+copies the ones chosen to the output folder. The staging folder belongs to one
+session of the window and is removed when the window closes; `clearStaging`
+removes any a crashed session left behind.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -24,6 +31,8 @@ import os
 import sys
 import json
 import time
+import shutil
+import tempfile
 import functools
 import importlib
 import threading
@@ -65,6 +74,36 @@ htmlFiles = {
     'plume':          'plumeStructureInteractive.html',
 }
 
+def stagingFolder() -> str:
+
+    '''
+
+    The folder this session's runs write into: one per window process, under the system's
+    temporary directory.
+
+    '''
+
+    return os.path.join(tempfile.gettempdir(), 'NOVA', f'session{os.getpid()}')
+
+def clearStaging(maxAgeHours: float = 12.0) -> None:
+
+    '''
+
+    Remove other sessions' staging folders older than `maxAgeHours`. A window that closes removes
+    its own; one that crashed leaves it behind, and this is what collects it.
+
+    '''
+
+    parent = os.path.dirname(stagingFolder())
+    if not os.path.isdir(parent):
+        return
+
+    cutoff = time.time() - 3600.0 * maxAgeHours
+    for entry in os.listdir(parent):
+        path = os.path.join(parent, entry)
+        if path != stagingFolder() and os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+            shutil.rmtree(path, ignore_errors = True)
+
 class RunResult:
 
     '''
@@ -77,7 +116,8 @@ class RunResult:
 
         self.ok = False
         self.nozzle = None            # the populated Nozzle instance on success
-        self.outputDir = ''           # <name>Outputs/ directory
+        self.outputDir = ''           # <name>Outputs/ directory in the staging folder
+        self.runName = ''             # the config's filename, which names the outputs
         self.configPath = ''          # the JSON handed to setInputs
         self.elapsedSec = 0.0
         self.error = ''               # short one-line message
@@ -203,6 +243,9 @@ class PipelineRunner:
             os.makedirs(outputBaseDir, exist_ok = True)
 
             runName = str(configDict.get('filename') or 'novaRun')
+            result.runName = runName
+            # A run of the same name replaces the last one's outputs rather than mixing with them
+            shutil.rmtree(os.path.join(outputBaseDir, runName + 'Outputs'), ignore_errors = True)
             configPath = os.path.join(outputBaseDir, runName + 'RunConfig.json')
             with open(configPath, 'w') as handle:
                 json.dump(configDict, handle, indent = 4)
@@ -284,8 +327,8 @@ class PipelineRunner:
                 module.tqdm = functools.partial(realTqdm, disable = True)
                 module._novaGuiTqdmPatched = True
 
-        # Send outputs to the folder chosen in the export tab rather than to
-        # wherever the nearest .git happens to be.
+        # Send outputs to the staging folder rather than to wherever the nearest .git
+        # happens to be.
         nozzleClass._getOutputRoot = lambda self, _base = outputBaseDir: _base
 
         return nozzleModule, nozzleClass
@@ -294,8 +337,8 @@ class PipelineRunner:
 
         '''
 
-        Override program-option flags so the View and Analyze tabs have the
-        files they read. Returns the list of keys that were changed.
+        Set the program flags that make a run write every figure and data file, which
+        the View tab reads and the Export tab offers. Returns the keys that were changed.
 
         '''
 

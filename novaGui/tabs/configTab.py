@@ -8,8 +8,13 @@ inside collapsible section cards, round-trips the values to and from JSON in the
 and runs light cross-field checks before a solve. A fresh form is the shipped nozzle.
 
 Each section shows the fields a design is made from, then an Advanced settings fold, closed until
-opened, holding the rest at the shipped nozzle's values. Alternative inputs (thrust or mass flow,
-L* or barrel length) share one selector row, so only one of them can be set.
+opened, holding the rest at the shipped nozzle's values. Some sections fold further: each volute
+has its own. A fold with nothing to show is hidden. Alternative inputs (thrust or mass flow, L* or
+barrel length) share one selector row, so only one of them can be set. Program flags the GUI sets
+itself have no row; their values pass through a loaded config unchanged.
+
+Choosing a radiative extension material fills the shell conductivity and emissivities from NOVA's
+material store where it carries them, and a note under the material says what the store holds.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -17,8 +22,10 @@ Date:   08/28/2026
 '''
 
 import json
+import re
 from tkinter import ttk, filedialog, messagebox
 
+from .. import backend
 from .. import configSchema
 from .. import theme
 from ..widgets import ScrollableFrame, CollapsibleSection, FieldRow, SelectorRow, MaterialInfoPanel, Tooltip
@@ -85,6 +92,19 @@ def _designVectorText(value) -> str:
 
     return ', '.join(f'{float(number):g}' for number in value)
 
+def _words(name: str) -> str:
+
+    '''
+
+    A material store key as words: oxidisingCoated reads oxidising coated, r512eCoatedOxidised
+    reads R512E coated oxidised.
+
+    '''
+
+    spaced = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', ' ', name).lower()
+
+    return re.sub(r'\br(\d+)e\b', lambda match: f'R{match.group(1)}E', spaced)
+
 class ConfigTab(ttk.Frame):
 
     '''
@@ -101,6 +121,9 @@ class ConfigTab(ttk.Frame):
         self._rows = {}                       # key -> FieldRow
         self._selectors = []                  # SelectorRow, in form order
         self._grids = []                      # every row grid, so their label columns match
+        self._folds = []                      # [holder, fold, grid, rows] for every fold
+        self._hidden = {}                     # key -> value of each field with no row
+        self._extensionNote = None            # what the store holds for the extension material
         self._sections = {}                   # group title -> CollapsibleSection
         self._orderedSections = []            # [(Group, CollapsibleSection)] in form order
         self._groupVisible = {}               # group title -> bool
@@ -134,25 +157,46 @@ class ConfigTab(ttk.Frame):
             self._orderedSections.append((group, section))
             self._groupVisible[group.title] = True
 
-            mainGrid = self._grid(section.body)
-            advancedGrid = None
-            if any(item.advanced for item in group.fields):
-                fold = CollapsibleSection(section.body, 'Advanced settings', collapsed = True, nested = True)
-                fold.pack(fill = 'x', pady = (theme.scaled(6), 0))
-                advancedGrid = self._grid(fold.body)
-
+            # Rows go to the section's own grid or to a fold, in schema order; a run of rows after a
+            # fold or a panel starts a new grid, so the section reads top to bottom as the schema does
+            folds = {}
+            grid, gridFold = None, None
             for item in group.fields:
-                grid = advancedGrid if item.advanced else mainGrid
+                if getattr(item, 'hidden', False):
+                    self._hidden[item.key] = item.default
+                    continue
+
+                foldName = configSchema.foldOf(item)
+                if grid is None or foldName != gridFold:
+                    grid = self._foldGrid(section, folds, foldName) if foldName else self._grid(section.body)
+                    gridFold = foldName
+
                 rowIndex = grid.grid_size()[1]
                 if isinstance(item, configSchema.Selector):
-                    self._selectors.append(SelectorRow(grid, item, rowIndex))
+                    row = SelectorRow(grid, item, rowIndex)
+                    self._selectors.append(row)
                 else:
-                    self._rows[item.key] = FieldRow(grid, item, rowIndex)
+                    row = FieldRow(grid, item, rowIndex)
+                    self._rows[item.key] = row
+                if foldName:
+                    folds[foldName][3].append(row)
 
-            if group.title == 'Regenerative Cooling':
-                self._materialPanel = MaterialInfoPanel(section.body)
-                self._materialAnchor = mainGrid
-                self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0), after = mainGrid)
+                # Material information sits directly under the material's row
+                key = getattr(item, 'key', None)
+                if key == 'material':
+                    self._materialPanel = MaterialInfoPanel(section.body)
+                    self._materialPanel.pack(fill = 'x', pady = (theme.scaled(4), theme.scaled(6)))
+                    self._materialAnchor = grid
+                    grid = None
+                elif key == 'extensionMaterial':
+                    self._extensionNote = ttk.Label(section.body, style = 'Muted.Card.TLabel',
+                                                    wraplength = theme.scaled(760), justify = 'left')
+                    self._extensionNote.pack(fill = 'x', pady = (0, theme.scaled(6)))
+                    self._extensionAnchor = grid
+                    grid = None
+                    row._widget.bind('<<ComboboxSelected>>', self._onExtensionMaterial, add = '+')
+
+            self._folds += folds.values()
 
         # Saving sits at the foot of the form, after the last section
         self._footer = ttk.Frame(scroller.body, style = 'TFrame', padding = (theme.scaled(10), theme.scaled(4),
@@ -194,6 +238,25 @@ class ConfigTab(ttk.Frame):
         self._grids.append(grid)
 
         return grid
+
+    def _foldGrid(self, section, folds: dict, name: str) -> ttk.Frame:
+
+        '''
+
+        The grid inside a named fold of a section, made the first time the fold is asked for. The
+        fold sits in a holder frame that keeps its place in the section, so a fold hidden while it
+        has nothing to show comes back where it was.
+
+        '''
+
+        if name not in folds:
+            holder = ttk.Frame(section.body, style = 'Surface.TFrame')
+            holder.pack(fill = 'x')
+            fold = CollapsibleSection(holder, name, collapsed = True, nested = True)
+            fold.pack(fill = 'x', pady = (theme.scaled(6), 0))
+            folds[name] = [holder, fold, self._grid(fold.body), []]
+
+        return folds[name][2]
 
     def _allRows(self) -> list:
 
@@ -247,13 +310,32 @@ class ConfigTab(ttk.Frame):
             predicate = row.spec.showWhen
             row.setVisible(predicate is None or bool(predicate(config)))
 
+        # A fold whose rows are all hidden would show a title over nothing
+        for holder, fold, _, rows in self._folds:
+            shown = any(row.visible for row in rows)
+            if shown and not fold.winfo_manager():
+                fold.pack(fill = 'x', pady = (theme.scaled(6), 0))
+            elif not shown and fold.winfo_manager():
+                fold.pack_forget()
+                # A frame that loses its last child keeps its old size until told otherwise
+                holder.configure(height = 1)
+
         if self._materialPanel is not None:
             if configSchema._coolingOn(config):
                 if not self._materialPanel.winfo_manager():
-                    self._materialPanel.pack(fill = 'x', pady = (theme.scaled(8), 0), after = self._materialAnchor)
+                    self._materialPanel.pack(fill = 'x', pady = (theme.scaled(4), theme.scaled(6)),
+                                             after = self._materialAnchor)
                 self._materialPanel.setMaterial(config.get('material') or 'GRCop-42')
             elif self._materialPanel.winfo_manager():
                 self._materialPanel.pack_forget()
+
+        if self._extensionNote is not None:
+            if configSchema._radiativeExtensionOn(config) and config.get('extensionMaterial'):
+                if not self._extensionNote.winfo_manager():
+                    self._extensionNote.pack(fill = 'x', pady = (0, theme.scaled(6)), after = self._extensionAnchor)
+                self._extensionNote.configure(text = self._extensionStoreText(config['extensionMaterial']))
+            elif self._extensionNote.winfo_manager():
+                self._extensionNote.pack_forget()
 
         layoutChanged = False
         for group, section in self._orderedSections:
@@ -297,6 +379,7 @@ class ConfigTab(ttk.Frame):
         '''
 
         values = {key: row.get() for key, row in self._rows.items()}
+        values.update(self._hidden)
         for row in self._selectors:
             values.update(row.get())
         # In the schema's order, which is the shipped file's, and without any synthetic helper;
@@ -328,6 +411,8 @@ class ConfigTab(ttk.Frame):
                 row.set(merged.get(key, row.spec.default))
             for row in self._selectors:
                 row.set(merged)
+            for key in self._hidden:
+                self._hidden[key] = merged.get(key)
         finally:
             self._suspendDynamics = False
         # A freshly loaded config may switch on a section that was collapsed;
@@ -364,6 +449,15 @@ class ConfigTab(ttk.Frame):
         if isSet('Lstar') and float(config['Lstar']) <= 0:
             problems.append("'Characteristic length L*' must be positive.")
 
+        # The margin report reads the material's limit in the service atmosphere, and a material
+        # defines limits only for the atmospheres a source covers
+        if config.get('makeRadiativeExtension') in (True, 'on') and isSet('extensionMaterial'):
+            limits = self._extensionLimits(config['extensionMaterial'])
+            atmosphere = config.get('extensionAtmosphere')
+            if limits and atmosphere not in limits:
+                problems.append(f"'Service atmosphere' has no limit for {config['extensionMaterial']}, which "
+                                f"has one for {', '.join(_words(name) for name in limits)}.")
+
         if config.get('makeCoolingChannels') in (True, 'on'):
             needed = ['hotWallThickness', 'shellThickness', 'coolantInitialTemperature', 'coolantInitialPressure']
             missing = [k for k in needed if not isSet(k)]
@@ -388,6 +482,79 @@ class ConfigTab(ttk.Frame):
         '''
 
         return
+
+    # -- Radiative extension material -- #
+
+    @staticmethod
+    def _extensionLimits(material: str) -> dict:
+
+        '''The material's temperature limits [degC] by atmosphere, empty if the store has no entry.'''
+
+        try:
+            return dict(backend.materialsModule().materialProfile(material)['maxUseTemperatureC'])
+        except KeyError:
+            return {}
+
+    @staticmethod
+    def _extensionProperties(material: str) -> dict:
+
+        '''
+
+        What the store carries for an extension material, as the fields it fills: (value, the
+        condition the value is for) per config key. A property the store does not carry is absent.
+
+        '''
+
+        materials = backend.materialsModule()
+        found = {}
+        try:
+            condition, value = next(iter(materials.materialProperty(material, 'thermalConductivity').items()))
+            found['extensionThermalConductivity'] = (value, condition)
+        except KeyError:
+            pass
+        try:
+            condition, value = next(iter(materials.surfaceEmissivity(material).items()))
+            found['extensionInnerEmissivity'] = (value, condition)
+            found['extensionOuterEmissivity'] = (value, condition)
+        except KeyError:
+            pass
+
+        return found
+
+    def _extensionStoreText(self, material: str) -> str:
+
+        '''The note under the material: its limits and what the store fills, or what it does not.'''
+
+        limits = self._extensionLimits(material)
+        if not limits:
+            return f'{material} is not in the material store, so no limit or property is known for it.'
+
+        parts = ['Limit ' + ', '.join(f'{value:.0f} °C {_words(name)}' for name, value in limits.items())]
+        properties = self._extensionProperties(material)
+        if 'extensionInnerEmissivity' in properties:
+            value, condition = properties['extensionInnerEmissivity']
+            parts.append(f'emissivity {value:g} ({_words(condition)})')
+        if 'extensionThermalConductivity' in properties:
+            value, condition = properties['extensionThermalConductivity']
+            parts.append(f'conductivity {value:g} W/m-K ({_words(condition)})')
+        missing = [name for key, name in (('extensionInnerEmissivity', 'emissivity'),
+                                          ('extensionThermalConductivity', 'conductivity'))
+                   if key not in properties]
+        text = '; '.join(parts) + '.'
+        if missing:
+            text += f' The store carries no {" or ".join(missing)} for it, so the fields below keep their values.'
+
+        return text
+
+    def _onExtensionMaterial(self, _event = None) -> None:
+
+        '''Fill the shell properties the store carries for the material just chosen.'''
+
+        material = self._rows['extensionMaterial'].get()
+        if not material:
+            return
+        for key, (value, _) in self._extensionProperties(material).items():
+            self._rows[key].set(value)
 
     # -- Internals -- #
 

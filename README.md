@@ -116,7 +116,7 @@ On Windows, `novaGui.bat` launches it with no console window. Run `python -m nov
 
 ### Design
 
-The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, and **Reset to example** returns to the shipped nozzle.
+The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, and **Reset to example** returns to the shipped nozzle.
 
 ![Design tab](docs/images/gui/designDark.png)
 
@@ -156,7 +156,7 @@ The numbers behind the figures in one table: sizing, the combustion chamber, del
 
 ### Export
 
-The output location and every file the run wrote: figures, interactive HTML, contour text files, STL geometry and the pickled `Nozzle`. Double-click a row to open it.
+A run writes its outputs to a staging folder, not to the output folder. The Export tab lists them by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
 
 ![Export tab](docs/images/gui/export.png)
 
@@ -179,7 +179,7 @@ Grouped by section, matching the order in the config file.
 | Field                                    | Unit  | Meaning                                                                                                                                                        |
 | ----------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `numContourPoints`                      | --    | Points in the resampled contour                                                                                                                                |
-| `chamberDiameter`                       | m     | Chamber outer diameter at the converging inlet. Sets the contraction ratio                                                                                     |
+| `chamberDiameter`                       | m     | Chamber diameter at the converging inlet. Sets the contraction ratio                                                                                     |
 | `convergingSectionAngle`                | deg   | Converging wall angle at the throat                                                                                                                            |
 | `Lstar`                                  | m     | Characteristic length Vc/At. Sizes the cylindrical chamber barrel after the converging-section volume is subtracted. Mutually exclusive with`chamberLength`  |
 | `chamberLength`                         | m     | Cylindrical chamber barrel length, given directly instead of through`Lstar`. Leave both `null` for no chamber                                              |
@@ -386,7 +386,7 @@ Generated `*Outputs/` directories are gitignored. The curated figures above are 
 | Thrust                            | 100 kN                               | mass flow is derived from it  |
 | Oxidizer / fuel inlet temperature | 90.17 K / 20.27 K                    | normal boiling points         |
 | Contour                           | truncated ideal, length fraction 0.8 | method of characteristics     |
-| Chamber outer diameter            | 180 mm                               | contraction ratio ~3.2        |
+| Chamber diameter                  | 180 mm                               | contraction ratio ~3.2        |
 
 In the config, a field left `null` means *not specified*. A literal `0.0` means *specified as zero*, which is not the same thing: `thrust` and `engineMassFlow` are mutually exclusive, so one of them must be `null`.
 

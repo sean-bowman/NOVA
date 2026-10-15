@@ -14,12 +14,14 @@ Date:   08/28/2026
 
 import re
 import queue
+import atexit
+import shutil
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 from . import branding, settings, theme
 from .widgets import ConsolePane, Tooltip
-from .runner import PipelineRunner
+from .runner import PipelineRunner, clearStaging, stagingFolder
 from .tabs import ConfigTab, ViewTab, AnalysisTab, ExportTab
 
 class NovaApp(tk.Tk):
@@ -55,6 +57,10 @@ class NovaApp(tk.Tk):
 
         self._queue = queue.Queue()
         self.runner = PipelineRunner(self._queue)
+        # Outputs reach the output folder only through Export; what was not exported goes when the
+        # process ends, however the window closed. A crashed session's folder is collected later.
+        clearStaging()
+        atexit.register(shutil.rmtree, stagingFolder(), ignore_errors = True)
         self.runResult = None
         self._consoleVisible = False
         self._progressCeiling = 0.0
@@ -212,7 +218,7 @@ class NovaApp(tk.Tk):
         self._setRunningState(True)
 
         try:
-            self.runner.start(config, self.exportTab.outputBaseDir)
+            self.runner.start(config, stagingFolder())
         except RuntimeError as exc:
             self._setRunningState(False)
             messagebox.showerror('Cannot start', str(exc))
@@ -339,7 +345,7 @@ class NovaApp(tk.Tk):
             messagebox.showerror('Run failed', f'{result.error}\n\nSee the run log for the full traceback.')
             return
 
-        self._console.append(f'run complete in {result.elapsedSec:.1f} s  ->  {result.outputDir}', 'ok')
+        self._console.append(f'run complete in {result.elapsedSec:.1f} s; the Export tab writes its outputs', 'ok')
         for tab in self._tabs:
             try:
                 tab.refresh(result)

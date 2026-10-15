@@ -31,6 +31,10 @@ Each field is a Field record:
     advanced   True puts the field in its group's Advanced settings fold, which
                opens on demand. Every advanced field defaults to the shipped
                nozzle's value, so a design can be made from the main fields alone.
+    fold       the name of another fold inside the group the field sits in, such
+               as one volute's settings; None for the group's own rows
+    hidden     True keeps the key in every config the form writes, at its loaded
+               or default value, without a row: a program flag the GUI sets itself
 
 A Selector is one form row standing for several keys that are alternatives to one
 another: thrust or engine mass flow, an area ratio or an exit pressure. Its first
@@ -76,6 +80,8 @@ class Field:
     showWhen: object = None
     synthetic: bool = False
     advanced: bool = False
+    fold: str = None
+    hidden: bool = False
     dimension: object = None      # set in __post_init__ from `unit`; drives the unit dropdown
 
     def __post_init__(self):
@@ -160,6 +166,7 @@ class Selector:
     blank: str = ''               # option shown when a config sets none of the row's values
     required: bool = True         # False lets the chosen option's value stay blank
     advanced: bool = False
+    fold: str = None
     showWhen: object = None
 
     def member(self, key: str) -> Field:
@@ -197,6 +204,19 @@ class Selector:
 
         return [spec.key for spec in self.members]
 
+advancedFold = 'Advanced settings'
+
+def foldOf(item) -> str:
+
+    '''
+
+    The fold a Field or Selector sits in: its own, the Advanced settings fold, or None for the
+    group's own rows.
+
+    '''
+
+    return item.fold or (advancedFold if item.advanced else None)
+
 @dataclass
 class Group:
 
@@ -216,9 +236,9 @@ class Group:
 
 # -- Program option flags forced on for every GUI run -- #
 
-# The View and Analyze tabs read the PNG and HTML files NOVA only writes
-# when plots and export are enabled, so the runner overrides these regardless
-# of the form.
+# Every GUI run writes every figure and data file into a staging folder, and the
+# Export tab copies the ones chosen to the output folder, so the runner sets these
+# and the form has no row for them.
 forcedFlags = ('export', 'plotsEnabled')
 
 # -- Dependency predicates -- #
@@ -241,6 +261,12 @@ def _manualChannelSizing(config: dict) -> bool:
 def _anyVolute(config: dict) -> bool:
     return (config.get('makeInletVolute') in (True, 'on')
             or config.get('makeOutletVolute') in (True, 'on'))
+
+def _inletVoluteOn(config: dict) -> bool:
+    return config.get('makeInletVolute') in (True, 'on')
+
+def _outletVoluteOn(config: dict) -> bool:
+    return config.get('makeOutletVolute') in (True, 'on')
 
 def _radiativeExtensionOn(config: dict) -> bool:
     return config.get('makeRadiativeExtension') in (True, 'on')
@@ -277,7 +303,7 @@ oxidizerChoices = [
 # Canonical names must match materials.availableWallMaterials(); the config info panel samples
 # k(T), density and modulus from that module for the selected alloy. Copper alloys first.
 materialChoices = [
-    ('GRCop-42 (Cu-Cr-Nb, regen standard)', 'GRCop-42'),
+    ('GRCop-42 (Cu-Cr-Nb)', 'GRCop-42'),
     ('CuCrZr (C18150)', 'CuCrZr'),
     ('OFHC copper (C10100)', 'OFHC Copper'),
     ('NARloy-Z (Cu-Ag-Zr)', 'NARloy-Z'),
@@ -287,6 +313,20 @@ materialChoices = [
     ('Inconel 625', 'Inconel 625'),
     ('316L stainless', '316L'),
     ('Ti-6Al-4V', 'Ti-6Al-4V'),
+]
+
+# -- Radiative extension materials -- #
+
+# The hot-structure entries of materials.availableMaterials(): the refractory metal, the ceramic
+# matrix and carbon composites, and graphite. The store's polymers, ablatives and thermal barrier
+# coating are not radiation-cooled shells. The names must match the store, which tests hold.
+extensionMaterialChoices = [
+    ('C103 (Nb-10Hf-1Ti)', 'C103'),
+    ('Carbon-carbon (2D)', 'Carbon-Carbon (2D)'),
+    ('C/SiC', 'C/SiC'),
+    ('SiC/SiC', 'SiC/SiC'),
+    ('ATJ graphite', 'ATJ Graphite'),
+    ('None (no margin report)', None),
 ]
 
 groups = [
@@ -300,8 +340,8 @@ groups = [
               help = 'tic and top are method-of-characteristics contours evaluated directly; toc '
                      'searches over them for the shortest length at the requested performance. '
                      'cone is a straight 15 degree half-angle cone.'),
-        Field('chamberDiameter', 'Chamber outer diameter', 'float', default = 0.18, unit = 'm',
-              help = 'Outer diameter of the chamber wall at the converging inlet. Sets the contraction ratio.'),
+        Field('chamberDiameter', 'Chamber diameter', 'float', default = 0.18, unit = 'm',
+              help = 'Diameter of the chamber at the converging inlet. Sets the contraction ratio.'),
         Selector('Chamber length', [
             Field('Lstar', 'Characteristic length L*', 'float', default = 1.0, unit = 'm',
                   help = 'Chamber volume over throat area, injector face to throat. Sets the cylindrical '
@@ -455,51 +495,15 @@ groups = [
               showWhen = _coolingOn,
               help = 'Hot wall alloy. Drives the temperature-dependent thermal conductivity in the '
                      'heat transfer model; sampled properties are shown below.'),
-        Field('gasSideAxialModel', 'Gas-side axial model', 'choice',
-              choices = [('Uniform constant (Bartz)', 'uniform'),
-                         ('Measured distribution (TN D-2832)', 'measured'),
-                         ('Integral method (Ievlev, as RPA)', 'ievlev')],
-              default = 'uniform', showWhen = _coolingOn,
-              help = 'Bartz carries one correlation constant along the whole wall. The measured '
-                     'distribution scales it by constants measured along a LOX/GH2 chamber, which '
-                     'leaves the barrel alone and takes about 40 percent off the throat. It is a '
-                     'calibration from one engine and injector, not a universal curve. Ievlev\'s '
-                     'method integrates the energy equation along the wall, as RPA does; it '
-                     'depends on the wall upstream, so the jacket is solved two or three times.'),
-        Field('coolantRoughnessModel', 'Coolant roughness model', 'choice',
-              choices = [('Friction only (no heat transfer credit)', 'frictionOnly'),
-                         ('Dipprey and Sabersky rough-wall heat transfer', 'dippreySabersky'),
-                         ('Full credit (rough friction into Gnielinski)', 'fullCredit')],
-              default = 'dippreySabersky', showWhen = _coolingOn,
-              help = 'What a rough wall may do to the coolant-side heat transfer. Roughness '
-                     'raises the friction factor and the pressure drop under all three. Friction '
-                     'only is the treatment the hardware comparisons support; full credit is what '
-                     'runs the wall coolest and what no measurement supports.'),
-        Field('coolantPropertyCorrection', 'Coolant property correction', 'choice',
-              choices = [('None (every property at the bulk temperature)', 'none'),
-                         ('Taylor, surface to bulk temperature ratio', 'taylor')],
-              default = 'none', showWhen = _coolingOn,
-              help = 'Whether the coolant-side correlation is corrected for the property '
-                     'variation between the bulk and the hot wall. Leave it at none. Taylor is '
-                     'NASA TN D-4332, fitted on symmetrically heated tubes, and against the '
-                     'hardware comparison it puts 0 of 13 measured wall temperatures inside the '
-                     'band where none puts 13 of 13. It is kept only so that result can be '
-                     'reproduced.'),
-        Field('channelSurfaceRoughness', 'Channel surface roughness', 'float', default = 3.5e-05,
-              unit = 'm', showWhen = _coolingOn,
-              help = 'Absolute roughness the coolant-side friction factor is built on. The '
-                     'default is a printed GRCop-42 channel from the Velo3D datasheet.'),
-        Field('coolantGeometryCorrections', 'Coolant entrance and curvature corrections', 'bool',
-              default = False, showWhen = _coolingOn,
-              help = 'Enhances the coolant-side coefficient in the developing length after the '
-                     'inlet and through the bends, by the entrance fit and Ito curvature factor '
-                     'NASA TN D-7207 found a station correlation needs to match measured rates.'),
         Field('channelType', 'Channel type', 'choice',
               choices = [('Circular', 'circle'), ('Rectangular', 'rectangular'), ('Helical', 'helical')],
               default = 'circle', showWhen = _coolingOn,
               help = 'Cooling channel cross-section family. Circular channels are sized by radius; '
                      'rectangular channels fill the pitch less the rib and are sized by depth; '
                      'helical channels run at a fixed angle and aspect ratio and are sized by width.'),
+        Field('channelHelixAngle', 'Channel helix angle', 'float', default = None, unit = 'deg',
+              showWhen = _helicalChannels,
+              help = 'Angle the helical channels run at from the meridian, 0 to 85 degrees. nChannel is the number of starts.'),
         Field('channelSizingMode', 'Channel sizing', 'choice',
               choices = [('Converge on the wall temperature limit', 'thermal'),
                          ('Manual size profile', 'manual')],
@@ -526,65 +530,22 @@ groups = [
                      'interpolated between the points and held flat outside them. A path is '
                      'read as a profile a run recorded, such as '
                      'runs/NOVANozzleOutputs/NOVANozzleChannelProfile.json.'),
-        Field('channelHelixAngle', 'Channel helix angle', 'float', default = None, unit = 'deg',
-              showWhen = _helicalChannels,
-              help = 'Angle the helical channels run at from the meridian, 0 to 85 degrees. nChannel is the number of starts.'),
-        Field('channelAspectRatio', 'Channel aspect ratio', 'float', default = 1.0,
-              showWhen = _helicalChannels,
-              help = 'Depth of a helical channel as a multiple of its width.'),
-        Field('minChannelWidth', 'Minimum channel width', 'float', default = 1.0e-3, unit = 'm',
-              showWhen = _rectangularOrHelicalChannels,
-              help = 'Narrowest channel the process can build. The channel count is reduced to hold it at the throat.'),
-        Field('channelCornerRadius', 'Channel corner radius', 'float', default = None, unit = 'm',
-              showWhen = _rectangularOrHelicalChannels,
-              help = 'Corner radius of a rectangular channel. Blank is a sharp corner; the STEP writer needs it above zero.'),
-        Field('maxChannelAspectRatio', 'Maximum aspect ratio', 'float', default = 8.0,
-              showWhen = _rectangularChannels,
-              help = 'Depth a rectangular channel may reach, as a multiple of its width.'),
-        Field('maxChannelDepth', 'Maximum channel depth', 'float', default = None, unit = 'm',
-              showWhen = _coolingOn,
-              help = 'How far any channel may reach out from the wall, a circle\'s diameter included. Blank '
-                     'leaves the aspect ratio, or for a helix the rib, to limit a rectangle, and leaves a '
-                     'circle bounded only by the room between its neighbors.'),
-        Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
-              showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
-        Field('thermalBarrierThickness', 'Thermal barrier thickness', 'float', default = None, unit = 'm',
-              showWhen = _coolingOn,
-              help = 'Ceramic coating over the hot wall. Blank for none. With a coating the wall '
-                     'temperature limit applies to the metal behind it, not to the coating surface.'),
-        Field('thermalBarrierConductivity', 'Thermal barrier conductivity', 'float', default = None,
-              unit = 'W/m-K', showWhen = _coolingOn,
-              help = 'Conductivity of the coating. Yttria-stabilized zirconia is about 1.5 W/m-K.'),
-        Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',
-              showWhen = _coolingOn, help = 'Outer structural shell thickness.'),
-        Field('infillThickness', 'Rib thickness', 'float', default = None, unit = 'm',
-              showWhen = _coolingOn,
-              help = 'Rib between neighboring channels. A rectangular channel\'s rib is exactly this at the wall; '
-                     'a helical channel\'s rib varies and never falls below it.'),
         Field('nChannel', 'Number of channels', 'int', default = None, showWhen = _coolingOn,
               help = 'Channel count, or starts for a helix. Required. It is reduced at run time if the '
                      'throat cannot hold the smallest channel the process can build, unless a manual '
                      'size profile fixed it, in which case the run stops instead.'),
-        Field('numCrossSections', 'Channel cross sections', 'int', default = 100, showWhen = _coolingOn,
-              help = 'Number of cross sections swept along each channel.'),
-        Field('numCSPointsChannel', 'Points per channel cross section', 'int', default = 50, showWhen = _coolingOn,
-              help = 'Number of points defining each channel cross section.'),
+        Field('hotWallThickness', 'Hot wall thickness', 'float', default = None, unit = 'm',
+              showWhen = _coolingOn, help = 'Combustion-side wall thickness.'),
+        Field('infillThickness', 'Rib thickness', 'float', default = None, unit = 'm',
+              showWhen = _coolingOn,
+              help = 'Rib between neighboring channels. A rectangular channel\'s rib is exactly this at the wall; '
+                     'a helical channel\'s rib varies and never falls below it.'),
+        Field('shellThickness', 'Shell thickness', 'float', default = None, unit = 'm',
+              showWhen = _coolingOn, help = 'Outer structural shell thickness.'),
         Field('maxWallTemperature', 'Max hot wall temperature', 'float', default = None, unit = 'K', showWhen = _coolingOn,
               help = 'Hot wall temperature the jacket is held to, one value for the whole jacket. '
                      'Required whenever the jacket is built: the sizing search converges each station '
                      'against it, and a manual size profile is reported against it.'),
-        Field('maxWallTempUpperBound', 'Max wall temp upper bound', 'float', default = None, unit = 'K', showWhen = _coolingOn,
-              help = 'Upper bound for a wall temperature search. Carried in the configuration and read '
-                     'by no solver: no search over the wall temperature is implemented.'),
-        Field('maxWallTempLowerBound', 'Max wall temp lower bound', 'float', default = None, unit = 'K', showWhen = _coolingOn,
-              help = 'Lower bound for a wall temperature search. Carried in the configuration and read '
-                     'by no solver: no search over the wall temperature is implemented.'),
-        Field('nChannelUpperBound', 'Channel count upper bound', 'int', default = None, showWhen = _coolingOn,
-              help = 'Upper bound for a channel-count search. Carried in the configuration and read by '
-                     'no solver: no search over the channel count is implemented.'),
-        Field('nChannelLowerBound', 'Channel count lower bound', 'int', default = None, showWhen = _coolingOn,
-              help = 'Lower bound for a channel-count search. Carried in the configuration and read by '
-                     'no solver: no search over the channel count is implemented.'),
         Field('coolantClass', 'Coolant class', 'choice',
               choices = [('Fuel', 'fuel'), ('Oxidizer', 'oxidizer')], default = 'fuel', showWhen = _coolingOn,
               help = 'Which propellant stream feeds the jacket.'),
@@ -596,12 +557,100 @@ groups = [
               help = 'Coolant pressure entering the jacket.'),
         Field('coolantMassFlow', 'Coolant mass flow', 'float', default = None, unit = 'kg/s', showWhen = _coolingOn,
               help = 'Coolant mass flow through the jacket. Leave blank to derive from O/F.'),
-        Field('minCoolantExitPressure', 'Min coolant exit pressure', 'float', default = None, unit = 'Pa', showWhen = _coolingOn,
+        Field('gasSideAxialModel', 'Gas-side axial model', 'choice', advanced = True,
+              choices = [('Uniform constant (Bartz)', 'uniform'),
+                         ('Measured distribution (TN D-2832)', 'measured'),
+                         ('Integral method (Ievlev, as RPA)', 'ievlev')],
+              default = 'uniform', showWhen = _coolingOn,
+              help = 'Bartz carries one correlation constant along the whole wall. The measured '
+                     'distribution scales it by constants measured along a LOX/GH2 chamber, which '
+                     'leaves the barrel alone and takes about 40 percent off the throat. It is a '
+                     'calibration from one engine and injector, not a universal curve. Ievlev\'s '
+                     'method integrates the energy equation along the wall, as RPA does; it '
+                     'depends on the wall upstream, so the jacket is solved two or three times.'),
+        Field('coolantRoughnessModel', 'Coolant roughness model', 'choice', advanced = True,
+              choices = [('Friction only (no heat transfer credit)', 'frictionOnly'),
+                         ('Dipprey and Sabersky rough-wall heat transfer', 'dippreySabersky'),
+                         ('Full credit (rough friction into Gnielinski)', 'fullCredit')],
+              default = 'dippreySabersky', showWhen = _coolingOn,
+              help = 'What a rough wall may do to the coolant-side heat transfer. Roughness '
+                     'raises the friction factor and the pressure drop under all three. Friction '
+                     'only is the treatment the hardware comparisons support; full credit is what '
+                     'runs the wall coolest and what no measurement supports.'),
+        Field('channelSurfaceRoughness', 'Channel surface roughness', 'float', default = 3.5e-05, advanced = True,
+              unit = 'm', showWhen = _coolingOn,
+              help = 'Absolute roughness the coolant-side friction factor is built on. The '
+                     'default is a printed GRCop-42 channel from the Velo3D datasheet.'),
+        Field('coolantPropertyCorrection', 'Coolant property correction', 'choice', advanced = True,
+              choices = [('None (every property at the bulk temperature)', 'none'),
+                         ('Taylor, surface to bulk temperature ratio', 'taylor')],
+              default = 'none', showWhen = _coolingOn,
+              help = 'Whether the coolant-side correlation is corrected for the property '
+                     'variation between the bulk and the hot wall. Leave it at none. Taylor is '
+                     'NASA TN D-4332, fitted on symmetrically heated tubes, and against the '
+                     'hardware comparison it puts 0 of 13 measured wall temperatures inside the '
+                     'band where none puts 13 of 13. It is kept only so that result can be '
+                     'reproduced.'),
+        Field('coolantGeometryCorrections', 'Coolant entrance and curvature corrections', 'bool', advanced = True,
+              default = False, showWhen = _coolingOn,
+              help = 'Enhances the coolant-side coefficient in the developing length after the '
+                     'inlet and through the bends, by the entrance fit and Ito curvature factor '
+                     'NASA TN D-7207 found a station correlation needs to match measured rates.'),
+        Field('channelAspectRatio', 'Channel aspect ratio', 'float', default = 1.0, advanced = True,
+              showWhen = _helicalChannels,
+              help = 'Depth of a helical channel as a multiple of its width.'),
+        Field('minChannelWidth', 'Minimum channel width', 'float', default = 1.0e-3, unit = 'm', advanced = True,
+              showWhen = _rectangularOrHelicalChannels,
+              help = 'Narrowest channel the process can build. The channel count is reduced to hold it at the throat.'),
+        Field('channelCornerRadius', 'Channel corner radius', 'float', default = None, unit = 'm', advanced = True,
+              showWhen = _rectangularOrHelicalChannels,
+              help = 'Corner radius of a rectangular channel. Blank is a sharp corner; the STEP writer needs it above zero.'),
+        Field('maxChannelAspectRatio', 'Maximum aspect ratio', 'float', default = 8.0, advanced = True,
+              showWhen = _rectangularChannels,
+              help = 'Depth a rectangular channel may reach, as a multiple of its width.'),
+        Field('maxChannelDepth', 'Maximum channel depth', 'float', default = None, unit = 'm', advanced = True,
+              showWhen = _coolingOn,
+              help = 'How far any channel may reach out from the wall, a circle\'s diameter included. Blank '
+                     'leaves the aspect ratio, or for a helix the rib, to limit a rectangle, and leaves a '
+                     'circle bounded only by the room between its neighbors.'),
+        Field('thermalBarrierThickness', 'Thermal barrier thickness', 'float',
+              default = None, unit = 'm', advanced = True,
+              showWhen = _coolingOn,
+              help = 'Ceramic coating over the hot wall. Blank for none. With a coating the wall '
+                     'temperature limit applies to the metal behind it, not to the coating surface.'),
+        Field('thermalBarrierConductivity', 'Thermal barrier conductivity', 'float', default = None, advanced = True,
+              unit = 'W/m-K', showWhen = _coolingOn,
+              help = 'Conductivity of the coating. Yttria-stabilized zirconia is about 1.5 W/m-K.'),
+        Field('numCrossSections', 'Channel cross sections', 'int',
+              default = 100, showWhen = _coolingOn, advanced = True,
+              help = 'Number of cross sections swept along each channel.'),
+        Field('numCSPointsChannel', 'Points per channel cross section', 'int',
+              default = 50, showWhen = _coolingOn, advanced = True,
+              help = 'Number of points defining each channel cross section.'),
+        Field('minCoolantExitPressure', 'Min coolant exit pressure', 'float',
+              default = None, unit = 'Pa', showWhen = _coolingOn, advanced = True,
               help = 'Lower limit on coolant pressure at the jacket exit. Checked once the jacket is '
                      'solved, and the run is refused below it. Blank is no limit.'),
-        Field('minCoolantExitTemperature', 'Min coolant exit temperature', 'float', default = None, unit = 'K', showWhen = _coolingOn,
+        Field('minCoolantExitTemperature', 'Min coolant exit temperature', 'float',
+              default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
               help = 'Lower limit on coolant temperature at the jacket exit, for a cycle that needs the '
                      'enthalpy. Checked once the jacket is solved. Blank is no limit.'),
+        Field('maxWallTempUpperBound', 'Max wall temp upper bound', 'float',
+              default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
+              help = 'Upper bound for a wall temperature search. Carried in the configuration and read '
+                     'by no solver: no search over the wall temperature is implemented.'),
+        Field('maxWallTempLowerBound', 'Max wall temp lower bound', 'float',
+              default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
+              help = 'Lower bound for a wall temperature search. Carried in the configuration and read '
+                     'by no solver: no search over the wall temperature is implemented.'),
+        Field('nChannelUpperBound', 'Channel count upper bound', 'int',
+              default = None, showWhen = _coolingOn, advanced = True,
+              help = 'Upper bound for a channel-count search. Carried in the configuration and read by '
+                     'no solver: no search over the channel count is implemented.'),
+        Field('nChannelLowerBound', 'Channel count lower bound', 'int',
+              default = None, showWhen = _coolingOn, advanced = True,
+              help = 'Lower bound for a channel-count search. Carried in the configuration and read by '
+                     'no solver: no search over the channel count is implemented.'),
     ], collapsed = True, expandWhen = _coolingOn),
 
     Group('Radiative Extension', [
@@ -609,10 +658,12 @@ groups = [
               help = 'Solve the wall temperature of the uncooled extension beyond the jacket. '
                      'It needs a truncation, because with none the jacket runs the whole '
                      'contour and there is no extension to solve.'),
-        Field('extensionMaterial', 'Extension material', 'text', default = 'C103',
-              showWhen = _radiativeExtensionOn,
-              help = 'Named only to look up a temperature limit for the margin report. Leave it '
-                     'empty to skip the margin.'),
+        Field('extensionMaterial', 'Extension material', 'choice', choices = extensionMaterialChoices,
+              default = 'C103', showWhen = _radiativeExtensionOn,
+              help = 'The shell material. Its temperature limit in the service atmosphere sets the '
+                     'margin report. Choosing it fills the conductivity and emissivities from '
+                     'NOVA\'s material store where the store carries them, and leaves the rest as '
+                     'they are. None skips the margin.'),
         Field('extensionAtmosphere', 'Service atmosphere', 'choice',
               choices = [('Inert or vacuum', 'inert'), ('Oxidising', 'oxidising'),
                          ('Oxidising, coated', 'oxidisingCoated')],
@@ -626,9 +677,9 @@ groups = [
                      'treatment neglects. The drop is reported so it can be checked.'),
         Field('extensionThermalConductivity', 'Shell conductivity', 'float', default = 45.0,
               unit = 'W/m-K', showWhen = _radiativeExtensionOn,
-              help = 'Supplied rather than looked up: the materials store carries conductivity '
-                     'curves only for the jacket alloys and would substitute GRCop-42, which '
-                     'conducts eight times better than a refractory metal.'),
+              help = 'One value for the whole shell. The material store carries a conductivity '
+                     'for ATJ graphite alone, at room temperature, so for the others it is '
+                     'supplied here. C103 is near 45 W/m-K.'),
         Field('extensionInnerEmissivity', 'Inner emissivity', 'float', default = 0.7,
               showWhen = _radiativeExtensionOn,
               help = 'Gas-side surface. Sets how much band radiation the wall exchanges with '
@@ -705,10 +756,6 @@ groups = [
     ], collapsed = True, expandWhen = _filmCoolingOn),
 
     Group('Volutes', [
-        Field('makeInletVolute', 'Generate inlet volute', 'bool', default = False,
-              help = 'Build the inlet manifold volute that feeds the channels.'),
-        Field('makeOutletVolute', 'Generate outlet volute', 'bool', default = False,
-              help = 'Build the outlet manifold volute that collects the channels.'),
         Field('numCSVolute', 'Volute cross sections', 'int', default = None, showWhen = _anyVolute,
               help = 'Number of cross sections swept around each volute.'),
         Field('numCSPointsVolute', 'Points per volute cross section', 'int', default = None, showWhen = _anyVolute,
@@ -737,69 +784,82 @@ groups = [
                      'channel port and the port count, so a large channel asks for a large '
                      'scroll; past this the build refuses rather than drawing one that will not '
                      'fit.'),
-        Field('inletVoluteCrossSection', 'Inlet cross section', 'choice',
+        Field('makeInletVolute', 'Generate inlet volute', 'bool', default = False, fold = 'Inlet volute',
+              help = 'Build the inlet manifold volute that feeds the channels.'),
+        Field('inletVoluteCrossSection', 'Inlet cross section', 'choice', fold = 'Inlet volute',
               choices = [('Circle', 'circle'), ('Squircle', 'squarc')], default = 'circle',
-              showWhen = _anyVolute, help = 'Cross-section shape of the inlet volute.'),
-        Field('inletVoluteAlignment', 'Inlet alignment', 'choice',
+              showWhen = _inletVoluteOn, help = 'Cross-section shape of the inlet volute.'),
+        Field('inletVoluteAlignment', 'Inlet alignment', 'choice', fold = 'Inlet volute',
               choices = [('Center', 'c'), ('North', 'n'), ('South', 's'), ('Inner', 'i'), ('Outer', 'o'),
                          ('North-inner', 'ni'), ('South-inner', 'si'), ('North-outer', 'no'), ('South-outer', 'so')],
-              default = 'i', showWhen = _anyVolute,
+              default = 'i', showWhen = _inletVoluteOn,
               help = 'Which edge of the inlet volute cross section holds still as the scroll '
                      'grows, and so whether the growing sections reach toward the nozzle or away '
                      'from it. Inner grows them outward, clear of the wall.'),
-        Field('inletVolutePrintability', 'Inlet printability shaping', 'choice',
+        Field('inletVolutePrintability', 'Inlet printability shaping', 'choice', fold = 'Inlet volute',
               choices = [('Off', 'off'), ('Thick', 'thick'), ('Thin', 'thin')], default = 'off',
-              showWhen = _anyVolute,
+              showWhen = _inletVoluteOn,
               help = 'Overhang support drawn inside the inlet scroll. Thick braces it with a wall '
                      'and two filleted transitions, thin with a sheet and one. Circular sections '
                      'only.'),
-        Field('inletVoluteTilt', 'Inlet volute tilt', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
+        Field('inletVoluteTilt', 'Inlet volute tilt', 'float',
+              default = None, unit = 'deg', showWhen = _inletVoluteOn, fold = 'Inlet volute',
               help = 'Tilt of the inlet volute cross section.'),
-        Field('inletGraylocDiameter', 'Inlet Grayloc seal ID', 'float', default = None, unit = 'in', showWhen = _anyVolute,
+        Field('inletGraylocDiameter', 'Inlet Grayloc seal ID', 'float',
+              default = None, unit = 'in', showWhen = _inletVoluteOn, fold = 'Inlet volute',
               help = 'Inner diameter of the inlet Grayloc seal ring.'),
-        Field('inletVoluteAxialOffset', 'Inlet volute axial offset', 'float', default = None, unit = 'm', showWhen = _anyVolute,
+        Field('inletVoluteAxialOffset', 'Inlet volute axial offset', 'float',
+              default = None, unit = 'm', showWhen = _inletVoluteOn, fold = 'Inlet volute',
               help = 'Distance upstream of the aft end of the regen section at which the inlet flare leaves the wall.'),
-        Field('inletVoluteFlareRoverD', 'Inlet flare R/D', 'float', default = None, showWhen = _anyVolute,
+        Field('inletVoluteFlareRoverD', 'Inlet flare R/D', 'float',
+              default = None, showWhen = _inletVoluteOn, fold = 'Inlet volute',
               help = 'Fillet radius of the turn into the inlet flare, over the jacket depth.'),
-        Field('inletVoluteFlareLength', 'Inlet flare length', 'float', default = None, unit = 'm', showWhen = _anyVolute,
+        Field('inletVoluteFlareLength', 'Inlet flare length', 'float',
+              default = None, unit = 'm', showWhen = _inletVoluteOn, fold = 'Inlet volute',
               help = 'Flare extension length for the inlet channel entry.'),
-        Field('outletVoluteCrossSection', 'Outlet cross section', 'choice',
+        Field('makeOutletVolute', 'Generate outlet volute', 'bool', default = False, fold = 'Outlet volute',
+              help = 'Build the outlet manifold volute that collects the channels.'),
+        Field('outletVoluteCrossSection', 'Outlet cross section', 'choice', fold = 'Outlet volute',
               choices = [('Circle', 'circle'), ('Squircle', 'squarc')], default = 'circle',
-              showWhen = _anyVolute, help = 'Cross-section shape of the outlet volute.'),
-        Field('outletVoluteAlignment', 'Outlet alignment', 'choice',
+              showWhen = _outletVoluteOn, help = 'Cross-section shape of the outlet volute.'),
+        Field('outletVoluteAlignment', 'Outlet alignment', 'choice', fold = 'Outlet volute',
               choices = [('Center', 'c'), ('North', 'n'), ('South', 's'), ('Inner', 'i'), ('Outer', 'o'),
                          ('North-inner', 'ni'), ('South-inner', 'si'), ('North-outer', 'no'), ('South-outer', 'so')],
-              default = 'i', showWhen = _anyVolute,
+              default = 'i', showWhen = _outletVoluteOn,
               help = 'Which edge of the outlet volute cross section holds still as the scroll '
                      'grows, and so whether the growing sections reach toward the nozzle or away '
                      'from it. Inner grows them outward, clear of the wall.'),
-        Field('outletVolutePrintability', 'Outlet printability shaping', 'choice',
+        Field('outletVolutePrintability', 'Outlet printability shaping', 'choice', fold = 'Outlet volute',
               choices = [('Off', 'off'), ('Thick', 'thick'), ('Thin', 'thin')], default = 'off',
-              showWhen = _anyVolute,
+              showWhen = _outletVoluteOn,
               help = 'Overhang support drawn inside the outlet scroll. Thick braces it with a wall '
                      'and two filleted transitions, thin with a sheet and one. Circular sections '
                      'only.'),
-        Field('outletVoluteTilt', 'Outlet volute tilt', 'float', default = None, unit = 'deg', showWhen = _anyVolute,
+        Field('outletVoluteTilt', 'Outlet volute tilt', 'float',
+              default = None, unit = 'deg', showWhen = _outletVoluteOn, fold = 'Outlet volute',
               help = 'Tilt of the outlet volute cross section.'),
-        Field('outletGraylocDiameter', 'Outlet Grayloc seal ID', 'float', default = None, unit = 'in', showWhen = _anyVolute,
+        Field('outletGraylocDiameter', 'Outlet Grayloc seal ID', 'float',
+              default = None, unit = 'in', showWhen = _outletVoluteOn, fold = 'Outlet volute',
               help = 'Inner diameter of the outlet Grayloc seal ring.'),
-        Field('outletVoluteAxialOffset', 'Outlet volute axial offset', 'float', default = None, unit = 'm', showWhen = _anyVolute,
+        Field('outletVoluteAxialOffset', 'Outlet volute axial offset', 'float',
+              default = None, unit = 'm', showWhen = _outletVoluteOn, fold = 'Outlet volute',
               help = 'Distance downstream of the injector face at which the outlet flare leaves the wall.'),
-        Field('outletVoluteFlareRoverD', 'Outlet flare R/D', 'float', default = None, showWhen = _anyVolute,
+        Field('outletVoluteFlareRoverD', 'Outlet flare R/D', 'float',
+              default = None, showWhen = _outletVoluteOn, fold = 'Outlet volute',
               help = 'Fillet radius of the turn into the outlet flare, over the jacket depth.'),
-        Field('outletVoluteFlareLength', 'Outlet flare length', 'float', default = None, unit = 'm', showWhen = _anyVolute,
+        Field('outletVoluteFlareLength', 'Outlet flare length', 'float',
+              default = None, unit = 'm', showWhen = _outletVoluteOn, fold = 'Outlet volute',
               help = 'Flare extension length for the outlet channel exit.'),
     ], collapsed = True, note = 'Requires cooling channels to be enabled.', expandWhen = _anyVolute),
 
     Group('Program Options', [
         Field('filename', 'Output name', 'text', default = 'novaRun',
               help = 'Base name for the output folder: <name>Outputs/ beside the export location.'),
-        Field('plotsEnabled', 'Plots', 'bool', default = True,
-              help = 'Write every figure the run generates: contour, Mach, pressure, temperature '
-                     'and near-wall views, the channel-mesh and jacket HTML views, and the volute '
-                     'assembly. Forced on by the GUI.'),
-        Field('export', 'Export data files', 'bool', default = True,
-              help = 'Write contour text files, STL geometry and the pickled nozzle. Forced on by the GUI.'),
+        Field('plotsEnabled', 'Plots', 'bool', default = True, hidden = True,
+              help = 'Write every figure the run generates. Every GUI run writes them.'),
+        Field('export', 'Export data files', 'bool', default = True, hidden = True,
+              help = 'Write contour text files, STL geometry and the pickled nozzle. Every GUI run '
+                     'writes them, and the Export tab chooses which are kept.'),
     ]),
 ]
 

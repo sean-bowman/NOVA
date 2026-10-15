@@ -1129,7 +1129,7 @@ directly against the NASA CEARun web tool.
 | Thrust | 100 [kN] | mass flow follows from it |
 | Oxidizer / fuel inlet temperature | 90.17 [K] / 20.27 [K] | normal boiling points |
 | Contour | truncated ideal, $L_{frac} = 0.8$ | method of characteristics |
-| Chamber outer diameter | 180 [mm] | contraction ratio approximately 3.2 |
+| Chamber diameter | 180 [mm] | contraction ratio approximately 3.2 |
 
 ## Chamber Conditions
 

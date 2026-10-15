@@ -5,9 +5,14 @@
 The Design tab's layout and the rows it is built from.
 
 Each section leads with the fields a design is made from and folds the rest into Advanced
-settings. Alternative inputs share a selector row, which writes the chosen option's key and None
-to the others, so a form cannot set both of a mutually exclusive pair. The form round-trips the
-shipped nozzle exactly, whichever rows its keys live in.
+settings; each volute has a fold of its own, and a fold with nothing to show is hidden. Alternative
+inputs share a selector row, which writes the chosen option's key and None to the others, so a form
+cannot set both of a mutually exclusive pair. Program flags the GUI sets itself have no row and
+pass through a loaded config. The form round-trips the shipped nozzle exactly, whichever rows its
+keys live in.
+
+Choosing an extension material fills what NOVA's material store carries for it. The Export tab
+copies the checked outputs of a run from its staging folder to the output folder.
 
 The scroll container gathers wheel input: deltas smaller than a notch add up, and notches that
 arrive before the form redraws are applied in one scroll, because every scroll redraws the visible
@@ -57,6 +62,48 @@ def testCombustionSizesTheEngineOnTwoSelectorsAndFoldsTheInletTemperatures():
     assert main == ['Fuel', 'Oxidizer', 'OFRatio', 'chamberPressure', 'Engine size', 'Nozzle expansion']
     advanced = [_name(item) for item in combustion.fields if item.advanced]
     assert advanced == ['fuelInitialTemperature', 'oxidizerInitialTemperature']
+
+def testRegenerativeCoolingShowsTheJacketsDesignInputsAndFoldsTheRest():
+    cooling = _group('Regenerative Cooling')
+    main = [_name(item) for item in cooling.fields if not configSchema.foldOf(item)]
+    # The helix angle and the manual profile belong to the channel type and sizing they complete:
+    # each is required when its choice is made, and shows only then
+    assert main == ['makeCoolingChannels', 'Regen truncation', 'material', 'channelType', 'channelHelixAngle',
+                    'channelSizingMode', 'manualChannelProfileKey', 'manualChannelProfile', 'nChannel',
+                    'hotWallThickness', 'infillThickness', 'shellThickness', 'maxWallTemperature',
+                    'coolantClass', 'coolant', 'coolantInitialTemperature', 'coolantInitialPressure',
+                    'coolantMassFlow']
+    assert all(configSchema.foldOf(item) == configSchema.advancedFold
+               for item in cooling.fields if _name(item) not in main)
+
+def testEachVoluteHasAFoldOfItsOwn():
+    volutes = _group('Volutes')
+    for item in volutes.fields:
+        fold = configSchema.foldOf(item)
+        if item.key.startswith(('inlet', 'makeInlet')):
+            assert fold == 'Inlet volute', item.key
+        elif item.key.startswith(('outlet', 'makeOutlet')):
+            assert fold == 'Outlet volute', item.key
+        else:
+            assert fold is None, item.key
+
+def testTheGuiSetsThePlotAndExportFlagsItself():
+    hidden = {spec.key for spec in configSchema.allFields() if spec.hidden}
+    assert hidden == set(configSchema.forcedFlags)
+
+def testTheLabelsSayChamberDiameterAndNameNoStandardAlloy():
+    spec = next(field for field in configSchema.allFields() if field.key == 'chamberDiameter')
+    assert spec.label == 'Chamber diameter'
+    assert all('standard' not in label for label, _ in configSchema.materialChoices)
+
+def testTheExtensionMaterialsAreTheStoresHotStructures():
+    '''Every material the store carries that can be a radiation-cooled shell, and no other.'''
+    from novaGui import backend
+    materials = backend.materialsModule()
+    offered = {value for _, value in configSchema.extensionMaterialChoices if value is not None}
+    hotStructure = {name for name in materials.availableMaterials()
+                    if materials.materialProfile(name)['class'] in ('refractoryMetal', 'composite', 'refractory')}
+    assert offered == hotStructure
 
 def testEverySelectorWritesOnlyTheKeysItHolds():
     for group in configSchema.groups:
@@ -144,6 +191,41 @@ def testABlankChamberLengthIsAllowedAndABlankThrustIsNot(form):
     _choose(size, 'Engine mass flow')
     assert form.validate() == ["'Engine mass flow' needs a value."]
 
+def testAFlagWithNoRowPassesThroughALoadedConfig(form):
+    config = configSchema.defaultConfig()
+    config['export'] = 'off'
+    form.setConfig(config)
+    assert 'export' not in form._rows
+    assert form.getConfig()['export'] == 'off'
+
+def testAFoldWithNothingToShowIsHidden(form, tkRoot):
+    cooling = next(entry for entry in form._folds if form._rows['gasSideAxialModel'] in entry[3])
+    assert cooling[1].winfo_manager()
+    config = configSchema.defaultConfig()
+    config['makeCoolingChannels'] = False
+    form.setConfig(config)
+    assert not cooling[1].winfo_manager()
+
+def testChoosingAnExtensionMaterialFillsWhatTheStoreCarries(form):
+    row = form._rows['extensionMaterial']
+    row._var.set(row.spec.valueToLabel('ATJ Graphite'))
+    form._onExtensionMaterial()
+    assert form.getConfig()['extensionThermalConductivity'] == pytest.approx(116.0)
+
+    # C103 carries an emissivity and no conductivity, which keeps the value it had
+    form._rows['extensionInnerEmissivity'].set(0.4)
+    row._var.set(row.spec.valueToLabel('C103'))
+    form._onExtensionMaterial()
+    config = form.getConfig()
+    assert config['extensionInnerEmissivity'] == pytest.approx(0.7)
+    assert config['extensionThermalConductivity'] == pytest.approx(116.0)
+
+def testAnAtmosphereTheMaterialHasNoLimitForIsFlagged(form):
+    config = configSchema.defaultConfig()
+    config.update(makeRadiativeExtension = True, extensionMaterial = 'C103', extensionAtmosphere = 'oxidisingCoated')
+    form.setConfig(config)
+    assert any("'Service atmosphere'" in problem for problem in form.validate())
+
 def testChangingAUnitKeepsTheQuantity(form):
     size = _selector(form, 'Engine size')
     _choose(size, 'Engine mass flow')
@@ -186,3 +268,50 @@ def testNotchesBeforeARedrawAreAppliedInOneScroll(tkRoot, scroller):
 def testADropdownDoesNotTakeTheWheel(tkRoot, scroller):
     '''Scrolling the form over a dropdown scrolls the form rather than changing the dropdown.'''
     assert tkRoot.bind_class('TCombobox', '<MouseWheel>') == ''
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Export -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testAnOldSessionsStagingIsClearedAndThisOnesIsKept(tmp_path, monkeypatch):
+    import os
+    import time
+    from novaGui import runner
+    monkeypatch.setattr(runner.tempfile, 'gettempdir', lambda: str(tmp_path))
+    mine = runner.stagingFolder()
+    old = os.path.join(os.path.dirname(mine), 'session1')
+    for folder in (mine, old):
+        os.makedirs(folder)
+        stale = time.time() - 13 * 3600
+        os.utime(folder, (stale, stale))
+    runner.clearStaging()
+    assert os.path.isdir(mine) and not os.path.isdir(old)
+
+def testExportCopiesOnlyTheCheckedOutputs(tkRoot, tmp_path):
+    import os
+    import types
+    from novaGui.tabs.exportTab import ExportTab
+    theme.applyTheme(tkRoot, 'dark')
+    tab = ExportTab(tkRoot, types.SimpleNamespace(configTab = None))
+    tab.pack()
+
+    staging = tmp_path / 'staging' / 'demoOutputs'
+    staging.mkdir(parents = True)
+    for name in ('machContours.png', 'contourInteractive.html', 'plotly.min.js', 'demoChannel.stl', 'demo.pkl'):
+        (staging / name).write_text('x')
+    configPath = tmp_path / 'staging' / 'demoRunConfig.json'
+    configPath.write_text('{}')
+    result = types.SimpleNamespace(outputDir = str(staging), configPath = str(configPath), runName = 'demo')
+    tab.refresh(result)
+    assert len(tab._chosen) == 6
+
+    # Unchecking a category leaves its files behind, and stays unchecked for the next run
+    tab._choose([path for path, kind in tab._files.items() if kind == 'geometry'], False)
+    tab._unchecked.add('geometry')
+    tab._baseDir.set(str(tmp_path / 'out'))
+    written = tab.export()
+    assert sorted(os.path.basename(path) for path in written) == [
+        'contourInteractive.html', 'demo.pkl', 'demoRunConfig.json', 'machContours.png', 'plotly.min.js']
+    assert all(os.path.dirname(path) == str(tmp_path / 'out' / 'demoOutputs') for path in written)
+    tab.refresh(result)
+    assert not any(kind == 'geometry' for path, kind in tab._files.items() if path in tab._chosen)
