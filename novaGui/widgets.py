@@ -26,6 +26,7 @@ Date:   08/28/2026
 '''
 
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 
 from . import theme
@@ -63,6 +64,21 @@ def fieldHelpText(fieldSpec, maximumOptions: int = 12) -> str:
         parts.append(options)
 
     return '\n\n'.join(parts)
+
+def fitWidth(widget, texts) -> int:
+
+    '''
+
+    Width [px] a ttk entry or dropdown needs to show the longest of `texts` whole: the text in the
+    widget's own font, plus the padding and arrow its request already carries beyond its width in
+    characters, plus a little room so the last letter does not touch the arrow.
+
+    '''
+
+    measure = tkfont.Font(root = widget, font = widget.cget('font')).measure
+    overhead = widget.winfo_reqwidth() - measure('0') * int(widget.cget('width'))
+
+    return max(measure(text) for text in texts) + overhead + theme.scaled(6)
 
 class Tooltip:
 
@@ -576,9 +592,20 @@ class FieldRow:
     @property
     def editorWidth(self) -> int:
 
-        '''Width the editor asks for [px]; a check box sits at the left of the column and asks for none.'''
+        '''
 
-        return 0 if self.spec.kind == 'bool' else self._widget.winfo_reqwidth()
+        Width the editor needs [px]: its own request, or for a dropdown enough to show its longest
+        option whole. A check box sits at the left of the column and needs none.
+
+        '''
+
+        if self.spec.kind == 'bool':
+            return 0
+        width = self._widget.winfo_reqwidth()
+        if self.spec.kind == 'choice' and self.spec.choices:
+            width = max(width, fitWidth(self._widget, self.spec.choiceLabels()))
+
+        return width
 
 class SelectorRow:
 
@@ -792,9 +819,9 @@ class SelectorRow:
     @property
     def labelWidth(self) -> int:
 
-        '''The dropdown takes whatever width the label column has, so it asks for none.'''
+        '''Width the option dropdown needs to show its longest option whole, with the help marker [px].'''
 
-        return 0
+        return fitWidth(self._picker, list(self._options)) + self._info.winfo_reqwidth() + theme.scaled(12)
 
     @property
     def editorWidth(self) -> int:

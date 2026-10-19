@@ -226,6 +226,33 @@ def testAnAtmosphereTheMaterialHasNoLimitForIsFlagged(form):
     form.setConfig(config)
     assert any("'Service atmosphere'" in problem for problem in form.validate())
 
+def testNoDropdownClipsItsLongestOption(form, tkRoot):
+    '''Every dropdown on show is wide enough for its longest option, in the font it draws with.'''
+    from tkinter import font as tkfont
+    from novaGui import units
+    form.pack(fill = 'both', expand = True)
+    for _, fold, _, _ in form._folds:
+        fold.setOpen(True)
+    tkRoot.update()
+
+    def textSpace(widget):
+        measure = tkfont.Font(root = tkRoot, font = widget.cget('font')).measure
+        overhead = widget.winfo_reqwidth() - measure('0') * int(widget.cget('width'))
+        return measure, widget.winfo_width() - overhead
+
+    dropdowns = [(row._widget, row.spec.choiceLabels()) for row in form._rows.values() if row.spec.kind == 'choice']
+    dropdowns += [(row._unitWidget, units.unitsFor(row._dimension)) for row in form._rows.values() if row._unitWidget]
+    dropdowns += [(row._picker, list(row._options)) for row in form._selectors]
+    checked = 0
+    for widget, texts in dropdowns:
+        if not widget.winfo_ismapped():
+            continue
+        measure, space = textSpace(widget)
+        widest = max(texts, key = measure)
+        assert measure(widest) <= space, widest
+        checked += 1
+    assert checked > 40
+
 def testChangingAUnitKeepsTheQuantity(form):
     size = _selector(form, 'Engine size')
     _choose(size, 'Engine mass flow')
