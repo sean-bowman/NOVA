@@ -117,6 +117,7 @@ from .channelProfile import (CHANNELSIZINGMODES, evaluateProfile, profileConfigu
 from .channelSections import (depthLimitedHalfExtent, helicalSpacing, loxodromeWrap,
                               maxHalfExtent, rectangularWidth, throatChannelCount)
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
+from .regenThermal import hotWallSectorArea
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
 
 def _zeroIfUnset(value) -> float:
@@ -333,6 +334,7 @@ class ChannelSizingState:
     channelWidth:                           Any   = None   # [m], one per station, rectangles and helices
     channelRibThickness:                    Any   = None   # [m], one per station, helices only
     channelWallTemperature:                 Any   = None   # [K], hot wall, one per station
+    channelThermalResults:                  Any   = None   # every station quantity the jacket solve produced
     channelProfilePoints:                   Any   = None   # [-], [m], the profile built, keyed on jacket fraction
     coolantExitPressure:                    Any   = None   # [Pa]
     coolantExitTemperature:                 Any   = None   # [K]
@@ -348,7 +350,7 @@ class ChannelSizingState:
 # surface it is a one-line fix rather than a silent drop.
 channelSizingOutputs = (
     'channelRadius', 'channelRibThickness', 'channelWidth', 'channelWallTemperature',
-    'channelProfilePoints', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
+    'channelThermalResults', 'channelProfilePoints', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
     'wallMaterialResolved', 'tempRangeKelvin', 'wallThermalConductivityData',
     'wallThermalConductivityInterpolator', 'wallCTEInterpolator',
     'wallYieldStrengthInterpolator', 'wallFractureStrainInterpolator')
@@ -1721,6 +1723,17 @@ def solveChannelRadii(state, geometry, thermal):
     # wherever the search converged and the bound wherever it did not; in the manual mode it is
     # the whole result, since nothing held it anywhere.
     state.channelWallTemperature = heatTransferPlots['wallTemperature'].copy()
+
+    # Every station quantity the solve produced, kept for figures and reports: the coolant's state
+    # and properties, both film coefficients, the gas temperature driving the wall and the heat each
+    # channel takes in at each station. That heat crosses the hot wall sector one channel owns, so
+    # dividing by the sector gives the heat flux. The segment lengths are in march order, the
+    # results in station order.
+    state.channelThermalResults = {key: np.array(value, dtype = float, copy = True)
+                                   for key, value in heatTransferPlots.items()}
+    sectorArea = hotWallSectorArea(state.channelThermalResults['rHotWall3D'], state.nChannel,
+                                   np.flip(wallSegmentLength))
+    state.channelThermalResults['heatFlux'] = state.channelThermalResults['heatTransfer'] / sectorArea
 
     # The profile this run built, keyed on the fraction along the jacket rather than on area
     # ratio: a constant radius barrel holds one area ratio over its whole length, so only the

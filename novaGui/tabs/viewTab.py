@@ -3,14 +3,15 @@
 
 '''
 
-Every view of a run in one place: the contour, the flow fields, the plume, the cooling jacket and
-the 3D assemblies. A sidebar groups them; the pane beside it draws the selected one inline with
+Every view of a run in one place: the contour, the flow fields, the plume, the cooling jacket, the
+film, the radiative extension and the 3D assemblies. A sidebar groups them and scrolls when the
+window is too short for all of them; the pane beside it draws the selected one inline with
 Matplotlib, and "Open interactive" renders the same view with plotly in the browser, where it can
 be rotated and probed. Views a run did not produce stay listed and greyed, so the list reads the
 same from run to run.
 
-The 3D assemblies are drawn inline from their plotly figures, because Tk cannot host plotly and
-the embedded HTML frame runs no JavaScript.
+The 3D assemblies are drawn inline from their plotly figures, because Tk cannot host plotly. The
+cooling views draw from `thermalPlots`.
 
 Author: Sean Bowman
 
@@ -26,9 +27,10 @@ import numpy as np
 from .. import backend
 from .. import runner
 from .. import theme
-from ..widgets import Tooltip, card
-from ..plotting import (MplPane, drawContour, drawField, drawHeatTransfer, drawNearWall, drawPlotly3d,
-                        drawPlume, drawRevolvedContour, openFile, openInteractive)
+from ..widgets import ScrollableFrame, Tooltip, card
+from ..plotting import (MplPane, drawContour, drawField, drawNearWall, drawPlotly3d, drawPlume,
+                        drawRevolvedContour, openFile, openInteractive)
+from .. import thermalPlots
 
 @dataclass(frozen = True)
 class ViewSpec:
@@ -53,16 +55,23 @@ class ViewSpec:
     builderKey: str = None
     htmlKey: str = None
 
+fieldSource = 'one-dimensional chamber, characteristic mesh to the exit plane'
+jacketSource = 'drawn from the jacket solve'
+
 views = (
     ViewSpec('contour', 'Contour', 'Computed contour', 'drawn from the run', 'contour'),
-    ViewSpec('segments', 'Contour', 'Contour segments', 'figure saved by the run'),
     ViewSpec('nearWall', 'Flow', 'Near-wall state', 'drawn from the run', 'nearWall'),
-    ViewSpec('mach', 'Flow', 'Mach field', 'drawn from the characteristic mesh', 'mach', 'machField'),
-    ViewSpec('pressure', 'Flow', 'Pressure field', 'drawn from the characteristic mesh', 'pressure', 'pressureField'),
-    ViewSpec('temperature', 'Flow', 'Temperature field', 'drawn from the characteristic mesh', 'temperature',
-             'temperatureField'),
-    ViewSpec('plume', 'Plume', 'Plume', 'marched field with correlated cells and Mach disk', 'plume', 'plume'),
-    ViewSpec('heatTransfer', 'Cooling', 'Heat transfer', 'drawn from the jacket sizing', None, 'heatTransfer'),
+    ViewSpec('mach', 'Flow', 'Mach field', fieldSource, 'mach', 'machField'),
+    ViewSpec('pressure', 'Flow', 'Pressure field', fieldSource, 'pressure', 'pressureField'),
+    ViewSpec('temperature', 'Flow', 'Temperature field', fieldSource, 'temperature', 'temperatureField'),
+    ViewSpec('plume', 'Plume', 'Plume', 'chamber, nozzle and marched plume as one field', 'plume', 'plume'),
+    ViewSpec('wallMap', 'Cooling', 'Jacket on the wall', jacketSource, None, 'heatTransfer'),
+    ViewSpec('jacketTemperatures', 'Cooling', 'Temperatures', jacketSource, None, 'heatTransfer'),
+    ViewSpec('coolantFlow', 'Cooling', 'Coolant flow', jacketSource, None, 'heatTransfer'),
+    ViewSpec('coolantProperties', 'Cooling', 'Coolant properties', jacketSource, None, 'heatTransfer'),
+    ViewSpec('heatFlux', 'Cooling', 'Heat flux', jacketSource, None, 'heatTransfer'),
+    ViewSpec('film', 'Cooling', 'Film cooling', 'drawn from the film solve'),
+    ViewSpec('extension', 'Cooling', 'Radiative extension', 'drawn from the extension solve'),
     ViewSpec('channelMesh', 'Cooling', 'Channel mesh', '3D assembly, decimated for the inline view',
              'channelMesh', 'channelMesh'),
     ViewSpec('revolved', '3D', 'Revolved contour', 'drawn from the run', 'revolved'),
@@ -106,16 +115,24 @@ def availableViews(nozzle, outputs: dict) -> set:
     def on(name):
         return str(getattr(nozzle, name, 'off')) in ('on', 'True', 'true')
 
+    def jacket():
+        return thermalPlots.thermalResults(nozzle) is not None
+
     tests = {
-        'contour':      lambda: has('xNozzleWall'),
-        'segments':     lambda: 'contour' in outputs.get('figures', {}),
-        'nearWall':     lambda: has('nozzleNearWallMachNumber'),
-        'mach':         lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
-        'pressure':     lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
-        'temperature':  lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
-        'plume':        lambda: getattr(nozzle, 'nozzlePlumeStructure', None) is not None,
-        'heatTransfer': lambda: has('channelWallTemperature'),
-        'channelMesh':  lambda: np.ndim(getattr(nozzle, 'xChannel', None)) == 2 and has('xChannel'),
+        'contour':            lambda: has('xNozzleWall'),
+        'nearWall':           lambda: has('nozzleNearWallMachNumber'),
+        'mach':               lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
+        'pressure':           lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
+        'temperature':        lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
+        'plume':              lambda: getattr(nozzle, 'nozzlePlumeStructure', None) is not None,
+        'wallMap':            jacket,
+        'jacketTemperatures': jacket,
+        'coolantFlow':        jacket,
+        'coolantProperties':  jacket,
+        'heatFlux':           jacket,
+        'film':               lambda: on('filmCooling') and thermalPlots.filmSolved(nozzle),
+        'extension':          lambda: thermalPlots.extensionSolved(nozzle),
+        'channelMesh':        lambda: np.ndim(getattr(nozzle, 'xChannel', None)) == 2 and has('xChannel'),
         'revolved':     lambda: has('xNozzleWall'),
         'volute':       lambda: on('makeInletVolute') or on('makeOutletVolute'),
     }
@@ -153,9 +170,12 @@ class ViewTab(ttk.Frame):
         self.columnconfigure(1, weight = 1)
         self.rowconfigure(0, weight = 1)
 
-        # -- Sidebar -- #
-        sidebar = card(self)
-        sidebar.grid(row = 0, column = 0, sticky = 'nsw', padx = (0, theme.scaled(8)))
+        # -- Sidebar: scrolls when the window is too short for every view -- #
+        sidebarCard = card(self)
+        sidebarCard.grid(row = 0, column = 0, sticky = 'nsw', padx = (0, theme.scaled(8)))
+        scroller = ScrollableFrame(sidebarCard, onCard = True, fitWidth = True)
+        scroller.pack(fill = 'both', expand = True)
+        sidebar = scroller.body
         group = None
         for spec in views:
             if spec.group != group:
@@ -247,26 +267,26 @@ class ViewTab(ttk.Frame):
             return
 
         drawers = {
-            'contour':      (drawContour,),
-            'nearWall':     (drawNearWall,),
-            'mach':         (drawField, 'mach'),
-            'pressure':     (drawField, 'pressure'),
-            'temperature':  (drawField, 'temperature'),
-            'plume':        (drawPlume,),
-            'heatTransfer': (drawHeatTransfer,),
-            'revolved':     (drawRevolvedContour,),
+            'contour':            (drawContour,),
+            'nearWall':           (drawNearWall,),
+            'mach':               (drawField, 'mach'),
+            'pressure':           (drawField, 'pressure'),
+            'temperature':        (drawField, 'temperature'),
+            'plume':              (drawPlume,),
+            'wallMap':            (thermalPlots.drawWallMap,),
+            'jacketTemperatures': (thermalPlots.drawJacketTemperatures,),
+            'coolantFlow':        (thermalPlots.drawCoolantFlow,),
+            'coolantProperties':  (thermalPlots.drawCoolantProperties,),
+            'heatFlux':           (thermalPlots.drawHeatFlux,),
+            'film':               (thermalPlots.drawFilm,),
+            'extension':          (thermalPlots.drawExtension,),
+            'revolved':           (drawRevolvedContour,),
         }
         if spec.key in drawers:
             function, *arguments = drawers[spec.key]
             self._pane.render(function, nozzle, *arguments)
         elif spec.key in ('channelMesh', 'volute'):
             self._pane.render(_drawAssembly, nozzle, spec.key)
-        elif spec.key == 'segments':
-            path = self._outputs.get('figures', {}).get('contour')
-            if path and os.path.isfile(path):
-                self._pane.showImage(path, spec.label)
-            else:
-                self._pane.message(f'{spec.label} was not written for this run.')
 
     def _openInteractive(self) -> None:
 

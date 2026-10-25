@@ -237,6 +237,73 @@ class PlumeFigure:
     trustworthy: bool = False                      # whether that drift is inside tolerance
     reachMarched: float = 0.0                      # [-], lip radii the march covered
 
+@dataclass
+class StitchedFieldFigure:
+
+    '''
+
+    One flow quantity from the injector face to the exit plane, the way the solve knows it.
+
+    Upstream of the throat no characteristic is solved: the flow is subsonic and the mesh starts at
+    the throat. There the field is the quasi one-dimensional answer, one value per station held
+    across the radius, on a structured grid from the axis to the wall. Downstream it is the
+    characteristic mesh, clipped to the wall that is built: the mesh of a truncated contour runs on
+    to the full ideal exit, past the exit plane of the delivered nozzle. The seam at the throat is
+    kept rather than blended, because the two sides are different kinds of answer.
+
+    '''
+
+    upstreamX: np.ndarray                          # [m], 2-D grid, axis to wall, injector face to throat
+    upstreamR: np.ndarray                          # [m]
+    upstreamValues: np.ndarray                     # field units, on the same grid
+    meshX: np.ndarray                              # [m], characteristic nodes, throat to exit plane
+    meshR: np.ndarray                              # [m]
+    meshValues: np.ndarray                         # field units
+    wallX: np.ndarray                              # [m]
+    wallR: np.ndarray                              # [m]
+    throatX: float = 0.0                           # [m]
+    exitX: float = 0.0                             # [m]
+    label: str = ''
+    colorscale: str = 'mach'                       # a NOVA.palette colormap name
+    logarithmic: bool = False                      # pressure falls three orders of magnitude
+    title: str = ''
+
+@dataclass
+class PlumeSceneFigure:
+
+    '''
+
+    The nozzle and its plume as one Mach field: the chamber's one-dimensional answer, the contour's
+    characteristic mesh to the exit plane, and the station march past it, with the wall and the
+    solved plume boundary that enclose them.
+
+    The three are kept as one set of nodes so they shade as one field; drawn as three they leave a
+    hairline of background at the throat and at the exit plane. `machRange` spans the supersonic
+    flow either side of the lip, so the plume keeps the whole color scale and the chamber, far below
+    it, sits at the bottom color.
+
+    '''
+
+    nodeX: np.ndarray                              # [m]
+    nodeR: np.ndarray                              # [m]
+    nodeMach: np.ndarray                           # [-]
+    machRange: tuple                               # (lowest, highest) [-] of the supersonic flow
+    wallX: np.ndarray                              # [m]
+    wallR: np.ndarray                              # [m]
+    boundaryX: np.ndarray                          # [m], solved plume boundary
+    boundaryR: np.ndarray                          # [m]
+    lipX: float = 0.0                              # [m]
+    lipRadius: float = 0.0                         # [m]
+    reach: float = 0.0                             # [-], lip radii the march covered
+    lipPressureRatio: float = float('nan')         # [-]
+    ambientPressure: float = float('nan')          # [Pa]
+    massDriftWorst: float = float('nan')           # [%]
+    trustworthy: bool = False
+    cellX: np.ndarray = field(default_factory = lambda: np.array([]))   # [m], correlated shock cells
+    machDiskX: float = 0.0                         # [m], correlated
+    machDiskDiameter: float = 0.0                  # [m]
+    machDiskPresent: bool = False
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Extractors -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -444,6 +511,163 @@ def fieldFigure(nozzle, quantity: str):
         wallX = _asArray(getattr(nozzle, 'xNozzleWall', [])),
         wallR = _asArray(getattr(nozzle, 'rNozzleWall', [])),
         label = label, colorscale = colorscale, title = title,
+    )
+
+def _meshNodes(nozzle, attribute: str):
+
+    '''
+
+    Every finite node of the characteristic mesh as flat arrays, in metres: x, r and the named
+    quantity. None when the mesh was not kept.
+
+    '''
+
+    xPoints = getattr(nozzle, 'allXPoints', None)
+    rPoints = getattr(nozzle, 'allRPoints', None)
+    values = getattr(nozzle, attribute, None)
+    if xPoints is None or rPoints is None or values is None:
+        return None
+
+    # The mesh is stored in the solve's own normalized coordinates
+    scale = float(getattr(nozzle, 'nozzleScalingFactor', 1.0) or 1.0)
+    xs, rs, vs = [], [], []
+    for xBlock, rBlock, valueBlock in zip(xPoints, rPoints, values):
+        xBlock = np.asarray(xBlock, dtype = float).ravel() * scale
+        rBlock = np.asarray(rBlock, dtype = float).ravel() * scale
+        valueBlock = np.asarray(valueBlock, dtype = float).ravel()
+        if not (xBlock.size and xBlock.shape == rBlock.shape == valueBlock.shape):
+            continue
+        keep = np.isfinite(xBlock) & np.isfinite(rBlock) & np.isfinite(valueBlock)
+        xs.append(xBlock[keep])
+        rs.append(rBlock[keep])
+        vs.append(valueBlock[keep])
+    if not xs:
+        return None
+
+    return np.concatenate(xs), np.concatenate(rs), np.concatenate(vs)
+
+def _chamberField(nozzle):
+
+    '''
+
+    The quasi one-dimensional field from the injector face to the throat, as 2-D grids keyed 'x',
+    'r', 'mach', 'pressure' and 'temperature'. None when the chamber state is not available.
+
+    '''
+
+    from .characteristics import CharacteristicGas
+    from .contour import quasiOneDimensionalField
+
+    wallX = _asArray(getattr(nozzle, 'xNozzleWall', []))
+    wallR = _asArray(getattr(nozzle, 'rNozzleWall', []))
+    if wallX.size < 3 or wallR.size != wallX.size:
+        return None
+    throat = int(np.argmin(wallR))
+    if throat < 1:
+        return None
+
+    try:
+        gas = CharacteristicGas(nozzle.chamberGamma, nozzle.chamberRGasConstant,
+                                nozzle.chamberStagnationTemperature)
+        return quasiOneDimensionalField(wallX[:throat + 1], wallR[:throat + 1], gas, nozzle.chamberPressure,
+                                        throatRadius = wallR[throat], branch = 'subsonic')
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+def stitchedFieldFigure(nozzle, quantity: str):
+
+    '''
+
+    A flow quantity from the injector face to the exit plane: the one-dimensional chamber and
+    converging section, then the characteristic mesh clipped to the delivered wall. None when the
+    mesh was not kept, which a conical diverging section never does.
+
+    Parameters:
+    -----------
+    quantity : str
+        One of 'mach', 'pressure', 'temperature'
+
+    '''
+
+    if quantity not in fieldDefinitions:
+        raise KeyError(f'stitchedFieldFigure has no definition for {quantity!r}. '
+                       f'Available: {sorted(fieldDefinitions)}')
+    attribute, label, colorscale, title = fieldDefinitions[quantity]
+
+    wallX = _asArray(getattr(nozzle, 'xNozzleWall', []))
+    wallR = _asArray(getattr(nozzle, 'rNozzleWall', []))
+    nodes = _meshNodes(nozzle, attribute)
+    if nodes is None or wallX.size < 3 or wallR.size != wallX.size:
+        return None
+
+    throatX, exitX = float(wallX[int(np.argmin(wallR))]), float(wallX[-1])
+    meshX, meshR, meshValues = nodes
+    inside = (meshX >= throatX) & (meshX <= exitX)
+
+    chamber = _chamberField(nozzle)
+    if chamber is not None:
+        upstreamX, upstreamR, upstreamValues = chamber['x'], chamber['r'], np.asarray(chamber[quantity], dtype = float)
+    else:
+        upstreamX = upstreamR = upstreamValues = np.empty((0, 0))
+
+    titles = {'mach': 'Mach number', 'pressure': 'Static pressure', 'temperature': 'Static temperature'}
+    return StitchedFieldFigure(
+        upstreamX = upstreamX, upstreamR = upstreamR, upstreamValues = upstreamValues,
+        meshX = meshX[inside], meshR = meshR[inside], meshValues = meshValues[inside],
+        wallX = wallX, wallR = wallR, throatX = throatX, exitX = exitX,
+        label = label, colorscale = colorscale, logarithmic = quantity == 'pressure',
+        title = f'{titles[quantity]} from the injector face to the exit plane',
+    )
+
+def plumeSceneFigure(nozzle):
+
+    '''
+
+    The nozzle and its marched plume as one Mach field, or None when the station march did not
+    solve (no reach was asked for, or the operating point was outside its envelope).
+
+    '''
+
+    plume = getattr(nozzle, 'nozzlePlumeField', None)
+    if plume is None or not getattr(plume, 'solved', False) or np.size(plume.nodeX) < 4:
+        return None
+
+    wallX = _asArray(getattr(nozzle, 'xNozzleWall', []))
+    wallR = _asArray(getattr(nozzle, 'rNozzleWall', []))
+    if wallX.size < 3 or wallR.size != wallX.size:
+        return None
+
+    blocks = []
+    chamber = _chamberField(nozzle)
+    if chamber is not None:
+        blocks.append((chamber['x'].ravel(), chamber['r'].ravel(), np.asarray(chamber['mach']).ravel(), False))
+    mesh = _meshNodes(nozzle, 'allMachNumbers')
+    if mesh is not None:
+        meshX, meshR, meshMach = mesh
+        keep = meshX <= plume.lipX
+        blocks.append((meshX[keep], meshR[keep], meshMach[keep], True))
+    blocks.append((np.asarray(plume.nodeX, dtype = float), np.asarray(plume.nodeR, dtype = float),
+                   np.asarray(plume.nodeMach, dtype = float), True))
+
+    supersonic = np.concatenate([mach for _, _, mach, isSupersonic in blocks if isSupersonic])
+    structure = getattr(nozzle, 'nozzlePlumeStructure', None)
+    reach = (plume.solvedTo - plume.lipX) / plume.lipRadius if plume.lipRadius > 0.0 else 0.0
+
+    return PlumeSceneFigure(
+        nodeX = np.concatenate([x for x, _, _, _ in blocks]),
+        nodeR = np.concatenate([r for _, r, _, _ in blocks]),
+        nodeMach = np.concatenate([mach for _, _, mach, _ in blocks]),
+        machRange = (float(np.nanmin(supersonic)), float(np.nanmax(supersonic))),
+        wallX = wallX, wallR = wallR,
+        boundaryX = np.asarray(plume.boundaryX, dtype = float), boundaryR = np.asarray(plume.boundaryR, dtype = float),
+        lipX = float(plume.lipX), lipRadius = float(plume.lipRadius), reach = float(reach),
+        lipPressureRatio = float(plume.lipPressureRatio),
+        ambientPressure = float(getattr(nozzle, 'plumeAmbientPressure', float('nan')) or float('nan')),
+        massDriftWorst = float(plume.massDriftWorst), trustworthy = bool(plume.trustworthy),
+        cellX = _asArray(getattr(structure, 'cellX', [])) if structure is not None else np.array([]),
+        machDiskX = float(getattr(structure, 'machDiskX', 0.0) or 0.0) if structure is not None else 0.0,
+        machDiskDiameter = float(getattr(structure, 'machDiskDiameter', 0.0) or 0.0) if structure is not None else 0.0,
+        machDiskPresent = bool(getattr(structure, 'machDiskPresent', False)) if structure is not None else False,
     )
 
 #--------------------------------------------------------------------------------------------------------------------------#

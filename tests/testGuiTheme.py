@@ -224,10 +224,15 @@ def testTheViewTabOffersOnlyWhatARunProduced():
                                         makeOutletVolute = 'off', nozzlePlumeStructure = None)
     available = availableViews(contourOnly, {'figures': {}})
     assert {'contour', 'nearWall', 'mach', 'pressure', 'temperature', 'revolved'} <= available
-    assert not available & {'plume', 'heatTransfer', 'channelMesh', 'volute', 'segments'}
+    cooling = {'wallMap', 'jacketTemperatures', 'coolantFlow', 'coolantProperties', 'heatFlux', 'film', 'extension'}
+    assert not available & ({'plume', 'channelMesh', 'volute'} | cooling)
 
     cooled = types.SimpleNamespace(**{**vars(contourOnly), 'xChannel': np.zeros((40, 60)),
-                                      'channelWallTemperature': np.ones(60), 'makeOutletVolute': 'on',
-                                      'nozzlePlumeStructure': object()})
-    available = availableViews(cooled, {'figures': {'contour': 'x.png'}})
-    assert {'plume', 'heatTransfer', 'channelMesh', 'volute', 'segments'} <= available
+                                      'channelThermalResults': {'xHotWall3D': np.linspace(0, 1, 60)},
+                                      'makeOutletVolute': 'on', 'nozzlePlumeStructure': object(),
+                                      'filmCooling': 'on', 'xRegenNozzle': np.linspace(0, 1, 60),
+                                      'regenSectionFilmEffectiveness': np.ones(60),
+                                      'radiativeExtensionSolution': object(),
+                                      'extensionWallTemperature': np.ones(40)})
+    available = availableViews(cooled, {'figures': {}})
+    assert {'plume', 'channelMesh', 'volute'} | cooling <= available

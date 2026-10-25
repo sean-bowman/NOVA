@@ -219,10 +219,17 @@ def _colorbar(pane: MplPane, mappable, ax, label: str) -> None:
 
     '''A horizontal color bar under a wide axisymmetric plot, styled for the mode.'''
 
+    from matplotlib.ticker import MaxNLocator
+
     bar = pane.figure.colorbar(mappable, ax = ax, orientation = 'horizontal', fraction = 0.05, pad = 0.10)
     bar.set_label(label, color = theme.text)
     bar.outline.set_edgecolor(theme.border)
     bar.ax.tick_params(colors = theme.textMuted)
+    # Round ticks rather than the contour levels, which land on unreadable values
+    low, high = mappable.norm.vmin, mappable.norm.vmax
+    if low is not None and high is not None and high > low:
+        ticks = MaxNLocator(7).tick_values(low, high)
+        bar.set_ticks(ticks[(ticks >= low) & (ticks <= high)])
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Matplotlib renderers -- #
@@ -314,48 +321,112 @@ def drawNearWall(pane: MplPane, nozzle) -> None:
     pane.axes = axM
     pane.redraw()
 
+def _outline(wallX, wallR):
+
+    '''The closed outline of an axisymmetric wall, upper side then lower, as (x, y) vertices.'''
+
+    wallX, wallR = np.asarray(wallX, dtype = float), np.asarray(wallR, dtype = float)
+
+    return np.column_stack([np.concatenate([wallX, wallX[::-1]]), np.concatenate([wallR, -wallR[::-1]])])
+
+def _clipTo(ax, artist, vertices) -> None:
+
+    '''Clip a filled contour to a closed outline, so a triangulation cannot spill past a wall.'''
+
+    from matplotlib.patches import Polygon
+
+    clip = Polygon(vertices, closed = True, transform = ax.transData, facecolor = 'none', edgecolor = 'none')
+    ax.add_patch(clip)
+    artist.set_clip_path(clip)
+
+def _mirrored(x, r, values):
+
+    '''A structured half field mirrored about the axis, keeping the radial coordinate monotone.'''
+
+    return (np.concatenate([x[:, ::-1], x], axis = 1), np.concatenate([-r[:, ::-1], r], axis = 1),
+            np.concatenate([values[:, ::-1], values], axis = 1))
+
 def drawField(pane: MplPane, nozzle, quantity: str) -> None:
 
     '''
 
-    A flow field over the characteristic mesh, mirrored about the axis, in the palette's colormap
-    for that quantity: Mach, pressure or temperature.
+    A flow field from the injector face to the exit plane, mirrored about the axis: the quasi
+    one-dimensional answer upstream of the throat, the characteristic mesh from the throat to the
+    exit plane of the wall that is built, and the seam between them marked, because the two are
+    different kinds of answer. Pressure falls three orders of magnitude, so its scale is logarithmic.
 
     '''
 
-    data = backend.figuresModule().fieldFigure(nozzle, quantity)
+    from matplotlib.colors import LogNorm
+
+    data = backend.figuresModule().stitchedFieldFigure(nozzle, quantity)
     if data is None:
         pane.message('This run kept no characteristic mesh, so there is no field to draw. '
                      'A conical diverging section never builds one.')
         return
 
-    xs, rs, vs = [], [], []
-    for xBlock, rBlock, valueBlock in zip(data.xBlocks, data.rBlocks, data.valueBlocks):
-        xBlock = np.asarray(xBlock, dtype = float).ravel()
-        rBlock = np.asarray(rBlock, dtype = float).ravel()
-        valueBlock = np.asarray(valueBlock, dtype = float).ravel()
-        keep = np.isfinite(xBlock) & np.isfinite(rBlock) & np.isfinite(valueBlock)
-        xs.append(xBlock[keep])
-        rs.append(rBlock[keep])
-        vs.append(valueBlock[keep])
-    xs, rs, vs = np.concatenate(xs), np.concatenate(rs), np.concatenate(vs)
-
-    scale, label = (1e-5, 'Pressure [bar]') if quantity == 'pressure' else (1.0, data.label)
+    scale, label = {'mach': (1.0, 'Mach number [-]'), 'pressure': (1e-5, 'Static pressure [bar], logarithmic'),
+                    'temperature': (1.0, 'Static temperature [K]')}[quantity]
+    upstream = np.asarray(data.upstreamValues, dtype = float) * scale
+    mesh = np.asarray(data.meshValues, dtype = float) * scale
+    pieces = [mesh] + ([upstream.ravel()] if upstream.size else [])
+    lowest = min(float(np.nanmin(piece)) for piece in pieces)
+    highest = max(float(np.nanmax(piece)) for piece in pieces)
+    if data.logarithmic:
+        levels = np.geomspace(max(lowest, highest * 1e-4), highest, 80)
+        norm = LogNorm(vmin = levels[0], vmax = levels[-1])
+    else:
+        levels, norm = np.linspace(lowest, highest, 80), None
+    cmap = _palette().colormap(data.colorscale, theme.mode)
 
     pane.clear(projection = None)
     ax = pane.axes
     ax.grid(False)
-    mesh = ax.tricontourf(np.concatenate([xs, xs]), np.concatenate([rs, -rs]),
-                          np.concatenate([vs, vs]) * scale, levels = 80,
-                          cmap = _palette().colormap(quantity, theme.mode))
+    outline = _outline(data.wallX, data.wallR)
+    shading = None
+    if upstream.size:
+        shading = ax.contourf(*_mirrored(data.upstreamX, data.upstreamR, upstream), levels = levels, cmap = cmap,
+                              norm = norm, extend = 'both')
+        _clipTo(ax, shading, outline)
+    if mesh.size > 3:
+        shading = ax.tricontourf(np.concatenate([data.meshX, data.meshX]), np.concatenate([data.meshR, -data.meshR]),
+                                 np.concatenate([mesh, mesh]), levels = levels, cmap = cmap, norm = norm,
+                                 extend = 'both')
+        _clipTo(ax, shading, outline)
+
     for sign in (1.0, -1.0):
         ax.plot(data.wallX, sign * np.asarray(data.wallR), color = theme.accent, linewidth = 1.6)
 
+    # The seam, marked rather than blended
+    span = float(np.max(data.wallR))
+    ax.axvline(data.throatX, color = theme.text, linewidth = 0.9, linestyle = '--', alpha = 0.6)
+    offset = 0.012 * (data.exitX - float(np.min(data.wallX)))
+    ax.text(data.throatX - offset, 0.88 * span, 'one dimensional', color = theme.textMuted, fontsize = 8,
+            ha = 'right', style = 'italic')
+    ax.text(data.throatX + offset, 0.88 * span, 'characteristics', color = theme.textMuted, fontsize = 8,
+            ha = 'left', style = 'italic')
+
+    ax.set_xlim(float(np.min(data.wallX)), data.exitX)
+    ax.set_ylim(-1.08 * span, 1.08 * span)
     ax.set_title(data.title, color = theme.text)
     ax.set_xlabel('Nozzle axis [m]')
     ax.set_ylabel('Radius [m]')
-    ax.set_aspect('equal', adjustable = 'datalim')
-    _colorbar(pane, mesh, ax, label)
+    ax.set_aspect('equal', adjustable = 'box')
+    if shading is not None:
+        bar = pane.figure.colorbar(shading, ax = ax, orientation = 'horizontal', fraction = 0.05, pad = 0.10)
+        bar.set_label(label, color = theme.text)
+        bar.outline.set_edgecolor(theme.border)
+        bar.ax.tick_params(colors = theme.textMuted)
+        if not data.logarithmic:
+            from matplotlib.ticker import MaxNLocator
+            ticks = MaxNLocator(7).tick_values(levels[0], levels[-1])
+            bar.set_ticks(ticks[(ticks >= levels[0]) & (ticks <= levels[-1])])
+        if data.logarithmic:
+            # Decade ticks; the level values themselves read as six-figure mantissas
+            decades = 10.0 ** np.arange(np.floor(np.log10(levels[0])), np.ceil(np.log10(levels[-1])) + 1)
+            decades = decades[(decades >= levels[0]) & (decades <= levels[-1])]
+            bar.set_ticks(decades)
+            bar.set_ticklabels([f'{value:g}' for value in decades])
     pane.redraw()
 
 def drawRevolvedContour(pane: MplPane, nozzle, sweepDeg: float = 300.0) -> None:
@@ -407,11 +478,91 @@ def drawPlume(pane: MplPane, nozzle) -> None:
 
     '''
 
-    The exhaust plume against the nozzle contour. Where the station march solved it, the interior
-    is shaded by Mach number in the palette's steel ramp with the solved boundary over it, and the
-    view is framed on the nozzle and the marched reach; the correlated shock cells and Mach disk are
-    drawn where they fall inside it and named in the title where they fall beyond. Where the march
-    did not solve, the correlated boundary is drawn alone over its whole length.
+    The nozzle and its plume as one Mach field, the picture the GUI's icon is drawn from: the
+    chamber's one-dimensional answer, the characteristic mesh to the exit plane and the station
+    march past it, shaded on the steel ramp inside the wall and the solved plume boundary, the plume
+    fading out where the march ends. The scale spans the supersonic flow, so the chamber sits at its
+    bottom color. Where the march did not solve, the correlated plume structure is drawn instead.
+
+    '''
+
+    scene = backend.figuresModule().plumeSceneFigure(nozzle)
+    if scene is not None:
+        _drawPlumeScene(pane, scene)
+        return
+    _drawCorrelatedPlume(pane, nozzle)
+
+def _drawPlumeScene(pane: MplPane, scene) -> None:
+
+    '''The solved scene: one field from the injector face to the end of the march.'''
+
+    from matplotlib.colors import to_rgba
+
+    pane.clear(projection = None)
+    ax = pane.axes
+    ax.grid(False)
+
+    # The wall and the boundary as one closed outline, injector face to the end of the march
+    upperX = np.concatenate([scene.wallX, scene.boundaryX])
+    upperR = np.concatenate([scene.wallR, scene.boundaryR])
+    outline = np.column_stack([np.concatenate([upperX, upperX[::-1]]), np.concatenate([upperR, -upperR[::-1]])])
+
+    levels = np.linspace(scene.machRange[0], scene.machRange[1], 120)
+    shading = ax.tricontourf(np.concatenate([scene.nodeX, scene.nodeX]), np.concatenate([scene.nodeR, -scene.nodeR]),
+                             np.concatenate([scene.nodeMach, scene.nodeMach]), levels = levels,
+                             cmap = _palette().colormap('mach', theme.mode), extend = 'both')
+    _clipTo(ax, shading, outline)
+
+    for sign in (1.0, -1.0):
+        ax.plot(scene.boundaryX, sign * scene.boundaryR, color = theme.yellow, linewidth = 1.4, alpha = 0.9,
+                label = 'Plume boundary, solved' if sign > 0 else None)
+        ax.plot(scene.wallX, sign * scene.wallR, color = theme.accent, linewidth = 2.0, solid_capstyle = 'round',
+                label = 'Nozzle wall' if sign > 0 else None)
+
+    # Framed on the nozzle and the march, and faded out over the last half lip radius of it, so no
+    # edge is left standing where the solve stops
+    start = float(np.min(scene.wallX))
+    end = scene.lipX + scene.reach * scene.lipRadius
+    halfHeight = 1.12 * max(float(np.max(np.abs(scene.boundaryR))), float(np.max(scene.wallR)))
+    fadeStart = end - 0.5 * scene.lipRadius
+    ramp = np.linspace(0.0, 1.0, 64)
+    ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+    fade = np.zeros((1, ramp.size, 4))
+    fade[..., :3] = to_rgba(ax.get_facecolor())[:3]
+    fade[..., 3] = ramp
+    ax.imshow(fade, extent = (fadeStart, end, -halfHeight, halfHeight), aspect = 'auto', zorder = 5,
+              interpolation = 'bilinear')
+
+    ax.set_xlim(start, end)
+    ax.set_ylim(-halfHeight, halfHeight)
+    ax.set_aspect('equal', adjustable = 'box')
+    ax.set_xlabel('Nozzle axis [m]')
+    ax.set_ylabel('Radius [m]')
+
+    # The drift belongs on the figure whatever its value: it separates a plume worth reading from one
+    # that is merely drawn
+    verdict = 'conserves mass' if scene.trustworthy else 'does not conserve mass; shorten the reach'
+    heading = (f'Nozzle and plume at {scene.ambientPressure / 1e3:.2f} kPa ambient, lip pressure ratio '
+               f'{scene.lipPressureRatio:.2f}\nmarched {scene.reach:.1f} lip radii, mass continuity error '
+               f'{scene.massDriftWorst:+.2f} %: {verdict}')
+    beyond = []
+    if scene.machDiskPresent and scene.machDiskX > end:
+        beyond.append(f'Mach disk (x = {scene.machDiskX:.2f} m)')
+    if np.size(scene.cellX) and float(np.max(scene.cellX)) > end:
+        beyond.append('shock cells')
+    if beyond:
+        heading += '\nThe correlated ' + ' and '.join(beyond) + ' lie beyond the march; Open interactive shows them'
+    ax.set_title(heading, color = theme.text, fontsize = 10)
+    _colorbar(pane, shading, ax, 'Mach number [-]')
+    _legend(ax, loc = 'upper left')
+    pane.redraw()
+
+def _drawCorrelatedPlume(pane: MplPane, nozzle) -> None:
+
+    '''
+
+    The correlated plume structure against the nozzle contour, for a run whose march did not solve:
+    the correlated boundary over its whole length, the shock cells and the Mach disk.
 
     '''
 
@@ -488,83 +639,6 @@ def drawPlume(pane: MplPane, nozzle) -> None:
     ax.set_xlabel('Nozzle axis [m]')
     ax.set_ylabel('Radius [m]')
     _legend(ax, loc = 'upper left')
-    pane.redraw()
-
-def drawHeatTransfer(pane: MplPane, nozzle) -> None:
-
-    '''
-
-    The jacket against the gas it holds back: the hot-wall temperature the sizing converged on,
-    with its limit and the gas-side recovery temperature driving it, over the channel size along
-    the regen section. The interactive dashboard carries every station quantity.
-
-    '''
-
-    def stationArray(name: str) -> np.ndarray:
-        value = getattr(nozzle, name, None)
-        try:
-            return np.asarray(value, dtype = float).ravel() if value is not None else np.array([])
-        except (TypeError, ValueError):
-            return np.array([])
-
-    x = stationArray('xRegenNozzleTrimmed')
-    wall = stationArray('channelWallTemperature')
-    if x.size < 2 or wall.size != x.size:
-        pane.message('No cooling jacket was built for this run.')
-        return
-
-    recovery = stationArray('regenSectionNearWallRecoveryTemperatureTrimmed')
-    size = stationArray('channelRadius')
-    limit = getattr(nozzle, 'maxWallTemperature', None)
-
-    pane.figure.clear()
-    pane.figure.set_layout_engine('constrained')
-    pane._projection = None
-    grid = pane.figure.add_gridspec(2, 1, height_ratios = (2, 1))
-    axT = pane.figure.add_subplot(grid[0])
-    axS = pane.figure.add_subplot(grid[1], sharex = axT)
-    for ax in (axT, axS):
-        theme.styleAxes(ax)
-
-    axT.plot(x, wall, color = theme.accent, linewidth = 1.8, label = 'Hot wall')
-    top = float(np.max(wall))
-    if limit is not None and np.isfinite(float(limit)):
-        axT.axhline(float(limit), color = theme.red, linewidth = 1.0, linestyle = '--',
-                    label = f'Wall limit {float(limit):.0f} K')
-        top = max(top, float(limit))
-    # The limit sits below the top of the frame, so the recovery temperature on its own axis,
-    # whose peak fills the top, does not run along it
-    bottom = float(np.min(wall))
-    axT.set_ylim(bottom - 0.05 * (top - bottom), top + 0.20 * (top - bottom))
-    legendAxis = axT
-    if recovery.size == x.size:
-        gasAxis = axT.twinx()
-        gasAxis.plot(x, recovery, color = theme.blue, linewidth = 1.2, label = 'Gas recovery')
-        gasAxis.set_ylabel('Gas recovery temperature [K]', color = theme.blue)
-        gasAxis.tick_params(colors = theme.textMuted)
-        for spine in gasAxis.spines.values():
-            spine.set_color(theme.border)
-        gasAxis.grid(False)
-        legendAxis = gasAxis
-    axT.set_ylabel('Hot wall temperature [K]')
-    axT.set_title('Cooling jacket', color = theme.text)
-    axT.tick_params(labelbottom = False)
-
-    # One legend for both axes, on the twin, which is drawn over the primary's lines
-    handles, labels = axT.get_legend_handles_labels()
-    if legendAxis is not axT:
-        gasHandles, gasLabels = legendAxis.get_legend_handles_labels()
-        handles += gasHandles
-        labels += gasLabels
-    legendAxis.legend(handles, labels, facecolor = theme.surface2, edgecolor = theme.border,
-                      labelcolor = theme.text, fontsize = 8, loc = 'lower center', framealpha = 0.95)
-
-    if size.size == x.size:
-        axS.plot(x, size * 1e3, color = theme.cyan, linewidth = 1.6)
-        axS.set_ylabel('Channel half-extent [mm]')
-    axS.set_xlabel('Nozzle axis [m]')
-
-    pane.axes = axS
     pane.redraw()
 
 def drawPlotly3d(pane: MplPane, figure, maximumGrid: int = 60) -> None:

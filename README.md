@@ -132,15 +132,21 @@ Every field carries an (i) icon. Hovering it gives the field's meaning and, for 
 
 When the run finishes the window turns to View: one figure at a time, picked from a sidebar of contour, flow, plume, cooling and 3D views. Each is drawn from the `Nozzle` object in the window's theme, and **Open interactive** opens its plotly companion in the browser.
 
+The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked.
+
 ![Mach field](docs/images/gui/viewMach.png)
 
-The plume view draws the station march carried past the lip, with the correlated shock cells and Mach disk where they fall inside the frame.
+The plume view draws the nozzle and its plume as one Mach field, the picture the GUI's icon is made from: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary.
 
 ![Plume](docs/images/gui/viewPlume.png)
 
-The heat transfer view draws the hot wall temperature against the alloy's limit, with the gas recovery temperature and the channel size along the jacket.
+The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers.
 
-![Heat transfer](docs/images/gui/viewHeatTransfer.png)
+![Jacket on the wall](docs/images/gui/viewJacket.png)
+
+With film cooling on, the film view maps the film along the wall against the core gas, with its effectiveness and the temperature it holds the wall to; with a radiative extension, the extension view draws the whole wall on one temperature scale against the shell's limit, with the heat balance that sets it.
+
+![Film cooling](docs/images/gui/viewFilm.png)
 
 The channel mesh and the revolved contour are 3D panes that rotate with the mouse.
 

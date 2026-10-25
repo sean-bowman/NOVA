@@ -165,6 +165,7 @@ class RegenChannelState:
     channelRibThickness:                       Any = None
     channelWidth:                              Any = None
     channelWallTemperature:                    Any = None
+    channelThermalResults:                     Any = None
     channelProfilePoints:                      Any = None
     gammaRegenSectionTrimmed:                  Any = None
     gasConstantRegenSectionTrimmed:            Any = None

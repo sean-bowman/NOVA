@@ -160,7 +160,11 @@ class ScrollableFrame(ttk.Frame):
 
     '''
 
-    A frame whose content scrolls vertically. Add children to `.body`.
+    A frame whose content scrolls vertically. Add children to `.body`. The scrollbar shows only
+    while the content is taller than the frame.
+
+    On a card it takes the card's color; with `fitWidth` it is as wide as its content, which is
+    what a sidebar wants rather than a form.
 
     '''
 
@@ -168,13 +172,16 @@ class ScrollableFrame(ttk.Frame):
     wheelLines = 3
     lineHeight = 20
 
-    def __init__(self, master, **kwargs):
+    def __init__(self, master, onCard: bool = False, fitWidth: bool = False, **kwargs):
 
-        super().__init__(master, **kwargs)
+        super().__init__(master, style = 'Surface.TFrame' if onCard else 'TFrame', **kwargs)
 
-        self._canvas = tk.Canvas(self, bg = theme.bg, highlightthickness = 0, bd = 0,
+        self._onCard = onCard
+        self._fitWidth = fitWidth
+        self._canvas = tk.Canvas(self, bg = theme.surface if onCard else theme.bg, highlightthickness = 0, bd = 0,
                                  yscrollincrement = theme.scaled(self.lineHeight))
-        self._scroll = ttk.Scrollbar(self, orient = 'vertical', command = self._onScrollbar)
+        self._scroll = ttk.Scrollbar(self, orient = 'vertical', command = self._onScrollbar,
+                                     style = 'Card.Vertical.TScrollbar' if onCard else 'Vertical.TScrollbar')
         self._canvas.configure(yscrollcommand = self._scroll.set)
 
         # Every scroll redraws the whole visible form, so input that arrives faster than the form
@@ -192,7 +199,7 @@ class ScrollableFrame(ttk.Frame):
         self._scroll.pack(side = 'right', fill = 'y')
         self._canvas.pack(side = 'left', fill = 'both', expand = True)
 
-        self.body = ttk.Frame(self._canvas, style = 'TFrame')
+        self.body = ttk.Frame(self._canvas, style = 'Surface.TFrame' if onCard else 'TFrame')
         self._windowId = self._canvas.create_window((0, 0), window = self.body, anchor = 'nw')
 
         self.body.bind('<Configure>', self._onBodyConfigure)
@@ -206,15 +213,31 @@ class ScrollableFrame(ttk.Frame):
 
     def _restyle(self) -> None:
 
-        self._canvas.configure(bg = theme.bg)
+        self._canvas.configure(bg = theme.surface if self._onCard else theme.bg)
 
     def _onBodyConfigure(self, _event) -> None:
 
         self._canvas.configure(scrollregion = self._canvas.bbox('all'))
+        if self._fitWidth:
+            self._canvas.configure(width = self.body.winfo_reqwidth())
+        self._placeScrollbar()
 
     def _onCanvasConfigure(self, event) -> None:
 
         self._canvas.itemconfigure(self._windowId, width = event.width)
+        self._placeScrollbar()
+
+    def _placeScrollbar(self) -> None:
+
+        '''Show the scrollbar only while the content is taller than the frame.'''
+
+        height = self._canvas.winfo_height()
+        needed = height > 1 and self.body.winfo_reqheight() > height
+        if needed and not self._scroll.winfo_manager():
+            self._scroll.pack(side = 'right', fill = 'y', before = self._canvas)
+        elif not needed and self._scroll.winfo_manager():
+            self._scroll.pack_forget()
+            self._canvas.yview_moveto(0.0)
 
     def _bindWheel(self, active: bool) -> None:
 

@@ -469,6 +469,7 @@ class Nozzle:
         self.channelWidth: np.ndarray | None          = None     # [m]
         self.channelDepth: np.ndarray | None          = None     # [m]
         self.channelWallTemperature: np.ndarray | None = None    # [K]
+        self.channelThermalResults: dict | None = None           # station arrays of the jacket solve, by quantity
         self.channelProfilePoints: np.ndarray | None  = None     # [-], [m]
         self.maxChannelRadius                         = None     # [m]
         self.coolantExitPressure                      = None     # Pa
