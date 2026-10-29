@@ -38,7 +38,7 @@ Date:   09/06/2026
 import numpy as np
 from scipy.optimize import fsolve
 
-from .characteristics import CharacteristicGas
+from .characteristics import CharacteristicGas, axisymmetricMethodOfCharacteristics
 from .gasDynamics import prandtlMeyerAngle
 
 # Transonic models the starting line may be built on, in the order they refine each other.
@@ -125,6 +125,48 @@ def transonicThroatVelocity(gamma: float, curvature: float, model: str = 'sauer'
         return 1.0 + firstOrder / shifted + (secondOrder + firstOrder) / shifted**2
 
     raise ValueError(f"No transonic model called '{model}'. Choose from {transonicModels}.")
+
+def throatDischargeCoefficient(gamma: float, curvature: float) -> float:
+
+    '''
+
+    Inviscid discharge coefficient of an axisymmetric throat: its mass flow over the
+    one-dimensional choked flow through the same area.
+
+    Kliegel and Levine's transonic series recast in inverse powers of R + 1, which converges for
+    every throat curvature where the same series in R does not:
+
+        1 - Cd = (gamma + 1) / (1 + R)^2 [1/96 - (8 gamma - 27) / (2304 (1 + R))
+                                          + (754 gamma^2 - 757 gamma + 3633) / (276480 (1 + R)^2)]
+
+    Kliegel, J. R., and Levine, J. N., Transonic Flow in Small Throat Radius of Curvature Nozzles,
+    AIAA Journal 7(7), 1969, as printed by Cao, Wang, Li and Ding, FLOMEKO 2019, equation 3 (see
+    docs/references_nozzleContour_2026-09-06.md).
+
+    The series assumes a symmetric throat. The Rao throat is not, and the entrant arc is the one
+    that sets the sonic line: at gamma = 1.1475 and an entrant arc of 1.5 throat radii this gives
+    0.9946, and an inviscid finite-volume solution of the shipped throat, with its 0.382 exit arc,
+    converges to 0.9948 (validation/openFoam). The boundary layer's displacement is not included.
+
+    Parameters:
+    -----------
+    gamma : float
+        Ratio of specific heats [-].
+    curvature : float
+        Throat wall radius of curvature as a multiple of the throat radius [-]. The entrant arc.
+
+    Returns:
+    --------
+    float : the discharge coefficient [-]
+
+    '''
+
+    if curvature <= 0.0:
+        raise ValueError(f'A throat curvature has to be positive, not {curvature}.')
+
+    shifted = curvature + 1.0
+    return float(1.0 - (gamma + 1.0) / shifted**2 * (1.0 / 96.0 - (8.0 * gamma - 27.0) / (2304.0 * shifted)
+                                                     + (754.0 * gamma**2 - 757.0 * gamma + 3633.0) / (276480.0 * shifted**2)))
 
 def sauerFlowParameterFor(gamma: float, throatRadius: float, throatVelocity: float) -> float:
 
@@ -451,6 +493,97 @@ def sauerLimitingCharacteristic(gas: CharacteristicGas, throat: ThroatGeometry,
         return axialLocationOfInterest
     else:
         return machNumberOfInterest
+
+def startLineCharacteristic(gas: CharacteristicGas, throat: ThroatGeometry, foot: tuple,
+                            first: tuple, numPoints: int, numStartPoints: int = None) -> tuple:
+
+    '''
+
+    The right-running characteristic that opens the inner expansion kernel, solved from the part of
+    the starting line no throat-arc characteristic reaches.
+
+    The near-throat kernel launches its left-running characteristics from the starting line at the
+    feet of the right-running ones leaving the throat arc. Those feet cover the line only from the
+    wall down to the last one's foot, and how far down that reaches is set by the exit arc: on
+    the Rao arc of 0.382 throat radii they stop at 0.87 of the throat radius, below which lies
+    three quarters of the mass the line carries. The flow downstream of that stretch is
+    determined by the starting line alone, so this solves it there: a characteristic net
+    launched from points on the line beneath the last foot, with each right-running
+    characteristic reflected from the axis, out to its crossings with the characteristic that
+    leaves the kernel's last row one point off the line. That characteristic's state at the
+    crossings is what the inner kernel marches from.
+
+    The intermediate states of a single axis-point solve carry no information from the line. A
+    kernel opened with them passes 1.6 percent less mass than the starting line carries, and puts
+    the first axis node at Mach 1.20 where a finite-volume solution of the same throat has 1.32
+    (validation/openFoam).
+
+    Parameters:
+    -----------
+    gas : CharacteristicGas
+        The gas the net is solved in.
+    throat : ThroatGeometry
+        Throat arcs and the Sauer constants.
+    foot : tuple
+        (mach, flowAngle, x, r) of the kernel's last row on the starting line.
+    first : tuple
+        (mach, flowAngle, x, r) of that row's next point, where the characteristic starts.
+    numPoints : int
+        Points to return along the characteristic, evenly spaced in radius.
+    numStartPoints : int
+        Points on the starting line beneath the foot. None takes `numPoints`; at the shipped
+        throat the axis state settles to 0.04 percent by twenty.
+
+    Returns:
+    --------
+    tuple : (mach, flowAngle, x, r) arrays from the point after `first` down to the axis
+
+    '''
+
+    numStartPoints = numStartPoints or numPoints
+
+    def interior(left: tuple, right: tuple) -> tuple:
+        # `left` carries the left-running characteristic, `right` the right-running one
+        return tuple(float(value) for value in axisymmetricMethodOfCharacteristics(gas, [*left, *right]))
+
+    def onAxis(point: tuple) -> tuple:
+        # The right-running characteristic meets its own mirror image on the axis
+        mach, angle, x, r = point
+        return interior((mach, -angle, x, -r), point)
+
+    radii = foot[3] * (1.0 - np.arange(1, numStartPoints + 1) / (numStartPoints + 1.0))
+    startPoints = [(float(sauerLimitingCharacteristic(gas, throat, radius)), 0.0,
+                    float(sauerLimitingCharacteristic(gas, throat, radius, returnAxialLocation = True)),
+                    float(radius)) for radius in radii]
+
+    # The latest point on the right-running characteristic leaving each starting point, the foot's
+    # first. Each new left-running line crosses all of them on its way out to the characteristic
+    # being solved.
+    current = [tuple(float(value) for value in foot)] + [None] * numStartPoints
+    characteristic = [tuple(float(value) for value in first)]
+
+    for index, start in enumerate(startPoints, start = 1):
+        point = start
+        for line in range(index - 1, -1, -1):
+            point = interior(point, current[line])
+            current[line] = point
+        characteristic.append(interior(point, characteristic[-1]))
+        current[index] = start
+
+    # The right-running characteristics reach the axis in turn, innermost first, and each reflects
+    # into a left-running one that crosses those still above it
+    for reflected in range(numStartPoints, -1, -1):
+        point = onAxis(current[reflected])
+        for line in range(reflected - 1, -1, -1):
+            point = interior(point, current[line])
+            current[line] = point
+        characteristic.append(interior(point, characteristic[-1]))
+    characteristic.append(onAxis(characteristic[-1]))
+
+    # Resampled evenly in radius, which is how the inner kernel spaces its rows
+    mach, angle, x, r = (np.array(values) for values in zip(*characteristic))
+    targets = first[3] * (1.0 - np.arange(1, numPoints + 1) / numPoints)
+    return tuple(np.interp(targets, r[::-1], values[::-1]) for values in (mach, angle, x, r))
 
 def limitingCharacteristicIntersection(gas: CharacteristicGas, throat: ThroatGeometry,
                                        machNumber: float, flowAngle: float,

@@ -1135,7 +1135,8 @@ class Nozzle:
 
         self.nozzleScalingFactor = throatScalingFactor(
             self.engineMassFlow, self.chamberPressure, self.throatGamma,
-            self.chamberRGasConstant, self.chamberStagnationTemperature)
+            self.chamberRGasConstant, self.chamberStagnationTemperature,
+            self.throatInletCurvatureNonDimensional)
 
         solution = ContourSolution(
             gas = gas, throat = throat,

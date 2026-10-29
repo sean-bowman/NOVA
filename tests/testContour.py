@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from NOVA.characteristics import CharacteristicGas
-from NOVA.contourKernel import ThroatGeometry
+from NOVA.contourKernel import ThroatGeometry, throatDischargeCoefficient
 from NOVA.contour import (ContourSolution, contourSolutionOutputs, throatScalingFactor,
                      conicalContour, raoWallAngles, raoParabolicContour, wallAnglesFromContour,
                      raoChartExtrapolatedAbove)
@@ -41,34 +41,34 @@ def throat():
 
 def testThroatRadiusPassesTheRequestedMassFlow():
     '''
-    The scaling factor is the throat radius that chokes at the requested mass flow. Recomputing
-    the choked flow from it has to give the mass flow back, apart from the empirical correction
-    the function applies.
+    The scaling factor is the throat radius that passes the requested mass flow once the throat's
+    discharge coefficient is applied: the one-dimensional choked flow through it, times the
+    coefficient, gives the mass flow back.
     '''
     massFlow, chamberPressure, throatGamma = 23.91, 6894757.0, 1.1502
-    radius = throatScalingFactor(massFlow, chamberPressure, throatGamma, GAS_CONSTANT,
-                                 STAGNATION_TEMPERATURE)
-    area = np.pi * radius ** 2
-    chokedFlow = chamberPressure * area * np.sqrt(
-        throatGamma / (GAS_CONSTANT * STAGNATION_TEMPERATURE)
-        * (2 / (throatGamma + 1)) ** ((throatGamma + 1) / (throatGamma - 1)))
+    for inletCurvature in (0.75, 1.5, 3.0):
+        radius = throatScalingFactor(massFlow, chamberPressure, throatGamma, GAS_CONSTANT,
+                                     STAGNATION_TEMPERATURE, inletCurvature)
+        area = np.pi * radius ** 2
+        chokedFlow = chamberPressure * area * np.sqrt(
+            throatGamma / (GAS_CONSTANT * STAGNATION_TEMPERATURE)
+            * (2 / (throatGamma + 1)) ** ((throatGamma + 1) / (throatGamma - 1)))
+        coefficient = throatDischargeCoefficient(throatGamma, inletCurvature)
+        assert chokedFlow * coefficient == pytest.approx(massFlow, rel = 1e-12)
 
-    correction = 1 - (throatGamma - 1) / 96 * (1 / 1.5) ** 2
-    assert chokedFlow == pytest.approx(massFlow * correction, rel = 1e-12)
-
-def testTheEmpiricalThroatCorrectionIsSmallAndItsSizeIsRecorded():
+def testTheThroatIsLargerThanTheOneDimensionalAreaByTheDischargeCoefficient():
     '''
-    The unsourced correction 1 - (gamma - 1) / 96 * (1 / 1.5)^2 shrinks the throat area by 0.070
-    per cent and the throat radius by 0.035 per cent at this gamma.
-
-    Recorded because it is applied to every dimension the tool produces and has no reference
-    behind it. A discharge coefficient of the kind it appears to stand in for is nearer 1 per
-    cent, so whatever it is, it does not reproduce one.
+    A sonic line bowed by the throat's curvature passes less than a flat one, so the throat is
+    larger than the one-dimensional choked area: by 0.54 percent in area at the Rao entrant arc,
+    and by more as the arc tightens.
     '''
     throatGamma = 1.1502
-    correction = 1 - (throatGamma - 1) / 96 * (1 / 1.5) ** 2
-    assert 100.0 * (1.0 - correction) == pytest.approx(0.0695, abs = 1e-3)
-    assert 100.0 * (1.0 - np.sqrt(correction)) == pytest.approx(0.0348, abs = 1e-3)
+    areas = [throatScalingFactor(20.0, 7.0e6, throatGamma, GAS_CONSTANT, STAGNATION_TEMPERATURE, curvature)**2
+             for curvature in (0.75, 1.5, 3.0)]
+    oneDimensional = 20.0 / (7.0e6 * np.sqrt(throatGamma / (GAS_CONSTANT * STAGNATION_TEMPERATURE)
+                                            * (2 / (throatGamma + 1)) ** ((throatGamma + 1) / (throatGamma - 1)))) / np.pi
+    assert 100.0 * (areas[1] / oneDimensional - 1.0) == pytest.approx(0.542, abs = 1e-3)
+    assert areas[0] > areas[1] > areas[2] > oneDimensional
 
 def testScalingGrowsWithMassFlowAndShrinksWithChamberPressure():
     base = throatScalingFactor(20.0, 7.0e6, 1.15, GAS_CONSTANT, STAGNATION_TEMPERATURE)

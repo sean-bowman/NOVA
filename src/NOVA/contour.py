@@ -44,7 +44,8 @@ from scipy.optimize import fsolve, minimize_scalar
 
 from .characteristics import (CharacteristicGas, axisymmetricMethodOfCharacteristics,
                               wallCharacteristicProjection)
-from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic,
+from .contourKernel import (ThroatGeometry, sauerLimitingCharacteristic, startLineCharacteristic,
+                            throatDischargeCoefficient,
                             limitingCharacteristicIntersection, throatIntersection)
 from .directCharacteristics import (marchPrescribedWall, shockFromWallEnvelope,
                                     stagnationPressureField)
@@ -55,7 +56,8 @@ from .wallGeometry import bezierBellWall, thrustOptimizedParabolaWall
 from .geometryTools import arcSpline, lineIntersection
 
 def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGamma: float,
-                        gasConstant: float, stagnationTemperature: float) -> float:
+                        gasConstant: float, stagnationTemperature: float,
+                        inletCurvature: float = 1.5) -> float:
 
     '''
 
@@ -63,14 +65,11 @@ def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGam
 
     The whole contour is solved non-dimensionally against a unit throat radius, so this one number
     carries it into real units. It is the radius of the throat that passes the requested mass flow
-    at the chamber state, times an empirical correction.
-
-    That correction, 1 - (gamma - 1) / 96 * (1 / 1.5)^2, reduces the throat area by about 0.07 per
-    cent at a gamma of 1.15. It is UNSOURCED: no reference for it has been found. It is understood
-    as a discharge-coefficient allowance for the boundary layer and the initial expansion near the
-    throat, which is a real effect, but that reading is inference rather than a citation. Published
-    discharge coefficients for a throat of this curvature at high Reynolds number sit near 0.99, an
-    order of magnitude further from unity, so the correction as written does not reproduce them.
+    at the chamber state once the throat's curvature is accounted for: the one-dimensional choked
+    area divided by the inviscid discharge coefficient of the entrant arc,
+    `throatDischargeCoefficient`. A sonic line bowed by the throat's curvature passes less than a
+    flat one, so the throat has to be larger than the one-dimensional area by that factor, 0.54
+    percent at gamma = 1.15 and an entrant arc of 1.5 throat radii.
 
     Parameters:
     -----------
@@ -84,6 +83,8 @@ def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGam
         Specific gas constant [J/kg-K]
     stagnationTemperature : float
         Chamber stagnation temperature [K]
+    inletCurvature : float
+        Entrant arc radius as a multiple of the throat radius [-]
 
     Returns:
     --------
@@ -94,8 +95,8 @@ def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGam
     nozzleThroatArea       = engineMassFlow/((chamberPressure * np.sqrt(throatGamma / \
                                             (gasConstant * stagnationTemperature) * \
                                             ((2 / (throatGamma + 1))**((throatGamma + 1) / (throatGamma - 1))))))
-    throatCorrectionFactor = 1 - (throatGamma - 1) / 96 * (1 / 1.5)**2
-    return np.sqrt(nozzleThroatArea * throatCorrectionFactor / np.pi)
+    dischargeCoefficient   = throatDischargeCoefficient(throatGamma, inletCurvature)
+    return np.sqrt(nozzleThroatArea / dischargeCoefficient / np.pi)
 
 class ContourSolution:
 
@@ -397,8 +398,9 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
 
     Three pieces, in order. Sauer's transonic solution draws the limiting characteristic, because
     a march cannot begin at the throat where the characteristics are degenerate. The near-throat
-    kernel is built out to the wall. The inner expansion kernel is then marched down to the axis
-    and reflected across it.
+    kernel is built out to the wall from the part of that line the throat arc's characteristics
+    reach. The inner expansion kernel is then marched down to the axis and reflected across it,
+    from a characteristic solved from the rest of the line (`startLineCharacteristic`).
 
     Parameters:
     -----------
@@ -550,11 +552,13 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
     expansionKernelX[:numCharacteristics, :numCharacteristics], expansionKernelR[:numCharacteristics, :numCharacteristics] \
     = [sauerStuff for sauerStuff in [throatKernelMach, throatKernelFlowAngle, throatKernelX, throatKernelR]]
 
-    # Create initial right running characteristic
-    axMOCKernel = [throatKernelMach[-1,1], -throatKernelFlowAngle[-1,1], throatKernelX[-1,1], -throatKernelR[-1,1], \
-                    throatKernelMach[-1,1],  throatKernelFlowAngle[-1,1], throatKernelX[-1,1],  throatKernelR[-1,1]]
-    initialRightRunningMach, initialRightRunningFlowAngle, initialRightRunningX, initialRightRunningR, *_ = \
-    axisymmetricMethodOfCharacteristics(gas, axMOCKernel, numPoints = idealMeshSpacing)
+    # The right-running characteristic the inner kernel marches from, from the last row's first
+    # point off the starting line down to the axis. Everything it crosses is fed by the stretch of
+    # the starting line below the last row's foot, so it is solved from that stretch.
+    lastRowFoot  = (throatKernelMach[-1,0], throatKernelFlowAngle[-1,0], throatKernelX[-1,0], throatKernelR[-1,0])
+    lastRowFirst = (throatKernelMach[-1,1], throatKernelFlowAngle[-1,1], throatKernelX[-1,1], throatKernelR[-1,1])
+    initialRightRunningMach, initialRightRunningFlowAngle, initialRightRunningX, initialRightRunningR = \
+    startLineCharacteristic(gas, throat, lastRowFoot, lastRowFirst, idealMeshSpacing)
 
     # Insert stuff from initial right running characteristic
     expansionKernelMach[numCharacteristics:numCharacteristics+idealMeshSpacing, 1], expansionKernelFlowAngle[numCharacteristics:numCharacteristics+idealMeshSpacing, 1], \
@@ -608,7 +612,8 @@ def solveKernel(gas: CharacteristicGas, throat: ThroatGeometry, numCharacteristi
 def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius: float,
                           wallMach: float, straighteningBlocks: tuple,
                           expansionBlocks: tuple, entryIndices: tuple,
-                          numContourElements: int) -> tuple:
+                          numContourElements: int, designMach: float,
+                          coreOriginX: float) -> tuple:
 
     '''
 
@@ -619,12 +624,12 @@ def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius:
     through the flow-straightening block and then through the expansion kernel behind it.
 
     The walk runs out of columns before it reaches the axis, typically around a quarter of the
-    exit radius. That leaves a core carrying roughly eight percent of the exit AREA unsampled,
-    and because the thrust integral weights by area over the FULL exit area, an unsampled core
-    subtracts directly from the thrust coefficient rather than showing up as a gap. The plane is
-    closed on the axis instead, where the flow angle is zero by symmetry and the Mach number is
-    extrapolated from the two innermost sampled points, and `exitPlaneSampledFraction` records
-    how much of the plane the mesh actually supplied.
+    exit radius, which leaves a core carrying roughly eight percent of the exit area unsampled.
+    That core is the ideal nozzle's uniform design region: downstream of the left-running
+    characteristic leaving the axis where the kernel reaches the design Mach number, the flow is
+    axial at that Mach number exactly. The plane is closed with it, from where that characteristic
+    crosses the exit plane to the axis, and `exitPlaneSampledFraction` records how much of the
+    plane the mesh supplied.
 
     This is the truncated ideal contour's own sampler, and it encodes that solve's traversal: the
     staircase steps inward because the TIC builds its wall outward against a prescribed exit line.
@@ -646,6 +651,10 @@ def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius:
         (i, j) of the cell the wall march finished in.
     numContourElements : int
         Bound on the walk, from the mesh the solve built.
+    designMach : float
+        Mach number of the uniform core, the kernel's last state on the axis [-].
+    coreOriginX : float
+        Axial position of that state, non-dimensional.
 
     Returns:
     --------
@@ -727,25 +736,25 @@ def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius:
     machNumberExitPlane = machNumberExitPlane[:index]
     flowAngleExitPlane = flowAngleExitPlane[:index]
 
-    # The walk descends through the mesh from the wall and runs out of columns before it
-    # reaches the axis, typically around a quarter of the exit radius. That leaves a core
-    # carrying roughly eight percent of the exit AREA unsampled, and because the thrust
-    # integral below weights by area over the FULL exit area, an unsampled core subtracts
-    # directly from the thrust coefficient rather than showing up as a gap.
-    #
-    # The plane is closed on the axis instead. Flow angle is zero there by symmetry, and the
-    # Mach number is extrapolated from the two innermost sampled points, which sit in the part
-    # of the plane where the profile is flattest. `exitPlaneSampledFraction` records how much
-    # of the plane the mesh actually supplied, so the size of the closure stays visible.
+    # The first step off the wall interpolates along a cell edge that can reach past the wall's
+    # own radius. A station there is outside the flow.
+    inside = np.concatenate(([True], rExitPlane[1:] <= rExitPlane[0]))
+    rExitPlane = rExitPlane[inside]
+    machNumberExitPlane = machNumberExitPlane[inside]
+    flowAngleExitPlane = flowAngleExitPlane[inside]
+
+    # The walk runs out of columns before the axis. Inside the left-running characteristic from
+    # the kernel's last axis point the flow is the uniform design core, axial at the design Mach
+    # number, so the plane is closed with that state from where the characteristic crosses it to
+    # the axis. Extrapolating the last two sampled stations to the axis puts the shipped nozzle's
+    # core at Mach 4.307 against a design value of 4.2033, above every Mach number in the net.
     state.exitPlaneSampledFraction = float(1.0 - (rExitPlane[-1] / rExitPlane[0]) ** 2)
-    if rExitPlane[-1] > 1e-12 and len(rExitPlane) >= 2:
-        slope = ((machNumberExitPlane[-1] - machNumberExitPlane[-2])
-                 / (rExitPlane[-1] - rExitPlane[-2]))
-        axisMach = machNumberExitPlane[-1] - slope * rExitPlane[-1]
-        rExitPlane = np.append(rExitPlane, 0.0)
-        machNumberExitPlane = np.append(machNumberExitPlane, axisMach)
-        flowAngleExitPlane = np.append(flowAngleExitPlane, 0.0)
-        index += 1
+    if rExitPlane[-1] > 1e-12:
+        coreRadius = (xExitPlane - coreOriginX) * np.tan(np.arcsin(1.0 / designMach))
+        closure = ([coreRadius] if 0.0 < coreRadius < rExitPlane[-1] else []) + [0.0]
+        rExitPlane = np.append(rExitPlane, closure)
+        machNumberExitPlane = np.append(machNumberExitPlane, np.full(len(closure), designMach))
+        flowAngleExitPlane = np.append(flowAngleExitPlane, np.zeros(len(closure)))
 
     return rExitPlane, machNumberExitPlane, flowAngleExitPlane
 
@@ -862,54 +871,38 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
     if stagnationPressure is None:
         stagnationPressure = state.chamberPressure
 
-    numStations  = len(rExitPlane)
-    exitPressure = np.zeros(numStations)
-    _, exitPressure[0], _ = isentropicValues(machNumberExitPlane[0], state.chamberStagnationTemperature,
-                                             np.asarray(stagnationPressure).flat[0]
-                                             if np.ndim(stagnationPressure) else stagnationPressure,
-                                             state.chamberGamma, state.chamberRGasConstant)
+    rExitPlane          = np.asarray(rExitPlane, dtype = float)
+    machNumberExitPlane = np.asarray(machNumberExitPlane, dtype = float)
+    flowAngleExitPlane  = np.asarray(flowAngleExitPlane, dtype = float)
+    stationStagnation   = np.broadcast_to(np.asarray(stagnationPressure, dtype = float), rExitPlane.shape)
 
-    velocityTermThrustCoef, pressureTermThrustCoef = 0, 0
+    exitTemperature, exitPressure, exitVelocity = isentropicValues(
+        machNumberExitPlane, state.chamberStagnationTemperature, stationStagnation,
+        state.chamberGamma, state.chamberRGasConstant)
+    exitPressure = np.array(exitPressure, dtype = float)
+    exitDensity  = exitPressure / (state.chamberRGasConstant * exitTemperature)
 
-    for i in range(numStations - 1):
+    # Every quantity is integrated over the plane by one rule, the trapezoidal rule on the
+    # integrand times radius, so the thrust and the mass flow it is divided by carry the same
+    # quadrature error rather than errors of opposite sign. Strips carrying the mean of their two
+    # stations, with the mass flow by the trapezoidal rule, put the shipped nozzle's thrust per
+    # unit mass flow 0.47 percent below the exact integral of its own piecewise-linear profile,
+    # nearly all of it from the single segment that closes the core.
+    def planeIntegral(values: np.ndarray) -> float:
+        return float(2.0 * np.pi * np.trapezoid(values[::-1] * rExitPlane[::-1], rExitPlane[::-1]))
 
-        differentialCSArea = np.pi * (rExitPlane[i]**2 - rExitPlane[i+1]**2)
-        stationStagnation  = (stagnationPressure[i+1] if np.ndim(stagnationPressure)
-                              else stagnationPressure)
-        _, exitPressure[i+1], _ = isentropicValues(machNumberExitPlane[i+1], state.chamberStagnationTemperature,
-                                                   stationStagnation, state.chamberGamma, state.chamberRGasConstant)
-        averagePressureBetweenNodes  = (exitPressure[i+1] + exitPressure[i]) / 2
-        averageFlowAngleBetweenNodes = (flowAngleExitPlane[i+1] + flowAngleExitPlane[i]) / 2
-
-        # Axial momentum flux through the strip, as the momentum theorem writes it:
-        #
-        #     integral of rho u^2 cos^2(theta) dA
-        #
-        # Two cosines, and both are needed. One resolves the mass actually crossing the plane,
-        # since only the axial component of the velocity carries flow through it; the other
-        # takes the axial component of the momentum that mass carries. Using a single cosine
-        # over-credits a diverging strip, and because the exit angle falls as a contour is
-        # truncated further out, that error grows with truncation and moves the apparent
-        # optimum. On the worked contour it put the peak thrust coefficient at an area ratio
-        # of 14.0 against a true 12.6.
-        averageMachBetweenNodes = 0.5 * (machNumberExitPlane[i] + machNumberExitPlane[i+1])
-        localTemperature = state.chamberStagnationTemperature \
-            / (1 + 0.5 * (state.chamberGamma - 1) * averageMachBetweenNodes**2)
-        localDensity = averagePressureBetweenNodes / (state.chamberRGasConstant * localTemperature)
-        localVelocity = averageMachBetweenNodes * np.sqrt(state.chamberGamma
-                                                          * state.chamberRGasConstant
-                                                          * localTemperature)
-        velocityTermThrustCoef += (localDensity * localVelocity**2
-                                   * np.cos(averageFlowAngleBetweenNodes)**2
-                                   * differentialCSArea) \
-                                  / (state.chamberPressure * np.pi * state.throatRadiusNonDimensional**2)
-
-        # Take summation of pressure term in thrust coefficient
-        # The thrust coefficient normalizes by the throat AREA, pi rt^2, which is where the
-        # exponent belongs. Written as rt * 2 this divided by 2 pi rt instead and halved the
-        # pressure term, since the non-dimensional throat radius is 1.
-        pressureTermThrustCoef += (averagePressureBetweenNodes - state.targetExitPressure) * differentialCSArea / \
-                (state.chamberPressure * np.pi * state.throatRadiusNonDimensional**2)
+    # Axial momentum flux, as the momentum theorem writes it: rho u^2 cos^2(theta). Two cosines,
+    # and both are needed. One resolves the mass actually crossing the plane, since only the axial
+    # component of the velocity carries flow through it; the other takes the axial component of
+    # the momentum that mass carries. A single cosine over-credits a diverging plane, and because
+    # the exit angle falls as a contour is truncated further out, that error grows with truncation
+    # and moves the apparent optimum: on the worked contour it put the peak thrust coefficient at
+    # an area ratio of 14.0 against a true 12.6.
+    #
+    # The thrust coefficient normalizes by the throat area, pi rt^2.
+    throatForce = state.chamberPressure * np.pi * state.throatRadiusNonDimensional**2
+    velocityTermThrustCoef = planeIntegral(exitDensity * exitVelocity**2 * np.cos(flowAngleExitPlane)**2) / throatForce
+    pressureTermThrustCoef = planeIntegral(exitPressure - state.targetExitPressure) / throatForce
 
     # The exit plane is the only place the solve knows what the whole flow is doing rather
     # than what the wall is doing, so it is kept. The area average is what the thrust
@@ -922,38 +915,21 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
     state.exitAreaAveragedPressure = float(
         np.trapezoid(exitPressure[::-1] * rExitPlane[::-1], rExitPlane[::-1])
         / np.trapezoid(rExitPlane[::-1], rExitPlane[::-1]))
-    massFlux = (exitPressure / (state.chamberRGasConstant
-                                * (state.chamberStagnationTemperature
-                                   / (1 + 0.5 * (state.chamberGamma - 1) * machNumberExitPlane**2)))
-                * machNumberExitPlane
-                * np.sqrt(state.chamberGamma * state.chamberRGasConstant
-                          * state.chamberStagnationTemperature
-                          / (1 + 0.5 * (state.chamberGamma - 1) * machNumberExitPlane**2))
-                * np.cos(flowAngleExitPlane))
-    weight = massFlux[::-1] * rExitPlane[::-1]
-    state.exitMassAveragedPressure = float(
-        np.trapezoid(exitPressure[::-1] * weight, rExitPlane[::-1])
-        / np.trapezoid(weight, rExitPlane[::-1]))
-    state.exitMassFlux = float(2.0 * np.pi * np.trapezoid(weight, rExitPlane[::-1]))
+    massFlux = exitDensity * exitVelocity * np.cos(flowAngleExitPlane)
+    state.exitMassFlux = planeIntegral(massFlux)
+    state.exitMassAveragedPressure = planeIntegral(exitPressure * massFlux) / state.exitMassFlux
 
     # Mass through the exit plane against the one-dimensional choked throat flow.
     #
-    # This does NOT converge to one, and reading a departure from one as solver error is wrong.
-    # `chokedFlow` below assumes a flat sonic line. The real one is curved by the throat, the
-    # solve carries that curvature from its transonic start line, and the flow it delivers is
-    # correspondingly less: this is the throat discharge coefficient, and it is physics rather
-    # than discretization.
+    # This does not converge to one. `chokedFlow` below assumes a flat sonic line; the real one is
+    # bowed by the throat's curvature and passes less, and the transonic starting line carries
+    # that into the solve. Sauer's line passes 0.9904 of the choked flow at the Rao entrant arc of
+    # 1.5 throat radii, against 0.9946 from Kliegel and Levine's series, which an inviscid
+    # finite-volume solution of the shipped throat reproduces to 0.02 percent.
     #
-    # Measured on the kernel's own downstream boundary, which reaches the axis and so is not
-    # truncated, the deficit is 2.04 per cent at the shipped outlet curvature of 0.382 throat
-    # radii, 1.55 at 0.75 and 0.92 at 1.5. It falls monotonically as the throat flattens, which
-    # is the signature. All three contoured families carry it identically, 0.9787 to 0.9798,
-    # because they share the kernel.
-    #
-    # What is left after it IS a quality measure, and it is the part that differs by family: a
-    # further 0.5 per cent for the truncated ideal contour, whose sampler leaves eight per cent
-    # of the exit area to a linear closure, against 1.5 to 1.8 for the optimized families, whose
-    # exit plane is fully sampled and whose loss is in the forward march and its sampling.
+    # The rest is the march's discretization, first order in the number of characteristics: on the
+    # shipped throat, cut at an area ratio of 40, the closure is 0.9815, 0.9862 and 0.9885 at 25,
+    # 50 and 100 characteristics, extrapolating to 0.9908 against the line's 0.9904.
     chokedFlow = (state.chamberPressure * np.pi * state.throatRadiusNonDimensional ** 2
                   * np.sqrt(state.throatGamma
                             / (state.chamberRGasConstant * state.chamberStagnationTemperature)
@@ -1234,7 +1210,8 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
     # Calculate scaling factor (to revert back to real units after the non-dimensional design process)
     state.nozzleScalingFactor = throatScalingFactor(state.engineMassFlow, state.chamberPressure,
                                                    state.throatGamma, state.chamberRGasConstant,
-                                                   state.chamberStagnationTemperature)
+                                                   state.chamberStagnationTemperature,
+                                                   state.throat.inletCurvature)
 
     #-----------------------------------------------------------------------------------------------------------------------------------------#
     # -- Starting Line and Kernel -- #
@@ -1442,7 +1419,8 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
              flowStraighteningFlowAngle),
             (expansionKernelX, expansionKernelR, expansionKernelMach,
              expansionKernelFlowAngle),
-            (iContourPrevious, jContourPrevious), numContourElements)
+            (iContourPrevious, jContourPrevious), numContourElements,
+            designMach = calculatedExitMach, coreOriginX = expansionKernelX[-1,-1])
 
         velocityTermThrustCoef, pressureTermThrustCoef = exitPlaneThrustCoefficient(
             state, rExitPlane, machNumberExitPlane, flowAngleExitPlane)
@@ -1551,7 +1529,8 @@ def solvePrescribedWallContour(state: ContourSolution, wall, inflectionAngle: fl
 
     state.nozzleScalingFactor = throatScalingFactor(state.engineMassFlow, state.chamberPressure,
                                                     state.throatGamma, state.chamberRGasConstant,
-                                                    state.chamberStagnationTemperature)
+                                                    state.chamberStagnationTemperature,
+                                                    state.throat.inletCurvature)
 
     # -- The kernel, turned to this family's inflection angle -- #
     #
@@ -1925,7 +1904,8 @@ def solveConicalContour(state: ContourSolution, conicalHalfAngle: float = 15.0,
     halfAngle = np.radians(float(conicalHalfAngle))
     scaling = throatScalingFactor(state.engineMassFlow, state.chamberPressure, state.throatGamma,
                                   state.chamberRGasConstant,
-                                  state.chamberStagnationTemperature)
+                                  state.chamberStagnationTemperature,
+                                  state.throat.inletCurvature)
 
     state.nozzleScalingFactor = scaling
 
