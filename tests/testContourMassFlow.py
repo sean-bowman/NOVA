@@ -68,6 +68,19 @@ def testTheDischargeCoefficientRefusesAFlatThroat():
     with pytest.raises(ValueError):
         throatDischargeCoefficient(GAMMA, 0.0)
 
+def testTheCharacteristicVelocityIsTheThermochemistrysNotTheGeometricThroats(shippedContour):
+    '''
+    The throat is larger than the one-dimensional choked area by its discharge coefficient, and
+    the characteristic velocity the heat transfer reads belongs to the one-dimensional area: it is
+    the closed-form perfect-gas value, not chamber pressure times the geometric throat area over
+    the mass flow, which is 0.54 percent higher.
+    '''
+    closedForm = (np.sqrt(GAS_CONSTANT * STAGNATION_TEMPERATURE / GAMMA)
+                  / (2.0 / (GAMMA + 1.0))**((GAMMA + 1.0) / (2.0 * (GAMMA - 1.0))))
+    assert shippedContour.theoreticalCharacteristicVelocity == pytest.approx(closedForm, rel = 1e-9)
+    geometric = CHAMBER_PRESSURE * shippedContour.throatArea / shippedContour.engineMassFlow
+    assert geometric / closedForm - 1.0 == pytest.approx(1.0 / throatDischargeCoefficient(GAMMA, 1.5) - 1.0, rel = 1e-6)
+
 def testTheStartingLineCarriesSauersDischargeCoefficient(gas, throat):
     '''
     The starting line passes Sauer's discharge coefficient, the leading term of the series, which

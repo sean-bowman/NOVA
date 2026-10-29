@@ -1007,7 +1007,11 @@ def finishContourSolution(state: ContourSolution, xNozzleWall: np.ndarray,
 
         # Calculate delivered characteristic velocity and theoretical characteristic velocity
         state.throatArea                        = np.pi * min(rNozzleWallScaled)**2
-        state.theoreticalCharacteristicVelocity = state.chamberPressure * state.throatArea / state.engineMassFlow
+        # The thermochemistry's characteristic velocity belongs to the area that passes the mass
+        # flow one-dimensionally, which is the geometric throat times its discharge coefficient
+        dischargeCoefficient = throatDischargeCoefficient(state.throatGamma, state.throat.inletCurvature)
+        state.theoreticalCharacteristicVelocity = (state.chamberPressure * state.throatArea * dischargeCoefficient
+                                                   / state.engineMassFlow)
         state.deliveredCharacteristicVelocity   = state.ambientSpecificImpulse * 9.81 / thrustCoef
 
         # Assign calculated properties to object
