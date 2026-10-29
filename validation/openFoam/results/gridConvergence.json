@@ -1,0 +1,66 @@
+{
+  "cells": [
+    5400,
+    21600,
+    86280
+  ],
+  "quantities": {
+    "massFlow": {
+      "coarse": 23.29582042776807,
+      "medium": 23.30409759380017,
+      "fine": 23.306526298265076,
+      "monotonic": true,
+      "order": 1.768949949412951,
+      "extrapolated": 23.307534872111393,
+      "gridConvergenceIndex": 5.409288762140451e-05,
+      "mediumToFine": -0.00010420705487495275,
+      "nova": 22.83078334424698,
+      "fineAgainstNova": 0.020837784969738093,
+      "extrapolatedAgainstNova": 0.02088196102060369
+    },
+    "vacuumThrustCoefficient": {
+      "coarse": 1.9192799100330862,
+      "medium": 1.9211948592089227,
+      "fine": 1.9217462207575315,
+      "monotonic": true,
+      "order": 1.7962355385775683,
+      "extrapolated": 1.9219691617341246,
+      "gridConvergenceIndex": 0.00014501197802871166,
+      "mediumToFine": -0.00028690653461592696,
+      "nova": 1.8761179465633968,
+      "fineAgainstNova": 0.024320578712929475,
+      "extrapolatedAgainstNova": 0.024439409715533156
+    },
+    "thrustPerMassFlow": {
+      "coarse": 4518.626029382524,
+      "medium": 4521.5279292882815,
+      "fine": 4522.354247164595,
+      "monotonic": true,
+      "order": 1.812228973828802,
+      "extrapolated": 4522.683215725235,
+      "gridConvergenceIndex": 9.092845856941242e-05,
+      "mediumToFine": -0.0001827185202998427,
+      "nova": 4506.9777845572435,
+      "fineAgainstNova": 0.0034117014421588543,
+      "extrapolatedAgainstNova": 0.003484692385616883
+    },
+    "exitMassAveragedMach": {
+      "coarse": 3.930915428472309,
+      "medium": 3.937279874156438,
+      "fine": 3.938874176137291,
+      "monotonic": true,
+      "order": 1.997109947256653,
+      "extrapolated": 3.9394070319513426,
+      "gridConvergenceIndex": 0.00016910155993295252,
+      "mediumToFine": -0.0004047608300137576,
+      "nova": 3.9540825726234474,
+      "fineAgainstNova": -0.003846251616355545,
+      "extrapolatedAgainstNova": -0.0037114906941277948
+    }
+  },
+  "mediumToFineCriterion": {
+    "value": -0.00028690653461592696,
+    "limit": 0.002,
+    "pass": true
+  }
+}

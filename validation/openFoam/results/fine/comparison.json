@@ -1,0 +1,254 @@
+{
+  "case": "novaNozzle2D-fine",
+  "resolution": "fine",
+  "cells": 86280,
+  "time": 0.001,
+  "averageStart": 0.0005,
+  "exitPlane": {
+    "massFlow": {
+      "openFoam": 23.306526298265076,
+      "nova": 22.83078334424698,
+      "difference": 0.020837784969738093,
+      "novaProfile": 22.757500139898383,
+      "differenceFromProfile": 0.02412506448386842
+    },
+    "vacuumThrust": {
+      "openFoam": 105400.36819161239,
+      "nova": 102897.83333656067,
+      "difference": 0.024320578712929475,
+      "novaProfile": 103054.90450185725,
+      "differenceFromProfile": 0.022759360178853605
+    },
+    "vacuumThrustCoefficient": {
+      "openFoam": 1.9217462207575315,
+      "nova": 1.8761179465633968,
+      "difference": 0.024320578712929475,
+      "novaProfile": 1.878981797264088,
+      "differenceFromProfile": 0.022759360178853827
+    },
+    "thrustPerMassFlow": {
+      "openFoam": 4522.354247164595,
+      "nova": 4506.9777845572435,
+      "difference": 0.0034117014421588543,
+      "novaProfile": 4528.393007507081,
+      "differenceFromProfile": -0.0013335327416315046
+    },
+    "exitMassAveragedMach": {
+      "openFoam": 3.938874176137291,
+      "nova": 3.9540825726234474,
+      "difference": -0.003846251616355545,
+      "novaProfile": 3.953464701172375,
+      "differenceFromProfile": -0.003690566664413919
+    },
+    "exitAreaAveragedPressure": {
+      "openFoam": 17840.060920147287,
+      "nova": 17382.763526624425,
+      "difference": 0.02630751967731948,
+      "novaProfile": 17320.91058809895,
+      "differenceFromProfile": 0.029972461863814637
+    },
+    "exitMassAveragedPressure": {
+      "openFoam": 18847.830001830225,
+      "nova": 18337.343008334312,
+      "difference": 0.02783865651986206,
+      "novaProfile": 18320.204277386147,
+      "differenceFromProfile": 0.02880020967317276
+    }
+  },
+  "dischargeCoefficient": {
+    "openFoam": 0.9947135756098101,
+    "nova": 0.9744090493665432,
+    "chokedMassFlow": 23.430389279624528,
+    "entrantArc": {
+      "hall": 0.9938035246464412,
+      "kliegelLevine": 0.9946106403224233
+    },
+    "exitArc": {
+      "hall": 0.26028684966701887,
+      "kliegelLevine": 0.9739942985549253
+    }
+  },
+  "designThrustCoefficient": {
+    "openFoam": 1.8405640634247837,
+    "nova": 1.7949357892306494
+  },
+  "steadiness": {
+    "massImbalance": 0.00011200598198657374,
+    "meanDrift": 6.18627140638317e-05,
+    "window": {
+      "inletMassFlow": {
+        "mean": 23.303920294986167,
+        "oscillation": 0.004508027782670104,
+        "drift": 6.0474888464279175e-05
+      },
+      "outletMassFlow": {
+        "mean": 23.306530473462942,
+        "oscillation": 0.0009705090294430321,
+        "drift": -5.063574914576652e-05
+      },
+      "vacuumThrust": {
+        "mean": 105400.42687333928,
+        "oscillation": 0.0011471458501941542,
+        "drift": -6.18627140638317e-05
+      }
+    }
+  },
+  "centerlineMach": {
+    "mean": 0.005175860653325517,
+    "rms": 0.014779549347430747,
+    "p95": 0.01832457007644739,
+    "max": 0.09679961617231259,
+    "count": 51
+  },
+  "wall": {
+    "divergingPressure": {
+      "mean": 0.023778881690172362,
+      "rms": 0.025648987228715156,
+      "p95": 0.03157958544271032,
+      "max": 0.07479925547760224,
+      "count": 1310
+    },
+    "divergingMach": {
+      "mean": 0.012375233668356205,
+      "rms": 0.013549691902156305,
+      "p95": 0.01796006180617902,
+      "max": 0.01995126986910234,
+      "count": 1310
+    },
+    "convergingPressureOneDimensional": {
+      "mean": 0.01042628744784341,
+      "rms": 0.026416669548309783,
+      "p95": 0.06379891628754733,
+      "max": 0.14792326202398076,
+      "count": 596
+    },
+    "convergingPressureTransonic": {
+      "mean": 0.006482498097640537,
+      "rms": 0.013588798196841542,
+      "p95": 0.03223258541926083,
+      "max": 0.056826683478003126,
+      "count": 596
+    },
+    "convergingMachOneDimensional": {
+      "mean": 0.05656578553096814,
+      "rms": 0.08874754274110142,
+      "p95": 0.2048740262808925,
+      "max": 0.21444494657089497,
+      "count": 596
+    },
+    "convergingMachTransonic": {
+      "mean": 0.04958228845905127,
+      "rms": 0.08266982549975947,
+      "p95": 0.2048740262808925,
+      "max": 0.21444494657089497,
+      "count": 596
+    }
+  },
+  "fieldMach": {
+    "mean": 0.011593368965914655,
+    "rms": 0.014806697834735694,
+    "p95": 0.026473357286546317,
+    "max": 0.09679961617231236,
+    "count": 6362
+  },
+  "fieldFlowAngleDegrees": {
+    "mean": 0.3796153092518182,
+    "rms": 0.6575760891065773,
+    "p95": 1.5118499149345375,
+    "max": 3.3426758353707,
+    "count": 6362
+  },
+  "fieldMachNearThroat": {
+    "mean": 0.017657725974568186,
+    "rms": 0.019124562565676965,
+    "p95": 0.027704742136041904,
+    "max": 0.09679961617231236,
+    "count": 3637
+  },
+  "fieldMachDownstream": {
+    "mean": 0.003499399629961299,
+    "rms": 0.004867617937775185,
+    "p95": 0.010707748877631838,
+    "max": 0.022401377094114716,
+    "count": 2725
+  },
+  "fieldFlowAngleDegreesDownstream": {
+    "mean": 0.2027243272258004,
+    "rms": 0.31009522287748964,
+    "p95": 0.6661784820967858,
+    "max": 1.3166157307947628,
+    "count": 2725
+  },
+  "centerlineMachDownstream": {
+    "mean": 0.0024835792998402894,
+    "rms": 0.004513707254967506,
+    "p95": 0.009822578199301463,
+    "max": 0.01832457007644739,
+    "count": 46
+  },
+  "conservation": {
+    "wallRow": {
+      "totalPressureMean": 0.9501709855309544,
+      "totalPressureMin": 0.8864120485799099,
+      "totalTemperatureMean": 0.9957741981983276
+    },
+    "secondRow": {
+      "totalPressureMean": 0.9619212776566749,
+      "totalPressureMin": 0.9120990918738532,
+      "totalTemperatureMean": 0.9971921820298069
+    },
+    "interior": {
+      "totalPressureMean": 0.999044133397028,
+      "totalPressureMin": 0.9917276459913338,
+      "totalTemperatureMean": 1.0000027523966035
+    }
+  },
+  "criteria": {
+    "vacuumThrustCoefficient": {
+      "value": 0.024320578712929475,
+      "limit": 0.01,
+      "pass": false
+    },
+    "massFlow": {
+      "value": 0.020837784969738093,
+      "limit": 0.01,
+      "pass": false
+    },
+    "thrustPerMassFlow": {
+      "value": 0.0034117014421588543,
+      "limit": 0.005,
+      "pass": true
+    },
+    "exitMassAveragedMach": {
+      "value": -0.003846251616355545,
+      "limit": 0.01,
+      "pass": true
+    },
+    "centerlineMachMax": {
+      "value": 0.09679961617231259,
+      "limit": 0.02,
+      "pass": false
+    },
+    "divergingWallPressureMax": {
+      "value": 0.07479925547760224,
+      "limit": 0.05,
+      "pass": false
+    },
+    "fieldMach95": {
+      "value": 0.026473357286546317,
+      "limit": 0.02,
+      "pass": false
+    },
+    "massImbalance": {
+      "value": 0.00011200598198657374,
+      "limit": 0.001,
+      "pass": true
+    },
+    "meanDrift": {
+      "value": 6.18627140638317e-05,
+      "limit": 0.0005,
+      "pass": true
+    }
+  },
+  "allPass": false
+}

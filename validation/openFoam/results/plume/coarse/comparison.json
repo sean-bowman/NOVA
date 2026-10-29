@@ -1,0 +1,262 @@
+{
+  "case": "novaPlume2D-coarse",
+  "resolution": "coarse",
+  "cells": 7680,
+  "cellsPerRadius": 10,
+  "time": 0.06,
+  "averageStart": 0.03,
+  "stationRadius": 0.3127023131044198,
+  "massFlow": {
+    "openFoamInflow": 21.74890441608,
+    "marchStation": 21.759760068247353,
+    "nozzleExit": 22.83078334424698,
+    "stationAgainstNozzle": -0.04691136786024952,
+    "stationAreaAgainstLip": -0.034560772963624475
+  },
+  "boundary": {
+    "radius": {
+      "mean": 0.014933374027840627,
+      "rms": 0.02325439539940181,
+      "p95": 0.05752477133401749,
+      "max": 0.06883462440160826,
+      "count": 129
+    },
+    "endOfMarch": {
+      "x": 2.0000000012994272,
+      "openFoam": 1.729166612876097,
+      "march": 1.7154839459753835
+    },
+    "layerWidthAtEndOfMarch": 0.44675563035810856,
+    "pressureOverAmbient": {
+      "mean": 0.07332113041267035,
+      "rms": 0.11446715593510368,
+      "p95": 0.18427407188003325,
+      "max": 0.40955832404673564,
+      "count": 20
+    },
+    "angleDegrees": {
+      "openFoam": 17.873537634838424,
+      "march": 24.857734187860125,
+      "marchFirstSegment": 17.373389656766236,
+      "prandtlMeyer": 27.55187922607797,
+      "prandtlMeyerAtStationLip": 27.242768620848796,
+      "correlationReported": 30.317789750539756
+    }
+  },
+  "extendedMarch": [
+    {
+      "x": 2.0,
+      "boundaryRadius": -0.0079145967216534,
+      "massDrift": -0.007226209605941795
+    },
+    {
+      "x": 4.0,
+      "boundaryRadius": -0.013331642006239819,
+      "massDrift": -0.057918358896301196
+    },
+    {
+      "x": 6.0,
+      "boundaryRadius": -0.038372464627629,
+      "massDrift": -0.1598864447148671
+    },
+    {
+      "x": 8.0,
+      "boundaryRadius": -0.06395741841490066,
+      "massDrift": -0.3395499432892794
+    }
+  ],
+  "fieldMach": {
+    "mean": 0.014407014874839214,
+    "rms": 0.05976922206512768,
+    "p95": 0.04597601835094811,
+    "max": 1.0149074347370912,
+    "count": 14001
+  },
+  "fieldPressure": {
+    "mean": 0.0647561849501887,
+    "rms": 0.17876513430324822,
+    "p95": 0.30319756503780904,
+    "max": 4.140950480379875,
+    "count": 14001
+  },
+  "fieldFlowAngleDegrees": {
+    "mean": 0.8753532095100136,
+    "rms": 3.5652495104889024,
+    "p95": 3.2483392203959784,
+    "max": 62.64547821212078,
+    "count": 14001
+  },
+  "machDisk": {
+    "present": false,
+    "x": 4.753164876,
+    "peakMach": 6.176977497108983,
+    "peakX": 4.687486882,
+    "downstreamMach": 3.3803947402683603,
+    "radius": NaN,
+    "xFromExit": 12.642122737656516,
+    "radiusOverStation": NaN,
+    "history": [
+      [
+        0.03,
+        4.815715347
+      ],
+      [
+        0.032,
+        4.815715347
+      ],
+      [
+        0.034,
+        4.753164876
+      ],
+      [
+        0.036,
+        4.753164876
+      ],
+      [
+        0.038,
+        4.753164876
+      ],
+      [
+        0.04,
+        4.753164876
+      ],
+      [
+        0.042,
+        4.753164876
+      ],
+      [
+        0.044,
+        4.753164876
+      ],
+      [
+        0.046,
+        4.753164876
+      ],
+      [
+        0.048,
+        4.753164876
+      ],
+      [
+        0.05,
+        4.753164876
+      ],
+      [
+        0.052,
+        4.753164876
+      ],
+      [
+        0.054,
+        4.753164876
+      ],
+      [
+        0.056,
+        4.753164876
+      ],
+      [
+        0.058,
+        4.753164876
+      ],
+      [
+        0.06,
+        4.753164876
+      ]
+    ],
+    "oscillation": 0.06615436779672013
+  },
+  "firstCell": {
+    "maxX": 8.522113911339362,
+    "maxRadius": 2.2772243101439926,
+    "neckX": 18.57129503124578,
+    "neckRadius": 1.4383891715697903
+  },
+  "structure": {
+    "machDiskLocation": {
+      "openFoam": 3.953221022615173,
+      "correlation": 2.517556235466613,
+      "reported": 2.517556235466613,
+      "difference": -0.36316329872161446
+    },
+    "machDiskDiameter": {
+      "openFoam": NaN,
+      "correlation": 2.9332462099611294,
+      "reported": 2.9332462099611294,
+      "difference": NaN
+    },
+    "shockCellLength": {
+      "openFoam": 5.807286913615173,
+      "correlation": 6.254101020579721,
+      "reported": 7.1236545282623664,
+      "pack": 5.84226894724905,
+      "difference": 0.07694025000159588
+    },
+    "maximumBoundaryRadius": {
+      "openFoam": 0.7120933092396432,
+      "correlation": 0.602494515,
+      "reported": 0.602494515,
+      "difference": -0.15391072043166687
+    }
+  },
+  "steadiness": {
+    "massImbalance": 0.04794102407624434,
+    "window": {
+      "inlet": {
+        "mean": 21.74890441608,
+        "oscillation": 1.6335138592883836e-16,
+        "drift": 0.0
+      },
+      "outlet": {
+        "mean": 51.52866443994425,
+        "oscillation": 0.007864666484465673,
+        "drift": -0.007906198316359303
+      },
+      "farField": {
+        "mean": -28.737095273621023,
+        "oscillation": 0.266352178760079,
+        "drift": -0.10169345973055788
+      }
+    }
+  },
+  "criteria": {
+    "boundaryRadiusMax": {
+      "value": 0.06883462440160826,
+      "limit": 0.02,
+      "pass": false
+    },
+    "fieldMach95": {
+      "value": 0.04597601835094811,
+      "limit": 0.02,
+      "pass": false
+    },
+    "lipBoundaryAngle": {
+      "value": 6.9841965530217,
+      "limit": 1.0,
+      "pass": false
+    },
+    "machDiskLocation": {
+      "value": -0.36316329872161446,
+      "limit": 0.1,
+      "pass": false
+    },
+    "machDiskDiameter": {
+      "value": NaN,
+      "limit": 0.25,
+      "pass": false
+    },
+    "shockCellLength": {
+      "value": 0.07694025000159588,
+      "limit": 0.1,
+      "pass": true
+    },
+    "massImbalance": {
+      "value": 0.04794102407624434,
+      "limit": 0.002,
+      "pass": false
+    },
+    "meanDrift": {
+      "value": -0.007906198316359303,
+      "limit": 0.001,
+      "pass": false
+    }
+  },
+  "allPass": false
+}

@@ -152,6 +152,17 @@ These back the contour generation described in `NozzleContour.md`, the taxonomy 
   - Merlin 1D Vacuum: expansion ratio 165. Geometry is manufacturer material rather than a technical publication.
   - F-1: overall expansion ratio 16, regeneratively cooled to the 10:1 plane with a turbine-exhaust-gas-cooled extension to 16:1. Diameters were not recovered from a citable source in this pass.
 
+## Cao, Wang, Li and Ding (2019), discharge coefficient of sonic nozzles
+
+- **URL:** <https://imeko.org/publications/tc9-2019/IMEKO-TC9-2019-028.pdf> (FLOMEKO 2019, Lisbon, *The Theoretical Analysis and Waviness Profile Measurement for the Discharge Coefficient of Sonic Nozzles*)
+- **Accessed:** 2026-10-27
+- **Relevance:** Retrieved for the closed-form inviscid discharge coefficient of an axisymmetric throat, to set against the mass flow of the OpenFOAM cross-check in `validation/openFoam`. The paper prints Hall's series, Kliegel and Levine's correction of it, and Kliegel and Levine's recast in `1/(R + 1)`, all three in full.
+- **Key findings:**
+  - Kliegel and Levine's recast, with `R` the throat wall radius of curvature over the throat radius: `1 - Cd = (gamma + 1) / (1 + R)^2 [1/96 - (8 gamma - 27) / (2304 (1 + R)) + (754 gamma^2 - 757 gamma + 3633) / (276480 (1 + R)^2)]` (equation 3). It converges for every `R`.
+  - Hall's series as Kliegel and Levine corrected it: `1 - Cd = (gamma + 1) / R^2 [1/96 - (8 gamma + 21) / (2304 R) + (754 gamma^2 + 2123 gamma + 2553) / (552960 R^2)]` (equation 2). The correction moves the coefficient by about 0.06 percent. For small enough `R` Hall's form returns a negative inviscid discharge coefficient.
+  - Every form leads with `(gamma + 1) / (96 R^2)`. NOVA's unsourced throat correction in `contour.throatScalingFactor`, `(gamma - 1) / 96 (1 / 1.5)^2`, has the same structure with the sign inside the first factor reversed.
+  - At gamma = 1.1475 and the Rao entrant arc of 1.5 throat radii, Kliegel and Levine give 0.9946 and corrected Hall gives 0.9938. At the 0.382 exit arc Kliegel and Levine give 0.9740. Both forms assume a symmetric throat.
+
 ---
 
 ## What these sources support and what they do not

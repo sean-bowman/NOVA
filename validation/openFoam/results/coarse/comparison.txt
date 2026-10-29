@@ -1,0 +1,32 @@
+coarse grid, 5400 cells, t = 0.006 s
+
+quantity                           OpenFOAM           NOVA  difference   NOVA profile  difference
+massFlow                            23.2958        22.8308      2.037%        22.7575      2.365%
+vacuumThrust                         105265         102898      2.301%         103055      2.145%
+vacuumThrustCoefficient             1.91928        1.87612      2.301%        1.87898      2.145%
+thrustPerMassFlow                   4518.63        4506.98      0.258%        4528.39     -0.216%
+exitMassAveragedMach                3.93092        3.95408     -0.586%        3.95346     -0.570%
+exitAreaAveragedPressure            17893.9        17382.8      2.941%        17320.9      3.308%
+exitMassAveragedPressure            18914.3        18337.3      3.147%        18320.2      3.243%
+dischargeCoefficient               0.994257       0.974409
+  Kliegel-Levine, entrant arc 0.99461, exit arc 0.97399; Hall, entrant arc 0.99380
+
+criterion                          value       limit  result
+vacuumThrustCoefficient           2.301%      1.000%  FAIL
+massFlow                          2.037%      1.000%  FAIL
+thrustPerMassFlow                 0.258%      0.500%  pass
+exitMassAveragedMach             -0.586%      1.000%  pass
+centerlineMachMax                10.514%      2.000%  FAIL
+divergingWallPressureMax          7.315%      5.000%  FAIL
+fieldMach95                       6.780%      2.000%  FAIL
+massImbalance                    -0.002%      0.100%  pass
+meanDrift                         0.000%      0.050%  pass
+
+oscillation over the averaging window, standard deviation over mean: inletMassFlow 0.209%, outletMassFlow 0.048%, vacuumThrust 0.057%
+fieldMachNearThroat          mean 2.707%  p95 7.757%  max 10.648%  (3637 nodes)
+fieldMachDownstream          mean 0.592%  p95 1.614%  max 3.648%  (2725 nodes)
+centerlineMachDownstream     mean 0.482%  p95 1.797%  max 2.222%  (46 nodes)
+divergingWallPressure        mean 2.524%  p95 3.066%  max 7.315%
+wallRow                      total pressure mean 0.9453 min 0.9019, total temperature mean 1.00247
+secondRow                    total pressure mean 0.9396 min 0.9094, total temperature mean 1.00011
+interior                     total pressure mean 0.9973 min 0.9001, total temperature mean 1.00008

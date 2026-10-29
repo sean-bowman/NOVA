@@ -1,0 +1,56 @@
+{
+  "colors": {
+    "bg": "#1C1E22",
+    "surface": "#24272C",
+    "surface2": "#2D3136",
+    "border": "#3D4148",
+    "text": "#DCE1E6",
+    "textMuted": "#9098A0",
+    "textDim": "#5C636B",
+    "accent": "#B5722E",
+    "accentDim": "#8F5A22",
+    "accentMuted": "#3A2E1E",
+    "green": "#6E9B85",
+    "red": "#B5493D",
+    "yellow": "#C2A05A",
+    "blue": "#6E88A3",
+    "orange": "#C08040",
+    "purple": "#8C7A96",
+    "cyan": "#6E9B95"
+  },
+  "categories": [
+    "#6E9B85",
+    "#B5722E",
+    "#B5493D",
+    "#C2A05A",
+    "#6E88A3",
+    "#C08040",
+    "#8C7A96",
+    "#6E9B95"
+  ],
+  "colormaps": {
+    "mach": [
+      "#2A2F37",
+      "#3A4552",
+      "#536780",
+      "#7C91A8",
+      "#AAB8C6",
+      "#DCE1E6"
+    ],
+    "pressure": [
+      "#3C5266",
+      "#6E88A3",
+      "#9098A0",
+      "#C08040",
+      "#B5493D"
+    ],
+    "temperature": [
+      "#2E2B28",
+      "#5A3F2A",
+      "#8F5A22",
+      "#C08040",
+      "#C2A05A",
+      "#E2CC96"
+    ]
+  }
+}

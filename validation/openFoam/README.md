@@ -1,0 +1,238 @@
+# NOVA Nozzle in OpenFOAM
+
+An axisymmetric Euler solution of NOVA's shipped nozzle in OpenFOAM, run as a cross-check of the flow NOVA's method of characteristics computes inside the nozzle. The plume outside the exit plane is a separate case, described in [plume.md](plume.md).
+
+## Contents
+
+- [Summary](#summary)
+- [What the case solves](#what-the-case-solves)
+- [Running it](#running-it)
+- [What is compared](#what-is-compared)
+- [Acceptance criteria](#acceptance-criteria)
+- [Results](#results)
+- [Findings](#findings)
+- [Validation status](#validation-status)
+- [References](#references)
+- [Files](#files)
+
+## Summary
+
+OpenFOAM and NOVA agree on how the nozzle expands the flow and disagree on how much flow its throat passes. Extrapolated to zero cell size, OpenFOAM's throat passes 2.1 percent more mass than NOVA's characteristic solution. That accounts for 2.1 points of the 2.4 percent gap in vacuum thrust coefficient; the rest is NOVA's exit-plane quadrature. Per unit mass flow the two agree to 0.35 percent against NOVA's reported figure, and to 0.13 percent against its exit profile integrated with one rule. Kliegel and Levine's closed form for this throat's discharge coefficient sits within 0.02 percent of OpenFOAM's.
+
+| Quantity | OpenFOAM, extrapolated | NOVA | NOVA against OpenFOAM |
+| --- | --- | --- | --- |
+| Discharge coefficient | 0.9948 | 0.9744 | -2.1 % |
+| Vacuum thrust coefficient | 1.9220 | 1.8761 | -2.4 % |
+| Thrust per unit mass flow [m/s] | 4522.7 | 4507.0 reported, 4528.4 from its profile | -0.35 %, +0.13 % |
+| Mass-averaged exit Mach | 3.9394 | 3.9541 | +0.37 % |
+
+Five of the ten criteria pass: thrust per unit mass flow, mass-averaged exit Mach, both steadiness criteria and grid convergence. The other five fail for two reasons, and neither is the expansion:
+
+- The mass flow and the thrust coefficient fail on NOVA's transonic start, which loses about two percent of the mass the throat passes. The centerline maximum and the field's 95th percentile fail in the same region, where NOVA's nodes are densest. Beyond one throat radius past the throat both are inside their limits, at 1.8 and 1.1 percent.
+- The diverging wall pressure fails on OpenFOAM's own wall treatment, which loses total pressure in the cells against a curved slip wall, and at the junction of the throat's exit arc with the contour.
+
+NOVA's exit plane carries two smaller problems of its own. It closes its unsampled core by linear extrapolation rather than at the uniform design state, which costs 0.31 percent of mass flow and thrust coefficient. It also integrates mass flow and thrust by different rules, which puts its reported thrust per unit mass flow 0.47 percent below its own profile's.
+
+## What the case solves
+
+The problem NOVA's method of characteristics solves, with nothing added: the Euler equations for a calorically perfect gas, inside NOVA's wall, from NOVA's stagnation state. A difference between the two solutions is then a difference of method, because the physics is identical.
+
+| Item | Setting |
+| --- | --- |
+| Nozzle | `src/NOVA/assets/NOVANozzle.json`: 100 kN LOX/LH2, Pc = 6.895 MPa, area ratio 40, truncated ideal contour at a length fraction of 0.8, Rao throat (entrant arc 1.5, exit arc 0.382 throat radii), Sauer transonic start, 50 characteristics |
+| Gas | NOVA's chamber values: gamma = 1.147542, R = 656.596 J/kg K (molecular weight 12.663 kg/kmol), T0 = 3398.37 K |
+| Wall | NOVA's contour resampled to 2000 points, injector face to exit plane; slip |
+| Inlet | Injector face; total pressure Pc and total temperature T0 (`totalPressure`, `totalTemperature`), velocity zero gradient |
+| Outlet | Exit plane; zero gradient on every field (the outflow is supersonic everywhere) |
+| Mesh | 5 degree wedge, one row of blocks from axis to wall, split where the wall radius changes by 30 percent; cells 1.5 times as long as they are tall, sized from the local radius; 30, 60 and 120 cells across the radius (5400, 21600 and 86280 cells) |
+| Solver | `rhoCentralFoam` (OpenFOAM v2606, ESI): Kurganov-Tadmor central fluxes, van Leer limited reconstruction, explicit Euler in time |
+| Initial field | Coarse grid: the quasi one-dimensional isentropic flow. Medium and fine: the next coarser grid's solution, mapped |
+| Run | Coarse 6 ms, medium 3 ms, fine 1 ms of physical time; fields averaged over the second half of each run |
+
+Four details of the setup matter to the numbers.
+
+**The wedge carries the exact flow area.** A wedge built from flat faces has a cross-section of r^2 sin(a) / 2 against the sector's r^2 a / 2, which at 5 degrees is 0.13 percent less flow area at every station. The wall points sit sqrt(a / sin a) = 1.000635 times the contour radius out, which gives the flat-faced wedge the sector's area exactly, so the throat area, mass flow and thrust need no correction. The comparison maps mesh coordinates back to contour radius.
+
+**The Courant number limit is set high on purpose.** `rhoCentralFoam` sums the wave speed over every face of a cell, the wedge faces included, although they carry no flux. On the prisms along the axis the wedge faces make up about nine tenths of the sum, so they set the time step. The case runs at `maxCo 1.0`, where the in-plane Courant number at the throat, which decides the scheme's stability, is about 0.2. At `maxCo 2.5` it is about 0.45 and the run is unstable: on the coarse grid the standard deviation of the inlet mass flow grows from 0.46 to 1.3 percent between 1.5 and 4 ms, where at 0.4 and 1.0 it decays alike, from 0.9 to 0.3 percent over the first 1.5 ms.
+
+**The chamber rings, so the fields are time-averaged.** The chamber's radial acoustic modes carry almost no energy into the nozzle, and an inviscid solution has nothing else to damp them. They ring for as long as the run lasts: the first radial mode, near 11 kHz (1.84 c / pi D for a 0.18 m chamber), on the coarse grid, and the second, near 20 kHz, on the medium, at 0.2 to 0.35 percent of the inlet mass flow and about a fifth of that at the exit. The mean flow is steady; an instant of it is not. A `fieldAverage` function object averages p, T and U over the second half of each run, and every comparison reads the averages.
+
+**The cells against the wall lose total pressure.** The slip wall takes the wall pressure equal to the pressure in the cell beside it, which on a curved wall ignores the pressure gradient that turns the flow. Dadone and Grossman showed this zeroth-order treatment generates spurious entropy at the wall [3]. Here it takes the total pressure in the row of cells against the wall from 1.0 at the end of the throat arc to between 0.85 and 0.90 of the chamber's at the exit on every grid, while the interior holds it to within about a percent. The cell aspect is fixed, so the entropy each wall cell accumulates along the wall does not shrink with the grid; the layer it occupies does. The wall values this case returns are therefore the least trustworthy part of it. Its integrated quantities still converge at an observed order of 1.8, so the layer's share of them is small. See [Findings](#findings).
+
+## Running it
+
+The case is written by the Python NOVA is installed in and run under OpenFOAM v2606 from openfoam.com, here in WSL2 Ubuntu 24.04 with the environment loaded by `source /usr/lib/openfoam/openfoam2606/etc/bashrc`. The comparison scripts need Python 3 with NumPy and Matplotlib on the OpenFOAM side. Cases run from the Linux file system rather than from `/mnt/c`, which is much slower for the many small files OpenFOAM writes.
+
+1. Write the three cases. The first call solves NOVA twice, once with each converging-wall model (about three minutes each), and writes `reference/novaNozzle.json` and `reference/style.json`; later calls reuse them until `--refresh` is passed.
+
+   ```bash
+   python validation/openFoam/makeNozzleCase.py --resolution coarse
+   python validation/openFoam/makeNozzleCase.py --resolution medium
+   python validation/openFoam/makeNozzleCase.py --resolution fine
+   ```
+
+2. Copy them into the Linux file system and run the coarse grid, then each finer grid from the one before it. Each `Allrun` meshes, initializes or maps, runs on four processors, reconstructs the last write and runs the comparison, which it logs to `log.python3.compare`. On a four-core machine the coarse grid takes about 10 minutes, the medium about 30 and the fine about 2 hours.
+
+   ```bash
+   cp -r /mnt/c/.../NOVA/validation/openFoam/cases/novaNozzle2D-* ~/foam/
+   cd ~/foam/novaNozzle2D-coarse && ./Allrun
+   cd ~/foam/novaNozzle2D-medium && ./Allrun ../novaNozzle2D-coarse
+   cd ~/foam/novaNozzle2D-fine && ./Allrun ../novaNozzle2D-medium
+   ```
+
+3. Run the grid study across the three:
+
+   ```bash
+   cd ~/foam
+   python3 novaNozzle2D-fine/scripts/gridConvergence.py novaNozzle2D-coarse novaNozzle2D-medium novaNozzle2D-fine
+   ```
+
+Each case's `comparison/` folder holds `comparison.json` and the figures. Open `case.foam` in ParaView for the fields; `pMean`, `TMean` and `UMean` are the averaged ones.
+
+## What is compared
+
+| Quantity | OpenFOAM | NOVA |
+| --- | --- | --- |
+| Mass flow | Outlet face values integrated over equal radial divisions of the exit radius; equal to the solver's own outlet flux | `exitMassFlux`: NOVA's exit plane, trapezoidal rule on mass flux times radius |
+| Vacuum thrust coefficient | Integral of rho u_x^2 + p over the exit plane, over Pc At | `thrustCoef`, NOVA's strip integral, plus the design exit pressure over the plane's area, which turns its pressure term from the design back pressure to vacuum |
+| Thrust per unit mass flow | The two integrals above | The two figures above |
+| Mass-averaged exit Mach | Outlet faces, weighted by mass flux | NOVA's exit-plane strips, weighted by mass flux |
+| Exit profiles | Outlet face values | `exitPlaneRadius`, `exitPlaneMach`, `exitPlanePressure`, `exitPlaneFlowAngle` |
+| Centerline Mach | Line sample on the axis | Every node of the characteristic mesh on the axis |
+| Wall state | Wall face values | `nozzleNearWall*`: the characteristic wall in the diverging section; ahead of the throat both converging-wall models, one-dimensional (shipped) and transonic |
+| Field | Cell values, interpolated linearly to each node | Mach number and flow angle at every node of the characteristic mesh inside the nozzle |
+| Discharge coefficient | Mass flow over the one-dimensional choked flow at the chamber gamma, 23.430 kg/s | The same, and the closed forms of Hall and of Kliegel and Levine [1, 2] |
+
+NOVA's exit plane is also integrated a second way, as an exact integral of its piecewise-linear profile with one rule for every quantity (the "NOVA profile" column of the comparison). NOVA integrates thrust and mass flow by two different rules, and over the core it closes linearly they err in opposite directions; the second integral separates what NOVA's flow field says from what its quadrature does to it.
+
+## Acceptance criteria
+
+Every limit is a relative difference of OpenFOAM against NOVA's reported value unless stated, and every limit was fixed before the first converged run, in `compareWithNova.py`. The two steadiness criteria were first written against the last instant and the last two writes. The chamber's radial modes made an instantaneous value a measure of the oscillation's phase rather than of convergence, so they are judged on means over the averaging window; the limits are unchanged.
+
+| Criterion | Limit | Basis |
+| --- | --- | --- |
+| Vacuum thrust coefficient | 1.0 % | The level at which a contour designer would act |
+| Mass flow | 1.0 % | As above |
+| Thrust per unit mass flow | 0.5 % | Independent of the throat's discharge coefficient; two isentropic solutions should agree closely on it |
+| Mass-averaged exit Mach | 1.0 % | The exit state the plume and the thrust both start from |
+| Centerline Mach, worst node | 2.0 % | The axis is where the characteristic mesh is sparsest and the finite-volume solution least accurate |
+| Diverging wall pressure, worst point from one throat radius past the throat | 5.0 % | Wall pressure falls two decades over the section, so a small shift in position shows as a large local difference |
+| Field Mach, 95th percentile over every node | 2.0 % | Allows a few nodes in the transonic start and the steep throat expansion |
+| Mass imbalance, inlet against outlet, window means | 0.1 % | Steady state |
+| Drift of the outlet mass flow and thrust, second half of the window against the first | 0.05 % | Steady state |
+| Vacuum thrust coefficient, medium grid against fine | 0.2 % | Grid convergence |
+
+## Results
+
+Every number for each grid is in `results/<grid>/comparison.json`, with the table `compareWithNova.py` prints in `comparison.txt` beside it. The grid study is in `results/gridConvergence.json`. The figures are the fine grid's.
+
+### Exit plane and throat
+
+The extrapolated value, observed order and grid convergence index come from the three grids at a refinement ratio of 2 [4]. "NOVA, profile" integrates NOVA's exit plane as an exact piecewise-linear profile with one rule; see [What is compared](#what-is-compared).
+
+| Quantity | Coarse | Medium | Fine | Extrapolated | Order | GCI | NOVA, reported | NOVA, profile |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Mass flow [kg/s] | 23.296 | 23.304 | 23.307 | 23.308 | 1.77 | 0.005 % | 22.831 | 22.758 |
+| Discharge coefficient | 0.9943 | 0.9946 | 0.9947 | 0.9948 | | | 0.9744 | 0.9713 |
+| Vacuum thrust coefficient | 1.9193 | 1.9212 | 1.9217 | 1.9220 | 1.80 | 0.015 % | 1.8761 | 1.8790 |
+| Thrust per unit mass flow [m/s] | 4518.6 | 4521.5 | 4522.4 | 4522.7 | 1.81 | 0.009 % | 4507.0 | 4528.4 |
+| Mass-averaged exit Mach | 3.9309 | 3.9373 | 3.9389 | 3.9394 | 2.00 | 0.017 % | 3.9541 | 3.9535 |
+
+The closed forms for the inviscid discharge coefficient [1, 2], at the entrant arc (R = 1.5): Kliegel and Levine 0.9946, Hall 0.9938. At the exit arc (R = 0.382): Kliegel and Levine 0.9740.
+
+### Criteria, fine grid
+
+| Criterion | Value | Limit | Result | Where it fails |
+| --- | --- | --- | --- | --- |
+| Vacuum thrust coefficient | 2.43 % | 1.0 % | fail | NOVA's transonic start |
+| Mass flow | 2.08 % | 1.0 % | fail | NOVA's transonic start |
+| Thrust per unit mass flow | 0.34 % | 0.5 % | pass | |
+| Mass-averaged exit Mach | -0.39 % | 1.0 % | pass | |
+| Centerline Mach, worst node | 9.68 % | 2.0 % | fail | NOVA's first axis node, at 0.64 throat radii; 1.83 % beyond one throat radius |
+| Diverging wall pressure, worst point | 7.48 % | 5.0 % | fail | OpenFOAM's wall cells, and the exit arc's junction with the contour |
+| Field Mach, 95th percentile | 2.65 % | 2.0 % | fail | The transonic start; 1.07 % beyond one throat radius |
+| Mass imbalance, window means | 0.011 % | 0.1 % | pass | |
+| Drift over the window | 0.006 % | 0.05 % | pass | |
+| Vacuum thrust coefficient, medium against fine | -0.029 % | 0.2 % | pass | |
+
+### Figures
+
+Mach number, OpenFOAM above the axis and NOVA below. NOVA's net does not reach the uniform core near the axis past 0.46 m, and has nothing upstream of its start line.
+
+![Mach number field](results/machField.png)
+
+The Mach number difference at every node of NOVA's net. The differences concentrate at NOVA's start line.
+
+![Mach number difference](results/machFieldDifference.png)
+
+The centerline, against NOVA's axis nodes.
+
+![Centerline](results/centerline.png)
+
+The wall, against NOVA's near-wall state under both converging-wall models.
+
+![Wall](results/wall.png)
+
+The exit plane. NOVA's points stop at 0.29 of the exit radius; the point on the axis is its linear closure.
+
+![Exit plane](results/exitPlane.png)
+
+OpenFOAM's total pressure along the nozzle in the row of cells against the wall, the row behind it, and the interior.
+
+![Total pressure](results/totalPressure.png)
+
+Mass flow through the inlet and the outlet over the fine run, with the averaging window shaded.
+
+![Mass flow](results/massFlow.png)
+
+The exit-plane quantities on the three grids, their extrapolation and NOVA's values.
+
+![Grid convergence](results/gridConvergence.png)
+
+## Findings
+
+**NOVA's flow carries about two percent too little mass, and the deficit is set at its transonic start.** OpenFOAM's discharge coefficient converges to 0.9948, against 0.9946 from Kliegel and Levine's series at the entrant arc's curvature and 0.9938 from Hall's [1, 2]. NOVA delivers 0.9744 at the same chamber gamma. Integrating mass flux across NOVA's own characteristic field at stations from 0.6 to 4 throat radii past the throat gives 0.968 to 0.975 of the choked flow at every one, so the deficit is in place as soon as the field begins. `contour.exitPlaneThrustCoefficient` reads its exit mass closure as the throat's discharge coefficient, "physics rather than discretization", and records the kernel's deficit growing as the exit arc tightens: 0.92 percent at 1.5 throat radii, 1.55 at 0.75 and 2.04 at 0.382. The finite-volume solution does not support that reading. Its throat passes the mass the entrant arc's curvature predicts, so at this throat the 0.382 exit arc costs nothing like two percent. Every figure NOVA reports per unit of throat area carries the deficit: its vacuum thrust coefficient is 2.4 percent below OpenFOAM's extrapolated value. Sauer's solution, which NOVA's start line is built on, is the first term of the series whose next terms give the 0.9938 and 0.9946 above. On its own it gives 1 - (gamma + 1) / (96 R^2) = 0.9901 at the entrant arc. That leaves about 1.5 percent unaccounted for, which on NOVA's own measurements grows as the exit arc tightens; how the start line meets the exit arc is the likely place to look.
+
+**The supersonic expansion agrees.** Thrust per unit mass flow is independent of the throat's coefficient. Against NOVA's exit profile integrated with one rule, OpenFOAM's is 0.13 percent lower, on the fine grid and extrapolated alike. At the stations NOVA samples inside 97 percent of the exit radius, Mach number agrees to 0.34 percent on average and 0.51 percent at worst, and flow angle to 0.1 degree on average. The three stations nearest the wall differ by 1 to 2 percent, in the cells the wall error below reaches. Beyond one throat radius past the throat, the Mach number at NOVA's characteristic nodes differs by 0.35 percent on average, with a 95th percentile of 1.07 percent. The centerline differs by 0.25 percent on average and 1.83 percent at most, the largest being at the end of the kernel.
+
+**NOVA's exit-plane closure should be the uniform design core.** A truncated ideal contour is cut from an ideal nozzle, whose flow downstream of the last characteristic from the axis is uniform at the design Mach number. Here that is 4.2033, the highest Mach number anywhere in NOVA's net, reached on the axis at 9.125 throat radii. NOVA's exit-plane sampler runs out of columns at 0.287 of the exit radius, where the Mach number is 4.198 and the flow angle 0.12 degrees: the edge of that core. It then closes the remaining 8 percent of the area by extrapolating the last two stations' slope to 4.307 on the axis, 2.5 percent above the design Mach number. The C+ characteristic from the kernel's end on the axis crosses the exit plane at about 1.66 throat radii, so inside that radius the flow is the design state exactly. OpenFOAM does not settle the core value either. Across the core its Mach number runs from 4.19 to 4.25 and its flow angle reaches 1.3 degrees, and its centerline wanders between 4.09 and 4.25 past the kernel's end. The axis is where the finite-volume solution is least accurate: the total pressure in the rows nearest it rises up to 3 percent above the chamber's near 10 throat radii on the fine grid, and 8 percent on the medium. Closing NOVA's core at the design state raises its mass flow and thrust coefficient by 0.31 percent each and leaves thrust per unit mass flow unchanged.
+
+**NOVA integrates mass flow and thrust by different rules.** Thrust is integrated by strips carrying the mean of their two stations, and mass flow by the trapezoidal rule on mass flux times radius. On most of the plane the two agree. Over the closed core, a single segment of 8 percent of the area, they err in opposite directions: against the exact integral of NOVA's own piecewise-linear profile, the reported mass flow is 0.32 percent high and the thrust coefficient 0.15 percent low. NOVA's reported thrust per unit mass flow, 4507.0 m/s, is therefore 0.47 percent below its own profile's 4528.4 m/s. This is why OpenFOAM sits 0.34 percent above NOVA's reported figure and 0.13 percent below its profile's. The second exit-plane station also lies outside the wall, at 6.421 throat radii against 6.325; it moves NOVA's integrals by less than 0.01 percent.
+
+**The transonic start carries the largest local differences.** Within one throat radius of the throat, the Mach number at NOVA's nodes differs by 1.77 percent on average and up to 9.68 percent. The worst is the first axis node, at 0.64 throat radii, where NOVA has Mach 1.204 and OpenFOAM 1.321. More than half NOVA's 6362 nodes lie in this region, which is why the whole-field 95th percentile fails its criterion while the field downstream passes it.
+
+**On the converging wall the transonic model is closer.** Against OpenFOAM's wall pressure ahead of the throat, NOVA's transonic near-wall model differs by 3.2 percent at the 95th percentile and the shipped one-dimensional model by 6.4 percent, on all three grids. Neither captures the flow slowing into the concave fillet where the barrel meets the cone. There, 1.8 throat radii ahead of the throat, OpenFOAM's wall Mach number is 0.159 against the one-dimensional 0.202, 21 percent lower.
+
+**OpenFOAM's wall values are not trustworthy to a few percent.** The row of cells against the wall loses total pressure steadily along the bell, to 0.89 of the chamber's at the exit on the fine grid (0.90 coarse, 0.85 medium), while the interior holds it to within about a percent. From 4 throat radii to the exit, its wall pressure sits 1.6 to 4.0 percent above NOVA's characteristic wall on the fine grid, and 2.4 percent above on average on every grid. The diverging-wall criterion therefore tests the case's wall treatment as much as NOVA, and its failure is not attributed to NOVA. Its worst point, 7.5 percent, lies 1 to 2 throat radii past the throat, where the exit arc meets the contour.
+
+## Validation status
+
+**This is a cross-check, not a validation.** NOVA's method of characteristics and OpenFOAM's finite-volume solution are two unvalidated solutions of the same inviscid problem. Where they agree, the agreement shows NOVA's characteristic net, its transonic start and its exit-plane integration are consistent with an independent discretization of the same equations; it does not show either matches a real nozzle, which is viscous, reacting, and has a boundary layer that changes the effective wall.
+
+**The discharge coefficient has a closed-form reference.** Kliegel and Levine's transonic series [1, 2] gives the inviscid discharge coefficient of an axisymmetric throat from its wall curvature alone. It is derived for a symmetric throat, and this one is not, so it is an approximate reference here. The finite-volume coefficient, extrapolated, sits 0.02 percent above it at the entrant arc's curvature; NOVA's sits 2.0 percent below it. That makes OpenFOAM's throat the best-supported number in the comparison, and NOVA's mass flow the least.
+
+What would close the gap: measured wall pressures and mass flow from a contoured nozzle with a known throat geometry, such as the cold-flow nozzles of Back, Massier and Gier, run through both NOVA and this case; and a curvature-corrected wall boundary condition in the case [3], which would make its wall values usable.
+
+## References
+
+[1] Kliegel, J. R., and Levine, J. N.: *Transonic Flow in Small Throat Radius of Curvature Nozzles*. AIAA Journal, vol. 7, no. 7, 1969, pp. 1375-1378.
+
+[2] Cao, P., Wang, C., Li, C., and Ding, H.: *The Theoretical Analysis and Waviness Profile Measurement for the Discharge Coefficient of Sonic Nozzles*. FLOMEKO 2019, Lisbon. Equations 2 and 3 give Hall's series as Kliegel and Levine corrected it and Kliegel and Levine's recast in 1/(R + 1). <https://imeko.org/publications/tc9-2019/IMEKO-TC9-2019-028.pdf>
+
+[3] Dadone, A., and Grossman, B.: *Surface Boundary Conditions for the Numerical Solution of the Euler Equations*. AIAA Journal, vol. 32, no. 2, 1994. As summarized by Wang, Z. J., and Sun, Y.: *A Curvature-Based Wall Boundary Condition for the Euler Equations on Unstructured Grids*, AIAA 2002-0966, <https://cfd.ku.edu/papers/aiaa-2002--0966.pdf>: zeroth-order pressure extrapolation to a curved wall generates significant spurious entropy.
+
+[4] Roache, P. J.: *Perspective: A Method for Uniform Reporting of Grid Refinement Studies*. Journal of Fluids Engineering, vol. 116, no. 3, 1994, pp. 405-413.
+
+## Files
+
+| File | Purpose |
+| --- | --- |
+| `makeNozzleCase.py` | Solves NOVA, writes `reference/` and a case folder for one grid |
+| `initializeFromQuasi1D.py` | Writes the quasi one-dimensional flow into the initial fields; copied into each case |
+| `compareWithNova.py` | Compares a converged case with NOVA and judges the criteria; copied into each case |
+| `gridConvergence.py` | Richardson extrapolation and grid convergence index across the three grids; copied into each case |
+| `reference/novaNozzle.json` | NOVA's solution: gas, wall, near-wall state under both converging-wall models, characteristic mesh, exit plane, performance |
+| `reference/style.json` | NOVA's dark figure palette, so the figures match the rest of the documentation |
+| `results/` | The comparison of each grid, the fine grid's figures and the grid study |
+| `cases/` | Generated cases and NOVA's scratch runs; not tracked |
+| `plume.md`, `makePlumeCase.py`, `setPlumeInflow.py`, `comparePlume.py`, `plumeGridConvergence.py`, `reference/novaPlume.json`, `results/plume/` | The plume case; see [plume.md](plume.md) |
