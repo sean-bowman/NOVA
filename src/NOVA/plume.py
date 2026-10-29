@@ -39,7 +39,7 @@ from typing import Any
 import numpy as np
 
 from .errors import InvalidInputError
-from .gasDynamics import prandtlMeyerAngle, machFromPressureRatio
+from .gasDynamics import prandtlMeyerAngle, machFromAreaRatio, machFromPressureRatio
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Correlation constants -- #
@@ -2325,7 +2325,7 @@ class PlumeContour:
 
     The march past the lip continues the characteristics net the nozzle solve produced, so it
     needs that net, the wall it was solved against, and the gas it was solved in. Nothing else
-    about the nozzle is relevant, which is why this is nineteen fields rather than a Nozzle.
+    about the nozzle is relevant, which is why this is twenty-two fields rather than a Nozzle.
 
     Two of them are not inputs in the ordinary sense. `nozzlePlumeStructure` carries a structure
     already solved for this contour, which the field solve reuses when the ambient matches, and
@@ -2345,6 +2345,9 @@ class PlumeContour:
     chamberRGasConstant:             Any = None
     chamberStagnationTemperature:    Any = None
     exitMachNumber:                  Any = None
+    exitPlaneFlowAngle:              Any = None
+    exitPlaneMach:                   Any = None
+    exitPlaneRadius:                 Any = None
     limitingCharacteristicR:         Any = None
     limitingCharacteristicX:         Any = None
     nozzleNearWallMachNumber:        Any = None
@@ -2481,10 +2484,9 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
 
     # -- Gas properties -- #
     # The gas the nozzle's characteristics were solved in, which is also the gas the station march
-    # continues them in. The exit Mach number and the lip state below are that gas's, so a
-    # correlation evaluated at any other ratio of specific heats reads them inconsistently: at
-    # CEA's exit value of 1.257 against the shipped nozzle's 1.1475 it lengthens the first shock
-    # cell by 14 percent and opens the lip turn by 2.8 degrees.
+    # continues them in. The lip state below and the area ratio are that gas's, so a correlation
+    # evaluated at any other ratio of specific heats reads them inconsistently: at CEA's exit
+    # value of 1.257 against the shipped nozzle's 1.1475 it opens the lip turn by 2.8 degrees.
     gamma = float(getattr(contour, 'chamberGamma', 0.0) or 0.0)
     if not 1.01 < gamma < 1.99:
         return None
@@ -2529,9 +2531,15 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
             f'flow attached at the lip, so the structure below is not descriptive of the real jet.')
 
     # -- Fully expanded jet -- #
+    # Tam and Tanna's diameter is mass conservation between the exit and the fully expanded jet,
+    # so the exit Mach number it reads has to be the one the area ratio gives in the same gas;
+    # with it the diameter reduces to the throat's times sqrt(A(Mj) / A*). The reported exit Mach
+    # number is the thermochemistry's equilibrium value, which in the contour's gas belongs to a
+    # different area ratio: on the shipped nozzle it would shrink the jet from 1.071 m to 0.849 m.
     structure.fullyExpandedMach = machFromPressureRatio(structure.nozzlePressureRatio, gamma)
+    areaRatioMach = machFromAreaRatio((structure.exitDiameter / structure.throatDiameter)**2, gamma)
     structure.fullyExpandedDiameter = fullyExpandedDiameter(
-        structure.exitDiameter, structure.exitMach, structure.fullyExpandedMach, gamma)
+        structure.exitDiameter, areaRatioMach, structure.fullyExpandedMach, gamma)
 
     # -- Shock cell spacing -- #
     structure.shockCellLength = shockCellLength(

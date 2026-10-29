@@ -279,6 +279,24 @@ def testStructureUsesTheGasTheNozzleWasSolvedIn():
     expectedMach = machFromPressureRatio(structure.nozzlePressureRatio, nozzle.chamberGamma)
     assert structure.fullyExpandedMach == pytest.approx(expectedMach, rel = 1e-12)
 
+def testFullyExpandedJetPassesTheThroatsMassFlow():
+
+    '''
+
+    The fully expanded jet carries the throat's mass flow in the contour's gas, so its diameter is
+    the throat's times the radius ratio the fully expanded Mach number has in that gas, whatever
+    exit Mach number the thermochemistry reported.
+
+    '''
+
+    from NOVA.gasDynamics import radiusMachRelation
+    for reportedExitMach in (3.5, 4.06, 4.6):
+        nozzle = _stubNozzle(13993.0)
+        nozzle.exitMachNumber = reportedExitMach
+        structure = nozzle.plumeStructure(1000.0)
+        expected = structure.throatDiameter * radiusMachRelation(structure.fullyExpandedMach, nozzle.chamberGamma)
+        assert structure.fullyExpandedDiameter == pytest.approx(expected, rel = 1e-6)
+
 def testStructureRegimeClassification():
 
     # Sea level: design exit pressure is far below ambient, so overexpanded.

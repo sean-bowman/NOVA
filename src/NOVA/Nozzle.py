@@ -1172,7 +1172,7 @@ class Nozzle:
         Returns:
         --------
         PlumeContour
-            The nineteen fields the plume solve reads, and nothing else about this nozzle.
+            The twenty-two fields the plume solve reads, and nothing else about this nozzle.
 
         '''
 
