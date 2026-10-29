@@ -316,7 +316,7 @@ class PlumeStructure:
 
     initialTurnAngle: float = 0.0         # [rad], positive outward
     shockCellLength: float = 0.0          # [m]
-    boundaryAmplitudeLimited: bool = False  # cell amplitude capped to keep r > 0
+    boundaryAmplitudeLimited: bool = False  # boundary held off the axis by a radius floor
     cellLengthPack: float = 0.0           # [m], the same with Pack's coefficient
     machDiskPresent: bool = False
     machDiskX: float = 0.0                # [m], absolute axial position
@@ -1723,10 +1723,6 @@ def _exitPlaneCrossings(seed: dict, scale: float, exitX: float):
     # replaces came from treating 2 percent of the nozzle length as "on the exit plane".
     onThePlane = 1e-9 * max(1.0, abs(exitX))
 
-    # Enough nodes to be a profile rather than a coincidence, matching the floor `plumeExitLine`
-    # applies to the assembled line.
-
-
     found = []
     for xBlock, rBlock, angleBlock, machBlock in zip(seed['xMesh'], seed['rMesh'],
                                                      seed['flowAngleMesh'], seed['machMesh']):
@@ -1767,6 +1763,32 @@ def _exitPlaneCrossings(seed: dict, scale: float, exitX: float):
 
     return radii[advancing], angles[advancing], machs[advancing]
 
+def _exitPlaneProfile(seed: dict):
+
+    '''
+
+    The contour's own exit-plane profile from the seed, ascending in radius, or None.
+
+    Returns radius [m], flow angle [rad] and Mach number [-], the same arrays
+    `_exitPlaneCrossings` returns, when the seed carries a finite, supersonic profile of at least
+    `exitPlaneMinimumNodes` stations.
+
+    '''
+
+    values = [seed.get(key) for key in ('exitPlaneRadius', 'exitPlaneFlowAngle', 'exitPlaneMach')]
+    if any(array is None for array in values):
+        return None
+    radii, angles, machs = [np.asarray(array, dtype = float) for array in values]
+    usable = np.isfinite(radii) & np.isfinite(angles) & np.isfinite(machs) & (machs > 1.0) & (radii >= 0.0)
+    if usable.sum() < exitPlaneMinimumNodes:
+        return None
+
+    order = np.argsort(radii[usable])
+    radii, angles, machs = radii[usable][order], angles[usable][order], machs[usable][order]
+    advancing = np.concatenate(([True], np.diff(radii) > 0.0))
+
+    return radii[advancing], angles[advancing], machs[advancing]
+
 def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
 
     '''
@@ -1776,6 +1798,12 @@ def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
     This is the handover. The contour solve already knows the flow across the exit plane, so the
     plume starts from it rather than from an assumption about it. Coordinates stay dimensional and
     in the nozzle's own frame, so nothing is scaled on the way across.
+
+    The line is the contour's own exit-plane profile when it carries one: the plane its thrust
+    and mass flow are integrated over, from the wall to the axis, so the plume carries the mass
+    the nozzle reports. Without one it is read from where the mesh's characteristics cross the
+    plane, which stops at the outermost crossing: on the shipped nozzle 0.9826 of the lip radius,
+    leaving out 3.5 percent of the exit area and 4.7 percent of its mass flow.
 
     Returns None when the contour carries no characteristic mesh, which is the conical case.
 
@@ -1788,7 +1816,7 @@ def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
     if not scale or not exitRadius:
         return None
 
-    crossings = _exitPlaneCrossings(seed, scale, exitX)
+    crossings = _exitPlaneProfile(seed) or _exitPlaneCrossings(seed, scale, exitX)
     if crossings is None:
         return None
     radii, angles, machs = crossings
@@ -2350,9 +2378,9 @@ def throttledContour(contour, throttleFraction: float):
     ambient the separation check would then never move at all, and the march would return an
     attached plume for a nozzle that is separated.
 
-    `ceaOutput` is left alone deliberately. The plume path reads one number from it, `exitGamma`,
-    which is dimensionless and does not move at a frozen gas state. A model that re-runs the
-    thermochemistry per power level has to replace that object rather than scale it.
+    `ceaOutput` is left alone deliberately. The plume path reads nothing from it: its gas is the
+    contour's chamber gas, which does not move at a frozen gas state. A model that re-runs the
+    thermochemistry per power level has to replace the contour's gas rather than scale it.
 
     The returned contour carries no `nozzlePlumeStructure`. The one on the input was solved at the
     input's pressures and would be silently reused by a field solve at a matching ambient.
@@ -2452,13 +2480,12 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     structure.notes = []
 
     # -- Gas properties -- #
+    # The gas the nozzle's characteristics were solved in, which is also the gas the station march
+    # continues them in. The exit Mach number and the lip state below are that gas's, so a
+    # correlation evaluated at any other ratio of specific heats reads them inconsistently: at
+    # CEA's exit value of 1.257 against the shipped nozzle's 1.1475 it lengthens the first shock
+    # cell by 14 percent and opens the lip turn by 2.8 degrees.
     gamma = float(getattr(contour, 'chamberGamma', 0.0) or 0.0)
-    ceaOutput = getattr(contour, 'ceaOutput', None)
-    if ceaOutput is not None:
-        try:
-            gamma = float(ceaOutput.ceaResults['exitGamma'])
-        except Exception:                          # noqa: BLE001 -- chamber gamma is a fine fallback
-            pass
     if not 1.01 < gamma < 1.99:
         return None
     structure.gamma = gamma
@@ -2563,44 +2590,51 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     structure.plumeLength = float(plumeLength)
 
     # -- Boundary curve -- #
-    # The two ends of each cell are set by correlation: the boundary leaves the lip at
-    # `initialTurnAngle` and the pattern repeats every `shockCellLength`. The sinusoid between
-    # them is a shape assumption, chosen so its initial slope matches the correlated turning
-    # angle exactly. It is not a computed streamline; a real boundary is the pressure-matched
-    # streamline from a method-of-characteristics solution.
+    # The cell length is a correlation; the shape between its ends is an assumption. Tam's
+    # shock-cell model treats the cells as a disturbance of the fully expanded jet, the jet the
+    # flow would be with its pressure matched to ambient, so the boundary is drawn oscillating
+    # about that jet's radius: it leaves the lip, swells to its widest at half a cell, and returns
+    # toward the lip radius at the first neck, every `shockCellLength`. It is not a computed
+    # streamline; the station march gives one near the lip.
+    #
+    # The shape does not reproduce `initialTurnAngle`. The real boundary turns through the lip's
+    # Prandtl-Meyer fan and bends back within a fraction of a cell, which no sinusoid of the cell
+    # length can follow: anchored to the turn angle, one about the fully expanded radius doubles
+    # the swell. On the shipped nozzle at 5 kPa this shape puts the widest radius 5 percent and
+    # the first neck 10 percent from an Euler solution (validation/openFoam/plume.md), where a
+    # sinusoid about the lip radius anchored to the turn angle needs an amplitude 1.6 times the
+    # lip radius and crosses the axis.
     axial = np.linspace(0.0, structure.plumeLength, numBoundaryPoints)
     cellLength = structure.shockCellLength
-    if cellLength > 0.0 and abs(structure.initialTurnAngle) > 1e-6:
-        amplitude = cellLength * np.tan(structure.initialTurnAngle) / (2.0 * np.pi)
-
-        # A strongly underexpanded jet correlates an amplitude larger than the lip radius,
-        # which a sinusoid about that radius would carry through the axis and out the other
-        # side. The cap holds the boundary positive everywhere. Where it binds, the swell is
-        # understated and the correlated turning angle is no longer reproduced, which is what
-        # `boundaryAmplitudeLimited` records; a real boundary needs the characteristics solve.
-        amplitudeLimit = 0.95 * structure.lipRadius
-        structure.boundaryAmplitudeLimited = bool(abs(amplitude) > amplitudeLimit)
-        amplitude = float(np.clip(amplitude, -amplitudeLimit, amplitudeLimit))
+    jetRadius = 0.5 * structure.fullyExpandedDiameter
+    if cellLength > 0.0 and jetRadius > 0.0:
 
         # Cells decay downstream through turbulent dissipation. The decay length is an
         # assumption, not a correlation; it is set to four cells so the pattern fades over the
         # distance shock-cell noise measurements typically still resolve it.
         decay = np.exp(-axial / (4.0 * cellLength))
-        radius = structure.lipRadius + amplitude * np.sin(2.0 * np.pi * axial / cellLength) * decay
+        radius = jetRadius + (structure.lipRadius - jetRadius) * np.cos(2.0 * np.pi * axial / cellLength) * decay
         structure.cellX = structure.lipX + np.arange(
             0.0, structure.plumeLength + cellLength, cellLength)
+
+        # A strongly overexpanded jet has a fully expanded radius under half the lip's, and the
+        # contraction would carry the boundary through the axis. The floor holds it off; where it
+        # binds, `boundaryAmplitudeLimited` records it.
+        floor = 0.05 * structure.lipRadius
+        structure.boundaryAmplitudeLimited = bool(np.any(radius < floor))
+        radius = np.maximum(radius, floor)
     else:
         radius = np.full(axial.shape, structure.lipRadius)
         structure.cellX = np.array([])
 
     structure.boundaryX = structure.lipX + axial
-    structure.boundaryR = np.maximum(radius, 0.0)
+    structure.boundaryR = radius
 
     if structure.boundaryAmplitudeLimited:
         structure.notes.append(
-            'Shock cell amplitude capped to keep the boundary off the axis. The correlated '
-            'turning angle implies a swell wider than the lip radius, so the drawn boundary '
-            'understates the plume; use it for cell spacing and scale, not for width.')
+            'Boundary radius capped at 5 percent of the lip radius where the contraction toward '
+            'the fully expanded jet would carry it through the axis. The jet is strongly '
+            'overexpanded; use the drawn boundary for cell spacing, not for width.')
 
     structure.notes.append(
         'Boundary, cell spacing and Mach disk are correlations (Prandtl 1904 / Pack, Ashkenas '
@@ -2664,6 +2698,9 @@ def plumeCharacteristicSeed(contour) -> dict:
         'stagnationPressure'         chamber stagnation pressure [Pa]
         'stagnationTemperature'      chamber stagnation temperature [K]
         'exitRadius', 'exitX'        nozzle lip position [m]
+        'exitPlaneRadius'            the contour's own exit-plane profile, wall to axis [m], with
+        'exitPlaneMach',             its Mach number [-] and flow angle [rad]; None when the
+        'exitPlaneFlowAngle'         contour carries none
 
     Returns None when no characteristic mesh exists, which is the case for a conical
     diverging section.
@@ -2672,6 +2709,13 @@ def plumeCharacteristicSeed(contour) -> dict:
 
     if getattr(contour, 'allXPoints', None) is None:
         return None
+
+    profile = [getattr(contour, name, None) for name in ('exitPlaneRadius', 'exitPlaneMach', 'exitPlaneFlowAngle')]
+    if any(values is None for values in profile) or not getattr(contour, 'nozzleScalingFactor', None):
+        profile = [None, None, None]
+    else:
+        profile = [np.asarray(values, dtype = float) for values in profile]
+        profile[0] = profile[0] * contour.nozzleScalingFactor
 
     return {
         'xLimiting':             getattr(contour, 'limitingCharacteristicX', None),
@@ -2689,4 +2733,7 @@ def plumeCharacteristicSeed(contour) -> dict:
         # reports zero rather than raising, and the march refuses on the seed it gets.
         'exitRadius':            _lastOrZero(getattr(contour, 'rNozzleWall', None)),
         'exitX':                 _lastOrZero(getattr(contour, 'xNozzleWall', None)),
+        'exitPlaneRadius':       profile[0],
+        'exitPlaneMach':         profile[1],
+        'exitPlaneFlowAngle':    profile[2],
     }

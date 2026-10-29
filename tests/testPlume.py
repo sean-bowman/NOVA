@@ -261,6 +261,24 @@ def _stubNozzle(exitPressure: float) -> Nozzle:
     nozzle.ceaOutput = None
     return nozzle
 
+def testStructureUsesTheGasTheNozzleWasSolvedIn():
+
+    '''
+
+    The correlations read the exit Mach number and lip state of the contour's own gas, the gas the
+    station march continues in, so they are evaluated in it even when a CEA result carrying a
+    different exit ratio of specific heats is on the nozzle.
+
+    '''
+
+    import types
+    nozzle = _stubNozzle(13993.0)
+    nozzle.ceaOutput = types.SimpleNamespace(ceaResults = {'exitGamma': 1.257})
+    structure = nozzle.plumeStructure(1000.0)
+    assert structure.gamma == nozzle.chamberGamma
+    expectedMach = machFromPressureRatio(structure.nozzlePressureRatio, nozzle.chamberGamma)
+    assert structure.fullyExpandedMach == pytest.approx(expectedMach, rel = 1e-12)
+
 def testStructureRegimeClassification():
 
     # Sea level: design exit pressure is far below ambient, so overexpanded.
@@ -307,23 +325,29 @@ def testStructureBoundaryStartsAtLip():
     assert np.all(structure.boundaryR >= 0.0)
     assert np.all(np.isfinite(structure.boundaryR))
 
-def testStructureBoundaryInitialSlopeMatchesTurnAngle():
+def testStructureBoundaryOscillatesAboutTheFullyExpandedJet():
 
     """
 
-    The boundary shape is an assumption, but it is anchored so its initial slope equals the
-    correlated turning angle. That anchoring is worth holding to wherever it survives, which is
-    wherever the cell amplitude is not capped to keep the boundary off the axis.
+    The boundary shape is an assumption: a decaying oscillation about the fully expanded jet's
+    radius, starting at the lip, widest at half a cell and back toward the lip radius at the first
+    neck. An underexpanded jet swells past its fully expanded radius and narrows inside it, and
+    the curve passes through the closed form at both points.
 
     """
 
     structure = _stubNozzle(13993.0).plumeStructure(1000.0)
-    slope = ((structure.boundaryR[1] - structure.boundaryR[0])
-             / (structure.boundaryX[1] - structure.boundaryX[0]))
-    if structure.boundaryAmplitudeLimited:
-        assert abs(slope) < abs(np.tan(structure.initialTurnAngle))
-    else:
-        assert slope == pytest.approx(np.tan(structure.initialTurnAngle), rel = 0.02)
+    assert structure.jetType == 'underexpanded'
+    assert not structure.boundaryAmplitudeLimited
+    jetRadius, lipRadius, cell = (0.5 * structure.fullyExpandedDiameter, structure.lipRadius,
+                                  structure.shockCellLength)
+    assert jetRadius > lipRadius
+    axial = structure.boundaryX - structure.lipX
+    for fraction, sign in ((0.5, 1.0), (1.0, -1.0)):
+        expected = jetRadius + sign * (jetRadius - lipRadius) * np.exp(-fraction / 4.0)
+        assert np.interp(fraction * cell, axial, structure.boundaryR) == pytest.approx(expected, rel = 1e-3)
+    firstCell = axial <= cell
+    assert np.max(structure.boundaryR[firstCell]) > jetRadius > np.min(structure.boundaryR[axial >= 0.5 * cell])
 
 def testStructureBoundaryStaysOffTheAxis():
 

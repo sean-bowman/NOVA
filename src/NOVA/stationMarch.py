@@ -138,7 +138,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.interpolate import PchipInterpolator
 
-from .gasDynamics import areaMachRelation, machFromAreaRatio
+from .gasDynamics import areaMachRelation, machFromAreaRatio, prandtlMeyerAngle
 from .plume import (PlumeField, PlumeFlow, PlumePoint, _reciprocalVelocitySlope,
                     obliqueShockState, plumeCharacteristicSeed, plumeExitLine,
                     plumeFieldMaxExitMach, plumeFieldMinExitMach, separationPressureRatio,
@@ -756,6 +756,12 @@ def solveStationField(contour, ambientPressure: float, reach: float = plumeField
                               maxStations = maxStations)
     result.boundaryMach = march['boundaryMach']
     result.stop = march['stop']
+    # The Prandtl-Meyer turn the lip takes its edge streamline through, from the station's lip
+    # Mach number to the boundary's: positive outward through an expansion, negative where the
+    # lip is compressed and the turn stands in for the oblique shock
+    if result.boundaryMach > 1.0:
+        result.lipTurnAngle = float(prandtlMeyerAngle(result.boundaryMach, flow.gamma)
+                                    - prandtlMeyerAngle(float(station.mach[-1]), flow.gamma))
 
     stations = march['stations']
     if len(stations) < 2:

@@ -560,6 +560,48 @@ def testTheLipRatioIsTheLipsOwnStaticOverAmbient():
     assert np.isfinite(near.lipPressureRatio) and near.lipPressureRatio > 0.0
     assert far.lipPressureRatio == pytest.approx(2.0 * near.lipPressureRatio, rel = 1e-12)
 
+def testTheLipTurnIsThePrandtlMeyerTurnFromTheLipToTheBoundary():
+    '''
+    The field reports the turn its lip fan takes the edge streamline through: outward from the
+    lip's Mach number to the boundary's when the lip is expanded, inward when it is compressed.
+    The lip Mach number is recovered from the reported lip ratio, so the two outputs agree.
+    '''
+    from NOVA.gasDynamics import prandtlMeyerAngle
+    flow = PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6)
+    # The lip sits at Mach 3, 108.9 kPa: expanded into 20 kPa, weakly compressed into 112 kPa,
+    # with the design exit pressure moved up beside the second so the separation check passes
+    for ambientPressure, exitPressure, sign in ((20000.0, 40000.0, 1.0), (112000.0, 110000.0, -1.0)):
+        contour = _marchable(ambientPressure)
+        contour.targetExitPressure = exitPressure
+        field = solveStationField(contour, ambientPressure = ambientPressure)
+        assert field.solved and field.boundaryMach > 1.0
+        lipMach = flow.machFromStaticPressure(field.lipPressureRatio * ambientPressure)
+        expected = prandtlMeyerAngle(field.boundaryMach, GAMMA) - prandtlMeyerAngle(lipMach, GAMMA)
+        assert field.lipTurnAngle == pytest.approx(expected, rel = 1e-9)
+        assert np.sign(field.lipTurnAngle) == sign
+
+def testTheMarchStartsFromTheContoursOwnExitPlane():
+    '''
+    A contour that carries its exit-plane profile hands that profile over, wall to axis, so the
+    plume's first station reaches the lip the nozzle's thrust and mass flow were integrated to.
+    The mesh's crossings stop at its outermost characteristic, short of the wall, and are the
+    fallback only.
+    '''
+    from NOVA.plume import plumeExitLine
+    seed = _syntheticSeed()
+    lipRadius = seed['exitRadius']
+    shortMesh = dict(seed, rMesh = [0.9 * seed['rMesh'][0]])
+    meshOnly = plumeExitLine(PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6), shortMesh, numPoints = 60)
+    assert meshOnly[0].r == pytest.approx(0.9 * lipRadius, rel = 1e-9)
+
+    radii = np.linspace(lipRadius, 0.0, 30)
+    withProfile = dict(shortMesh, exitPlaneRadius = radii, exitPlaneMach = 4.0 + 0.8 * (1.0 - radii / lipRadius),
+                       exitPlaneFlowAngle = np.radians(14.0) * radii / lipRadius)
+    line = plumeExitLine(PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6), withProfile, numPoints = 60)
+    assert line[0].r == pytest.approx(lipRadius, rel = 1e-12)
+    assert line[0].mach == pytest.approx(4.0, rel = 1e-9)
+    assert line[-1].r == 0.0 and line[-1].mach == pytest.approx(4.8, rel = 1e-9)
+
 def _shippedInputs(**overrides):
 
     '''The shipped configuration read into a Nozzle, with keys replaced or removed (None).'''
