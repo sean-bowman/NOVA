@@ -463,10 +463,9 @@ def report(data):
     print('INTERNAL SHOCK')
     print('=' * 108)
     print('A truncated ideal contour is shock free by construction. The optimized families can')
-    print('generate compression that coalesces, and at the length fractions swept here they')
-    print('mostly do not: a chart parabola at 80 per cent bell turns gently enough that the wall')
-    print('characteristics meet beyond the exit, which is no shock in the nozzle. Detection is a')
-    print('property of the design point, not of the family.')
+    print('generate compression that coalesces. At the length fractions swept here what forms')
+    print('is weak: a front of one crossing, turning the flow under a degree, too weak to resolve')
+    print('or charge. Detection is a property of the design point, not of the family.')
     print()
     print('Deflection is the total wall turning the front absorbs and the ratio is the stagnation')
     print('pressure surviving it. The capture is a weak-shock treatment, so it is only as good as')
@@ -528,9 +527,9 @@ def report(data):
                   f'{100 * data["turning_exitMassClosure"][index]:9.2f}')
         print()
         print('  Read the closure column beside the coefficient on the hardest-turned row. A wall')
-        print('  that spills most of its mass out of the sampled plane can report a HIGHER raw')
-        print('  coefficient than a good one, which is the failure mode the closure band in the')
-        print('  optimizer exists to refuse.')
+        print('  that spills most of its mass out of the sampled plane loses raw coefficient to the')
+        print('  mass it does not carry rather than to the thrust it loses, which is why the')
+        print('  closure band in the optimizer refuses it.')
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- The figure -- #
