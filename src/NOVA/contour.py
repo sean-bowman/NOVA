@@ -925,7 +925,7 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
     # bowed by the throat's curvature and passes less, and the transonic starting line carries
     # that into the solve. Sauer's line passes 0.9904 of the choked flow at the Rao entrant arc of
     # 1.5 throat radii, against 0.9946 from Kliegel and Levine's series, which an inviscid
-    # finite-volume solution of the shipped throat reproduces to 0.02 percent.
+    # finite-volume solution of the shipped throat reproduces to 0.01 percent.
     #
     # The rest is the march's discretization, first order in the number of characteristics: on the
     # shipped throat, cut at an area ratio of 40, the closure is 0.9815, 0.9862 and 0.9885 at 25,

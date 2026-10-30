@@ -53,7 +53,7 @@ def testTheDischargeCoefficientReproducesThePrintedSeries():
     '''
     Kliegel and Levine's series in 1/(R + 1), evaluated by hand from its printed coefficients at
     the shipped gamma: 0.99461 at the Rao entrant arc and 0.97399 at its exit arc. An inviscid
-    finite-volume solution of the shipped throat converges to 0.9948.
+    finite-volume solution of the shipped throat converges to 0.9947.
     '''
     assert throatDischargeCoefficient(GAMMA, 1.5) == pytest.approx(0.99461, abs = 1e-5)
     assert throatDischargeCoefficient(GAMMA, 0.382) == pytest.approx(0.97399, abs = 1e-5)

@@ -14,9 +14,8 @@ neither of them carries.
 The case starts from the exit station NOVA's march starts from: the same radii, Mach numbers and
 flow angles, at NOVA's chamber ratio of specific heats and gas constant. Both methods then solve the
 same initial-value problem, so a difference between the march and the case is a difference of
-method. The station is the march's own, which ends 1.7 percent of the lip radius inside the wall
-because it is read from where the characteristic mesh crosses the exit plane; the case's jet issues
-from that radius too. The jet expands into the shipped ambient of 5 kPa. The ambient gas is the
+method. The station is the nozzle's exit plane, from the wall to the axis, so the station radius is
+the lip radius. The jet expands into the shipped ambient of 5 kPa. The ambient gas is the
 exhaust gas at rest at 216.65 K, the standard atmosphere's temperature at that pressure; an inviscid
 steady jet depends on the ambient's pressure alone, so its temperature and composition only mark
 where the jet ends.
@@ -30,8 +29,8 @@ acoustic modes, with a period near 16 ms here, moving the pressure the jet expan
 of itself.
 
 The solution is written to `reference/novaPlume.json`: the gas, the exit station, the march at the
-shipped reach and at a longer one, and the correlated structure, both as NOVA reports it and
-re-evaluated at the chamber gas the march and the case solve in.
+shipped reach and at a longer one, and the correlated structure as NOVA reports it, with its
+scalars re-evaluated independently from NOVA's functions as a check on the reported ones.
 
 Run it with the Python NOVA is installed in, from the NOVA root:
 

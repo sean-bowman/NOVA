@@ -69,6 +69,9 @@ criteria = {
 # Fields stored as three columns in a sample file; everything else is one
 vectorFields = ('U', 'UMean')
 
+# NumPy names the rule trapz before 2.0, and OpenFOAM's Python environment may carry the older release
+trapezoidRule = getattr(np, 'trapezoid', None) or np.trapz
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Reading the case -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -215,8 +218,8 @@ def novaExitIntegrals(reference: dict) -> dict:
 
     '''
 
-    NOVA's exit plane integrated the way NOVA integrates it: strips between neighboring
-    stations, each carrying the mean of its two stations.
+    NOVA's exit plane integrated the way NOVA integrates it: the trapezoidal rule on each integrand
+    times radius, over the stations NOVA reports.
 
     '''
 
@@ -225,12 +228,9 @@ def novaExitIntegrals(reference: dict) -> dict:
     radius, mach = np.asarray(plane['r']), np.asarray(plane['mach'])
     angle, pressure = np.asarray(plane['flowAngle']), np.asarray(plane['pressure'])
 
-    area = math.pi * (radius[:-1]**2 - radius[1:]**2)
-    meanMach, meanPressure = 0.5 * (mach[:-1] + mach[1:]), 0.5 * (pressure[:-1] + pressure[1:])
-    meanAngle = 0.5 * (angle[:-1] + angle[1:])
-    temperature = stagnationTemperature / (1.0 + 0.5 * (gamma - 1.0) * meanMach**2)
-    massFlux = meanPressure / (gasConstant * temperature) * meanMach * np.sqrt(gamma * gasConstant * temperature) \
-               * np.cos(meanAngle)
+    temperature = stagnationTemperature / (1.0 + 0.5 * (gamma - 1.0) * mach**2)
+    massFlux = pressure / (gasConstant * temperature) * mach * np.sqrt(gamma * gasConstant * temperature) * np.cos(angle)
+    trapezoid = lambda values: float(trapezoidRule(values[::-1] * radius[::-1], radius[::-1]))
     thrust = performance['vacuumThrustCoefficient'] * gas['chamberPressure'] * math.pi \
              * reference['geometry']['throatRadius']**2
 
@@ -239,7 +239,7 @@ def novaExitIntegrals(reference: dict) -> dict:
         'vacuumThrust': thrust,
         'vacuumThrustCoefficient': performance['vacuumThrustCoefficient'],
         'thrustPerMassFlow': thrust / performance['massFlow'],
-        'exitMassAveragedMach': float(np.sum(meanMach * massFlux * area) / np.sum(massFlux * area)),
+        'exitMassAveragedMach': trapezoid(mach * massFlux) / trapezoid(massFlux),
         'exitAreaAveragedPressure': performance['exitAreaAveragedPressure'],
         'exitMassAveragedPressure': performance['exitMassAveragedPressure'],
     }
@@ -251,11 +251,11 @@ def novaProfileIntegrals(reference: dict, samples: int = 200001) -> dict:
     NOVA's exit plane integrated exactly as a piecewise-linear profile in radius, with one rule for
     every quantity.
 
-    NOVA integrates its thrust by strips carrying the mean of their two stations and its mass flow
-    by the trapezoidal rule on mass flux times radius. On most of the plane the two agree, but the
-    core NOVA closes linearly is a single segment from about a quarter of the exit radius to the
-    axis, and over it the two rules err in opposite directions. This integral separates what NOVA's
-    flow field says from what its quadrature does to it. Stations outside the wall are dropped.
+    NOVA integrates every quantity by the trapezoidal rule on the integrand times radius over its
+    stations, which is exact only where the integrand times radius is linear. This integral treats
+    the profile itself as piecewise linear and integrates it on a fine subdivision, which separates
+    what NOVA's flow field says from what its quadrature does to it. Stations outside the wall are
+    dropped.
 
     '''
 

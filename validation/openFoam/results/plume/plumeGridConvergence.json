@@ -6,43 +6,43 @@
   ],
   "quantities": {
     "boundaryRadiusAtEndOfMarch": {
-      "coarse": 1.729166612876097,
-      "medium": 1.7390811835111517,
-      "fine": 1.7337005900843834,
+      "coarse": 1.7481102260296413,
+      "medium": 1.7582748052789592,
+      "fine": 1.7549944384183702,
       "monotonic": false,
       "order": NaN,
       "extrapolated": NaN,
-      "gridConvergenceIndex": 0.001293137892807096,
-      "mediumToFine": 0.00310353094273703,
-      "nova": 1.7154839459753835,
+      "gridConvergenceIndex": 0.000778817012364554,
+      "mediumToFine": 0.0018691608296749296,
+      "nova": 1.7355453193269605,
       "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": -0.010507376079345598
+      "novaAgainstFine": -0.011082154259666743
     },
     "lipBoundaryAngle": {
-      "coarse": 17.873537634838424,
-      "medium": 22.054986259302343,
-      "fine": 23.707459326239775,
+      "coarse": 18.882165166019732,
+      "medium": 22.546123624180073,
+      "fine": 24.26558811987303,
       "monotonic": true,
-      "order": 1.3393760793886609,
-      "extrapolated": 24.787211650783547,
-      "gridConvergenceIndex": 0.05693104381648589,
-      "mediumToFine": -0.06970266379866567,
-      "nova": 24.857734187860125,
-      "novaAgainstExtrapolated": 0.0028451177998614074,
-      "novaAgainstFine": 0.048519533273951865
+      "order": 1.0914438195686407,
+      "extrapolated": 25.786065019784324,
+      "gridConvergenceIndex": 0.07832475007405931,
+      "mediumToFine": -0.07086020281885319,
+      "nova": 25.438722670264877,
+      "novaAgainstExtrapolated": -0.013470157205178412,
+      "novaAgainstFine": 0.04834560549682587
     },
     "machDiskLocation": {
-      "coarse": 12.642122737656516,
-      "medium": 12.857157143166484,
-      "fine": 12.792146741426308,
+      "coarse": 12.842154742624972,
+      "medium": 13.062189947684162,
+      "fine": 12.992178746501594,
       "monotonic": false,
       "order": NaN,
       "extrapolated": NaN,
-      "gridConvergenceIndex": 0.002117523191320104,
-      "mediumToFine": 0.00508205565916825,
-      "nova": 8.050967741405648,
+      "gridConvergenceIndex": 0.002245299606420913,
+      "mediumToFine": 0.005388719055410191,
+      "nova": 7.915813146025133,
       "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": -0.370632005390209
+      "novaAgainstFine": -0.39072473520604656
     },
     "machDiskDiameter": {
       "coarse": NaN,
@@ -53,45 +53,45 @@
       "extrapolated": NaN,
       "gridConvergenceIndex": NaN,
       "mediumToFine": NaN,
-      "nova": 9.380315037777283,
+      "nova": 9.216794297942668,
       "novaAgainstExtrapolated": NaN,
       "novaAgainstFine": NaN
     },
     "shockCellLength": {
-      "coarse": 18.57129503124578,
-      "medium": 18.65526066533187,
-      "fine": 18.716495153205983,
-      "monotonic": true,
-      "order": 0.4554545525277755,
-      "extrapolated": 18.88145218925853,
-      "gridConvergenceIndex": 0.011016821973229465,
-      "mediumToFine": -0.0032716856106269647,
-      "nova": 20.000175113803227,
-      "novaAgainstExtrapolated": 0.059249834881933916,
-      "novaAgainstFine": 0.06858548836678757
+      "coarse": 18.842027179046433,
+      "medium": 18.92661050828587,
+      "fine": 18.919685328142585,
+      "monotonic": false,
+      "order": NaN,
+      "extrapolated": NaN,
+      "gridConvergenceIndex": 0.0001525126700747126,
+      "mediumToFine": 0.0003660304081793102,
+      "nova": 19.664424721817163,
+      "novaAgainstExtrapolated": NaN,
+      "novaAgainstFine": 0.0393632019115453
     },
     "maximumBoundaryRadius": {
-      "coarse": 2.2772243101439926,
-      "medium": 2.2547816522864323,
-      "fine": 2.2222798449243473,
+      "coarse": 2.319463724285443,
+      "medium": 2.2985709851868776,
+      "fine": 2.266229187302427,
       "monotonic": true,
-      "order": -0.5342764030871316,
+      "order": -0.6303982343323482,
       "extrapolated": NaN,
-      "gridConvergenceIndex": 0.006093930863447641,
-      "mediumToFine": 0.014625434072274337,
-      "nova": 1.926735075985225,
+      "gridConvergenceIndex": 0.005946331109856449,
+      "mediumToFine": 0.014271194663655477,
+      "nova": 2.304367383725674,
       "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": -0.13299169751916795
+      "novaAgainstFine": 0.016828922969015503
     }
   },
   "criteria": {
     "boundaryRadiusAtEndOfMarch": {
-      "value": 0.00310353094273703,
+      "value": 0.0018691608296749296,
       "limit": 0.005,
       "pass": true
     },
     "machDiskLocation": {
-      "value": 0.00508205565916825,
+      "value": 0.005388719055410191,
       "limit": 0.02,
       "pass": true
     }

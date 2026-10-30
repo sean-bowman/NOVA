@@ -146,7 +146,7 @@ def throatDischargeCoefficient(gamma: float, curvature: float) -> float:
     The series assumes a symmetric throat. The Rao throat is not, and the entrant arc is the one
     that sets the sonic line: at gamma = 1.1475 and an entrant arc of 1.5 throat radii this gives
     0.9946, and an inviscid finite-volume solution of the shipped throat, with its 0.382 exit arc,
-    converges to 0.9948 (validation/openFoam). The boundary layer's displacement is not included.
+    converges to 0.9947 (validation/openFoam). The boundary layer's displacement is not included.
 
     Parameters:
     -----------

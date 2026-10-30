@@ -1802,8 +1802,8 @@ def plumeExitLine(flow: PlumeFlow, seed: dict, numPoints: int = 120) -> list:
     The line is the contour's own exit-plane profile when it carries one: the plane its thrust
     and mass flow are integrated over, from the wall to the axis, so the plume carries the mass
     the nozzle reports. Without one it is read from where the mesh's characteristics cross the
-    plane, which stops at the outermost crossing: on the shipped nozzle 0.9826 of the lip radius,
-    leaving out 3.5 percent of the exit area and 4.7 percent of its mass flow.
+    plane, which stops at the outermost crossing, short of the wall, and leaves out the mass
+    between that crossing and the wall.
 
     Returns None when the contour carries no characteristic mesh, which is the conical case.
 
@@ -2608,9 +2608,9 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     # The shape does not reproduce `initialTurnAngle`. The real boundary turns through the lip's
     # Prandtl-Meyer fan and bends back within a fraction of a cell, which no sinusoid of the cell
     # length can follow: anchored to the turn angle, one about the fully expanded radius doubles
-    # the swell. On the shipped nozzle at 5 kPa this shape puts the widest radius 5 percent and
-    # the first neck 10 percent from an Euler solution (validation/openFoam/plume.md), where a
-    # sinusoid about the lip radius anchored to the turn angle needs an amplitude 1.6 times the
+    # the swell. On the shipped nozzle at 5 kPa this shape puts the widest radius 2 percent and
+    # the first neck 13 percent from an Euler solution (validation/openFoam/plume.md), where a
+    # sinusoid about the lip radius anchored to the turn angle needs an amplitude 1.7 times the
     # lip radius and crosses the axis.
     axial = np.linspace(0.0, structure.plumeLength, numBoundaryPoints)
     cellLength = structure.shockCellLength

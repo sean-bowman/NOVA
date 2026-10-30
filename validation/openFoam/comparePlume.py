@@ -18,9 +18,8 @@ What is compared:
       and flow angle at every node inside nine tenths of the boundary radius. The march run to a
       longer reach is set against the case to show where it parts from it.
     - Against the correlations: the Mach disk's distance from the exit plane and its diameter, the
-      first shock cell's length and the boundary's initial angle. Each correlation is evaluated at
-      the case's gas, the chamber gas the march solves in; NOVA reports them at CEA's exit ratio of
-      specific heats, which is listed beside them.
+      first shock cell's length and the boundary's widest radius. Each correlation is evaluated at
+      the case's gas, the chamber gas the march and NOVA's correlations both solve in.
     - Steadiness: the mass through every open boundary over the averaging window.
 
 The jet boundary is the contact surface between the jet and the ambient. Total temperature is
@@ -97,14 +96,20 @@ def readAxis(path: str) -> dict:
 
 def columns(cellX: np.ndarray, tolerance: float = 1e-6) -> list:
 
-    '''The cells of each axial column of the structured mesh, ordered outward, the columns downstream.'''
+    '''
 
-    keys = np.round(cellX / tolerance).astype(np.int64)
-    unique, inverse = np.unique(keys, return_inverse = True)
-    order = np.argsort(inverse, kind = 'stable')
-    splits = np.cumsum(np.bincount(inverse, minlength = len(unique)))[:-1]
+    The cells of each axial column of the structured mesh, ordered outward, the columns downstream.
 
-    return np.split(order, splits)
+    A column ends where the sorted cell centers jump by more than `tolerance` [m]. Rounding the
+    centers to the tolerance instead splits a column whose centers straddle a rounding boundary.
+
+    '''
+
+    order = np.argsort(cellX, kind = 'stable')
+    breaks = np.flatnonzero(np.diff(cellX[order]) > tolerance) + 1
+
+    # blockMesh numbers a column's cells outward, so the cell index restores that order
+    return [np.sort(members) for members in np.split(order, breaks)]
 
 def jetBoundary(cellX: np.ndarray, cellR: np.ndarray, fraction: np.ndarray, levels: tuple = (0.1, 0.5, 0.9)) -> dict:
 

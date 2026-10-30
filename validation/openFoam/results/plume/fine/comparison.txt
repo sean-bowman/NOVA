@@ -1,28 +1,28 @@
 fine grid, 123072 cells, 40 per station radius, t = 0.005 s
 
-mass flow: OpenFOAM inflow 21.759 kg/s, march station 21.76, nozzle exit 22.831 (station against nozzle -4.69%, station area against the lip's -3.46%)
-boundary at the end of the march, x = 2.000: OpenFOAM 1.7337, march 1.7155 station radii; contact layer 0.182 wide
-boundary angle over the first half station radius [deg]: openFoam 23.71, march 24.86, marchFirstSegment 17.37, prandtlMeyer 27.55, prandtlMeyerAtStationLip 27.24, correlationReported 30.32
-Mach disk: regular reflection at 12.792 station radii, radius nan, peak Mach 6.140, oscillation 0.0553 station radii over the window
-extended march, boundary radius against OpenFOAM and its own mass drift: x = 2: -1.1% / -0.7%, x = 4: -1.0% / -5.8%, x = 6: -2.3% / -16.0%, x = 8: -4.2% / -34.0%
+mass flow: OpenFOAM inflow 23.251 kg/s, march station 23.252, nozzle exit 23.256 (station against nozzle -0.02%, station area against the lip's -0.00%)
+boundary at the end of the march, x = 2.000: OpenFOAM 1.7550, march 1.7355 station radii; contact layer 0.183 wide
+boundary angle over the first half station radius [deg]: openFoam 24.27, march 25.44, marchFirstSegment 17.91, prandtlMeyer 28.02, prandtlMeyerAtStationLip 28.05, correlationReported 28.02
+Mach disk: regular reflection at 12.992 station radii, radius nan, peak Mach 6.161, oscillation 0.0931 station radii over the window
+extended march, boundary radius against OpenFOAM and its own mass drift: x = 2: -1.1% / -0.7%, x = 4: -1.0% / -6.4%, x = 6: -2.3% / -16.7%, x = 8: -4.3% / -34.6%
 
 structure                    OpenFOAM  correlation  difference  NOVA reported
-machDiskLocation               4.0001       2.5176     -37.06%         2.5176
-machDiskDiameter                  nan       2.9332        nan%         2.9332
-shockCellLength                5.8527       6.2541       6.86%         7.1237
-maximumBoundaryRadius         0.69491      0.60249     -13.30%        0.60249
+machDiskLocation               4.1474       2.5269     -39.07%         2.5269
+machDiskDiameter                  nan       2.9422        nan%         2.9422
+shockCellLength                6.0396       6.2773       3.94%         6.2773
+maximumBoundaryRadius         0.72343      0.73561       1.68%        0.73561
 
 criterion                      value       limit  result
-boundaryRadiusMax             2.044%      2.000%  FAIL
-fieldMach95                   0.992%      2.000%  pass
-lipBoundaryAngle              1.150 deg      1.000 deg  FAIL
-machDiskLocation            -37.063%     10.000%  FAIL
+boundaryRadiusMax             2.078%      2.000%  FAIL
+fieldMach95                   1.012%      2.000%  pass
+lipBoundaryAngle              1.173 deg      1.000 deg  FAIL
+machDiskLocation            -39.072%     10.000%  FAIL
 machDiskDiameter                nan%     25.000%  FAIL
-shockCellLength               6.859%     10.000%  pass
-massImbalance               -37.260%      0.200%  FAIL
-meanDrift                    -4.020%      0.100%  FAIL
-fieldMach                mean 0.190  p95 0.992  max 4.077  (14001 nodes)
-fieldPressure            mean 1.463  p95 7.650  max 36.494  (14001 nodes)
-fieldFlowAngleDegrees    mean 0.159  p95 0.733  max 4.178  (14001 nodes)
-boundary pressure        mean 1.59%  max 34.03% from ambient
-window means [kg/s]: inlet 21.759 (oscillation 0.000%, drift +0.000%), outlet 45.883 (oscillation 2.478%, drift -4.020%), farField -32.231 (oscillation 2.679%, drift +4.176%)
+shockCellLength               3.936%     10.000%  pass
+massImbalance               -39.260%      0.200%  FAIL
+meanDrift                    -4.814%      0.100%  FAIL
+fieldMach                mean 0.195  p95 1.012  max 4.439  (14211 nodes)
+fieldPressure            mean 1.481  p95 7.576  max 37.815  (14211 nodes)
+fieldFlowAngleDegrees    mean 0.161  p95 0.731  max 4.429  (14211 nodes)
+boundary pressure        mean 1.37%  max 33.89% from ambient
+window means [kg/s]: inlet 23.251 (oscillation 0.000%, drift +0.000%), outlet 48.247 (oscillation 2.926%, drift -4.814%), farField -34.124 (oscillation 4.179%, drift +6.929%)

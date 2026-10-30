@@ -1,65 +1,65 @@
 {
   "cells": [
-    5400,
-    21600,
-    86280
+    5340,
+    21660,
+    86400
   ],
   "quantities": {
     "massFlow": {
-      "coarse": 23.29582042776807,
-      "medium": 23.30409759380017,
-      "fine": 23.306526298265076,
+      "coarse": 23.43861579933476,
+      "medium": 23.446864369085933,
+      "fine": 23.44896290920086,
       "monotonic": true,
-      "order": 1.768949949412951,
-      "extrapolated": 23.307534872111393,
-      "gridConvergenceIndex": 5.409288762140451e-05,
-      "mediumToFine": -0.00010420705487495275,
-      "nova": 22.83078334424698,
-      "fineAgainstNova": 0.020837784969738093,
-      "extrapolatedAgainstNova": 0.02088196102060369
+      "order": 1.9747579455046056,
+      "extrapolated": 23.449678982272765,
+      "gridConvergenceIndex": 3.817189456737933e-05,
+      "mediumToFine": -8.949394150399562e-05,
+      "nova": 23.255904764772,
+      "fineAgainstNova": 0.008301467794162187,
+      "extrapolatedAgainstNova": 0.008332258816018623
     },
     "vacuumThrustCoefficient": {
-      "coarse": 1.9192799100330862,
-      "medium": 1.9211948592089227,
-      "fine": 1.9217462207575315,
+      "coarse": 1.9194901199220933,
+      "medium": 1.9214228861412403,
+      "fine": 1.9219258743755534,
       "monotonic": true,
-      "order": 1.7962355385775683,
-      "extrapolated": 1.9219691617341246,
-      "gridConvergenceIndex": 0.00014501197802871166,
-      "mediumToFine": -0.00028690653461592696,
-      "nova": 1.8761179465633968,
-      "fineAgainstNova": 0.024320578712929475,
-      "extrapolatedAgainstNova": 0.024439409715533156
+      "order": 1.9420705859691707,
+      "extrapolated": 1.9221028229413735,
+      "gridConvergenceIndex": 0.00011508545164201011,
+      "mediumToFine": -0.0002617105274554229,
+      "nova": 1.9071509931121828,
+      "fineAgainstNova": 0.007747095702821172,
+      "extrapolatedAgainstNova": 0.007839877326541123
     },
     "thrustPerMassFlow": {
-      "coarse": 4518.626029382524,
-      "medium": 4521.5279292882815,
-      "fine": 4522.354247164595,
+      "coarse": 4519.096289113893,
+      "medium": 4522.055229880701,
+      "fine": 4522.834206660298,
       "monotonic": true,
-      "order": 1.812228973828802,
-      "extrapolated": 4522.683215725235,
-      "gridConvergenceIndex": 9.092845856941242e-05,
-      "mediumToFine": -0.0001827185202998427,
-      "nova": 4506.9777845572435,
-      "fineAgainstNova": 0.0034117014421588543,
-      "extrapolatedAgainstNova": 0.003484692385616883
+      "order": 1.9254285874476311,
+      "extrapolated": 4523.112562094935,
+      "gridConvergenceIndex": 7.693058763540823e-05,
+      "mediumToFine": -0.00017223199967189283,
+      "nova": 4525.322264496064,
+      "fineAgainstNova": -0.0005498078789407668,
+      "extrapolatedAgainstNova": -0.0004882972464669288
     },
     "exitMassAveragedMach": {
-      "coarse": 3.930915428472309,
-      "medium": 3.937279874156438,
-      "fine": 3.938874176137291,
+      "coarse": 3.9309496347007986,
+      "medium": 3.937359405491629,
+      "fine": 3.939002552773449,
       "monotonic": true,
-      "order": 1.997109947256653,
-      "extrapolated": 3.9394070319513426,
-      "gridConvergenceIndex": 0.00016910155993295252,
-      "mediumToFine": -0.0004047608300137576,
-      "nova": 3.9540825726234474,
-      "fineAgainstNova": -0.003846251616355545,
-      "extrapolatedAgainstNova": -0.0037114906941277948
+      "order": 1.963810967371613,
+      "extrapolated": 3.939568977410228,
+      "gridConvergenceIndex": 0.00017974875275851264,
+      "mediumToFine": -0.00041714806218218757,
+      "nova": 3.9451194688974534,
+      "fineAgainstNova": -0.0015505021260392438,
+      "extrapolatedAgainstNova": -0.0014069260844911113
     }
   },
   "mediumToFineCriterion": {
-    "value": -0.00028690653461592696,
+    "value": -0.0002617105274554229,
     "limit": 0.002,
     "pass": true
   }

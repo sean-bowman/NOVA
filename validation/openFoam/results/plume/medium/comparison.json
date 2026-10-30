@@ -5,195 +5,195 @@
   "cellsPerRadius": 20,
   "time": 0.01,
   "averageStart": 0.005,
-  "stationRadius": 0.3127023131044198,
+  "stationRadius": 0.31922317604178135,
   "massFlow": {
-    "openFoamInflow": 21.7566299412,
-    "marchStation": 21.759760068247353,
-    "nozzleExit": 22.83078334424698,
-    "stationAgainstNozzle": -0.04691136786024952,
-    "stationAreaAgainstLip": -0.034560772963624475
+    "openFoamInflow": 23.249246114880002,
+    "marchStation": 23.252312213887016,
+    "nozzleExit": 23.255904764772,
+    "stationAgainstNozzle": -0.0001544790848312383,
+    "stationAreaAgainstLip": -2.6176860679072433e-10
   },
   "boundary": {
     "radius": {
-      "mean": 0.012240704982204849,
-      "rms": 0.01398138679999575,
-      "p95": 0.02837063579465814,
-      "max": 0.037560008518909616,
-      "count": 129
+      "mean": 0.011602110394937287,
+      "rms": 0.013606438136941453,
+      "p95": 0.0284508489872754,
+      "max": 0.03793841462026026,
+      "count": 131
     },
     "endOfMarch": {
-      "x": 2.0000000012994272,
-      "openFoam": 1.7390811835111517,
-      "march": 1.7154839459753835
+      "x": 1.999999990844042,
+      "openFoam": 1.7582748052789592,
+      "march": 1.7355453193269605
     },
-    "layerWidthAtEndOfMarch": 0.28672140715719413,
+    "layerWidthAtEndOfMarch": 0.28417572009772435,
     "pressureOverAmbient": {
-      "mean": 0.0334714091222089,
-      "rms": 0.0671079987965044,
-      "p95": 0.1406111361024722,
-      "max": 0.342554180636513,
+      "mean": 0.032368203263811554,
+      "rms": 0.0652717589250562,
+      "p95": 0.13200870528402098,
+      "max": 0.3383421943259891,
       "count": 40
     },
     "angleDegrees": {
-      "openFoam": 22.054986259302343,
-      "march": 24.857734187860125,
-      "marchFirstSegment": 17.373389656766236,
-      "prandtlMeyer": 27.55187922607797,
-      "prandtlMeyerAtStationLip": 27.242768620848796,
-      "correlationReported": 30.317789750539756
+      "openFoam": 22.546123624180073,
+      "march": 25.438722670264877,
+      "marchFirstSegment": 17.90708813921823,
+      "prandtlMeyer": 28.018891873193418,
+      "prandtlMeyerAtStationLip": 28.052218718582402,
+      "correlationReported": 28.018891873193418
     }
   },
   "extendedMarch": [
     {
       "x": 2.0,
-      "boundaryRadius": -0.013570514854413296,
-      "massDrift": -0.007226209605941795
+      "boundaryRadius": -0.01292891876107316,
+      "massDrift": -0.007361954920330982
     },
     {
       "x": 4.0,
-      "boundaryRadius": -0.014350585051514209,
-      "massDrift": -0.057918358896301196
+      "boundaryRadius": -0.014105365705474382,
+      "massDrift": -0.06380143328775569
     },
     {
       "x": 6.0,
-      "boundaryRadius": -0.03212959729814169,
-      "massDrift": -0.1598864447148671
+      "boundaryRadius": -0.03224879134348524,
+      "massDrift": -0.16684470554355837
     },
     {
       "x": 8.0,
-      "boundaryRadius": -0.05516273546931505,
-      "massDrift": -0.3395499432892794
+      "boundaryRadius": -0.05620055140616198,
+      "massDrift": -0.3461703183163064
     }
   ],
   "fieldMach": {
-    "mean": 0.005569791630110168,
-    "rms": 0.05150095259076041,
-    "p95": 0.01828076703593473,
-    "max": 1.869835647159551,
-    "count": 14001
+    "mean": 0.005642722795259696,
+    "rms": 0.05023082355740011,
+    "p95": 0.019050555842169914,
+    "max": 1.770018476922774,
+    "count": 14211
   },
   "fieldPressure": {
-    "mean": 0.032166975367752794,
-    "rms": 0.11904636504128986,
-    "p95": 0.1619770768460107,
-    "max": 3.0541478390154406,
-    "count": 14001
+    "mean": 0.03261830984870525,
+    "rms": 0.1193749411465326,
+    "p95": 0.1657026898761224,
+    "max": 2.9885587417354444,
+    "count": 14211
   },
   "fieldFlowAngleDegrees": {
-    "mean": 0.3686314422222501,
-    "rms": 2.017166456729745,
-    "p95": 1.6127504537298245,
-    "max": 77.5873883373844,
-    "count": 14001
+    "mean": 0.3774884506896829,
+    "rms": 2.0637978378139508,
+    "p95": 1.6361762448130674,
+    "max": 76.46288333853028,
+    "count": 14211
   },
   "machDisk": {
     "present": false,
-    "x": 4.820406632,
-    "peakMach": 6.210582864880735,
-    "peakX": 4.754728638,
-    "downstreamMach": 3.141785518569911,
+    "x": 4.972143372,
+    "peakMach": 6.242820363923692,
+    "peakX": 4.905095778,
+    "downstreamMach": 3.117208167346351,
     "radius": NaN,
-    "xFromExit": 12.857157143166484,
+    "xFromExit": 13.062189947684162,
     "radiusOverStation": NaN,
     "history": [
       [
         0.005,
-        4.789131397
+        4.940215946
       ],
       [
         0.006,
-        4.789131397
+        4.940215946
       ],
       [
         0.007,
-        4.789131397
+        4.940215946
       ],
       [
         0.008,
-        4.820406632
+        4.972143372
       ],
       [
         0.009,
-        4.820406632
+        4.972143372
       ],
       [
         0.01,
-        4.789131397
+        4.972143372
       ]
     ],
-    "oscillation": 0.047147995233660596
+    "oscillation": 0.05000800129220648
   },
   "firstCell": {
-    "maxX": 8.269914801530842,
-    "maxRadius": 2.2547816522864323,
-    "neckX": 18.65526066533187,
-    "neckRadius": 1.3666952077775507
+    "maxX": 8.344782090045094,
+    "maxRadius": 2.2985709851868776,
+    "neckX": 18.92661050828587,
+    "neckRadius": 1.3802982003473596
   },
   "structure": {
     "machDiskLocation": {
-      "openFoam": 4.020462778615173,
-      "correlation": 2.517556235466613,
-      "reported": 2.517556235466613,
-      "difference": -0.37381431588983116
+      "openFoam": 4.169753761160768,
+      "correlation": 2.526911013427428,
+      "reported": 2.526911013427428,
+      "difference": -0.39399035094964663
     },
     "machDiskDiameter": {
       "openFoam": NaN,
-      "correlation": 2.9332462099611294,
-      "reported": 2.9332462099611294,
+      "correlation": 2.9422143487130388,
+      "reported": 2.9422143487130388,
       "difference": NaN
     },
     "shockCellLength": {
-      "openFoam": 5.833543161615173,
-      "correlation": 6.254101020579721,
-      "reported": 7.1236545282623664,
-      "pack": 5.84226894724905,
-      "difference": 0.07209303973815206
+      "openFoam": 6.041812718160768,
+      "correlation": 6.277340114732998,
+      "reported": 6.277340114732998,
+      "pack": 5.8639777488317435,
+      "difference": 0.03898290257562431
     },
     "maximumBoundaryRadius": {
-      "openFoam": 0.705075438215373,
-      "correlation": 0.602494515,
-      "reported": 0.602494515,
-      "difference": -0.14548928760731927
+      "openFoam": 0.7337571302488415,
+      "correlation": 0.735607475,
+      "reported": 0.735607475,
+      "difference": 0.0025217400620434205
     }
   },
   "steadiness": {
-    "massImbalance": -1.8063780071284277,
+    "massImbalance": -1.7682668017464858,
     "window": {
       "inlet": {
-        "mean": 21.7566299412,
-        "oscillation": 0.0,
+        "mean": 23.249246114880002,
+        "oscillation": 1.5280984429541095e-16,
         "drift": 0.0
       },
       "outlet": {
-        "mean": 47.01336201062446,
-        "oscillation": 0.037194020076949184,
-        "drift": 0.06287194931233686
+        "mean": 49.33130840031115,
+        "oscillation": 0.03484518965991748,
+        "drift": 0.05396652034419591
       },
       "farField": {
-        "mean": -64.55742990444,
-        "oscillation": 0.2299161382339306,
-        "drift": -0.19370215376557243
+        "mean": -67.19293235600692,
+        "oscillation": 0.21606067867829443,
+        "drift": -0.09605193719170502
       }
     }
   },
   "criteria": {
     "boundaryRadiusMax": {
-      "value": 0.037560008518909616,
+      "value": 0.03793841462026026,
       "limit": 0.02,
       "pass": false
     },
     "fieldMach95": {
-      "value": 0.01828076703593473,
+      "value": 0.019050555842169914,
       "limit": 0.02,
       "pass": true
     },
     "lipBoundaryAngle": {
-      "value": 2.802747928557782,
+      "value": 2.892599046084804,
       "limit": 1.0,
       "pass": false
     },
     "machDiskLocation": {
-      "value": -0.37381431588983116,
+      "value": -0.39399035094964663,
       "limit": 0.1,
       "pass": false
     },
@@ -203,17 +203,17 @@
       "pass": false
     },
     "shockCellLength": {
-      "value": 0.07209303973815206,
+      "value": 0.03898290257562431,
       "limit": 0.1,
       "pass": true
     },
     "massImbalance": {
-      "value": -1.8063780071284277,
+      "value": -1.7682668017464858,
       "limit": 0.002,
       "pass": false
     },
     "meanDrift": {
-      "value": 0.06287194931233686,
+      "value": 0.05396652034419591,
       "limit": 0.001,
       "pass": false
     }
