@@ -250,7 +250,7 @@ What a rough wall may do to the coolant-side heat transfer is set by `coolantRou
 
 A thermal barrier coating is a second shell inside the metal one, set by `thermalBarrierThickness` and `thermalBarrierConductivity`. It raises its own gas-side surface temperature and lowers the metal behind it, which is the point of fitting one, so `maxWallTemperature` applies to the metal rather than to the ceramic.
 
-Every run marches a turbulent boundary layer along the finished wall and prices the drag it costs, reporting `frictionLossCoefficient` and a corrected thrust coefficient. The march starts at the injector face, so the layer arriving at the throat carries the chamber's history, but only the diverging section's drag is charged against exit thrust: friction on the subsonic wall is a chamber momentum loss and is reported separately as `chamberDragForce`. On the reference nozzle the debit is 2.00 percent of ideal thrust, from 1973 N over the bell against 213 N over the chamber. The displacement thickness is reported and **not** applied to the wall: offsetting the contour by it is SP-8120's reference practice and would move every contour the tool produces.
+Every run marches a turbulent boundary layer along the finished wall and prices the drag it costs, reporting `frictionLossCoefficient` and a corrected thrust coefficient. The march starts at the injector face, so the layer arriving at the throat carries the chamber's history, but only the diverging section's drag is charged against exit thrust: friction on the subsonic wall is a chamber momentum loss and is reported separately as `chamberDragForce`. On the reference nozzle the debit is 1.99 percent of ideal thrust, from 2001 N over the bell against 212 N over the chamber. The displacement thickness is reported and **not** applied to the wall: offsetting the contour by it is SP-8120's reference practice and would move every contour the tool produces.
 
 | Field                                       | Unit | Meaning                                                                                            |
 | --------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------- |
@@ -388,7 +388,7 @@ Generated `*Outputs/` directories are gitignored. The curated figures above are 
 | Propellants                       | LOX / LH2                            |                               |
 | Chamber pressure                  | 6.8948 MPa                           | 1000 psia                     |
 | Mixture ratio                     | 5.5                                  | hydrogen-rich, near peak Isp  |
-| Expansion ratio                   | 40                                   | sets the target exit pressure |
+| Expansion ratio                   | 40                                   | where the contour is cut      |
 | Thrust                            | 100 kN                               | mass flow is derived from it  |
 | Oxidizer / fuel inlet temperature | 90.17 K / 20.27 K                    | normal boiling points         |
 | Contour                           | truncated ideal, length fraction 0.8 | method of characteristics     |
@@ -413,13 +413,13 @@ CEA output at the chamber, compared against CEARun for the same case:
 
 | Quantity                  | Value       |
 | ------------------------- | ----------- |
-| Throat radius             | 50.6 mm     |
-| Exit radius               | 318.3 mm    |
-| Diverging section length  | 806.3 mm    |
+| Throat radius             | 50.5 mm     |
+| Exit radius               | 319.2 mm    |
+| Diverging section length  | 802.4 mm    |
 | Delivered area ratio      | 40.000      |
 | Delivered length fraction | 0.8000      |
 | Mass flow                 | 23.466 kg/s |
-| Thrust coefficient        | 1.795       |
+| Thrust coefficient        | 1.826       |
 | Ideal Isp                 | 434.4 s     |
 
 ### Generated geometry

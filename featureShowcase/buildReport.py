@@ -1,12 +1,13 @@
 '''
-Render the nozzle contour report to a self-contained HTML file.
+Render NOVA's long-form documents to self-contained HTML files.
 
 Uses documentProcessor, which embeds every figure as a data URI so the output is one file with
 nothing beside it. The source markdown stays readable in the repository and on GitHub; the HTML is
 what gets sent to anyone who is not going to clone it.
 
-    python featureShowcase/buildReport.py
-    python featureShowcase/buildReport.py --pdf
+    python featureShowcase/buildReport.py                           # every document
+    python featureShowcase/buildReport.py NozzleDesignOverview.md   # one document, by file name
+    python featureShowcase/buildReport.py --pdf                     # with a paginated light PDF
 '''
 import os
 import sys
@@ -22,27 +23,47 @@ from documentProcessor import DocumentProcessor
 
 import showcasePalette
 
-reports = os.path.join(root, 'docs', 'reports')
+# (markdown source relative to the NOVA root, wordmark, eyebrow, masthead meta)
 documents = [
-    ('nozzleContourEffort_2026-09-06.md', 'NOVA', 'Contour verification and assessment'),
+    (os.path.join('docs', 'reports', 'nozzleContourEffort_2026-09-06.md'), 'NOVA',
+     'Contour verification and assessment', ['Sean Bowman', '06 September 2026']),
+    (os.path.join('docs', 'NozzleDesignOverview.md'), 'NOVA', 'Rocket Propulsion · Nozzle Design',
+     ['Sean Bowman', 'Isabella Duprey-Churn', 'Compiled 07/20/2026']),
 ]
+
+def readMarkdown(source: str) -> str:
+    '''The document's markdown without the breadcrumb line that links it into the repository.'''
+    with open(source, encoding = 'utf-8') as handle:
+        lines = handle.read().split('\n')
+    # A leading '[Home](...) > ...' line navigates the repository on GitHub and leads nowhere in a
+    # file sent on its own
+    while lines and not lines[0].strip():
+        lines = lines[1:]
+    if lines and lines[0].startswith('[Home]('):
+        lines = lines[1:]
+    return '\n'.join(lines)
 
 def main():
     wantPdf = '--pdf' in sys.argv
+    wanted = [argument for argument in sys.argv[1:] if not argument.startswith('--')]
 
-    for name, wordmark, eyebrow in documents:
-        source = os.path.join(reports, name)
+    for relative, wordmark, eyebrow, meta in documents:
+        name = os.path.basename(relative)
+        if wanted and name not in wanted:
+            continue
+        source = os.path.join(root, relative)
         if not os.path.isfile(source):
             print(f'  missing {name}')
             continue
 
+        text = readMarkdown(source)
         processor = DocumentProcessor(theme = 'dark', wordmark = wordmark, eyebrow = eyebrow,
-                                      meta = ['Sean Bowman', '06 September 2026'])
-        processor.fromMarkdownFile(source)
+                                      meta = meta)
+        processor.fromMarkdown(text, baseDir = os.path.dirname(source))
 
-        target = os.path.join(reports, name.replace('.md', '.html'))
+        target = source.replace('.md', '.html')
         # documentProcessor writes the report style's own dark palette; the report takes NOVA's
-        with open(target, 'w', encoding = 'utf-8') as handle:
+        with open(target, 'w', encoding = 'utf-8', newline = '\n') as handle:
             handle.write(showcasePalette.restyleHtml(processor.toHtml()))
         print(f'  wrote {os.path.basename(target)}   '
               f'{os.path.getsize(target) / 1024 / 1024:.1f} MB')
@@ -51,10 +72,9 @@ def main():
             # Light for paper, and paginated, because a report of this length as one continuous
             # sheet is unreadable on anything but a screen.
             printable = DocumentProcessor(theme = 'light', singlePage = False, wordmark = wordmark,
-                                          eyebrow = eyebrow,
-                                          meta = ['Sean Bowman', '06 September 2026'])
-            printable.fromMarkdownFile(source)
-            pdfPath = os.path.join(reports, name.replace('.md', '.pdf'))
+                                          eyebrow = eyebrow, meta = meta)
+            printable.fromMarkdown(text, baseDir = os.path.dirname(source))
+            pdfPath = source.replace('.md', '.pdf')
             printable.toPdf(pdfPath)
             print(f'  wrote {os.path.basename(pdfPath)}    '
                   f'{os.path.getsize(pdfPath) / 1024 / 1024:.1f} MB')

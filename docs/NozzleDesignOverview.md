@@ -1095,9 +1095,9 @@ The heat transfer model outputs plots of the coolant properties, both heat trans
 
 The gas side is checked against a worked example of the correlation as NASA SP-125 gives it, but not against a measurement of its own. Measurements exist, and they do not flatter it. Written as $St^*Pr^{*0.7} = C\,Re^{*-0.2}_d$ with properties at Eckert's reference enthalpy, the Bartz form carries $C = 0.026$ along the whole wall, while Schacht, Quentmeyer and Jones measured $C$ at five stations of a LOX/GH2 chamber over 150 to 1000 psia [13] and found it varies: 0.0257 in the cylindrical barrel, 0.0240 through the converging section, 0.0148 at the throat, and 0.0153 to 0.0188 downstream. Four other configurations put the throat between 0.017 and 0.023. So the coefficient here is about right over the barrel and 20 to 40 percent high at the throat, where the flux is highest. A high coefficient is not a licence: it drives the sizing march to a smaller channel, which holds the wall below its limit and charges pressure drop for margin that was already there.
 
-Setting `gasSideAxialModel` to `measured` scales the coefficient by that measured distribution, normalized to the barrel so the absolute level stays Bartz's and only the shape comes from the measurement. On the shipped jacket it leaves the barrel alone, takes 41 percent off the throat, and costs 36 K of coolant pickup for a fifth less pressure drop. It is a calibration from one engine and one injector rather than a correlation, and the source says so itself; the account is in [gasSideAxialDistribution_2026-09-22.md](./reports/gasSideAxialDistribution_2026-09-22.md).
+Setting `gasSideAxialModel` to `measured` scales the coefficient by that measured distribution, normalized to the barrel so the absolute level stays Bartz's and only the shape comes from the measurement. On the shipped jacket it leaves the barrel alone, takes 41 percent off the throat, and costs 15 K of coolant pickup for 12 percent less pressure drop. It is a calibration from one engine and one injector rather than a correlation, and the source says so itself; the account is in [gasSideAxialDistribution_2026-09-22.md](./reports/gasSideAxialDistribution_2026-09-22.md).
 
-Setting `gasSideAxialModel` to `ievlev` runs Ievlev's integral method as RPA carries it, in `ievlevHeatTransfer`. It integrates the energy equation along the wall in closed form, so a station's coefficient depends on the wall upstream of it, and the jacket is sized around an outer iteration on the wall temperature that closes in two or three passes. On the shipped regression jacket it carries more heat into the coolant than Bartz, 264.0 K at the outlet against 252.7 K, with a wider throat channel. Against the measured heat flux of Test 024 on the MSFC 40k calorimeter chamber, on the test's own wall temperature, it runs the throat 20 percent high against the barrel, where Bartz runs it 38 percent high; the comparison is in [calorimeter40k_2026-10-04.md](./reports/calorimeter40k_2026-10-04.md).
+Setting `gasSideAxialModel` to `ievlev` runs Ievlev's integral method as RPA carries it, in `ievlevHeatTransfer`. It integrates the energy equation along the wall in closed form, so a station's coefficient depends on the wall upstream of it, and the jacket is sized around an outer iteration on the wall temperature that closes in two or three passes. On the shipped regression jacket it carries more heat into the coolant than Bartz, 266.5 K at the outlet against 253.8 K, with a wider throat channel. Against the measured heat flux of Test 024 on the MSFC 40k calorimeter chamber, on the test's own wall temperature, it runs the throat 20 percent high against the barrel, where Bartz runs it 38 percent high; the comparison is in [calorimeter40k_2026-10-04.md](./reports/calorimeter40k_2026-10-04.md).
 
 The coolant side was put against Carlile and Quentmeyer's three chambers [10], at one station with the gas side fixed from their stated operating point. Every one of their 13 measured throat wall temperatures lies inside the band NOVA predicts once the coolant state and the channel roughness, neither of which the paper reports, are bracketed. The bands are wider than the tolerances set before the comparison, so it is a comparison, not a validation.
 
@@ -1125,7 +1125,7 @@ directly against the NASA CEARun web tool.
 | Propellants | LOX / LH2 | |
 | Chamber pressure | 6.8948 [MPa] | 1000 [psia] |
 | Mixture ratio | 5.5 | hydrogen-rich, near peak $I_{sp}$ |
-| Expansion ratio | 40 | one-dimensional; sets the target exit pressure |
+| Expansion ratio | 40 | geometric, where the contour is cut |
 | Thrust | 100 [kN] | mass flow follows from it |
 | Oxidizer / fuel inlet temperature | 90.17 [K] / 20.27 [K] | normal boiling points |
 | Contour | truncated ideal, $L_{frac} = 0.8$ | method of characteristics |
@@ -1149,13 +1149,13 @@ Equilibrium chamber properties, compared against CEARun for the same case:
 | Quantity | Value |
 |----------|-------|
 | Throat radius | 50.5 [mm] |
-| Exit radius | 425 [mm] |
-| Contour length | ~1.0 [m] |
+| Exit radius | 319.2 [mm] |
+| Diverging section length | 802.4 [mm] |
 | Mass flow | 23.466 [kg/s] |
 | Ideal $I_{sp}$ | 434.4 [s] |
-| Target exit pressure | 13 993 [Pa] |
+| Thrust coefficient | 1.826, 1.790 after wall friction |
 
-The characteristic mesh runs sonic at the throat and expands to roughly Mach 5 at the exit plane.
+The characteristic mesh runs sonic at the throat. At the exit plane it runs from Mach 3.78 at the wall to 4.19 on the axis.
 
 ![Mach number contours](../featureShowcase/fieldMach.png)
 
@@ -1171,15 +1171,9 @@ The characteristic mesh runs sonic at the throat and expands to roughly Mach 5 a
 
 ## A Note on Area Ratio
 
-The configured expansion ratio of 40 is the **one-dimensional** area ratio, and it is what sets
-the target exit pressure of 13 993 [Pa]. The method of characteristics contour then converges on
-that pressure at the wall, reaching it at a **geometric** area ratio of about 71.
+The configured expansion ratio of 40 is the **geometric** area ratio of the delivered nozzle. The solve finds the ideal contour that reaches that area ratio at 80 percent of the length of a 15 degree cone and cuts it there, so the exit pressure is a result of the cut rather than a target.
 
-The two numbers are not expected to be identical, because the MoC solution matches near-wall
-static pressure rather than a mass-averaged one-dimensional exit state. The pressure match itself
-is tight: 13 995.7 [Pa] against a 13 993.3 [Pa] target. The one-dimensional expansion ratio should
-be read as the operating point that sets exit pressure, not as the geometric area ratio the
-contour will land on.
+A truncated contour has no single exit pressure. The one-dimensional exit state at an area ratio of 40 is 13 993 [Pa] in CEA's equilibrium gas and 17 699 [Pa] in the frozen chamber gas the characteristics are solved in. Across the method of characteristics exit plane the static pressure runs from 25.5 [kPa] at the wall to 10.7 [kPa] on the axis, with a mass average of 18.6 [kPa]. The wall carries the highest pressure because the cut stops the bell before its wall has expanded to the core's Mach number.
 
 
 # References

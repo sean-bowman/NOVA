@@ -142,12 +142,12 @@ Chamber temperature, molecular weight and the ratio of specific heats all move w
 
 | Power level | Exit displacement thickness [mm] | Effective area ratio | Friction drag [N] |
 |---|---|---|---|
-| 100 % | 3.723 | 38.647 | 2016.7 |
-| 60 % | 4.124 | 38.548 | 1339.7 |
-| 40 % | 4.474 | 38.463 | 968.3 |
-| 20 % | 5.141 | 38.299 | 555.9 |
+| 100 % | 3.945 | 39.125 | 1984.6 |
+| 60 % | 4.370 | 39.031 | 1318.8 |
+| 40 % | 4.739 | 38.950 | 953.5 |
+| 20 % | 5.443 | 38.795 | 547.6 |
 
-Displacement thickness grows 38 percent and the exit skin friction coefficient 38 percent, against a geometric area ratio of 39.57. Two consequences. The effective area ratio falls 0.95 percent over the range, which shifts the exit pressure and so the power level at which separation is reported, by rather less than the 4.9 percent the frozen gas state already costs. And friction drag, which is 2.02 percent of thrust at rated power, is 2.79 percent at 20 percent power: **throttling makes the nozzle relatively draggier, by 38 percent.** The plume sweep does not include either effect.
+The effective area ratio is the exit's displaced area over the throat's, against a geometric area ratio of 40. Displacement thickness grows 38 percent and the exit skin friction coefficient 38 percent. Two consequences. The effective area ratio falls 0.84 percent over the range, which shifts the exit pressure and so the power level at which separation is reported, by rather less than the 4.9 percent the frozen gas state already costs. And friction drag, which is 1.98 percent of thrust at rated power, is 2.74 percent at 20 percent power: **throttling makes the nozzle relatively draggier, by 38 percent.** The plume sweep does not include either effect.
 
 **Separation as a model rather than a refusal.** Schmucker's criterion, `p_sep / p_a = (1.88 Ma_sep - 1)^-0.64`, evaluated along the wall locates the separation point instead of only declaring that one exists. The outputs that follow are the separation station, the area ratio there, the effective exit the jet actually leaves from, and the power level at which separation first enters the nozzle rather than sitting at the lip. The shipped contour is a truncated ideal contour, and truncated ideal and conical nozzles show free shock separation only; restricted shock separation belongs to thrust-optimized contours, so the `top` and `toc` families need checking before they take the same treatment. The plume downstream of a separated nozzle stays out of scope either way.
 

@@ -29,7 +29,7 @@ python featureShowcase/buildChamberField.py       # chamber and converging secti
 python featureShowcase/buildModelComparisons.py    # the selectable thermal and gas models, about 4 minutes
 python featureShowcase/buildFamiliesReportFigures.py  # figures for the contour families report
 python featureShowcase/buildCalorimeter40k.py figures # figures for the 40k calorimeter report
-python featureShowcase/buildReport.py             # renders the effort report to HTML
+python featureShowcase/buildReport.py             # renders the effort report and the design overview to HTML
 python featureShowcase/buildGuiGraphic.py         # the GUI's plume graphic, banner and icon
 python featureShowcase/buildGuiScreenshots.py     # the GUI walkthrough screenshots in docs/images/gui
 ```

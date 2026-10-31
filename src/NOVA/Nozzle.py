@@ -1715,7 +1715,7 @@ class Nozzle:
         **The drag charged is the diverging section's.** The march covers the whole wall, because
         the thickness arriving at the throat is set by the chamber upstream of it, but friction on
         the subsonic wall does not reduce exit plane momentum and is not a thrust debit. On the
-        reference nozzle the chamber and converging section carry a further 213 N, which is
+        reference nozzle the chamber and converging section carry a further 212 N, which is
         reported as `chamberDragForce` and left out of the coefficient.
 
         The wall temperature is the jacket's own solved distribution where there is a jacket, so
