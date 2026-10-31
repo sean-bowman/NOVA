@@ -321,6 +321,39 @@ def solveRegenSectionFilm(state):
     state.filmCoolantVelocity                   = coolant.velocity
     state.filmSurvivalLength                    = film.survivalLength
 
+def stationAreaRatios(rNozzle, nozzleScalingFactor = None) -> np.ndarray:
+
+    '''
+
+    Area ratio of every wall station against the throat the contour was sized to.
+
+    The wall is resampled to a fixed number of points along its arc length, so no station lands
+    exactly on the throat and the smallest station radius sits above it: 0.6 percent on the
+    shipped nozzle, which is 1.2 percent in area. Taking the area ratios against that station
+    shifts every gas property looked up from them and moves an area ratio truncation downstream.
+    A sampled wall can only overstate its throat, so the throat is the smaller of the sized radius
+    and the smallest station; without a sized radius it is the smallest station.
+
+    Parameters:
+    -----------
+    rNozzle : array
+        Wall radius at each station [m].
+    nozzleScalingFactor : float
+        Throat radius the contour was sized to [m], or None.
+
+    Returns:
+    --------
+    np.ndarray
+        Station area over throat area [-].
+
+    '''
+
+    rNozzle = np.asarray(rNozzle, dtype = float)
+    throatRadius = float(np.min(rNozzle))                                    # [m]
+    if nozzleScalingFactor is not None and float(nozzleScalingFactor) > 0.0:
+        throatRadius = min(throatRadius, float(nozzleScalingFactor))
+    return (rNozzle / throatRadius)**2
+
 def solveRegenStations(state):
 
     '''
@@ -343,9 +376,7 @@ def solveRegenStations(state):
     rNozzle = state.rNozzleWall.copy()
 
     throatIndex = rNozzle.argmin()
-
-    throatArea =  np.pi * rNozzle[throatIndex]**2
-    areaRatios = (np.pi * rNozzle**2) / throatArea
+    areaRatios = stationAreaRatios(rNozzle, state.nozzleScalingFactor)
 
     print(f'Truncating Nozzle Regen Section.')
 

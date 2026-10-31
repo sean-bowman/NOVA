@@ -838,3 +838,58 @@ class TestCoolantPastWallLimit:
 
         assert 'no channel size' in message
         assert 'downstream' in message
+
+class TestStationAreaRatios:
+
+    '''
+
+    The regen split takes its area ratios against the throat the contour was sized to. The wall it
+    reads is resampled along its arc length, so no station lands on the throat and the smallest
+    station radius overstates it.
+
+    '''
+
+    @staticmethod
+    def sampledThroat():
+
+        '''A circular throat arc of unit radius of curvature, sampled so no point sits on it.'''
+
+        throatRadius = 0.05                                                  # [m]
+        angles = np.linspace(-0.6, 0.6, 12) + 0.03                           # [rad], off the throat
+        return throatRadius, throatRadius + throatRadius * (1.0 - np.cos(angles))
+
+    def testTheSampledThroatSitsAboveTheSizedThroat(self):
+
+        throatRadius, radii = self.sampledThroat()
+
+        assert radii.min() > throatRadius
+
+    def testRatiosAreTakenAgainstTheSizedThroat(self):
+
+        from NOVA.regenStations import stationAreaRatios
+
+        throatRadius, radii = self.sampledThroat()
+        ratios = stationAreaRatios(radii, throatRadius)
+
+        np.testing.assert_allclose(ratios, (radii / throatRadius)**2, rtol = 1e-14)
+        assert ratios.min() > 1.0
+
+    def testAWallBelowTheSizedThroatSetsTheThroat(self):
+
+        # A sized radius above the wall's smallest station cannot be the throat: the flow would
+        # have to pass a section smaller than its own throat
+        from NOVA.regenStations import stationAreaRatios
+
+        throatRadius, radii = self.sampledThroat()
+        ratios = stationAreaRatios(radii, 1.1 * radii.min())
+
+        assert ratios.min() == pytest.approx(1.0, rel = 1e-14)
+
+    def testWithoutASizedThroatTheSmallestStationIsTheThroat(self):
+
+        from NOVA.regenStations import stationAreaRatios
+
+        _, radii = self.sampledThroat()
+
+        for scalingFactor in (None, 0.0):
+            assert stationAreaRatios(radii, scalingFactor).min() == pytest.approx(1.0, rel = 1e-14)
