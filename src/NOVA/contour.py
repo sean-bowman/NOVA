@@ -747,7 +747,7 @@ def sampleExitPlaneByWalk(state: ContourSolution, xExitPlane: float, wallRadius:
     # the kernel's last axis point the flow is the uniform design core, axial at the design Mach
     # number, so the plane is closed with that state from where the characteristic crosses it to
     # the axis. Extrapolating the last two sampled stations to the axis puts the shipped nozzle's
-    # core at Mach 4.307 against a design value of 4.2033, above every Mach number in the net.
+    # core 2.5 percent above the design Mach number, above every Mach number in the net.
     state.exitPlaneSampledFraction = float(1.0 - (rExitPlane[-1] / rExitPlane[0]) ** 2)
     if rExitPlane[-1] > 1e-12:
         coreRadius = (xExitPlane - coreOriginX) * np.tan(np.arcsin(1.0 / designMach))

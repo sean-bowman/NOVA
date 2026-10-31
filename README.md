@@ -460,7 +460,7 @@ The nozzle solution carried past the lip by the station marcher, swept across th
 
 ![Plume across its usable back pressures](featureShowcase/plumeSweep.gif)
 
-The same nozzle at a fixed altitude, with the engine as the variable instead. Power level walks down from rated in 5 percent steps against an ambient of 7.00 kPa, the pressure at which rated power sits at the top of the march's envelope, and the sweep stops where the nozzle separates. Thrust and one-dimensional ideal specific impulse run alongside.
+The same nozzle at a fixed altitude, with the engine as the variable instead. Power level walks down from rated in 5 percent steps against an ambient of 8.85 kPa, the pressure at which rated power sits at the top of the march's envelope, and the sweep stops at 25 percent: one step short of where the nozzle separates, the compressed lip needs a shock stronger than the march stands in for. Thrust and one-dimensional ideal specific impulse run alongside.
 
 ![Plume across the engine's throttle range](featureShowcase/plumeThrottle.gif)
 
@@ -553,7 +553,7 @@ Baselines are written to `tests/baselines/` and are carried in the repository, s
 
 `tests/testMaterials.py` validates the wall alloy thermal conductivity curves in `materials.py` against their cited sources (Touloukian, ASM, Special Metals, ITER MPH, NASA).
 
-`tests/testPlume.py` validates the plume correlations in `Nozzle.py`: the Prandtl-Meyer function against compressible flow tables, the Tam and Tanna equivalent diameter against an independent mass-conservation derivation, the Ashkenas and Sherman Mach disk location in both its diameter and radius forms, and the oblique shock deflection against the theta-beta-M relation solved the other way round.
+`tests/testPlume.py` validates the plume correlations in `Nozzle.py`: the Prandtl-Meyer function against compressible flow tables, the Tam and Tanna equivalent diameter against an independent mass-conservation derivation, the Ashkenas and Sherman Mach disk location in both its diameter and radius forms, the supersonic-exit Mach disk onset through each of its sources, Lewis and Carlson's disk location against its radius form, the regular reflection's limit at the lip Mach line, the exit state taken in the contour's own gas, and the oblique shock deflection against the theta-beta-M relation solved the other way round.
 
 ## Theory
 

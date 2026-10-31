@@ -1,6 +1,6 @@
 # NOVA Plume in OpenFOAM
 
-An axisymmetric Euler solution of the exhaust plume of NOVA's shipped nozzle in OpenFOAM, run as a cross-check of NOVA's two plume outputs: the station march that solves the boundary and interior for two lip radii past the exit plane, and the correlations that place the shock cell length, the widest boundary and the Mach disk. The nozzle's interior is a separate case, described in [README.md](README.md).
+An axisymmetric Euler solution of the exhaust plume of NOVA's shipped nozzle in OpenFOAM, run as a cross-check of NOVA's two plume outputs: the station march that solves the boundary and interior for two lip radii past the exit plane, and the correlations that place the shock cell length, the widest boundary and the first shock on the axis. The nozzle's interior is a separate case, described in [README.md](README.md).
 
 ## Contents
 
@@ -20,9 +20,9 @@ An axisymmetric Euler solution of the exhaust plume of NOVA's shipped nozzle in 
 
 Within its shipped reach of two station radii, NOVA's station march agrees with the Euler solution. On the fine grid the march's boundary sits 1.1 percent of radius inside OpenFOAM's on average. The worst station, 2.1 percent, is the first, one fine cell from the lip. The field Mach number agrees to 1.0 percent at the 95th percentile, and the boundary angle at the lip to 0.35 degree once the grid error is extrapolated out. Two of those three miss their criteria on the fine grid itself (2.08 percent against 2.0, and 1.17 degrees against 1.0), by margins that shrink by a factor of 1.8 to 2.5 with each halving of the cell size. Marched on to 10 station radii, the march follows OpenFOAM's axis to within 0.51 percent past the arrival of the lip's expansion, and its boundary to 2.3 percent at 6 station radii, while its own mass flow falls 17 percent.
 
-The shock cell and widest-boundary correlations hold; the Mach disk correlations do not. The first shock cell is 18.92 station radii long against Prandtl's 19.66 (+3.9 percent) and Pack's 18.37 (-2.9 percent). The correlated boundary's widest radius, 2.30 station radii, is 1.7 percent wider than OpenFOAM's; its first neck is 12.8 percent narrower. The jet's barrel shock reflects regularly from the axis at 13.0 station radii on all three grids. NOVA's Ashkenas and Sherman Mach disk sits at 7.92, 39 percent short, and its diameter correlation gives a disk 9.2 station radii across, twice the jet's widest diameter, where the case resolves none. The steadiness criteria fail on the open ambient, which settles over tens of milliseconds and trades mass through the far field; the jet itself is steady, its shock reflection varying by 0.09 station radii over the averaging window.
+The correlations hold everywhere but the boundary's first neck. The first shock cell is 18.92 station radii long against Prandtl's 19.55 (+3.3 percent) and Pack's 18.26 (-3.5 percent). The correlated boundary's widest radius, 2.29 station radii, is 0.8 percent wider than OpenFOAM's; its first neck is 13.0 percent narrower. The jet's barrel shock reflects from the axis at 12.99 station radii with no Mach disk on any grid. NOVA judges this jet below the Mach disk onset for its exit Mach number and places a regular reflection at 13.54 station radii, 4.2 percent downstream. The steadiness criteria fail on the open ambient, which settles over tens of milliseconds and trades mass through the far field; the jet itself is steady, its shock reflection varying by 0.09 station radii over the averaging window.
 
-The case found five defects in NOVA's plume, corrected before the results here were taken; see [NOVA defects this comparison found](#nova-defects-this-comparison-found). The largest started the march 1.7 percent of the lip radius inside the wall, with 4.7 percent of the nozzle's mass flow left out. Starting from the full exit plane, with the corrected kernel behind it, lengthens the plume's structure by 3.2 to 4.1 percent in meters and 1.1 to 2.0 percent in station radii; see [Sensitivity to the starting station](#sensitivity-to-the-starting-station). OpenFOAM and NOVA are both unvalidated for this flow, so the agreement is a cross-check, not a validation; see [Validation status](#validation-status).
+The case found eight defects in NOVA's plume, corrected before the results here were taken; see [NOVA defects this comparison found](#nova-defects-this-comparison-found). The largest started the march 1.7 percent of the lip radius inside the wall, with 4.7 percent of the nozzle's mass flow left out. Starting from the full exit plane, with the corrected kernel behind it, lengthens the plume's structure by 3.2 to 4.1 percent in meters and 1.1 to 2.0 percent in station radii; see [Sensitivity to the starting station](#sensitivity-to-the-starting-station). OpenFOAM and NOVA are both unvalidated for this flow, so the agreement is a cross-check, not a validation; see [Validation status](#validation-status).
 
 ## What the case solves
 
@@ -93,12 +93,12 @@ Each case's `comparison/` folder holds `comparison.json` and the figures.
 | Boundary angle at the lip | Straight-line fit to the boundary over the first half station radius | The same fit to the march's boundary; and the Prandtl-Meyer turn from the lip Mach number to the boundary Mach number, added to the lip's wall angle |
 | Interior field | Cell values interpolated linearly to each march node inside 0.9 of the march's boundary radius | Mach number, pressure and flow angle at every node of the march's 132 stations of 121 points |
 | Axis | Line sample on the axis | The march's axis nodes |
-| Mach disk location | The steepest fall in axis Mach number ahead of the first subsonic stretch, or ahead of the first minimum when the reflection is regular | `PlumeStructure.machDiskX`: Ashkenas and Sherman, x / D* = 0.67 sqrt(P0 / Pa) [1] |
-| Mach disk diameter | Twice the radius of the subsonic region a tenth of a station radius behind the disk | `machDiskDiameter`: D / De = 1.78 log10(P0 / Pa) - 0.98 [2] |
+| First shock on the axis | The steepest fall in axis Mach number ahead of the first subsonic stretch, or ahead of the first minimum when the reflection is regular | `PlumeStructure.axisShockX`. Above the Mach disk onset, Pe / Pa against the exit Mach number from Smith and Richards' simulations [7], a Mach disk at Lewis and Carlson's x / De = 0.69 Me sqrt(gamma Pe / Pa) [8]; below it, a regular reflection at Smith and Richards' x / Re = sqrt(Me^2 - 1) Pe / Pa [7] |
+| Mach disk diameter | Twice the radius of the subsonic region a tenth of a station radius behind the disk; zero for a regular reflection | `machDiskDiameter`: Smith and Richards' D / De = 0.6 sqrt(Pe / Pa - onset), zero below the onset [7] |
 | First shock cell | Exit plane to the boundary's first neck | `shockCellLength`: Prandtl, 1.306 Dj sqrt(Mj^2 - 1), with Tam and Tanna's fully expanded diameter [3, 4]; and `cellLengthPack`, Pack's coefficient of 1.22 |
 | Widest boundary | The boundary's first maximum | The correlated boundary's maximum: a sinusoid of the cell length about the fully expanded jet's radius, decaying over four cells |
 
-NOVA evaluates its correlations at the chamber ratio of specific heats, 1.1475, the gas its march and this case run in. `makePlumeCase.py` re-evaluates each correlated scalar with NOVA's own functions (`plume.fullyExpandedDiameter`, `shockCellLength`, `gasDynamics.machFromPressureRatio`, `prandtlMeyerAngle`) as a check on the reported values, and the two agree.
+NOVA evaluates its correlations at the chamber ratio of specific heats, 1.1475, the gas its march and this case run in, from the one-dimensional exit state at the nozzle's area ratio of 40 in that gas: Mach 3.954 and 17699 Pa, a ratio of 3.54 to the ambient. `makePlumeCase.py` re-evaluates each correlated scalar with NOVA's own functions (`plume.fullyExpandedDiameter`, `shockCellLength`, `machReflectionOnset`, `supersonicMachDiskLocation`, `regularReflectionLocation`, `gasDynamics.machFromPressureRatio`, `prandtlMeyerAngle`) as a check on the reported values, and the two agree.
 
 ## Acceptance criteria
 
@@ -109,13 +109,13 @@ Every limit is a relative difference of NOVA against OpenFOAM unless stated, and
 | Boundary radius, worst march station | 2.0 % | The boundary is what the march exists to produce; 2 percent of radius is 4 percent of area |
 | Field Mach, 95th percentile over march nodes inside 0.9 of its boundary | 2.0 % | As for the nozzle |
 | Boundary angle over the first half station radius | 1.0 degree | The lip's expansion fan, which sets everything downstream |
-| Mach disk location | 10 % | The correlation's coefficient spans 0.64 to 0.67 across sources, 5 percent, and it is fitted to sonic nozzles |
-| Mach disk diameter | 25 % | A fit for coflowing jets, less certain than the location |
+| Where the first shock meets the axis | 10 % | Mach disk location coefficients span 5 percent across sources; the same limit holds a regular reflection |
+| Mach disk diameter | 25 % | Less certain than the location; a disk both solutions leave out passes |
 | First shock cell length | 10 % | Prandtl's and Pack's coefficients differ by 7 percent |
 | Mass imbalance, inflow against outflow, window means | 0.2 % | Steady state; the open boundaries exchange mass with the ambient, which the nozzle's walls do not |
 | Drift of the outlet mass flow, second half of the window against the first | 0.1 % | Steady state |
 | Boundary radius at the end of the march, medium grid against fine | 0.5 % | Grid convergence |
-| Mach disk location, medium grid against fine | 2.0 % | Grid convergence |
+| First shock on the axis, medium grid against fine | 2.0 % | Grid convergence |
 
 ## Results
 
@@ -130,13 +130,13 @@ On the fine grid:
 | Boundary radius, worst march station | 2.08 % | 2.0 % | Fail |
 | Field Mach, 95th percentile | 1.01 % | 2.0 % | Pass |
 | Boundary angle over the first half station radius | 1.17 degrees | 1.0 degree | Fail |
-| Mach disk location | -39.1 % (reflection, no disk) | 10 % | Fail |
-| Mach disk diameter | No disk resolved | 25 % | Fail |
-| First shock cell length | +3.9 % | 10 % | Pass |
+| Where the first shock meets the axis | +4.2 % (a regular reflection in both) | 10 % | Pass |
+| Mach disk diameter | None in either | 25 % | Pass |
+| First shock cell length | +3.3 % | 10 % | Pass |
 | Mass imbalance | -39.3 % | 0.2 % | Fail |
 | Drift of the outlet mass flow | -4.8 % | 0.1 % | Fail |
 | Boundary radius at the end of the march, medium grid against fine | 0.19 % | 0.5 % | Pass |
-| Mach disk location, medium grid against fine | 0.54 % | 2.0 % | Pass |
+| First shock on the axis, medium grid against fine | 0.54 % | 2.0 % | Pass |
 
 ### Grid convergence
 
@@ -144,10 +144,10 @@ On the fine grid:
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Boundary radius at the end of the march | 1.7481 | 1.7583 | 1.7550 | oscillatory | | 0.08 % | 1.7355 |
 | Boundary angle at the lip [deg] | 18.88 | 22.55 | 24.27 | 1.09 | 25.79 | 7.8 % | 25.44 |
-| Reflection on the axis | 12.84 | 13.06 | 12.99 | oscillatory | | 0.23 % | 7.92 (Mach disk) |
-| Mach disk diameter | none | none | none | | | | 9.22 |
-| First shock cell length | 18.84 | 18.93 | 18.92 | oscillatory | | 0.02 % | 19.66 (Prandtl); 18.37 (Pack) |
-| Widest boundary radius | 2.320 | 2.299 | 2.266 | -0.63 | | 0.60 % | 2.304 |
+| Reflection on the axis | 12.84 | 13.06 | 12.99 | oscillatory | | 0.23 % | 13.54 (regular reflection) |
+| Mach disk diameter | none | none | none | | | | none |
+| First shock cell length | 18.84 | 18.93 | 18.92 | oscillatory | | 0.02 % | 19.55 (Prandtl); 18.26 (Pack) |
+| Widest boundary radius | 2.320 | 2.299 | 2.266 | -0.63 | | 0.60 % | 2.285 |
 
 An oscillatory sequence, or one whose change grows with refinement, has no observed order; it gets no extrapolation, and its index is taken at a formal second order. The boundary where the march ends, the reflection and the first cell's length settle to 0.19, 0.54 and 0.04 percent between the medium and fine grids. The widest boundary radius narrows by more with each refinement, so its grids are outside the asymptotic range, and its fine value carries an error of order its last change, 1.4 percent. The first neck's radius narrows from 1.443 to 1.380 to 1.322 station radii, by about the same amount each time, so it has not converged either.
 
@@ -177,7 +177,7 @@ The lip angle measures the first half station radius of the fan. OpenFOAM's rise
 
 On the axis the march and OpenFOAM agree to 0.01 percent within 2 station radii and to 0.07 percent within 3. The lip's expansion reaches the axis there, and the two solutions take it differently: OpenFOAM's axis Mach number starts to rise at 2.8 station radii and is 1 percent up by 3.9, while the march holds the station's Mach number to 4.2 and is 1 percent up by 4.4. The difference peaks at 2.9 percent at 4.3 station radii; by 5.2 both have risen 10 percent, and from there to the end of the march at 10 station radii they agree to 0.51 percent. The Mach number on the axis rises to 6.16 at 12.9 station radii and falls to 2.79 across the reflected shock, with no subsonic cell on any grid.
 
-The boundary widens to 2.27 station radii at 8.2 and narrows to its first neck, 1.32 station radii, at 18.9. NOVA's correlated boundary, a decaying sinusoid about the fully expanded jet's radius of 1.69 station radii, peaks at 2.30 station radii at 9.7 and narrows to 1.15 at 19.5.
+The boundary widens to 2.27 station radii at 8.2 and narrows to its first neck, 1.32 station radii, at 18.9. NOVA's correlated boundary, a decaying sinusoid about the fully expanded jet's radius of 1.68 station radii, peaks at 2.29 station radii at 9.6 and narrows to 1.15 at 19.4.
 
 ![Plume field](results/plume/plumeField.png)
 
@@ -185,11 +185,11 @@ The boundary widens to 2.27 station radii at 8.2 and narrows to its first neck, 
 
 | Structure | OpenFOAM, fine grid | NOVA | NOVA against OpenFOAM |
 | --- | --- | --- | --- |
-| Mach disk location | 12.99 (reflection) | 7.92 | -39.1 % |
-| Mach disk diameter | none | 9.22 | |
-| First shock cell length | 18.92 | 19.66 (Prandtl); 18.37 (Pack) | +3.9 %; -2.9 % |
-| Widest boundary radius | 2.266 | 2.304 | +1.7 % |
-| First neck radius | 1.322 | 1.153 | -12.8 % |
+| First shock on the axis | 12.99 (regular reflection) | 13.54 (regular reflection) | +4.2 % |
+| Mach disk diameter | none | none | |
+| First shock cell length | 18.92 | 19.55 (Prandtl); 18.26 (Pack) | +3.3 %; -3.5 % |
+| Widest boundary radius | 2.266 | 2.285 | +0.8 % |
+| First neck radius | 1.322 | 1.150 | -13.0 % |
 | Boundary angle at the lip [deg] | 24.27 (25.79 extrapolated) | 25.44 (march fit); 28.02 (Prandtl-Meyer, at the lip itself) | |
 
 ### Sensitivity to the starting station
@@ -223,27 +223,28 @@ The flow in through the far field is entrainment. An inviscid jet entrains nothi
 
 **The march's boundary holds past its reach.** Past two station radii its mass flow drifts (-6.4 percent at 4 station radii, -17 at 6, -35 at 8), as NOVA's trust limit says, yet its boundary stays within 1.0 percent at 4 station radii and 2.3 percent at 6, and its axis within 0.51 percent to 10 once the expansion has arrived. The drift belongs to the interior field near the boundary; the boundary's position and the axis hold much longer. A trust limit set on the boundary alone could reach about 6 station radii.
 
-**The Mach disk correlations do not fit this nozzle.** Ashkenas and Sherman fitted x / D* = 0.67 sqrt(P0 / Pa) to sonic orifices and nozzles [1]; NOVA applies it with the throat diameter to a Mach 4.2 exit at P0 / Pa = 1379. The case's barrel shock reaches the axis at 13.0 station radii, and NOVA's own march, run to 10 station radii, passes the correlated 7.92 with the axis Mach number at 5.36 and rising, in agreement with OpenFOAM. The diameter correlation, D / De = 1.78 log10(P0 / Pa) - 0.98 [2], gives 4.6 exit diameters at this pressure ratio, twice the jet's widest diameter, which no jet can contain. Inviscid theory does not allow a converging conical shock to reflect regularly from the axis [6], so a Mach disk is expected; the case resolves none, which puts any disk below the grid's resolution at the reflection, about 0.05 station radii axially and 0.025 radially, and under 1 percent of the correlated diameter.
+**The first shock reflects from the axis without a resolved disk, where NOVA places it.** At an exit Mach number of 3.95 the exit pressure ratio, 3.54, is under half the 7.31 at which Smith and Richards' simulations form a Mach disk [7], so NOVA reports a regular reflection, at 13.54 station radii by their equation 8, against OpenFOAM's 12.99. Their simulations are uniform, parallel jets at gamma = 5/3, where this exit is non-uniform, 9 degrees divergent at the lip, and at gamma = 1.1475; the 4.2 percent is one point of agreement, not a check of the relation at this gamma. Inviscid theory does not allow a converging conical shock to reflect regularly from the axis [6], so a disk is expected in principle; the case resolves none, which puts any disk below the grid's resolution at the reflection, about 0.05 station radii axially and 0.025 radially. A regular reflection here, in OpenFOAM's sense and in Smith and Richards', is a disk too small to resolve.
 
-**The shock cell correlations bracket the case.** Prandtl's first-term coefficient puts the first cell 3.9 percent long and Pack's 40-term coefficient 2.9 percent short, at the chamber gas and with Tam and Tanna's fully expanded diameter. NOVA reports Prandtl's and lists Pack's beside it; the spread between them, 7 percent, is a fair measure of the correlation's uncertainty here.
+**The shock cell correlations bracket the case.** Prandtl's first-term coefficient puts the first cell 3.3 percent long and Pack's 40-term coefficient 3.5 percent short, at the chamber gas and with Tam and Tanna's fully expanded diameter. NOVA reports Prandtl's and lists Pack's beside it; the spread between them, 7 percent, is a fair measure of the correlation's uncertainty here.
 
-**The correlated boundary gets the width and misses the neck.** The sinusoid about the fully expanded jet's radius puts the widest radius 1.7 percent from OpenFOAM's, 1.5 station radii downstream of it, and the first neck 12.8 percent narrow, 0.6 station radii downstream. The neck's comparison carries the grid's error: OpenFOAM's neck narrows by about 4 percent with each halving of the cell size. The sinusoid does not reproduce the lip turn, which the real boundary makes within a fraction of a cell; near the lip the march's boundary is the better output.
-
-**The plume's exit Mach number and pressure come from the thermochemistry.** `PlumeStructure.exitMach` and `exitPressure` are CEA's exit values, 4.223 and 13993 Pa, where the contour's gas at the same area ratio gives Mach 3.947 and 17966 Pa. They set only the jet type and the separation warning, and both values call this jet underexpanded, so no correlation changes; the correlations themselves take the contour's gas.
+**The correlated boundary gets the width and misses the neck.** The sinusoid about the fully expanded jet's radius puts the widest radius 0.8 percent from OpenFOAM's, 1.4 station radii downstream of it, and the first neck 13.0 percent narrow, 0.5 station radii downstream. The neck's comparison carries the grid's error: OpenFOAM's neck narrows by about 4 percent with each halving of the cell size. The sinusoid does not reproduce the lip turn, which the real boundary makes within a fraction of a cell; near the lip the march's boundary is the better output.
 
 ## NOVA defects this comparison found
 
-The comparison was first run against a version of NOVA whose march started short of the wall. It exposed five defects in NOVA's plume, each corrected in NOVA; the results above are against the corrected solver, and [Sensitivity to the starting station](#sensitivity-to-the-starting-station) compares the two starting stations.
+The comparison was first run against a version of NOVA whose march started short of the wall. It exposed eight defects in NOVA's plume, each corrected in NOVA; the results above are against the corrected solver, and [Sensitivity to the starting station](#sensitivity-to-the-starting-station) compares the two starting stations.
 
 - **The march started short of the wall.** `plume.plumeExitLine` read the exit plane from the rows of the characteristic mesh that cross it, and the outermost row crosses at 0.9826 of the lip radius. The station carried 3.5 percent less area than the exit plane and 21.76 kg/s against the 22.83 kg/s NOVA then reported for its nozzle, 4.7 percent less. The march starts from the contour's exit-plane profile, wall to axis, which `PlumeContour` carries when the plume is driven from a `Nozzle`; the crossings remain the fallback for a contour without a profile.
 - **The correlations used a different gas from the march.** `plume.solvePlumeStructure` took CEA's exit ratio of specific heats, 1.257, while the march ran at the chamber's 1.1475; the reported shock cell was 14 percent longer and the lip turn 2.8 degrees larger than the chamber gas gives. The correlations take the contour's chamber gas.
-- **The fully expanded jet took the thermochemistry's exit Mach number.** That Mach number belongs to a different area ratio in the contour's gas, and shrank the shipped nozzle's fully expanded jet from 1.071 m to 0.849 m when the plume was driven from a `Nozzle`. The jet's diameter takes the exit Mach number the area ratio gives in the contour's gas.
+- **The fully expanded jet took the thermochemistry's exit Mach number.** That Mach number belongs to a different area ratio in the contour's gas, and shrank the shipped nozzle's fully expanded jet from 1.074 m to 0.852 m when the plume was driven from a `Nozzle`. The jet's diameter takes the exit Mach number the area ratio gives in the contour's gas.
 - **An amplitude cap set the correlated boundary's width.** The boundary was a sinusoid about the lip radius anchored to the lip turn angle, which needs an amplitude of 1.7 lip radii on this nozzle; NOVA held it at 0.95 of the lip radius to keep it off the axis, so the cap set the widest radius 13 percent narrow and carried the first neck to a fifth of the lip radius. The boundary oscillates about the fully expanded jet's radius, as Tam's shock-cell model has it; the floor that remains binds only for a strongly overexpanded jet.
+- **The Mach disk was judged as behind a sonic exit.** NOVA decided a disk formed from the nozzle pressure ratio, 1379 against the sonic onset of 3.5, and placed it by Ashkenas and Sherman's sonic-nozzle fit [1] at 7.92 station radii, where NOVA's own march, run to 10 station radii, passes with the axis Mach number at 5.36 and rising, in agreement with OpenFOAM. The diameter fit [2] gave 9.22 station radii, twice the jet's widest diameter. Behind a supersonic exit the switch is the exit pressure ratio against an onset that rises with exit Mach number [7], and the disk's position scales on the exit diameter and state [8]; NOVA judges and places the first axis shock that way.
+- **The exit Mach number and pressure came from the thermochemistry.** `PlumeStructure.exitMach` and `exitPressure` were CEA's equilibrium exit values, Mach 4.223 and 13993 Pa, where the contour's gas at the same area ratio gives Mach 3.954 and 17699 Pa. They set the jet type, the separation warning and the Mach disk switch. They are the one-dimensional state at the area ratio in the contour's gas, and `PlumeContour` carries nothing from the thermochemistry.
+- **The throat was read off the resampled wall.** The shipped wall has 100 points from the injector face to the exit, and its smallest radius sits 0.6 percent outside the throat, which read the area ratio as 39.5 against 40 and widened the fully expanded jet by 0.6 percent. The structure takes the throat radius from the contour's scaling factor.
 - **`PlumeField.lipTurnAngle` was never set.** It was declared with a default of 0.0, and `examples/novaNozzle.py` printed a lip turn of 0.00 degrees. It carries the Prandtl-Meyer turn from the station's lip Mach number to the boundary's, 0.3317 rad (19.0 degrees) on the shipped nozzle.
 
 ## Validation status
 
-The case is a cross-check between two unvalidated tools, not a validation. Neither OpenFOAM's `rhoCentralFoam` with this mesh, limiter and boundaries nor NOVA's march has been compared here with a measured underexpanded jet or an exact solution of one. Their agreement within the march's reach shows that the two methods, from the same starting data and under the same physics, produce the same near field; it does not show that either matches a real jet. Both solve the Euler equations, so neither carries the turbulent mixing layer that thickens a real plume's boundary. The correlations are the opposite case: each is a fit to measurements, which NOVA applies outside the conditions they were fitted to.
+The case is a cross-check between two unvalidated tools, not a validation. Neither OpenFOAM's `rhoCentralFoam` with this mesh, limiter and boundaries nor NOVA's march has been compared here with a measured underexpanded jet or an exact solution of one. Their agreement within the march's reach shows that the two methods, from the same starting data and under the same physics, produce the same near field; it does not show that either matches a real jet. Both solve the Euler equations, so neither carries the turbulent mixing layer that thickens a real plume's boundary. The correlations are the opposite case: each is a fit to measurements or simulations, which NOVA applies outside the conditions they were fitted to. The Mach disk onset and the regular reflection's position come from simulations at gamma = 5/3, and Lewis and Carlson's disk position from nozzles up to exit Mach 2.9.
 
 Sanity checks in place of a validation:
 
@@ -267,6 +268,10 @@ Closing the gap needs a measured supersonic underexpanded jet run through the sa
 [5] Love, E. S., Grigsby, C. E., Lee, L. P., and Woodling, M. J.: *Experimental and Theoretical Studies of Axisymmetric Free Jets*. NASA TR R-6, 1959. <https://ntrs.nasa.gov/citations/19980228067>
 
 [6] Courant, R., and Friedrichs, K. O.: *Supersonic Flow and Shock Waves*. Interscience, 1948. A conical shock with converging flow behind it cannot reflect regularly from the axis; as cited by Hew, J. K. J., Ogawa, H., and Boswell, R. W.: *Centreline Shock Reflection Phenomena for Supersonic Internal Flows in the Non-Rankine-Hugoniot Zone*, arXiv:2209.13453, 2022.
+
+[7] Smith, M. D., and Richards, C.: *The Influence of Mach Number and Overpressure on the Structure of Supersonic Gas Jets*. Monthly Notices of the Royal Astronomical Society, vol. 526, no. 3, 2023, pp. 3407-3420. <https://doi.org/10.1093/mnras/stad2879>. Axisymmetric Euler simulations of uniform jets at gamma = 5/3: the Mach disk forms above Pe / Pa = 3.5 at Mach 2 and 7.4 at Mach 4 (equations 3 and 4), and at Mach 4.96, 5.52 and 7.20 for ratios of 12, 16 and 24; the first axis shock of a regular reflection at x / Re = sqrt(M^2 - 1) Pe / Pa (equation 8); the disk's radius (equation 6) and position (equation 9).
+
+[8] Lewis, C. H., and Carlson, D. J.: *Normal Shock Location in Underexpanded Gas and Gas-Particle Jets*. AIAA Journal, vol. 2, no. 4, 1964, pp. 776-777. x / De = 0.69 Me sqrt(gamma Pe / Pa), from nozzles up to exit Mach 2.9; in jet radii it is equation 9 of [7].
 
 ## Files
 

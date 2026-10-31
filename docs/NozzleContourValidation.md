@@ -263,7 +263,7 @@ $$F(R) = \int_{R_t}^{R} \left(P_{wall}(r) - P_{ambient}\right) 2\pi r\, \mathrm{
 
 and its maximum sits exactly where the integrand changes sign, which is where the wall static pressure reaches ambient. That is the classical optimum-expansion result in the form that survives a non-uniform exit. The plane average describes the flow leaving the nozzle; the wall pressure describes the surface the force acts on, and only the second decides whether more nozzle is worth having.
 
-Measured on the worked case at an ambient of 101.3 kPa, the thrust integral peaks at an area ratio of 13.18, where the wall pressure is 99.3 kPa, within 2 percent of ambient. Cutting instead where the mass-averaged exit pressure reaches ambient stops at an area ratio of 10.03 and gives up 2.0 percent of the available thrust gain, because on this contour the mass average is 0.729 of the wall value.
+Measured on the ideal contour the shipped nozzle is cut from, at an ambient of 101.3 kPa, the wall pressure reaches ambient at an area ratio of 13.26, inside the band from 12.6 to 13.6 over which the thrust coefficient sits within its own discretization scatter of its maximum. Cutting instead where the mass-averaged exit pressure reaches ambient stops at an area ratio of 10.61 and gives up 0.28 percent of thrust coefficient, because at the wall cut the mass average is 0.757 of the wall value. The study is below.
 
 What remains true is that the plane is strongly non-uniform, spanning a factor of 2.4 in static pressure from wall to axis. That matters for describing the exit state and for the state handed to the plume march. It does not make the wall the wrong place to apply a thrust criterion.
 
@@ -277,20 +277,20 @@ The area-averaged exit pressure of 17.6 kPa against the perfect-gas one-dimensio
 
 ## Which pressure a pressure match should converge on
 
-Measured rather than argued. One ideal contour at a fixed design Mach number, truncated across a range of area ratios at an ambient of 101.325 kPa, with the thrust coefficient computed at each cut.
+Measured rather than argued (`featureShowcase/buildPressureCutStudy.py`). One ideal contour, at the shipped nozzle's design Mach number of 4.166 and 50 characteristics, truncated at 221 area ratios from 7 to 18 at an ambient of 101.325 kPa, with the thrust coefficient integrated over the exit plane at each cut and its pressure term taken against the ambient. The exit plane is sampled from the mesh, so the coefficient moves in small steps as the cut crosses mesh lines and scatters by 1.3e-4, 0.009 percent, about a quintic fitted through every cut. The maximum is the fit's.
 
-| Convergence target | Delivered area ratio | Thrust coefficient | Against the peak |
+| Convergence target | Delivered area ratio | Thrust coefficient | Against the maximum |
 |---|---|---|---|
-| Wall static pressure | 12.40 | 1.46342 | -0.026 % |
-| Mass-averaged exit pressure | 10.40 | 1.46062 | -0.217 % |
-| Area-averaged exit pressure | 10.40 | 1.46062 | -0.217 % |
-| *the true maximum* | *12.80* | *1.46380* | -- |
+| Wall static pressure | 13.26 | 1.51799 | -0.001 % |
+| Mass-averaged exit pressure | 10.61 | 1.51377 | -0.279 % |
+| Area-averaged exit pressure | 10.42 | 1.51307 | -0.326 % |
+| *the maximum* | *13.07* | *1.51801* | -- |
 
-**The wall wins, and by an order of magnitude.** Converging on it lands within 0.03 percent of the maximum thrust coefficient; converging on either average under-expands by more than two in area ratio and gives up 0.22 percent.
+**The wall wins.** Converging on it lands within the scatter of the maximum thrust coefficient, which is flat to that scatter from an area ratio of 12.6 to 13.6; converging on either average under-expands by 2.6 to 2.8 in area ratio and gives up 0.28 to 0.33 percent.
 
 That is what the surface integral predicts. Extending a nozzle adds a ring of wall whose axial force is $(P_{wall} - P_{ambient})$ times its projected area, so the sign of the gain is set by the wall pressure alone. Because the flow is supersonic, adding wall at the exit cannot change anything upstream of it, and the relation is exact rather than approximate.
 
-Two independent formulations of thrust agree on the location. The wall surface integral gives its maximum at $P_{wall} = P_{ambient}$ analytically. The exit-plane control-volume integral, computed over the same sweep, peaks at an area ratio of 12.60 where $P_{wall}/P_{ambient} = 0.9988$.
+Two independent formulations of thrust agree on the location. The wall surface integral gives its maximum at $P_{wall} = P_{ambient}$ analytically, an area ratio of 13.26 here. The exit-plane control-volume integral, computed over the same sweep, peaks at 13.07 on the fit, where $P_{wall}/P_{ambient} = 1.015$; the two differ by less than the band over which the integral is flat to its own scatter.
 
 Two qualifications belong with the result. It is the **unconstrained** optimum, assuming no penalty for length or mass; a length-constrained design truncates earlier, which is the problem Rao's optimization solves. And it is the condition for **where to cut one ideal contour**, not the optimality condition across a family of different design Mach numbers at a fixed length.
 
@@ -402,6 +402,7 @@ python featureShowcase/buildContourValidation.py   # the truncated ideal sweeps,
 python featureShowcase/buildContourFamilies.py     # the cross-family study, about forty minutes
 python featureShowcase/buildSubfamilyStudy.py      # the quadratic subfamily, about two hours
 python featureShowcase/buildChamberField.py        # the chamber and converging section fields
+python featureShowcase/buildPressureCutStudy.py    # where to cut one ideal contour at sea level, about an hour
 python tests/regressionHarness.py --compare        # bit identity against the recorded baselines
 ```
 

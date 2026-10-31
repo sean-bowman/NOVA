@@ -52,15 +52,32 @@ from .gasDynamics import prandtlMeyerAngle, machFromAreaRatio, machFromPressureR
 prandtlCellCoefficient = 1.306
 packCellCoefficient    = 1.22
 
-# Ashkenas and Sherman (1966): x_M / D* = 0.67 sqrt(P0 / Pa). Reported coefficients across
-# sources span 0.64 to 0.67.
+# Ashkenas and Sherman (1966): x_M / D* = 0.67 sqrt(P0 / Pa), for a SONIC exit. Reported
+# coefficients across sources span 0.64 to 0.67.
 machDiskLocationCoefficient = 0.67
 
 # Nozzle pressure ratio above which a Mach reflection (Mach disk) replaces the regular
-# reflection. Classical measurements cluster near 3.9 (Crist 1966), 3.78 (Antsupov 1974), 3.67
-# (Addy 1981); recent DNS puts it near 3.1. The threshold is uncertain at roughly the 20 %
-# level, so it is deliberately a soft switch reported alongside the value used.
+# reflection behind a SONIC exit. Classical measurements cluster near 3.9 (Crist 1966), 3.78
+# (Antsupov 1974), 3.67 (Addy 1981); recent DNS puts it near 3.1. The threshold is uncertain at
+# roughly the 20 % level, so it is deliberately a soft switch reported alongside the value used.
 machDiskOnsetPressureRatio = 3.5
+
+# Lewis and Carlson (1964): x_M / D_e = 0.69 M_e sqrt(gamma Pe / Pa), the Mach disk position
+# behind a SUPERSONIC exit, measured on nozzles up to exit Mach 2.9. Written in jet radii it
+# is equation 9 of Smith and Richards (2023), whose coefficient of 1.38 is twice this one. A sonic
+# exit's nozzle pressure ratio says nothing about a Mach 4 jet: the shipped nozzle's 1380 puts
+# Ashkenas and Sherman's disk at 7.9 lip radii, where an Euler solution carries a regular
+# reflection at 13.0 (validation/openFoam/plume.md).
+supersonicMachDiskCoefficient = 0.69
+supersonicMachDiskFittedMach = 2.9    # [-], highest exit Mach number in Lewis and Carlson's data
+
+# Exit-to-ambient pressure ratio Pe/Pa at which a Mach reflection replaces the regular reflection
+# behind a supersonic exit, against exit Mach number. Smith and Richards (2023) simulated uniform,
+# parallel jets at gamma = 5/3 and found 3.5 at Mach 2 and 7.4 at Mach 4, and that the reflection
+# changes type at Mach 4.96, 5.52 and 7.20 for ratios of 12, 16 and 24. The faster the jet, the
+# harder it has to be pushed before its first shock stops reflecting regularly.
+machReflectionOnsetMach          = (2.0, 4.0, 4.96, 5.52, 7.20)
+machReflectionOnsetPressureRatio = (3.5, 7.4, 12.0, 16.0, 24.0)
 
 # Summerfield criterion: an overexpanded nozzle separates internally below roughly this exit to
 # ambient static pressure ratio, at which point the plume correlations, which all assume flow
@@ -211,6 +228,93 @@ def machDiskDiameter(exitDiameter: float, nozzlePressureRatio: float) -> float:
     ratio = 1.78 * np.log10(nozzlePressureRatio) - 0.98
     return float(max(0.0, ratio) * exitDiameter)
 
+def machReflectionOnset(exitMach: float, gamma: float) -> float:
+
+    '''
+
+    Exit-to-ambient pressure ratio Pe/Pa above which the first shock meets the axis in a Mach
+    reflection, a Mach disk, rather than reflecting regularly.
+
+    Linear in exit Mach number through the sonic onset, `machDiskOnsetPressureRatio` times the
+    sonic pressure ratio p*/p0 of this gas, and the thresholds Smith and Richards simulated from
+    Mach 2 to 7.2 (`machReflectionOnsetPressureRatio`). Past Mach 7.2 the last segment is extended.
+
+    The simulations are at gamma = 5/3 and the sonic measurements in air. How the threshold moves
+    with gamma is not measured. Smith and Richards' general fit, 0.44 (M^2 + 2/(gamma - 1)), raises
+    it as gamma falls (to 12.8 at Mach 3.95 and gamma 1.15, against 7.3 here), so carrying the
+    gamma = 5/3 values to a rocket exhaust errs toward reporting a Mach disk.
+
+    A converging conical shock cannot strictly reflect regularly from the axis (Courant and
+    Friedrichs). Below the onset the simulations and an Euler solution of the shipped plume
+    (validation/openFoam/plume.md) both carry a disk too small to resolve, which is what regular
+    means here.
+
+    '''
+
+    sonic = machDiskOnsetPressureRatio * (2.0 / (gamma + 1.0))**(gamma / (gamma - 1.0))
+    mach = (1.0,) + machReflectionOnsetMach
+    ratio = (sonic,) + machReflectionOnsetPressureRatio
+    if exitMach <= mach[-1]:
+        return float(np.interp(exitMach, mach, ratio))
+    slope = (ratio[-1] - ratio[-2]) / (mach[-1] - mach[-2])
+    return float(ratio[-1] + slope * (exitMach - mach[-1]))
+
+def supersonicMachDiskLocation(exitDiameter: float, exitMach: float, exitPressureRatio: float,
+                               gamma: float, coefficient: float = supersonicMachDiskCoefficient) -> float:
+
+    '''
+
+    Axial distance from the exit plane to the Mach disk behind a supersonic exit (Lewis and
+    Carlson, 1964).
+
+        x_M / D_e = C M_e sqrt(gamma Pe / Pa)
+
+    Scaled on the **exit** diameter and the **exit** state. Measured on nozzles up to exit Mach 2.9
+    (`supersonicMachDiskFittedMach`).
+
+    '''
+
+    if exitPressureRatio <= 0.0 or exitMach <= 0.0:
+        return 0.0
+    return float(coefficient * exitDiameter * exitMach * np.sqrt(gamma * exitPressureRatio))
+
+def supersonicMachDiskDiameter(exitDiameter: float, exitPressureRatio: float, onsetRatio: float) -> float:
+
+    '''
+
+    Mach disk diameter behind a supersonic exit, from Smith and Richards' (2023) equation 6:
+
+        D_MD / D_e = 0.6 sqrt(Pe/Pa - onset)
+
+    zero at and below the onset ratio `machReflectionOnset` gives. Fitted to their simulations at
+    gamma = 5/3, which they note overstate the disk at low Mach number.
+
+    '''
+
+    if exitPressureRatio <= onsetRatio:
+        return 0.0
+    return float(0.6 * np.sqrt(exitPressureRatio - onsetRatio) * exitDiameter)
+
+def regularReflectionLocation(exitRadius: float, exitMach: float, exitPressureRatio: float) -> float:
+
+    '''
+
+    Axial distance from the exit plane to where the first shock reflects regularly from the axis,
+    Smith and Richards' (2023) equation 8:
+
+        x_R / R_e = sqrt(M_e^2 - 1) Pe / Pa
+
+    At a ratio of one this is the lip's Mach line reaching the axis, which is where a weak
+    disturbance from the lip of a matched jet would arrive. Their own fits to the regular
+    reflections they simulated at Mach 4 and 8 scale as (Pe/Pa)^0.9 rather than linearly, and the
+    simulations are uniform, parallel jets at gamma = 5/3.
+
+    '''
+
+    if exitMach <= 1.0 or exitPressureRatio <= 0.0:
+        return 0.0
+    return float(np.sqrt(exitMach**2 - 1.0) * exitPressureRatio * exitRadius)
+
 def obliqueShockDeflection(mach: float, gamma: float, pressureRatio: float) -> float:
 
     '''
@@ -302,7 +406,8 @@ class PlumeStructure:
     lipPressure: float = 0.0              # [Pa]
     lipWallAngle: float = 0.0             # [rad], nozzle wall divergence at the exit
 
-    # Jet-scale state, used for the cell and Mach disk correlations
+    # Jet-scale state, used for the cell and Mach disk correlations. One-dimensional at the
+    # geometric area ratio, in the gas the contour was solved in.
     exitMach: float = 0.0                 # [-], one-dimensional
     exitPressure: float = 0.0             # [Pa], one-dimensional
     exitDiameter: float = 0.0             # [m], geometric
@@ -318,9 +423,12 @@ class PlumeStructure:
     shockCellLength: float = 0.0          # [m]
     boundaryAmplitudeLimited: bool = False  # boundary held off the axis by a radius floor
     cellLengthPack: float = 0.0           # [m], the same with Pack's coefficient
+    machReflectionOnset: float = 0.0      # [-], Pe/Pa above which the first shock ends in a Mach disk
     machDiskPresent: bool = False
     machDiskX: float = 0.0                # [m], absolute axial position
     machDiskDiameter: float = 0.0         # [m]
+    axisShockX: float = 0.0               # [m], where the first shock meets the axis: the Mach disk
+                                          # when one forms, the regular reflection otherwise
     plumeLength: float = 0.0              # [m]
 
     boundaryX: np.ndarray = field(default_factory = lambda: np.array([]))   # [m]
@@ -2325,11 +2433,12 @@ class PlumeContour:
 
     The march past the lip continues the characteristics net the nozzle solve produced, so it
     needs that net, the wall it was solved against, and the gas it was solved in. Nothing else
-    about the nozzle is relevant, which is why this is twenty-two fields rather than a Nozzle.
+    about the nozzle is relevant, which is why this is nineteen fields rather than a Nozzle. The
+    thermochemistry is not among them: the plume is solved and correlated in the gas the contour
+    was solved in, and its exit state follows from the contour's area ratio in that gas.
 
-    Two of them are not inputs in the ordinary sense. `nozzlePlumeStructure` carries a structure
-    already solved for this contour, which the field solve reuses when the ambient matches, and
-    `ceaOutput` is the thermochemistry the exit state is read back from.
+    One field is not an input in the ordinary sense. `nozzlePlumeStructure` carries a structure
+    already solved for this contour, which the field solve reuses when the ambient matches.
 
     Every field starts empty. A solve reports what it could not do rather than assuming a value.
 
@@ -2339,12 +2448,10 @@ class PlumeContour:
     allMachNumbers:                  Any = None
     allRPoints:                      Any = None
     allXPoints:                      Any = None
-    ceaOutput:                       Any = None
     chamberGamma:                    Any = None
     chamberPressure:                 Any = None
     chamberRGasConstant:             Any = None
     chamberStagnationTemperature:    Any = None
-    exitMachNumber:                  Any = None
     exitPlaneFlowAngle:              Any = None
     exitPlaneMach:                   Any = None
     exitPlaneRadius:                 Any = None
@@ -2355,12 +2462,11 @@ class PlumeContour:
     nozzlePlumeStructure:            Any = None
     nozzleScalingFactor:             Any = None
     rNozzleWall:                     Any = None
-    targetExitPressure:              Any = None
     xNozzleWall:                     Any = None
 
 # Every absolute pressure a PlumeContour carries. A power level scales all of them together or
 # none of them: scaling one leaves the contour describing two different engines at once.
-contourPressureFields = ('chamberPressure', 'nozzleNearWallPressure', 'targetExitPressure')
+contourPressureFields = ('chamberPressure', 'nozzleNearWallPressure')
 
 def throttledContour(contour, throttleFraction: float):
 
@@ -2374,16 +2480,14 @@ def throttledContour(contour, throttleFraction: float):
     a multiplier on `contourPressureFields` and nothing else.
 
     **Scaling only `chamberPressure` is the trap this function exists to close.**
-    `solvePlumeStructure` takes its exit pressure from `targetExitPressure` or from
-    `nozzleNearWallPressure`, neither of which is the chamber pressure, while it takes its nozzle
-    pressure ratio from the chamber directly. A contour with one scaled and the others not reports
-    a separation margin from the rated engine and a Mach disk from the throttled one. At a fixed
-    ambient the separation check would then never move at all, and the march would return an
-    attached plume for a nozzle that is separated.
+    `solvePlumeStructure` takes its exit pressure and nozzle pressure ratio from the chamber, but
+    its lip pressure, which sets the lip turn and the overexpanded lip shock, from
+    `nozzleNearWallPressure`. A contour with one scaled and the other not turns the lip of the
+    rated engine in the jet of the throttled one.
 
-    `ceaOutput` is left alone deliberately. The plume path reads nothing from it: its gas is the
-    contour's chamber gas, which does not move at a frozen gas state. A model that re-runs the
-    thermochemistry per power level has to replace the contour's gas rather than scale it.
+    The gas is left alone. The plume is solved in the contour's chamber gas, which does not move
+    at a frozen gas state; a model that re-runs the thermochemistry per power level has to replace
+    the contour's gas rather than scale it.
 
     The returned contour carries no `nozzlePlumeStructure`. The one on the input was solved at the
     input's pressures and would be silently reused by a field solve at a matching ambient.
@@ -2502,15 +2606,22 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     structure.lipPressure = float(nearWallPressure[-1]) if nearWallPressure.size else 0.0
 
     # -- Jet-scale state: one-dimensional exit and throat -- #
-    throatIndex = int(np.argmin(r))
-    structure.throatDiameter = float(2.0 * r[throatIndex])
+    # The throat is the contour's scaling length, the throat radius in meters. The smallest radius
+    # of the resampled wall only approaches it: on the shipped nozzle's 100 points it sits 0.6
+    # percent wide, which reads the area ratio as 39.5 against the 40 the contour was cut at.
+    scalingFactor = float(getattr(contour, 'nozzleScalingFactor', 0.0) or 0.0)
+    structure.throatDiameter = float(2.0 * scalingFactor) if scalingFactor > 0.0 else float(2.0 * np.min(r))
     structure.exitDiameter = float(2.0 * r[-1])
-    structure.exitMach = float(getattr(contour, 'exitMachNumber', 0.0) or structure.lipMach)
-    structure.exitPressure = float(getattr(contour, 'targetExitPressure', 0.0) or structure.lipPressure)
 
+    # The exit state is the one-dimensional one at that area ratio in the contour's gas. The
+    # thermochemistry's equilibrium exit state belongs to a different gas: on the shipped nozzle it
+    # reads Mach 4.223 and 13993 Pa against 3.954 and 17699 Pa here.
     chamberPressure = float(getattr(contour, 'chamberPressure', 0.0) or 0.0)
-    if chamberPressure <= 0.0 or structure.exitPressure <= 0.0:
+    if chamberPressure <= 0.0 or structure.throatDiameter <= 0.0:
         return None
+    structure.exitMach = machFromAreaRatio((structure.exitDiameter / structure.throatDiameter)**2, gamma)
+    structure.exitPressure = float(chamberPressure * (1.0 + 0.5 * (gamma - 1.0) * structure.exitMach**2)
+                                   ** (-gamma / (gamma - 1.0)))
 
     structure.nozzlePressureRatio = chamberPressure / ambientPressure
     structure.exitPressureRatio = structure.exitPressure / ambientPressure
@@ -2533,13 +2644,12 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     # -- Fully expanded jet -- #
     # Tam and Tanna's diameter is mass conservation between the exit and the fully expanded jet,
     # so the exit Mach number it reads has to be the one the area ratio gives in the same gas;
-    # with it the diameter reduces to the throat's times sqrt(A(Mj) / A*). The reported exit Mach
-    # number is the thermochemistry's equilibrium value, which in the contour's gas belongs to a
-    # different area ratio: on the shipped nozzle it would shrink the jet from 1.071 m to 0.849 m.
+    # with it the diameter reduces to the throat's times sqrt(A(Mj) / A*). The thermochemistry's
+    # equilibrium exit Mach number belongs to a different area ratio in the contour's gas and
+    # would shrink the shipped nozzle's jet from 1.074 m to 0.852 m.
     structure.fullyExpandedMach = machFromPressureRatio(structure.nozzlePressureRatio, gamma)
-    areaRatioMach = machFromAreaRatio((structure.exitDiameter / structure.throatDiameter)**2, gamma)
     structure.fullyExpandedDiameter = fullyExpandedDiameter(
-        structure.exitDiameter, areaRatioMach, structure.fullyExpandedMach, gamma)
+        structure.exitDiameter, structure.exitMach, structure.fullyExpandedMach, gamma)
 
     # -- Shock cell spacing -- #
     structure.shockCellLength = shockCellLength(
@@ -2547,29 +2657,43 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     structure.cellLengthPack = shockCellLength(
         structure.fullyExpandedDiameter, structure.fullyExpandedMach, packCellCoefficient)
 
-    # -- Mach disk -- #
-    # Ashkenas and Sherman, Crist and the onset surveys all measured jets exhausting into a
-    # back pressure BELOW their exit pressure. The correlation is an underexpanded-jet result
-    # and does not transfer to an overexpanded jet, whose near field is a lip shock train; a
-    # Mach reflection can still occur there but not at a position this correlation predicts.
-    structure.machDiskPresent = (structure.jetType == 'underexpanded'
-                                 and structure.nozzlePressureRatio >= machDiskOnsetPressureRatio)
-    if structure.jetType == 'overexpanded' and structure.nozzlePressureRatio >= machDiskOnsetPressureRatio:
+    # -- First shock on the axis: Mach disk or regular reflection -- #
+    # Behind a supersonic exit the switch is the exit pressure ratio against a threshold that rises
+    # with exit Mach number, not the nozzle pressure ratio a sonic exit is judged on. Every one of
+    # these is an underexpanded-jet result. An overexpanded jet's near field is a lip shock train;
+    # a Mach reflection can still occur there but not at a position these correlations predict.
+    structure.machReflectionOnset = machReflectionOnset(structure.exitMach, gamma)
+    if structure.jetType == 'overexpanded':
         structure.notes.append(
-            'The jet is overexpanded, so no Mach disk is reported: the Ashkenas and Sherman '
-            'correlation is an underexpanded-jet result and does not apply here, even though the '
-            'jet pressure ratio is above its onset threshold. A Mach reflection may still form '
-            'in the lip shock train, but locating it needs a shock-capturing solution.')
-    if structure.machDiskPresent:
-        structure.machDiskX = structure.lipX + machDiskLocation(
-            structure.throatDiameter, structure.nozzlePressureRatio)
-        structure.machDiskDiameter = machDiskDiameter(
-            structure.exitDiameter, structure.nozzlePressureRatio)
-        structure.notes.append(
-            f'Nozzle pressure ratio {structure.nozzlePressureRatio:.1f} is above the Mach disk '
-            f'onset threshold of {machDiskOnsetPressureRatio:.1f}, so the first cell is bounded '
-            f'by a Mach disk rather than a regular reflection. Published onset thresholds range '
-            f'from about 3.1 to 3.9, so treat the switch as soft.')
+            'The jet is overexpanded, so neither a Mach disk nor a regular reflection point is '
+            'reported: the correlations for both are underexpanded-jet results. A Mach reflection '
+            'may still form in the lip shock train, but locating it needs a shock-capturing solution.')
+    else:
+        structure.machDiskPresent = structure.exitPressureRatio > structure.machReflectionOnset
+        source = (f'Smith and Richards\' simulations put the onset behind a Mach '
+                  f'{structure.exitMach:.2f} exit at a ratio of {structure.machReflectionOnset:.2f}. '
+                  f'They ran at gamma = 5/3 and their general fit raises the onset as gamma falls, '
+                  f'so treat the switch as soft.')
+        if structure.machDiskPresent:
+            structure.machDiskX = structure.lipX + supersonicMachDiskLocation(
+                structure.exitDiameter, structure.exitMach, structure.exitPressureRatio, gamma)
+            structure.machDiskDiameter = supersonicMachDiskDiameter(
+                structure.exitDiameter, structure.exitPressureRatio, structure.machReflectionOnset)
+            structure.axisShockX = structure.machDiskX
+            structure.notes.append(
+                f'Pe/Pa {structure.exitPressureRatio:.2f} is above the Mach disk onset, so the first '
+                f'cell ends in a Mach disk, placed by Lewis and Carlson. {source}')
+            if structure.exitMach > supersonicMachDiskFittedMach:
+                structure.notes.append(
+                    f'Lewis and Carlson fitted exit Mach numbers up to {supersonicMachDiskFittedMach:.1f}; '
+                    f'at {structure.exitMach:.2f} the Mach disk position is an extrapolation.')
+        else:
+            structure.axisShockX = structure.lipX + regularReflectionLocation(
+                structure.lipRadius, structure.exitMach, structure.exitPressureRatio)
+            structure.notes.append(
+                f'Pe/Pa {structure.exitPressureRatio:.2f} is below the Mach disk onset, so the first '
+                f'shock reflects regularly from the axis, placed by Smith and Richards\' equation 8. '
+                f'{source}')
 
     # -- Initial boundary turning at the lip -- #
     if structure.jetType == 'underexpanded':
@@ -2594,7 +2718,7 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     # -- Axial extent -- #
     if plumeLength is None:
         plumeLength = max(10.0 * max(structure.fullyExpandedDiameter, structure.exitDiameter),
-                          2.0 * (structure.machDiskX - structure.lipX))
+                          2.0 * (structure.axisShockX - structure.lipX))
     structure.plumeLength = float(plumeLength)
 
     # -- Boundary curve -- #
@@ -2608,7 +2732,7 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
     # The shape does not reproduce `initialTurnAngle`. The real boundary turns through the lip's
     # Prandtl-Meyer fan and bends back within a fraction of a cell, which no sinusoid of the cell
     # length can follow: anchored to the turn angle, one about the fully expanded radius doubles
-    # the swell. On the shipped nozzle at 5 kPa this shape puts the widest radius 2 percent and
+    # the swell. On the shipped nozzle at 5 kPa this shape puts the widest radius 1 percent and
     # the first neck 13 percent from an Euler solution (validation/openFoam/plume.md), where a
     # sinusoid about the lip radius anchored to the turn angle needs an amplitude 1.7 times the
     # lip radius and crosses the axis.
@@ -2645,8 +2769,9 @@ def solvePlumeStructure(contour, ambientPressure: float, plumeLength: float = No
             'overexpanded; use the drawn boundary for cell spacing, not for width.')
 
     structure.notes.append(
-        'Boundary, cell spacing and Mach disk are correlations (Prandtl 1904 / Pack, Ashkenas '
-        'and Sherman 1966, Tam and Tanna); the interior of the plume is not solved. Cell '
+        'Boundary, cell spacing and the first axis shock are correlations (Prandtl 1904 / Pack, '
+        'Tam and Tanna, Lewis and Carlson 1964, Smith and Richards 2023); the interior of the '
+        'plume is not solved. Cell '
         f'spacing with Pack\'s coefficient would be {structure.cellLengthPack:.3f} m against '
         f'{structure.shockCellLength:.3f} m with Prandtl\'s, which is a fair measure of the '
         'uncertainty.')

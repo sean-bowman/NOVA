@@ -120,6 +120,8 @@ from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNod
                     PlumeFlow, PlumePoint, solvePlumeStructure, throttledContour,
                     plumeCharacteristicSeed,
                     fullyExpandedDiameter, shockCellLength, machDiskLocation, machDiskDiameter,
+                    machReflectionOnset, supersonicMachDiskLocation, supersonicMachDiskDiameter,
+                    regularReflectionLocation,
                     obliqueShockDeflection, obliqueShockState,
                     freeJetRefineLine, freeJetGeneralPoint, freeJetSameFamilyPoint,
                     freeJetBoundaryPoint, freeJetNearAxisPoint, freeJetCenterLineTarget,
@@ -130,7 +132,8 @@ from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNod
                     plumeMassFlux, plumeMachDisk, plumeExitLine, plumeCornerFan,
                     solvePlumeMarch, advancePlumeFront, solvePlumeFront,
                     prandtlCellCoefficient, packCellCoefficient, machDiskLocationCoefficient,
-                    machDiskOnsetPressureRatio, separationPressureRatio,
+                    machDiskOnsetPressureRatio, supersonicMachDiskCoefficient,
+                    machReflectionOnsetMach, machReflectionOnsetPressureRatio, separationPressureRatio,
                     plumeFieldMinPressureRatio, plumeFieldMaxPressureRatio,
                     plumeFieldMinExitMach, plumeFieldMaxExitMach, plumeFieldMaxWallAngle)
 from .stationMarch import (solveStationField, solveStationMarch, stationFromLine,
@@ -1173,7 +1176,7 @@ class Nozzle:
         Returns:
         --------
         PlumeContour
-            The twenty-two fields the plume solve reads, and nothing else about this nozzle.
+            The nineteen fields the plume solve reads, and nothing else about this nozzle.
 
         '''
 

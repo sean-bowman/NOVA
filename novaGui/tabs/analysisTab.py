@@ -185,9 +185,14 @@ class AnalysisTab(ttk.Frame):
             if structure is not None:
                 row(plume, 'Shock cell length (correlated)', getattr(structure, 'shockCellLength', 0.0) * 1e3,
                     '{:.1f}', 'mm')
-                if getattr(structure, 'machDiskPresent', False) and getattr(structure, 'lipRadius', 0.0):
+                lipRadius = getattr(structure, 'lipRadius', 0.0)
+                axisShock = getattr(structure, 'axisShockX', 0.0)
+                if getattr(structure, 'machDiskPresent', False) and lipRadius:
                     row(plume, 'Mach disk (correlated)',
-                        (structure.machDiskX - structure.lipX) / structure.lipRadius, '{:.1f}', 'lip radii downstream')
+                        (structure.machDiskX - structure.lipX) / lipRadius, '{:.1f}', 'lip radii downstream')
+                elif axisShock and lipRadius:
+                    row(plume, 'Regular reflection (correlated)',
+                        (axisShock - structure.lipX) / lipRadius, '{:.1f}', 'lip radii downstream')
                 else:
                     row(plume, 'Mach disk (correlated)', 'none')
 

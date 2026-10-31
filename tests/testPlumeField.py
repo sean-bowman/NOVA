@@ -341,16 +341,19 @@ def _marchable(ambientPressure, exitMach = 3.0, wallAngleDeg = 9.0):
     fraction = radii / lipRadius
     axisMach = exitMach + 0.4
 
+    # The mesh is in throat radii and the scaling factor is the throat radius, as NOVA writes them.
+    # The throat is the one the exit Mach number implies, so the wall's area ratio and the mesh's
+    # lip agree on the exit state.
+    from NOVA.gasDynamics import areaMachRelation
+    throatRadius = lipRadius / np.sqrt(areaMachRelation(exitMach, GAMMA))   # [m]
     contour = types.SimpleNamespace(
-        nozzleScalingFactor = 1.0,
+        nozzleScalingFactor = throatRadius,
         chamberGamma = GAMMA, chamberRGasConstant = 320.0,
         chamberStagnationTemperature = 3000.0, chamberPressure = 4.0e6,
-        exitMachNumber = exitMach, targetExitPressure = 40000.0,
-        exitDiameter = 2.0 * lipRadius, throatDiameter = 0.10,
-        allXPoints = [np.full_like(radii, 1.0)], allRPoints = [radii],
+        allXPoints = [np.full_like(radii, 1.0) / throatRadius], allRPoints = [radii / throatRadius],
         allMachNumbers = [axisMach + (exitMach - axisMach) * fraction],
         allFlowAngles = [np.radians(wallAngleDeg) * fraction],
-        xNozzleWall = np.array([0.0, 1.0]), rNozzleWall = np.array([0.10, lipRadius]))
+        xNozzleWall = np.array([0.0, 1.0]), rNozzleWall = np.array([throatRadius, lipRadius]))
 
     return contour
 
@@ -446,7 +449,7 @@ def testThrottlingScalesEveryPressureAndNothingElse():
         rated = np.asarray(getattr(contour, name), dtype = float)
         assert np.allclose(np.asarray(getattr(throttled, name), dtype = float), 0.25*rated)
 
-    assert throttled.exitMachNumber == contour.exitMachNumber
+    assert throttled.chamberGamma == contour.chamberGamma
     assert np.array_equal(throttled.rNozzleWall, contour.rNozzleWall)
     assert np.array_equal(throttled.allMachNumbers[0], contour.allMachNumbers[0])
 
@@ -460,7 +463,6 @@ def testThrottlingLeavesTheRatedContourAlone():
     throttledContour(contour, 0.1)
 
     assert contour.chamberPressure == 4.0e6
-    assert contour.targetExitPressure == 40000.0
     assert np.array_equal(contour.nozzleNearWallPressure, np.array([80000.0, 40000.0]))
 
 def testThrottlingClearsAStructureSolvedAtAnotherPowerLevel():
@@ -568,11 +570,9 @@ def testTheLipTurnIsThePrandtlMeyerTurnFromTheLipToTheBoundary():
     '''
     from NOVA.gasDynamics import prandtlMeyerAngle
     flow = PlumeFlow(GAMMA, 320.0, 3000.0, 4.0e6)
-    # The lip sits at Mach 3, 108.9 kPa: expanded into 20 kPa, weakly compressed into 112 kPa,
-    # with the design exit pressure moved up beside the second so the separation check passes
-    for ambientPressure, exitPressure, sign in ((20000.0, 40000.0, 1.0), (112000.0, 110000.0, -1.0)):
+    # The lip sits at Mach 3, 108.9 kPa: expanded into 20 kPa, weakly compressed into 112 kPa
+    for ambientPressure, sign in ((20000.0, 1.0), (112000.0, -1.0)):
         contour = _marchable(ambientPressure)
-        contour.targetExitPressure = exitPressure
         field = solveStationField(contour, ambientPressure = ambientPressure)
         assert field.solved and field.boundaryMach > 1.0
         lipMach = flow.machFromStaticPressure(field.lipPressureRatio * ambientPressure)

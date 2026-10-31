@@ -134,18 +134,9 @@ asked for, exactly. See
 check does and does not establish, for the comparison against the Rao wall-angle chart, and for
 the defects the comparison found.
 
-**Plume.** One figure per regime, each at equal aspect ratio and sized to the plume it draws.
-Ambient pressure is set from the nozzle exit pressure so each lands on a chosen Pe/Pa. The Mach
-disk is placed from the Ashkenas and Sherman correlation, which is defined for underexpanded jets
-only, so it appears in the underexpanded case and nowhere else. Separation follows the Summerfield
-criterion, Pe/Pa < 0.4.
+**Plume.** One figure per regime, each at equal aspect ratio and sized to the plume it draws. Ambient pressure is set from the nozzle's one-dimensional exit pressure so each lands on a chosen Pe/Pa. The first shock on the axis is a Mach disk, placed by Lewis and Carlson, when Pe/Pa is above the onset Smith and Richards found for the exit Mach number (7.3 at this nozzle's 3.95), and a regular reflection otherwise; both are underexpanded-jet results, so neither appears in the overexpanded cases. Separation follows the Summerfield criterion, Pe/Pa < 0.4.
 
-Everything in these figures is correlation. The boundary shape is a decaying sinusoid whose
-initial slope matches the correlated turning angle; it is not a computed streamline. Its amplitude
-is capped so the boundary cannot reach the axis, and where that cap binds the figure says so on
-its face: the correlated turning angle for a strongly underexpanded jet implies a swell wider than
-the lip radius, so the drawn width understates the plume. Cell spacing and Mach disk location are
-unaffected. `PlumeStructure.boundaryAmplitudeLimited` carries the same flag in code.
+Everything in these figures is correlation. The boundary is a decaying sinusoid of the cell length about the fully expanded jet's radius; it is not a computed streamline. A floor holds it off the axis where a strongly overexpanded jet's contraction would carry it through, and where that floor binds the figure says so on its face. `PlumeStructure.boundaryAmplitudeLimited` carries the same flag in code.
 
 **Plume interior.** There is no interior field in the shipped model. `plumeStructure` returns a
 boundary, cell node positions and a Mach disk, and deliberately solves no interior, because no

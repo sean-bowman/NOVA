@@ -77,6 +77,9 @@ def drawCase(nozzle, slug, label, pressureRatio, exitPressure):
         half = structure.machDiskDiameter * 0.5e3
         axes.plot([structure.machDiskX * 1e3] * 2, [-half, half], color = blue, lw = 2.6,
                   label = 'Mach disk', zorder = 5)
+    elif structure.axisShockX > 0.0 and structure.axisShockX <= boundaryX.max() / 1e3:
+        axes.plot([structure.axisShockX * 1e3], [0.0], 'o', color = blue, ms = 6,
+                  label = 'regular reflection', zorder = 5)
 
     axes.set_title(f'{label}    Pe/Pa {structure.exitPressureRatio:.2f}    '
                    f'NPR {structure.nozzlePressureRatio:.0f}    '
@@ -86,9 +89,9 @@ def drawCase(nozzle, slug, label, pressureRatio, exitPressure):
     axes.set_ylabel('Radius [mm]')
     if getattr(structure, 'boundaryAmplitudeLimited', False):
         axes.text(0.015, 0.04,
-                  'Correlation out of range: the cell amplitude implies a swell wider than the '
-                  'lip radius, so the drawn\nboundary understates the plume width. Cell spacing '
-                  'and Mach disk location remain valid.',
+                  'Correlation out of range: the contraction toward the fully expanded jet would carry '
+                  'the boundary\nthrough the axis, so the drawn boundary is held off it. Cell spacing '
+                  'remains valid.',
                   transform = axes.transAxes, fontsize = 7.5, color = showcasePalette.warn, va = 'bottom')
 
     axes.set_xlim(wallX.min(), boundaryX.max())

@@ -106,7 +106,8 @@ from .Volute import Volute
 from .stationMarch import (solveStationField, solveStationMarch,
                            plumeFieldDefaultReach, plumeFieldDriftTolerance)
 from .plume import (PlumeField, PlumeStructure, machDiskDiameter, machDiskLocation,
-                    obliqueShockDeflection, shockCellLength, throttledContour)
+                    machReflectionOnset, supersonicMachDiskLocation, supersonicMachDiskDiameter,
+                    regularReflectionLocation, obliqueShockDeflection, shockCellLength, throttledContour)
 
 # -- Figures -- #
 
@@ -172,7 +173,8 @@ __all__ = [
     'solveStationField', 'solveStationMarch', 'plumeFieldDefaultReach',
     'plumeFieldDriftTolerance',
     'PlumeField', 'PlumeStructure', 'machDiskDiameter', 'machDiskLocation',
-    'obliqueShockDeflection', 'shockCellLength', 'throttledContour',
+    'machReflectionOnset', 'supersonicMachDiskLocation', 'supersonicMachDiskDiameter',
+    'regularReflectionLocation', 'obliqueShockDeflection', 'shockCellLength', 'throttledContour',
     # Figures
     'exportInteractiveFigures',
     # Errors

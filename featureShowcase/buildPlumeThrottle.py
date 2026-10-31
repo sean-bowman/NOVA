@@ -132,14 +132,16 @@ def performanceCurve(nozzle, ambientPressure: float, fractions):
 
     '''
 
+    # The exit state is the structure's, one-dimensional at the area ratio in the chamber gas, so
+    # the velocity and the pressure term belong to the same gas
+    structure = solvePlumeStructure(nozzle.plumeContour(), ambientPressure = ambientPressure)
     gamma = float(nozzle.chamberGamma)
     gasConstant = float(nozzle.chamberRGasConstant)
-    exitMach = float(nozzle.exitMachNumber)
+    exitMach = float(structure.exitMach)
     exitTemperature = float(nozzle.chamberStagnationTemperature) \
                       / (1.0 + 0.5*(gamma - 1.0)*exitMach**2)
     exitVelocity = exitMach*np.sqrt(gamma*gasConstant*exitTemperature)
 
-    structure = solvePlumeStructure(nozzle.plumeContour(), ambientPressure = ambientPressure)
     exitArea = np.pi*float(structure.lipRadius)**2
     ratedExitPressure = float(structure.exitPressure)
     ratedMassFlow = float(nozzle.engineMassFlow)

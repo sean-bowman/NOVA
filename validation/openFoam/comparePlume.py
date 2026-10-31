@@ -17,8 +17,9 @@ What is compared:
       station, its mean angle over the first half station radius, and the Mach number, pressure
       and flow angle at every node inside nine tenths of the boundary radius. The march run to a
       longer reach is set against the case to show where it parts from it.
-    - Against the correlations: the Mach disk's distance from the exit plane and its diameter, the
-      first shock cell's length and the boundary's widest radius. Each correlation is evaluated at
+    - Against the correlations: where the first shock meets the axis, a Mach disk or a regular
+      reflection, its distance from the exit plane and the disk's diameter, the first shock cell's
+      length and the boundary's widest radius. Each correlation is evaluated at
       the case's gas, the chamber gas the march and NOVA's correlations both solve in.
     - Steadiness: the mass through every open boundary over the averaging window.
 
@@ -62,8 +63,8 @@ criteria = {
     'boundaryRadiusMax':  0.020,    # worst march station
     'fieldMach95':        0.020,    # 95th percentile over nodes inside 0.9 of the boundary radius
     'lipBoundaryAngle':   1.0,      # [deg], mean angle over the first half station radius
-    'machDiskLocation':   0.10,     # distance from the exit plane, against Ashkenas and Sherman
-    'machDiskDiameter':   0.25,     # against the logarithmic fit
+    'axisShockLocation':  0.10,     # where the first shock meets the axis, from the exit plane
+    'machDiskDiameter':   0.25,     # against Smith and Richards' fit; zero against zero passes
     'shockCellLength':    0.10,     # exit plane to the first neck of the boundary, against Prandtl
     'massImbalance':      0.002,    # inflow against outflow, window means
     'meanDrift':          0.001,    # outlet mass flow, second half of the window against the first
@@ -338,7 +339,10 @@ def drawAxis(path: str, axis: dict, reference: dict, disk: dict, unit: float, st
     '''Mach number and pressure on the axis, with the Mach disk OpenFOAM captures and the correlation's.'''
 
     march, extended, gas = reference['march'], reference['extendedMarch'], reference['gas']
-    correlated = reference['structure']['chamberGas']['machDiskX']
+    chamberGas = reference['structure']['chamberGas']
+    correlated = chamberGas['axisShockX']
+    correlatedLabel = ('Lewis and Carlson Mach disk' if chamberGas['machDiskPresent']
+                       else 'Smith and Richards regular reflection')
     figure, (upper, lower) = plt.subplots(2, 1, figsize = (9.0, 6.0), sharex = True)
     x = (axis['x'] - startX) / unit
     upper.plot(x, axis['mach'], label = 'OpenFOAM')
@@ -351,7 +355,7 @@ def drawAxis(path: str, axis: dict, reference: dict, disk: dict, unit: float, st
         lower.semilogy(stationX, np.asarray(data['axisPressure']) / gas['ambientPressure'], kind, color = 'C1',
                        linewidth = width, label = label)
     for axes in (upper, lower):
-        axes.axvline((correlated - startX) / unit, linestyle = ':', color = 'C2', label = 'Ashkenas and Sherman')
+        axes.axvline((correlated - startX) / unit, linestyle = ':', color = 'C2', label = correlatedLabel)
         axes.axvline((disk['x'] - startX) / unit, linestyle = '-', color = 'C0', linewidth = 0.6,
                      label = 'OpenFOAM Mach disk' if disk['present'] else 'OpenFOAM reflection')
     lower.axhline(1.0, color = 'C3', linewidth = 0.6, label = 'ambient')
@@ -494,13 +498,14 @@ def compare(case: str) -> dict:
 
     # -- Structure against the correlations -- #
     disk = machDisk(axis['x'], axis['mach'])
-    disk['radius'] = diskRadius(cellX, cellR, cellMach, disk['x'], unit)
+    # A regular reflection leaves no subsonic region behind it, so no disk
+    disk['radius'] = diskRadius(cellX, cellR, cellMach, disk['x'], unit) if disk['present'] else 0.0
     cell = firstCell(boundary['x'], boundary[0.5], unit)
     chamberGas, reported = reference['structure']['chamberGas'], reference['structure']['reported']
     lipX = reference['nozzle']['lipX']
     structure = {
-        'machDiskLocation': {'openFoam': disk['x'] - startX, 'correlation': chamberGas['machDiskX'] - lipX,
-                             'reported': reported['machDiskX'] - lipX},
+        'axisShockLocation': {'openFoam': disk['x'] - startX, 'correlation': chamberGas['axisShockX'] - lipX,
+                              'reported': reported['axisShockX'] - lipX},
         'machDiskDiameter': {'openFoam': 2.0 * disk['radius'], 'correlation': chamberGas['machDiskDiameter'],
                              'reported': reported['machDiskDiameter']},
         'shockCellLength': {'openFoam': cell['neckX'] - startX, 'correlation': chamberGas['shockCellLength'],
@@ -508,8 +513,12 @@ def compare(case: str) -> dict:
         'maximumBoundaryRadius': {'openFoam': cell['maxRadius'], 'correlation': float(np.max(reported['boundaryR'])),
                                   'reported': float(np.max(reported['boundaryR']))},
     }
+    # A disk both solutions leave out agrees; one only one of them carries does not
     for entry in structure.values():
-        entry['difference'] = entry['correlation'] / entry['openFoam'] - 1.0 if entry['openFoam'] else float('nan')
+        if entry['openFoam']:
+            entry['difference'] = entry['correlation'] / entry['openFoam'] - 1.0
+        else:
+            entry['difference'] = 0.0 if entry['correlation'] == 0.0 else float('nan')
 
     # -- Steadiness and mass balance, over the averaging window -- #
     histories, window = {}, {}
@@ -538,7 +547,7 @@ def compare(case: str) -> dict:
         'boundaryRadiusMax': statistics(boundaryError)['max'],
         'fieldMach95': statistics(fieldMachError)['p95'],
         'lipBoundaryAngle': angles['march'] - angles['openFoam'],
-        'machDiskLocation': structure['machDiskLocation']['difference'],
+        'axisShockLocation': structure['axisShockLocation']['difference'],
         'machDiskDiameter': structure['machDiskDiameter']['difference'],
         'shockCellLength': structure['shockCellLength']['difference'],
         'massImbalance': imbalance,
@@ -598,7 +607,8 @@ def compare(case: str) -> dict:
              'extended': (extendedX, extendedR, '--', 'accent', f'NOVA march to {extended["reach"]:.0f}'),
              'correlated': (np.asarray(structureBoundary['boundaryX']), np.asarray(structureBoundary['boundaryR']), ':',
                             'red', 'NOVA correlated boundary')}
-    markers = {(chamberGas['machDiskX'], 0.0): ('o', 'red', 'NOVA Mach disk, Ashkenas and Sherman'),
+    markers = {(chamberGas['axisShockX'], 0.0): ('o', 'red', 'NOVA Mach disk, Lewis and Carlson' if chamberGas['machDiskPresent']
+                                                 else 'NOVA regular reflection, Smith and Richards'),
                (disk['x'], 0.0): ('v', 'yellow', 'OpenFOAM Mach disk' if disk['present'] else 'OpenFOAM reflection')}
     drawField(os.path.join(output, 'plumeField.png'), points, None, boundary, lines, style, unit, startX,
               (min(length, 24.0), 3.0), markers)

@@ -25,9 +25,11 @@ import pytest
 
 from NOVA.Nozzle import (Nozzle, prandtlMeyerAngle, machFromPressureRatio, fullyExpandedDiameter,
                     shockCellLength, machDiskLocation, machDiskDiameter,
-                    obliqueShockDeflection,
+                    machReflectionOnset, supersonicMachDiskLocation, supersonicMachDiskDiameter,
+                    regularReflectionLocation, obliqueShockDeflection,
                     prandtlCellCoefficient, packCellCoefficient,
-                    machDiskLocationCoefficient, machDiskOnsetPressureRatio)
+                    machDiskLocationCoefficient, machDiskOnsetPressureRatio,
+                    machReflectionOnsetMach, machReflectionOnsetPressureRatio)
 
 # -- Elementary gas dynamics against published values -- #
 
@@ -191,6 +193,56 @@ def testMachDiskDiameterVanishesNearOnset():
     assert machDiskDiameter(1.0, 100.0) > 0.0
     assert 3.0 < machDiskOnsetPressureRatio < 4.0
 
+def testMachReflectionOnsetPassesThroughItsSources():
+
+    '''
+
+    The onset is the sonic threshold, 3.5 times p*/p0, at Mach 1 and Smith and Richards' simulated
+    thresholds from Mach 2 to 7.2, and it rises with exit Mach number throughout.
+
+    '''
+
+    gamma = 1.4
+    sonic = machDiskOnsetPressureRatio * (2.0 / (gamma + 1.0))**(gamma / (gamma - 1.0))
+    assert machReflectionOnset(1.0, gamma) == pytest.approx(sonic, rel = 1e-12)
+    for mach, ratio in zip(machReflectionOnsetMach, machReflectionOnsetPressureRatio):
+        assert machReflectionOnset(mach, gamma) == pytest.approx(ratio, rel = 1e-12)
+    onsets = [machReflectionOnset(mach, gamma) for mach in np.linspace(1.0, 9.0, 81)]
+    assert np.all(np.diff(onsets) > 0.0)
+
+def testLewisCarlsonIsSmithRichardsEquationNine():
+
+    '''
+
+    x_M / D_e = 0.69 M_e sqrt(gamma Pe/Pa), written in exit radii, is the 1.38 M_e sqrt(gamma Pe/Pa)
+    Smith and Richards give.
+
+    '''
+
+    exitRadius, mach, ratio, gamma = 0.3, 3.0, 10.0, 1.2
+    expected = 1.38 * mach * np.sqrt(gamma * ratio) * exitRadius
+    assert supersonicMachDiskLocation(2.0 * exitRadius, mach, ratio, gamma) == pytest.approx(expected, rel = 1e-12)
+
+def testRegularReflectionOfAMatchedJetIsTheLipMachLine():
+
+    '''
+
+    At Pe/Pa = 1 a weak disturbance from the lip crosses the jet along the Mach line, which reaches
+    the axis R / tan(mu) downstream.
+
+    '''
+
+    exitRadius, mach = 0.3, 3.5
+    machLine = exitRadius / np.tan(np.arcsin(1.0 / mach))
+    assert regularReflectionLocation(exitRadius, mach, 1.0) == pytest.approx(machLine, rel = 1e-12)
+    assert regularReflectionLocation(exitRadius, mach, 2.0) == pytest.approx(2.0 * machLine, rel = 1e-12)
+
+def testSupersonicMachDiskDiameterVanishesAtOnset():
+
+    assert supersonicMachDiskDiameter(1.0, 7.0, 7.4) == 0.0
+    assert supersonicMachDiskDiameter(1.0, 7.4, 7.4) == 0.0
+    assert supersonicMachDiskDiameter(1.0, 11.4, 7.4) == pytest.approx(1.2, rel = 1e-12)
+
 # -- Oblique shock at an overexpanded lip -- #
 
 def testObliqueShockDeflectionAgainstThetaBetaM():
@@ -309,8 +361,8 @@ def testStructureRegimeClassification():
     assert underexpanded.jetType == 'underexpanded'
     assert underexpanded.initialTurnAngle > 0.0
 
-    # Matched.
-    matched = _stubNozzle(13993.0).plumeStructure(13993.0)
+    # Matched to the one-dimensional exit pressure.
+    matched = _stubNozzle(13993.0).plumeStructure(underexpanded.exitPressure)
     assert matched.jetType == 'ideallyExpanded'
 
 def testStructureFlagsSeparation():
@@ -325,15 +377,73 @@ def testStructureFlagsSeparation():
     structure = _stubNozzle(13993.0).plumeStructure(101325.0)
     assert any('separation' in note.lower() or 'separated' in note.lower() for note in structure.notes)
 
-def testStructureMachDiskConsistency():
+def testStructureExitStateIsTheAreaRatiosInTheContoursGas():
 
-    structure = _stubNozzle(13993.0).plumeStructure(1000.0)
+    '''
+
+    The exit Mach number and pressure are the one-dimensional ones at the wall's area ratio in the
+    gas the contour was solved in, whatever exit state the thermochemistry reported.
+
+    '''
+
+    from NOVA.gasDynamics import machFromAreaRatio
+    nozzle = _stubNozzle(13993.0)
+    structure = nozzle.plumeStructure(1000.0)
+    gamma = nozzle.chamberGamma
+    areaRatio = (structure.exitDiameter / structure.throatDiameter)**2
+    assert structure.exitMach == pytest.approx(machFromAreaRatio(areaRatio, gamma), rel = 1e-12)
+    assert structure.exitMach != pytest.approx(nozzle.exitMachNumber, rel = 0.01)
+    expected = nozzle.chamberPressure * (1.0 + 0.5 * (gamma - 1.0) * structure.exitMach**2)**(-gamma / (gamma - 1.0))
+    assert structure.exitPressure == pytest.approx(expected, rel = 1e-12)
+
+def testStructureReadsTheThroatFromTheScalingFactor():
+
+    '''
+
+    The resampled wall's smallest radius only approaches the throat; the scaling factor is the
+    throat radius itself.
+
+    '''
+
+    nozzle = _stubNozzle(13993.0)
+    assert nozzle.plumeStructure(1000.0).throatDiameter == pytest.approx(2.0 * np.min(nozzle.rNozzleWall), rel = 1e-12)
+    nozzle.nozzleScalingFactor = 0.0500
+    assert nozzle.plumeStructure(1000.0).throatDiameter == pytest.approx(0.1000, rel = 1e-12)
+
+def testStructureMachDiskBehindAStronglyUnderexpandedExit():
+
+    structure = _stubNozzle(13993.0).plumeStructure(50.0)
+    assert structure.exitPressureRatio > structure.machReflectionOnset
     assert structure.machDiskPresent
-    assert structure.machDiskX > structure.lipX
-    assert structure.machDiskDiameter > 0.0
-    # Location must match the correlation applied to the reported inputs.
-    expected = structure.lipX + machDiskLocation(structure.throatDiameter, structure.nozzlePressureRatio)
+    expected = structure.lipX + supersonicMachDiskLocation(structure.exitDiameter, structure.exitMach,
+                                                           structure.exitPressureRatio, structure.gamma)
     assert structure.machDiskX == pytest.approx(expected, rel = 1e-12)
+    assert structure.axisShockX == structure.machDiskX
+    assert structure.machDiskDiameter > 0.0
+
+def testStructureRegularReflectionBehindAModeratelyUnderexpandedExit():
+
+    '''
+
+    A Mach 4 exit at a pressure ratio of 3 reflects its first shock regularly. Its nozzle pressure
+    ratio is in the thousands, far above the sonic onset of 3.5, and judging it on that put a Mach
+    disk behind the shipped nozzle where an Euler solution of it has a regular reflection.
+
+    '''
+
+    reference = _stubNozzle(13993.0).plumeStructure(1000.0)
+    structure = _stubNozzle(13993.0).plumeStructure(reference.exitPressure / 3.0)
+    assert structure.nozzlePressureRatio > 100.0 * machDiskOnsetPressureRatio
+    assert not structure.machDiskPresent
+    assert structure.machDiskX == 0.0 and structure.machDiskDiameter == 0.0
+    expected = structure.lipX + regularReflectionLocation(structure.lipRadius, structure.exitMach, 3.0)
+    assert structure.axisShockX == pytest.approx(expected, rel = 1e-9)
+
+def testOverexpandedStructureReportsNoAxisShock():
+
+    structure = _stubNozzle(13993.0).plumeStructure(101325.0)
+    assert not structure.machDiskPresent
+    assert structure.axisShockX == 0.0
 
 def testStructureBoundaryStartsAtLip():
 

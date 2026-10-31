@@ -812,7 +812,7 @@ def solveStationField(contour, ambientPressure: float, reach: float = plumeField
     if structure.machDiskPresent:
         result.notes.append(
             f'A Mach disk stands {(structure.machDiskX - structure.lipX)/structure.lipRadius:.1f} '
-            f'lip radii downstream by Ashkenas and Sherman. Nothing in this field represents it: '
+            f'lip radii downstream by Lewis and Carlson. Nothing in this field represents it: '
             f'the march is isentropic and carries no shock.')
 
     return result

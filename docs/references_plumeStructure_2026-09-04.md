@@ -309,3 +309,48 @@ The exit plane of a truncated ideal contour is the reason the question arises at
   - **Fifteen center-line stations** run from x/r 0.0874887 to 0.4325213. Each block of the table is one characteristic of the net, and the blocks beginning on the axis give that distribution. Transcribed in `experimental/stationMarchValidation.py`.
   - **The free boundary is not tabulated.** y/r never exceeds 1.0 across all 907 rows, so table II covers the expansion portion of the interior only, as its own caption says.
   - **The archive.org OCR of this report is unusable for the table**: it loses the exponent digit from roughly three quarters of the entries written in scientific notation and splits the columns into separate vertical runs. The text layer of the NTRS PDF is row-aligned and keeps the exponents, and is what the transcription reads.
+
+---
+
+# Part 4: The first axis shock behind a supersonic exit
+
+Sources gathered 2026-10-30 after an Euler solution of the shipped plume (`validation/openFoam/plume.md`) carried a regular reflection at 13.0 lip radii where Ashkenas and Sherman put a Mach disk at 7.9. The question driving the search: what decides between a regular and a Mach reflection behind a supersonic exit, and where does each sit, given that the onset thresholds and the location fit above are all for sonic exits.
+
+## Smith and Richards, The influence of Mach number and overpressure on the structure of supersonic gas jets
+
+- **URL:** <https://academic.oup.com/mnras/article/526/3/3407/7281019> (doi 10.1093/mnras/stad2879)
+- **Accessed:** 2026-10-30
+- **Relevance:** The only source found that measures the regular-to-Mach reflection onset against jet Mach number rather than for a sonic exit, and that gives the first axis shock's position in both regimes.
+- **Key findings:**
+  - Axisymmetric simulations (PLUTO) of uniform, parallel jets entering a reservoir, at gamma = 5/3, about 13 cells per jet radius. Not a nozzle and not a rocket gas.
+  - **Onset:** the Mach disk forms above a jet-to-ambient pressure ratio of about 3.5 at Mach 2 and 7.4 at Mach 4 (their equations 3 and 4); at fixed ratios of 12, 16 and 24 the reflection changes type at Mach 4.96, 5.52 and 7.20. A rule of thumb, a disk above 0.5 M^2, fits from Mach 4 up.
+  - A general fit, 0.44 (M^2 + 2/(gamma - 1)) (equation 5), raises the onset as gamma falls; it is untested away from gamma = 5/3 and puts the sonic onset of air well above the measured one.
+  - **Regular reflection position:** the first axis shock at x / R = sqrt(M^2 - 1) (Pe/Pa) (equation 8), which is the lip Mach line at a ratio of one; their fits at Mach 4 and 8 scale as (Pe/Pa)^0.9.
+  - **Mach disk:** radius 0.6 sqrt(Pe/Pa - onset) jet radii (equation 6); position 1.38 sqrt(gamma Pe/Pa) M jet radii (equation 9), which is Lewis and Carlson's correlation written in radii.
+  - Implemented in `plume.machReflectionOnset`, `regularReflectionLocation` and `supersonicMachDiskDiameter`. On the shipped nozzle the regular reflection lands 4.2 percent beyond the Euler solution's.
+
+## Lewis and Carlson (1964), Normal shock location in underexpanded gas and gas-particle jets
+
+- **URL:** <https://arxiv.org/abs/2404.07329> (cited and tabulated there; the original is AIAA Journal 2(4), 776-777, doi 10.2514/3.2409, behind access controls)
+- **Accessed:** 2026-10-30
+- **Relevance:** The standard Mach disk location for a supersonic exit, scaled on the exit diameter and exit state rather than the throat and chamber.
+- **Key findings:**
+  - x_M / D_e = 0.69 M_e sqrt(gamma Pe/Pa). The coefficient and form are confirmed through Smith and Richards' equation 9; the original text was not retrieved.
+  - Measured on nozzles of exit Mach number 1.75 and 2.905, with a particle-loading correction (1 + 0.197 M_e^1.45 Phi_m^0.65)^-1 that is not used here.
+  - An AEDC report (AEDC-TR-76-129) recommends it for establishing the Mach disk location at pressure ratios below 3.
+  - Implemented in `plume.supersonicMachDiskLocation`; NOVA notes when the exit Mach number is beyond 2.9.
+
+## Muraoka and Hiejima (2022), Onset conditions for Mach disk formation in underexpanded jet flows
+
+- **URL:** <https://pubs.aip.org/aip/pof/article/34/11/116125/2848522/Onset-conditions-for-Mach-disk-formation-in>
+- **Accessed:** 2026-10-30
+- **Relevance:** Checked for an onset criterion that depends on exit Mach number; it has none.
+- **Key findings:**
+  - Sonic injection only: the disk appears between NPR 3.03 and 3.12, when the total pressure loss reaches about 40 percent.
+  - Confirms that the sonic-exit onset in nozzle pressure ratio is the only one available in that form, and that it says nothing about a supersonic exit.
+
+## What these sources do and do not support
+
+**Supported:** deciding between a regular and a Mach reflection behind a supersonic exit on the exit pressure ratio against an onset that rises with exit Mach number; placing a regular reflection and a Mach disk on the exit radius and exit state.
+
+**Not supported by anything found:** how the onset moves with gamma. Every threshold for a supersonic exit comes from simulations at 5/3, and the one general fit that carries gamma is untested. A rocket exhaust at 1.15 sits outside all of them; the general fit suggests its onset is higher, so the tabulated values err toward reporting a disk.

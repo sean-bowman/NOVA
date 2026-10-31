@@ -3,22 +3,22 @@ medium grid, 30720 cells, 20 per station radius, t = 0.01 s
 mass flow: OpenFOAM inflow 23.249 kg/s, march station 23.252, nozzle exit 23.256 (station against nozzle -0.02%, station area against the lip's -0.00%)
 boundary at the end of the march, x = 2.000: OpenFOAM 1.7583, march 1.7355 station radii; contact layer 0.284 wide
 boundary angle over the first half station radius [deg]: openFoam 22.55, march 25.44, marchFirstSegment 17.91, prandtlMeyer 28.02, prandtlMeyerAtStationLip 28.05, correlationReported 28.02
-Mach disk: regular reflection at 13.062 station radii, radius nan, peak Mach 6.243, oscillation 0.0500 station radii over the window
+Mach disk: regular reflection at 13.062 station radii, radius 0.000, peak Mach 6.243, oscillation 0.0500 station radii over the window
 extended march, boundary radius against OpenFOAM and its own mass drift: x = 2: -1.3% / -0.7%, x = 4: -1.4% / -6.4%, x = 6: -3.2% / -16.7%, x = 8: -5.6% / -34.6%
 
 structure                    OpenFOAM  correlation  difference  NOVA reported
-machDiskLocation               4.1698       2.5269     -39.40%         2.5269
-machDiskDiameter                  nan       2.9422        nan%         2.9422
-shockCellLength                6.0418       6.2773       3.90%         6.2773
-maximumBoundaryRadius         0.73376      0.73561       0.25%        0.73561
+axisShockLocation              4.1698       4.3224       3.66%         4.3224
+machDiskDiameter                    0            0       0.00%              0
+shockCellLength                6.0418       6.2392       3.27%         6.2392
+maximumBoundaryRadius         0.73376      0.72943      -0.59%        0.72943
 
 criterion                      value       limit  result
 boundaryRadiusMax             3.794%      2.000%  FAIL
 fieldMach95                   1.905%      2.000%  pass
 lipBoundaryAngle              2.893 deg      1.000 deg  FAIL
-machDiskLocation            -39.399%     10.000%  FAIL
-machDiskDiameter                nan%     25.000%  FAIL
-shockCellLength               3.898%     10.000%  pass
+axisShockLocation             3.660%     10.000%  pass
+machDiskDiameter              0.000%     25.000%  pass
+shockCellLength               3.267%     10.000%  pass
 massImbalance              -176.827%      0.200%  FAIL
 meanDrift                     5.397%      0.100%  FAIL
 fieldMach                mean 0.564  p95 1.905  max 177.002  (14211 nodes)

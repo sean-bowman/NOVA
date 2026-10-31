@@ -92,9 +92,9 @@
     "peakMach": 6.242820363923692,
     "peakX": 4.905095778,
     "downstreamMach": 3.117208167346351,
-    "radius": NaN,
+    "radius": 0.0,
     "xFromExit": 13.062189947684162,
-    "radiusOverStation": NaN,
+    "radiusOverStation": 0.0,
     "history": [
       [
         0.005,
@@ -130,30 +130,30 @@
     "neckRadius": 1.3802982003473596
   },
   "structure": {
-    "machDiskLocation": {
+    "axisShockLocation": {
       "openFoam": 4.169753761160768,
-      "correlation": 2.526911013427428,
-      "reported": 2.526911013427428,
-      "difference": -0.39399035094964663
+      "correlation": 4.322382930983087,
+      "reported": 4.322382930983089,
+      "difference": 0.036603880843992576
     },
     "machDiskDiameter": {
-      "openFoam": NaN,
-      "correlation": 2.9422143487130388,
-      "reported": 2.9422143487130388,
-      "difference": NaN
+      "openFoam": 0.0,
+      "correlation": 0.0,
+      "reported": 0.0,
+      "difference": 0.0
     },
     "shockCellLength": {
       "openFoam": 6.041812718160768,
-      "correlation": 6.277340114732998,
-      "reported": 6.277340114732998,
-      "pack": 5.8639777488317435,
-      "difference": 0.03898290257562431
+      "correlation": 6.2392072017565905,
+      "reported": 6.2392072017565905,
+      "pack": 5.828355885255008,
+      "difference": 0.03267140058851625
     },
     "maximumBoundaryRadius": {
       "openFoam": 0.7337571302488415,
-      "correlation": 0.735607475,
-      "reported": 0.735607475,
-      "difference": 0.0025217400620434205
+      "correlation": 0.729426318,
+      "reported": 0.729426318,
+      "difference": -0.005902242132042712
     }
   },
   "steadiness": {
@@ -192,18 +192,18 @@
       "limit": 1.0,
       "pass": false
     },
-    "machDiskLocation": {
-      "value": -0.39399035094964663,
+    "axisShockLocation": {
+      "value": 0.036603880843992576,
       "limit": 0.1,
-      "pass": false
+      "pass": true
     },
     "machDiskDiameter": {
-      "value": NaN,
+      "value": 0.0,
       "limit": 0.25,
-      "pass": false
+      "pass": true
     },
     "shockCellLength": {
-      "value": 0.03898290257562431,
+      "value": 0.03267140058851625,
       "limit": 0.1,
       "pass": true
     },

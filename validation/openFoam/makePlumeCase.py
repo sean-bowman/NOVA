@@ -113,27 +113,40 @@ def _correlations(structure, gamma: float, exitMach: float, lipMach: float) -> d
 
     NOVA's correlated plume structure at a given ratio of specific heats.
 
-    The scalars `plume.solvePlumeStructure` derives from the fully expanded state, re-evaluated with
-    NOVA's own functions. The Mach disk location and diameter do not depend on the gas.
+    The scalars `plume.solvePlumeStructure` derives from the exit and fully expanded states,
+    re-evaluated with NOVA's own functions from the exit Mach number handed in, the one-dimensional
+    one at the area ratio. The first shock on the axis is the Mach disk when the exit pressure ratio
+    is above the onset, and the regular reflection point otherwise.
 
     '''
 
     from NOVA.gasDynamics import machFromPressureRatio, prandtlMeyerAngle
-    from NOVA.plume import (fullyExpandedDiameter, machDiskDiameter, machDiskLocation, packCellCoefficient,
-                            prandtlCellCoefficient, shockCellLength)
+    from NOVA.plume import (fullyExpandedDiameter, machReflectionOnset, packCellCoefficient, prandtlCellCoefficient,
+                            regularReflectionLocation, shockCellLength, supersonicMachDiskDiameter,
+                            supersonicMachDiskLocation)
 
     jetMach = machFromPressureRatio(structure.nozzlePressureRatio, gamma)
     jetDiameter = fullyExpandedDiameter(structure.exitDiameter, exitMach, jetMach, gamma)
     turn = prandtlMeyerAngle(jetMach, gamma) - prandtlMeyerAngle(lipMach, gamma)
+    exitPressureRatio = (structure.nozzlePressureRatio
+                         * (1.0 + 0.5 * (gamma - 1.0) * exitMach**2)**(-gamma / (gamma - 1.0)))
+    onset = machReflectionOnset(exitMach, gamma)
+    diskPresent = exitPressureRatio > onset
+    if diskPresent:
+        axisShock = supersonicMachDiskLocation(structure.exitDiameter, exitMach, exitPressureRatio, gamma)
+    else:
+        axisShock = regularReflectionLocation(0.5 * structure.exitDiameter, exitMach, exitPressureRatio)
 
     return {
-        'gamma': gamma, 'exitMach': exitMach, 'lipMach': lipMach,
+        'gamma': gamma, 'exitMach': exitMach, 'lipMach': lipMach, 'exitPressureRatio': exitPressureRatio,
         'fullyExpandedMach': jetMach, 'fullyExpandedDiameter': jetDiameter,
         'shockCellLength': shockCellLength(jetDiameter, jetMach, prandtlCellCoefficient),
         'cellLengthPack': shockCellLength(jetDiameter, jetMach, packCellCoefficient),
         'initialTurnAngle': structure.lipWallAngle + turn,
-        'machDiskX': structure.lipX + machDiskLocation(structure.throatDiameter, structure.nozzlePressureRatio),
-        'machDiskDiameter': machDiskDiameter(structure.exitDiameter, structure.nozzlePressureRatio),
+        'machReflectionOnset': onset, 'machDiskPresent': bool(diskPresent),
+        'machDiskX': structure.lipX + axisShock if diskPresent else 0.0,
+        'machDiskDiameter': supersonicMachDiskDiameter(structure.exitDiameter, exitPressureRatio, onset),
+        'axisShockX': structure.lipX + axisShock,
     }
 
 def _march(field, gas: dict) -> dict:
@@ -195,9 +208,11 @@ def solveNova() -> dict:
     throatRadius = float(nozzle.nozzleScalingFactor)
     wallX, wallR = np.asarray(nozzle.xNozzleWall, dtype = float), np.asarray(nozzle.rNozzleWall, dtype = float)
 
-    # The one-dimensional exit Mach number at the chamber gas, for the correlations evaluated in it
+    # The one-dimensional exit Mach number at the chamber gas, for the correlations evaluated in it.
+    # The area ratio is the lip's against the throat radius; the resampled wall's smallest radius
+    # misses the throat.
     from NOVA.gasDynamics import machFromAreaRatio
-    chamberExitMach = float(machFromAreaRatio((wallR[-1] / wallR.min())**2, gamma))
+    chamberExitMach = float(machFromAreaRatio((wallR[-1] / throatRadius)**2, gamma))
 
     def marchOut(march: dict, nodes: bool) -> dict:
         out = {'boundaryX': _rounded(march['boundaryX']), 'boundaryR': _rounded(march['boundaryR']),
@@ -243,8 +258,10 @@ def solveNova() -> dict:
                          'shockCellLength': float(structure.shockCellLength),
                          'cellLengthPack': float(structure.cellLengthPack),
                          'initialTurnAngle': float(structure.initialTurnAngle),
+                         'machReflectionOnset': float(structure.machReflectionOnset),
                          'machDiskPresent': bool(structure.machDiskPresent), 'machDiskX': float(structure.machDiskX),
                          'machDiskDiameter': float(structure.machDiskDiameter),
+                         'axisShockX': float(structure.axisShockX),
                          'boundaryAmplitudeLimited': bool(structure.boundaryAmplitudeLimited),
                          'boundaryX': _rounded(structure.boundaryX), 'boundaryR': _rounded(structure.boundaryR),
                          'notes': list(structure.notes)},

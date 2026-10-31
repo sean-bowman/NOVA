@@ -1,0 +1,1820 @@
+{
+ "ambientPressure": 101325.0,
+ "designMach": 4.166016831366466,
+ "gamma": 1.1475421191138746,
+ "numCharacteristics": 50,
+ "shippedExitPlane": {
+  "areaRatio": 40.0,
+  "wall": 25520.468429115343,
+  "massAveraged": 18613.491355921025,
+  "areaAveraged": 17646.830889696805,
+  "oneDimensional": 17699.228155440505,
+  "oneDimensionalMach": 3.953669831009859,
+  "axis": 10693.08409639441,
+  "ceaExitPressure": 13993.281188626517,
+  "ceaExitMach": 4.223443848725594
+ },
+ "peak": {
+  "areaRatio": 13.07365,
+  "thrustCoefficient": 1.5180124147038825,
+  "wallPressureRatio": 1.0154353997763201,
+  "fitResidual": 0.0001334488240661249,
+  "plateau": [
+   12.61,
+   13.548850000000002
+  ]
+ },
+ "targets": {
+  "wallPressure": {
+   "areaRatio": 13.259619406592039,
+   "thrustCoefficient": 1.5179916994778682,
+   "againstPeak": -1.3646282345014527e-05,
+   "wallPressure": 101325.0,
+   "massAveragedPressure": 76666.70710687929
+  },
+  "massAveragedPressure": {
+   "areaRatio": 10.606241459531043,
+   "thrustCoefficient": 1.513773125201109,
+   "againstPeak": -0.0027926579925898753,
+   "wallPressure": 128609.59919003074,
+   "massAveragedPressure": 101325.0
+  },
+  "areaAveragedPressure": {
+   "areaRatio": 10.423856282432716,
+   "thrustCoefficient": 1.5130669663039056,
+   "againstPeak": -0.0032578445025046587,
+   "wallPressure": 130965.98695402978,
+   "massAveragedPressure": 103571.06093848184
+  }
+ },
+ "cuts": [
+  {
+   "areaRatio": 7.0,
+   "thrustCoefficient": 1.4852043644437287,
+   "wallPressure": 196214.73951618528,
+   "massAveragedPressure": 173932.91074380407,
+   "areaAveragedPressure": 173242.8196430097,
+   "massClosure": 0.9881315936491226
+  },
+  {
+   "areaRatio": 7.05,
+   "thrustCoefficient": 1.485795929175853,
+   "wallPressure": 194855.75872494414,
+   "massAveragedPressure": 172260.7817112516,
+   "areaAveragedPressure": 171562.7072421571,
+   "massClosure": 0.9880679677684406
+  },
+  {
+   "areaRatio": 7.1,
+   "thrustCoefficient": 1.4863943360755147,
+   "wallPressure": 193510.5210763125,
+   "massAveragedPressure": 170622.51094357326,
+   "areaAveragedPressure": 169915.201403711,
+   "massClosure": 0.9880188479348773
+  },
+  {
+   "areaRatio": 7.15,
+   "thrustCoefficient": 1.4872711488061199,
+   "wallPressure": 192178.8285088542,
+   "massAveragedPressure": 169041.49661724688,
+   "areaAveragedPressure": 168329.5254199972,
+   "massClosure": 0.9881463461519182
+  },
+  {
+   "areaRatio": 7.2,
+   "thrustCoefficient": 1.4878859174773051,
+   "wallPressure": 190860.48685897,
+   "massAveragedPressure": 167468.62353107551,
+   "areaAveragedPressure": 166744.56792217877,
+   "massClosure": 0.9881272579914069
+  },
+  {
+   "areaRatio": 7.25,
+   "thrustCoefficient": 1.4885671575309773,
+   "wallPressure": 189555.30576114764,
+   "massAveragedPressure": 165931.101566487,
+   "areaAveragedPressure": 165195.27885066628,
+   "massClosure": 0.9881562403219183
+  },
+  {
+   "areaRatio": 7.3,
+   "thrustCoefficient": 1.4891151177158883,
+   "wallPressure": 188277.29978317395,
+   "massAveragedPressure": 164393.90624894857,
+   "areaAveragedPressure": 163643.7717635014,
+   "massClosure": 0.9880797813300501
+  },
+  {
+   "areaRatio": 7.35,
+   "thrustCoefficient": 1.4895801530645927,
+   "wallPressure": 187013.5157287293,
+   "massAveragedPressure": 162882.40597063123,
+   "areaAveragedPressure": 162116.85187254238,
+   "massClosure": 0.9879745471391169
+  },
+  {
+   "areaRatio": 7.4,
+   "thrustCoefficient": 1.4900556084134728,
+   "wallPressure": 185762.08841583622,
+   "massAveragedPressure": 161400.69255757966,
+   "areaAveragedPressure": 160619.01635153472,
+   "massClosure": 0.9878857472175082
+  },
+  {
+   "areaRatio": 7.45,
+   "thrustCoefficient": 1.4907692119009401,
+   "wallPressure": 184522.84607652333,
+   "massAveragedPressure": 159966.81678577466,
+   "areaAveragedPressure": 159173.2680745028,
+   "massClosure": 0.9879484718254414
+  },
+  {
+   "areaRatio": 7.5,
+   "thrustCoefficient": 1.4912152576477602,
+   "wallPressure": 183295.6201975994,
+   "massAveragedPressure": 158539.19157854366,
+   "areaAveragedPressure": 157726.25876132975,
+   "massClosure": 0.9878624528952907
+  },
+  {
+   "areaRatio": 7.55,
+   "thrustCoefficient": 1.4916844630858475,
+   "wallPressure": 182080.2454405349,
+   "massAveragedPressure": 157139.7747834516,
+   "areaAveragedPressure": 156307.17370118367,
+   "massClosure": 0.9877990977862301
+  },
+  {
+   "areaRatio": 7.6,
+   "thrustCoefficient": 1.4921576007454163,
+   "wallPressure": 180876.5595638025,
+   "massAveragedPressure": 155766.467288067,
+   "areaAveragedPressure": 154913.54978030905,
+   "massClosure": 0.9877473533291922
+  },
+  {
+   "areaRatio": 7.65,
+   "thrustCoefficient": 1.4926652574650774,
+   "wallPressure": 179684.40334757167,
+   "massAveragedPressure": 154420.15571169427,
+   "areaAveragedPressure": 153547.25742589647,
+   "massClosure": 0.9877242284371377
+  },
+  {
+   "areaRatio": 7.7,
+   "thrustCoefficient": 1.493199286009327,
+   "wallPressure": 178503.6205206863,
+   "massAveragedPressure": 153099.56776658216,
+   "areaAveragedPressure": 152207.05014598524,
+   "massClosure": 0.9877249131063204
+  },
+  {
+   "areaRatio": 7.75,
+   "thrustCoefficient": 1.4939928037040717,
+   "wallPressure": 177334.0576898284,
+   "massAveragedPressure": 151819.5932810847,
+   "areaAveragedPressure": 150911.69109983338,
+   "massClosure": 0.987878983342097
+  },
+  {
+   "areaRatio": 7.8,
+   "thrustCoefficient": 1.494880349492609,
+   "wallPressure": 176194.70095895126,
+   "massAveragedPressure": 150516.88229756002,
+   "areaAveragedPressure": 149583.4081430225,
+   "massClosure": 0.9879449813737369
+  },
+  {
+   "areaRatio": 7.85,
+   "thrustCoefficient": 1.4952935980656936,
+   "wallPressure": 175079.61081369148,
+   "massAveragedPressure": 149237.51751039116,
+   "areaAveragedPressure": 148278.66344258914,
+   "massClosure": 0.9878488917361686
+  },
+  {
+   "areaRatio": 7.9,
+   "thrustCoefficient": 1.4957160176453914,
+   "wallPressure": 173974.7951600055,
+   "massAveragedPressure": 147981.5817917106,
+   "areaAveragedPressure": 146997.07160702476,
+   "massClosure": 0.9877670833794234
+  },
+  {
+   "areaRatio": 7.95,
+   "thrustCoefficient": 1.4961282423402693,
+   "wallPressure": 172880.11955183634,
+   "massAveragedPressure": 146747.4521744983,
+   "areaAveragedPressure": 145736.58649198557,
+   "massClosure": 0.9876888011016588
+  },
+  {
+   "areaRatio": 8.0,
+   "thrustCoefficient": 1.4965726778782706,
+   "wallPressure": 171795.45193870392,
+   "massAveragedPressure": 145536.6747600854,
+   "areaAveragedPressure": 144499.98982695676,
+   "massClosure": 0.9876372052949755
+  },
+  {
+   "areaRatio": 8.05,
+   "thrustCoefficient": 1.497254260995017,
+   "wallPressure": 170720.66261029866,
+   "massAveragedPressure": 144362.07607547316,
+   "areaAveragedPressure": 143305.64190449312,
+   "massClosure": 0.9877331181530693
+  },
+  {
+   "areaRatio": 8.1,
+   "thrustCoefficient": 1.4977389644431183,
+   "wallPressure": 169655.6241426642,
+   "massAveragedPressure": 143193.93608627384,
+   "areaAveragedPressure": 142112.58643423853,
+   "massClosure": 0.9877205574098978
+  },
+  {
+   "areaRatio": 8.15,
+   "thrustCoefficient": 1.4982227625747617,
+   "wallPressure": 168600.21134592092,
+   "massAveragedPressure": 142045.96757214356,
+   "areaAveragedPressure": 140939.2601044483,
+   "massClosure": 0.9877157547522604
+  },
+  {
+   "areaRatio": 8.2,
+   "thrustCoefficient": 1.4986928670093895,
+   "wallPressure": 167554.30121347326,
+   "massAveragedPressure": 140917.2205704003,
+   "areaAveragedPressure": 139784.2882387063,
+   "massClosure": 0.9877115786563901
+  },
+  {
+   "areaRatio": 8.25,
+   "thrustCoefficient": 1.4991554355130736,
+   "wallPressure": 166517.7728726527,
+   "massAveragedPressure": 139807.51385729798,
+   "areaAveragedPressure": 138647.6806665529,
+   "massClosure": 0.987711247293159
+  },
+  {
+   "areaRatio": 8.3,
+   "thrustCoefficient": 1.4996186114134227,
+   "wallPressure": 165490.50753674473,
+   "massAveragedPressure": 138716.39644344675,
+   "areaAveragedPressure": 137529.61456099007,
+   "massClosure": 0.9877193040673009
+  },
+  {
+   "areaRatio": 8.35,
+   "thrustCoefficient": 1.5000958602417602,
+   "wallPressure": 164472.38845835676,
+   "massAveragedPressure": 137643.93893516983,
+   "areaAveragedPressure": 136430.5742949505,
+   "massClosure": 0.9877429422802806
+  },
+  {
+   "areaRatio": 8.4,
+   "thrustCoefficient": 1.5007030920738507,
+   "wallPressure": 163485.98133407327,
+   "massAveragedPressure": 136582.79698468652,
+   "areaAveragedPressure": 135346.2813888201,
+   "massClosure": 0.98781294126097
+  },
+  {
+   "areaRatio": 8.45,
+   "thrustCoefficient": 1.501010478837015,
+   "wallPressure": 162512.76171133696,
+   "massAveragedPressure": 135523.04542269075,
+   "areaAveragedPressure": 134258.75431444918,
+   "massClosure": 0.9877292196493682
+  },
+  {
+   "areaRatio": 8.5,
+   "thrustCoefficient": 1.501329970529971,
+   "wallPressure": 161547.95824196443,
+   "massAveragedPressure": 134480.96917104642,
+   "areaAveragedPressure": 133189.28770119572,
+   "massClosure": 0.9876599061854558
+  },
+  {
+   "areaRatio": 8.55,
+   "thrustCoefficient": 1.5016894874207807,
+   "wallPressure": 160591.46782830785,
+   "massAveragedPressure": 133456.69562345106,
+   "areaAveragedPressure": 132139.2129137507,
+   "massClosure": 0.9876199061277464
+  },
+  {
+   "areaRatio": 8.6,
+   "thrustCoefficient": 1.5020399375015534,
+   "wallPressure": 159643.18908888323,
+   "massAveragedPressure": 132449.08660724162,
+   "areaAveragedPressure": 131105.2327494943,
+   "massClosure": 0.987582952787636
+  },
+  {
+   "areaRatio": 8.65,
+   "thrustCoefficient": 1.502392018410071,
+   "wallPressure": 158703.02232133513,
+   "massAveragedPressure": 131458.0827175275,
+   "areaAveragedPressure": 130087.64496497126,
+   "massClosure": 0.9875545526951583
+  },
+  {
+   "areaRatio": 8.7,
+   "thrustCoefficient": 1.502935541795016,
+   "wallPressure": 157770.8694663952,
+   "massAveragedPressure": 130493.6794428333,
+   "areaAveragedPressure": 129101.62935439617,
+   "massClosure": 0.9876452543133184
+  },
+  {
+   "areaRatio": 8.75,
+   "thrustCoefficient": 1.503555823909953,
+   "wallPressure": 156852.3345857684,
+   "massAveragedPressure": 129521.44500095744,
+   "areaAveragedPressure": 128100.52850833224,
+   "massClosure": 0.9876860893797915
+  },
+  {
+   "areaRatio": 8.8,
+   "thrustCoefficient": 1.5038180659266436,
+   "wallPressure": 155958.15623247594,
+   "massAveragedPressure": 128557.42852229082,
+   "areaAveragedPressure": 127106.8589235251,
+   "massClosure": 0.9875838022417736
+  },
+  {
+   "areaRatio": 8.85,
+   "thrustCoefficient": 1.5040861161346408,
+   "wallPressure": 155071.39792576034,
+   "massAveragedPressure": 127608.90512164995,
+   "areaAveragedPressure": 126128.87387946193,
+   "massClosure": 0.9874923692664629
+  },
+  {
+   "areaRatio": 8.9,
+   "thrustCoefficient": 1.5043753244633002,
+   "wallPressure": 154191.97233336678,
+   "massAveragedPressure": 126676.11735389075,
+   "areaAveragedPressure": 125167.24408952163,
+   "massClosure": 0.9874200156568689
+  },
+  {
+   "areaRatio": 8.95,
+   "thrustCoefficient": 1.504685642724867,
+   "wallPressure": 153319.79352063956,
+   "massAveragedPressure": 125758.2182888299,
+   "areaAveragedPressure": 124221.52256176155,
+   "massClosure": 0.9873665572114174
+  },
+  {
+   "areaRatio": 9.0,
+   "thrustCoefficient": 1.5050288618403689,
+   "wallPressure": 152454.7769215179,
+   "massAveragedPressure": 124854.4923891562,
+   "areaAveragedPressure": 123291.79432630778,
+   "massClosure": 0.9873376882117918
+  },
+  {
+   "areaRatio": 9.05,
+   "thrustCoefficient": 1.5055546760007097,
+   "wallPressure": 151596.83931028174,
+   "massAveragedPressure": 123973.66437487926,
+   "areaAveragedPressure": 122390.09603048337,
+   "massClosure": 0.9874218728705514
+  },
+  {
+   "areaRatio": 9.1,
+   "thrustCoefficient": 1.5058866354395173,
+   "wallPressure": 150745.89877402113,
+   "massAveragedPressure": 123097.84873098828,
+   "areaAveragedPressure": 121487.41441942983,
+   "massClosure": 0.9874013836499574
+  },
+  {
+   "areaRatio": 9.15,
+   "thrustCoefficient": 1.5062115441563297,
+   "wallPressure": 149901.8746858083,
+   "massAveragedPressure": 122235.43355301721,
+   "areaAveragedPressure": 120597.77197815095,
+   "massClosure": 0.9873841614281126
+  },
+  {
+   "areaRatio": 9.2,
+   "thrustCoefficient": 1.5065309269004266,
+   "wallPressure": 149064.68767855037,
+   "massAveragedPressure": 121386.36342824501,
+   "areaAveragedPressure": 119721.08918253315,
+   "massClosure": 0.9873711494849116
+  },
+  {
+   "areaRatio": 9.25,
+   "thrustCoefficient": 1.5068594947111837,
+   "wallPressure": 148234.25961950066,
+   "massAveragedPressure": 120550.4530820404,
+   "areaAveragedPressure": 118857.81154497131,
+   "massClosure": 0.9873696912604504
+  },
+  {
+   "areaRatio": 9.3,
+   "thrustCoefficient": 1.5071970916940147,
+   "wallPressure": 147410.51358541273,
+   "massAveragedPressure": 119727.21108176578,
+   "areaAveragedPressure": 118007.69634623232,
+   "massClosure": 0.9873799953698051
+  },
+  {
+   "areaRatio": 9.35,
+   "thrustCoefficient": 1.5075351470484257,
+   "wallPressure": 146593.37383831362,
+   "massAveragedPressure": 118916.06046975493,
+   "areaAveragedPressure": 117169.89961321818,
+   "massClosure": 0.9873971520661099
+  },
+  {
+   "areaRatio": 9.4,
+   "thrustCoefficient": 1.508064405739341,
+   "wallPressure": 145782.76580187763,
+   "massAveragedPressure": 118124.25746873053,
+   "areaAveragedPressure": 116357.50959047483,
+   "massClosure": 0.9875298415756931
+  },
+  {
+   "areaRatio": 9.45,
+   "thrustCoefficient": 1.5083744888968524,
+   "wallPressure": 144991.9876189208,
+   "massAveragedPressure": 117320.55793609146,
+   "areaAveragedPressure": 115527.95155589975,
+   "massClosure": 0.9875023139459685
+  },
+  {
+   "areaRatio": 9.5,
+   "thrustCoefficient": 1.5085903473824294,
+   "wallPressure": 144208.87012977176,
+   "massAveragedPressure": 116525.88685427821,
+   "areaAveragedPressure": 114708.7540815525,
+   "massClosure": 0.9874440398616925
+  },
+  {
+   "areaRatio": 9.55,
+   "thrustCoefficient": 1.5088027694229793,
+   "wallPressure": 143431.8749955245,
+   "massAveragedPressure": 115743.16594222121,
+   "areaAveragedPressure": 113901.19077607479,
+   "massClosure": 0.9873907759077399
+  },
+  {
+   "areaRatio": 9.6,
+   "thrustCoefficient": 1.5090260582751323,
+   "wallPressure": 142660.93469019677,
+   "massAveragedPressure": 114972.69196205471,
+   "areaAveragedPressure": 113105.90305079348,
+   "massClosure": 0.9873501354564563
+  },
+  {
+   "areaRatio": 9.65,
+   "thrustCoefficient": 1.509249907628209,
+   "wallPressure": 141895.98269648643,
+   "massAveragedPressure": 114213.8389136623,
+   "areaAveragedPressure": 112322.04157271999,
+   "massClosure": 0.9873165526138673
+  },
+  {
+   "areaRatio": 9.7,
+   "thrustCoefficient": 1.5094697451042798,
+   "wallPressure": 141136.95348627912,
+   "massAveragedPressure": 113466.13863036723,
+   "areaAveragedPressure": 111549.08932358457,
+   "massClosure": 0.9872874601131119
+  },
+  {
+   "areaRatio": 9.75,
+   "thrustCoefficient": 1.5098829375437688,
+   "wallPressure": 140383.78250162338,
+   "massAveragedPressure": 112735.6579481151,
+   "areaAveragedPressure": 110798.38428310252,
+   "massClosure": 0.9873700053819283
+  },
+  {
+   "areaRatio": 9.8,
+   "thrustCoefficient": 1.5102548004854954,
+   "wallPressure": 139649.529961915,
+   "massAveragedPressure": 111988.54533582187,
+   "areaAveragedPressure": 110024.65236130483,
+   "massClosure": 0.9873344662568683
+  },
+  {
+   "areaRatio": 9.85,
+   "thrustCoefficient": 1.5104180441942623,
+   "wallPressure": 138923.23143646718,
+   "massAveragedPressure": 111257.5697760407,
+   "areaAveragedPressure": 109267.62811391556,
+   "massClosure": 0.9872517435752303
+  },
+  {
+   "areaRatio": 9.9,
+   "thrustCoefficient": 1.5105886821915295,
+   "wallPressure": 138202.4085905498,
+   "massAveragedPressure": 110536.70638510003,
+   "areaAveragedPressure": 108521.39218482705,
+   "massClosure": 0.9871793238002285
+  },
+  {
+   "areaRatio": 9.95,
+   "thrustCoefficient": 1.5108036743509727,
+   "wallPressure": 137487.00313286923,
+   "massAveragedPressure": 109825.3511577519,
+   "areaAveragedPressure": 107787.2471707297,
+   "massClosure": 0.9871355907275404
+  },
+  {
+   "areaRatio": 10.0,
+   "thrustCoefficient": 1.5110228444959157,
+   "wallPressure": 136776.9576128826,
+   "massAveragedPressure": 109124.11282967673,
+   "areaAveragedPressure": 107063.40552316378,
+   "massClosure": 0.98710033834342
+  },
+  {
+   "areaRatio": 10.05,
+   "thrustCoefficient": 1.5112393889233215,
+   "wallPressure": 136072.2154051083,
+   "massAveragedPressure": 108433.20500036897,
+   "areaAveragedPressure": 106349.55501828692,
+   "massClosure": 0.9870705026783914
+  },
+  {
+   "areaRatio": 10.1,
+   "thrustCoefficient": 1.51160937658873,
+   "wallPressure": 135372.72069379975,
+   "massAveragedPressure": 107757.38705699437,
+   "areaAveragedPressure": 105655.41670641671,
+   "massClosure": 0.9871347487015524
+  },
+  {
+   "areaRatio": 10.15,
+   "thrustCoefficient": 1.5118178980799328,
+   "wallPressure": 134678.41845797116,
+   "massAveragedPressure": 107086.01593974045,
+   "areaAveragedPressure": 104960.47615964312,
+   "massClosure": 0.9871131087412217
+  },
+  {
+   "areaRatio": 10.2,
+   "thrustCoefficient": 1.5120315433902272,
+   "wallPressure": 133989.25445676883,
+   "massAveragedPressure": 106424.06648894135,
+   "areaAveragedPressure": 104275.10024419185,
+   "massClosure": 0.987099921005723
+  },
+  {
+   "areaRatio": 10.25,
+   "thrustCoefficient": 1.5122374973562465,
+   "wallPressure": 133305.1752151739,
+   "massAveragedPressure": 105771.34959080987,
+   "areaAveragedPressure": 103598.6152746682,
+   "massClosure": 0.9870888945072648
+  },
+  {
+   "areaRatio": 10.3,
+   "thrustCoefficient": 1.512458743401259,
+   "wallPressure": 132626.12801003325,
+   "massAveragedPressure": 105127.69218636263,
+   "areaAveragedPressure": 102931.88022335293,
+   "massClosure": 0.9870917558549288
+  },
+  {
+   "areaRatio": 10.35,
+   "thrustCoefficient": 1.5126898991800375,
+   "wallPressure": 131952.060856403,
+   "massAveragedPressure": 104492.35843137684,
+   "areaAveragedPressure": 102274.24196606498,
+   "massClosure": 0.987105072151286
+  },
+  {
+   "areaRatio": 10.4,
+   "thrustCoefficient": 1.5129388757624838,
+   "wallPressure": 131282.92249420175,
+   "massAveragedPressure": 103864.914531902,
+   "areaAveragedPressure": 101625.78727863393,
+   "massClosure": 0.9871326063533684
+  },
+  {
+   "areaRatio": 10.45,
+   "thrustCoefficient": 1.5133560830921153,
+   "wallPressure": 130618.66237516214,
+   "massAveragedPressure": 103249.03149511926,
+   "areaAveragedPressure": 100995.37204213958,
+   "massClosure": 0.9872596118978427
+  },
+  {
+   "areaRatio": 10.5,
+   "thrustCoefficient": 1.513590505403146,
+   "wallPressure": 129968.2590500836,
+   "massAveragedPressure": 102627.22566599183,
+   "areaAveragedPressure": 100352.9874287777,
+   "massClosure": 0.9872552927604387
+  },
+  {
+   "areaRatio": 10.55,
+   "thrustCoefficient": 1.5136985694824643,
+   "wallPressure": 129326.14734587897,
+   "massAveragedPressure": 102009.28155418063,
+   "areaAveragedPressure": 99714.8660271223,
+   "massClosure": 0.9871981613986804
+  },
+  {
+   "areaRatio": 10.6,
+   "thrustCoefficient": 1.51380361817199,
+   "wallPressure": 128688.61574800526,
+   "massAveragedPressure": 101399.99416755931,
+   "areaAveragedPressure": 99085.03161973276,
+   "massClosure": 0.9871454798628913
+  },
+  {
+   "areaRatio": 10.65,
+   "thrustCoefficient": 1.5139160871182895,
+   "wallPressure": 128055.61830901277,
+   "massAveragedPressure": 100799.21988402586,
+   "areaAveragedPressure": 98463.80242145751,
+   "massClosure": 0.9871025964133067
+  },
+  {
+   "areaRatio": 10.7,
+   "thrustCoefficient": 1.5140307655910592,
+   "wallPressure": 127427.10970409824,
+   "massAveragedPressure": 100207.00200069672,
+   "areaAveragedPressure": 97850.87276443884,
+   "massClosure": 0.9870669648686011
+  },
+  {
+   "areaRatio": 10.75,
+   "thrustCoefficient": 1.5141516555659054,
+   "wallPressure": 126803.04522020696,
+   "massAveragedPressure": 99622.81190454276,
+   "areaAveragedPressure": 97246.09745677636,
+   "massClosure": 0.9870400699681263
+  },
+  {
+   "areaRatio": 10.8,
+   "thrustCoefficient": 1.5143112650452775,
+   "wallPressure": 126183.38074537338,
+   "massAveragedPressure": 99046.08287908984,
+   "areaAveragedPressure": 96649.4469517342,
+   "massClosure": 0.9870338173227463
+  },
+  {
+   "areaRatio": 10.85,
+   "thrustCoefficient": 1.514750183673086,
+   "wallPressure": 125572.59505453653,
+   "massAveragedPressure": 98470.00293260172,
+   "areaAveragedPressure": 96056.98181621438,
+   "massClosure": 0.9871171086106182
+  },
+  {
+   "areaRatio": 10.9,
+   "thrustCoefficient": 1.5148220383693085,
+   "wallPressure": 124972.47127392802,
+   "massAveragedPressure": 97895.55350883432,
+   "areaAveragedPressure": 95462.32222316756,
+   "massClosure": 0.987042218753357
+  },
+  {
+   "areaRatio": 10.95,
+   "thrustCoefficient": 1.5149183706523577,
+   "wallPressure": 124376.49238156412,
+   "massAveragedPressure": 97326.76513545768,
+   "areaAveragedPressure": 94875.5788755478,
+   "massClosure": 0.9869838318496162
+  },
+  {
+   "areaRatio": 11.0,
+   "thrustCoefficient": 1.515023542738027,
+   "wallPressure": 123784.61809295676,
+   "massAveragedPressure": 96765.51314390378,
+   "areaAveragedPressure": 94296.64916534084,
+   "massClosure": 0.9869356080751125
+  },
+  {
+   "areaRatio": 11.05,
+   "thrustCoefficient": 1.5151322211796272,
+   "wallPressure": 123196.8086525945,
+   "massAveragedPressure": 96212.13440054106,
+   "areaAveragedPressure": 93725.37260201498,
+   "massClosure": 0.9868953415608244
+  },
+  {
+   "areaRatio": 11.1,
+   "thrustCoefficient": 1.5152460765946718,
+   "wallPressure": 122613.02482497228,
+   "massAveragedPressure": 95666.1703092284,
+   "areaAveragedPressure": 93161.5163048932,
+   "massClosure": 0.9868632413056685
+  },
+  {
+   "areaRatio": 11.15,
+   "thrustCoefficient": 1.5153615942914915,
+   "wallPressure": 122033.22788580805,
+   "massAveragedPressure": 95127.7664330242,
+   "areaAveragedPressure": 92604.95857546022,
+   "massClosure": 0.986837984937724
+  },
+  {
+   "areaRatio": 11.2,
+   "thrustCoefficient": 1.5156165333658715,
+   "wallPressure": 121457.37961344584,
+   "massAveragedPressure": 94599.28733684853,
+   "areaAveragedPressure": 92062.79920340059,
+   "massClosure": 0.9868960892559895
+  },
+  {
+   "areaRatio": 11.25,
+   "thrustCoefficient": 1.5157328754459525,
+   "wallPressure": 120885.44228043534,
+   "massAveragedPressure": 94074.6674605691,
+   "areaAveragedPressure": 91519.86843881787,
+   "massClosure": 0.9868815143452465
+  },
+  {
+   "areaRatio": 11.3,
+   "thrustCoefficient": 1.515848333680725,
+   "wallPressure": 120317.37864528809,
+   "massAveragedPressure": 93556.83281483682,
+   "areaAveragedPressure": 90983.61602492846,
+   "massClosure": 0.9868718542079118
+  },
+  {
+   "areaRatio": 11.35,
+   "thrustCoefficient": 1.515971419784926,
+   "wallPressure": 119753.1519444034,
+   "massAveragedPressure": 93045.33139877574,
+   "areaAveragedPressure": 90454.12094059163,
+   "massClosure": 0.9868709079989524
+  },
+  {
+   "areaRatio": 11.4,
+   "thrustCoefficient": 1.5161117300115745,
+   "wallPressure": 119192.7258841601,
+   "massAveragedPressure": 92539.378034366,
+   "areaAveragedPressure": 89931.43499627293,
+   "massClosure": 0.9868829354334896
+  },
+  {
+   "areaRatio": 11.45,
+   "thrustCoefficient": 1.5162669959213728,
+   "wallPressure": 118636.06463317134,
+   "massAveragedPressure": 92038.04908766098,
+   "areaAveragedPressure": 89415.14219146984,
+   "massClosure": 0.986906299737438
+  },
+  {
+   "areaRatio": 11.5,
+   "thrustCoefficient": 1.516435239851583,
+   "wallPressure": 118083.13281469663,
+   "massAveragedPressure": 91542.32743735544,
+   "areaAveragedPressure": 88905.36807931992,
+   "massClosure": 0.9869406573521824
+  },
+  {
+   "areaRatio": 11.55,
+   "thrustCoefficient": 1.5166268010651807,
+   "wallPressure": 117537.38860148082,
+   "massAveragedPressure": 91049.35017748724,
+   "areaAveragedPressure": 88397.34115728503,
+   "massClosure": 0.986969571121568
+  },
+  {
+   "areaRatio": 11.6,
+   "thrustCoefficient": 1.5167772268165198,
+   "wallPressure": 117001.61234843916,
+   "massAveragedPressure": 90557.02593435903,
+   "areaAveragedPressure": 87894.2885433429,
+   "massClosure": 0.9869858036501418
+  },
+  {
+   "areaRatio": 11.65,
+   "thrustCoefficient": 1.5167978547852166,
+   "wallPressure": 116469.35358184083,
+   "massAveragedPressure": 90068.47033556858,
+   "areaAveragedPressure": 87390.58671357074,
+   "massClosure": 0.986934152962961
+  },
+  {
+   "areaRatio": 11.7,
+   "thrustCoefficient": 1.5168207041389954,
+   "wallPressure": 115940.57991493763,
+   "massAveragedPressure": 89586.36339556932,
+   "areaAveragedPressure": 86893.11228218635,
+   "massClosure": 0.9868890799821148
+  },
+  {
+   "areaRatio": 11.75,
+   "thrustCoefficient": 1.5168440265492864,
+   "wallPressure": 115415.25936281939,
+   "massAveragedPressure": 89110.66616900542,
+   "areaAveragedPressure": 86401.71085113705,
+   "massClosure": 0.9868496685251475
+  },
+  {
+   "areaRatio": 11.8,
+   "thrustCoefficient": 1.5168768038375757,
+   "wallPressure": 114893.36033598438,
+   "massAveragedPressure": 88640.81662820656,
+   "areaAveragedPressure": 85916.43629897654,
+   "massClosure": 0.9868197723504714
+  },
+  {
+   "areaRatio": 11.85,
+   "thrustCoefficient": 1.5169251635702716,
+   "wallPressure": 114374.85163403822,
+   "massAveragedPressure": 88176.55080675946,
+   "areaAveragedPressure": 85436.99833642862,
+   "massClosure": 0.9868006993597545
+  },
+  {
+   "areaRatio": 11.9,
+   "thrustCoefficient": 1.5170030048268692,
+   "wallPressure": 113859.7024395166,
+   "massAveragedPressure": 87717.73818738037,
+   "areaAveragedPressure": 84963.52882754592,
+   "massClosure": 0.9867981717760526
+  },
+  {
+   "areaRatio": 11.95,
+   "thrustCoefficient": 1.517780434040471,
+   "wallPressure": 113348.04564372693,
+   "massAveragedPressure": 87272.0957017832,
+   "areaAveragedPressure": 84496.8203050025,
+   "massClosure": 0.9870399073785373
+  },
+  {
+   "areaRatio": 12.0,
+   "thrustCoefficient": 1.5174003193463854,
+   "wallPressure": 112847.26279073503,
+   "massAveragedPressure": 86801.70586556055,
+   "areaAveragedPressure": 84024.4725732086,
+   "massClosure": 0.9868547215686921
+  },
+  {
+   "areaRatio": 12.05,
+   "thrustCoefficient": 1.5174149825739205,
+   "wallPressure": 112349.66633625301,
+   "massAveragedPressure": 86346.81085778282,
+   "areaAveragedPressure": 83557.10354222044,
+   "massClosure": 0.9868017082233255
+  },
+  {
+   "areaRatio": 12.1,
+   "thrustCoefficient": 1.51742996423781,
+   "wallPressure": 111855.22785617947,
+   "massAveragedPressure": 85897.84112900813,
+   "areaAveragedPressure": 83095.32429487506,
+   "massClosure": 0.9867542406686552
+  },
+  {
+   "areaRatio": 12.15,
+   "thrustCoefficient": 1.5174488733050464,
+   "wallPressure": 111363.91926795455,
+   "massAveragedPressure": 85454.5060766957,
+   "areaAveragedPressure": 82639.09355104064,
+   "massClosure": 0.9867137824975213
+  },
+  {
+   "areaRatio": 12.2,
+   "thrustCoefficient": 1.517473605911933,
+   "wallPressure": 110875.71282527008,
+   "massAveragedPressure": 85017.03222746584,
+   "areaAveragedPressure": 82188.50846703244,
+   "massClosure": 0.9866816347867339
+  },
+  {
+   "areaRatio": 12.25,
+   "thrustCoefficient": 1.5175034614371408,
+   "wallPressure": 110390.58111288106,
+   "massAveragedPressure": 84584.78704013169,
+   "areaAveragedPressure": 81743.23627332831,
+   "massClosure": 0.9866566061341739
+  },
+  {
+   "areaRatio": 12.3,
+   "thrustCoefficient": 1.5175409060208065,
+   "wallPressure": 109908.4970415164,
+   "massAveragedPressure": 84157.86615751435,
+   "areaAveragedPressure": 81303.34043839332,
+   "massClosure": 0.986640074215922
+  },
+  {
+   "areaRatio": 12.35,
+   "thrustCoefficient": 1.517582943659385,
+   "wallPressure": 109429.43384288585,
+   "massAveragedPressure": 83736.21456627341,
+   "areaAveragedPressure": 80868.67472268436,
+   "massClosure": 0.9866307206250247
+  },
+  {
+   "areaRatio": 12.4,
+   "thrustCoefficient": 1.51762806604247,
+   "wallPressure": 108953.36506478266,
+   "massAveragedPressure": 83319.73310748888,
+   "areaAveragedPressure": 80439.1102915983,
+   "massClosure": 0.9866277921261899
+  },
+  {
+   "areaRatio": 12.45,
+   "thrustCoefficient": 1.5177954356065901,
+   "wallPressure": 108480.26456627795,
+   "massAveragedPressure": 82908.70195364811,
+   "areaAveragedPressure": 80019.61615082475,
+   "massClosure": 0.986695891253354
+  },
+  {
+   "areaRatio": 12.5,
+   "thrustCoefficient": 1.517854605877818,
+   "wallPressure": 108010.10651300596,
+   "massAveragedPressure": 82499.54464963856,
+   "areaAveragedPressure": 79599.32273862185,
+   "massClosure": 0.9867064390972449
+  },
+  {
+   "areaRatio": 12.55,
+   "thrustCoefficient": 1.5179269021354922,
+   "wallPressure": 107542.8653725368,
+   "massAveragedPressure": 82093.27221233443,
+   "areaAveragedPressure": 79183.64197982338,
+   "massClosure": 0.9867264699628906
+  },
+  {
+   "areaRatio": 12.6,
+   "thrustCoefficient": 1.5180064876809662,
+   "wallPressure": 107078.51590983737,
+   "massAveragedPressure": 81691.95879898343,
+   "areaAveragedPressure": 78772.8878833162,
+   "massClosure": 0.9867546555616956
+  },
+  {
+   "areaRatio": 12.65,
+   "thrustCoefficient": 1.5180657169583094,
+   "wallPressure": 106622.03515564125,
+   "massAveragedPressure": 81289.91094227758,
+   "areaAveragedPressure": 78360.40389396128,
+   "massClosure": 0.9867507460368196
+  },
+  {
+   "areaRatio": 12.7,
+   "thrustCoefficient": 1.5180105731318854,
+   "wallPressure": 106171.37833806397,
+   "massAveragedPressure": 80888.56644148735,
+   "areaAveragedPressure": 77948.9058705182,
+   "massClosure": 0.9866961971113931
+  },
+  {
+   "areaRatio": 12.75,
+   "thrustCoefficient": 1.5179621251298627,
+   "wallPressure": 105723.45731854024,
+   "massAveragedPressure": 80491.87328522092,
+   "areaAveragedPressure": 77542.12797422992,
+   "massClosure": 0.9866491480149622
+  },
+  {
+   "areaRatio": 12.8,
+   "thrustCoefficient": 1.5179162051872206,
+   "wallPressure": 105278.24887655702,
+   "massAveragedPressure": 80100.34807552202,
+   "areaAveragedPressure": 77140.12745831495,
+   "massClosure": 0.9866086043265954
+  },
+  {
+   "areaRatio": 12.85,
+   "thrustCoefficient": 1.5179831835537574,
+   "wallPressure": 104835.73005651232,
+   "massAveragedPressure": 79714.97097567619,
+   "areaAveragedPressure": 76747.6222866105,
+   "massClosure": 0.9866354455942643
+  },
+  {
+   "areaRatio": 12.9,
+   "thrustCoefficient": 1.5179412738783782,
+   "wallPressure": 104395.87816382524,
+   "massAveragedPressure": 79332.66443190153,
+   "areaAveragedPressure": 76354.51491074033,
+   "massClosure": 0.9866056442903287
+  },
+  {
+   "areaRatio": 12.95,
+   "thrustCoefficient": 1.5179101901650511,
+   "wallPressure": 103958.67076111586,
+   "massAveragedPressure": 78954.39947082454,
+   "areaAveragedPressure": 75965.7281062991,
+   "massClosure": 0.9865841603947916
+  },
+  {
+   "areaRatio": 13.0,
+   "thrustCoefficient": 1.5179077847094642,
+   "wallPressure": 103524.08566445472,
+   "massAveragedPressure": 78580.07006670516,
+   "areaAveragedPressure": 75581.39881740822,
+   "massClosure": 0.9865780221169159
+  },
+  {
+   "areaRatio": 13.05,
+   "thrustCoefficient": 1.5179254471082482,
+   "wallPressure": 103092.10093968041,
+   "massAveragedPressure": 78208.67174070075,
+   "areaAveragedPressure": 75201.25973214825,
+   "massClosure": 0.986583737379477
+  },
+  {
+   "areaRatio": 13.1,
+   "thrustCoefficient": 1.5179656649338968,
+   "wallPressure": 102662.69489878239,
+   "massAveragedPressure": 77839.5610659204,
+   "areaAveragedPressure": 74825.16475957393,
+   "massClosure": 0.9866019741870315
+  },
+  {
+   "areaRatio": 13.15,
+   "thrustCoefficient": 1.5180978953428614,
+   "wallPressure": 102239.89408640494,
+   "massAveragedPressure": 77467.70275530999,
+   "areaAveragedPressure": 74444.22355800436,
+   "massClosure": 0.9866106803241734
+  },
+  {
+   "areaRatio": 13.2,
+   "thrustCoefficient": 1.5180430465461223,
+   "wallPressure": 101821.03666929281,
+   "massAveragedPressure": 77099.47473043378,
+   "areaAveragedPressure": 74068.00611586531,
+   "massClosure": 0.9865646889830536
+  },
+  {
+   "areaRatio": 13.25,
+   "thrustCoefficient": 1.517992535088933,
+   "wallPressure": 101404.64017453362,
+   "massAveragedPressure": 76735.61543038972,
+   "areaAveragedPressure": 73696.03434135394,
+   "massClosure": 0.9865254481937771
+  },
+  {
+   "areaRatio": 13.3,
+   "thrustCoefficient": 1.518047953953143,
+   "wallPressure": 100990.68441867894,
+   "massAveragedPressure": 76377.44196692751,
+   "areaAveragedPressure": 73332.669121645,
+   "massClosure": 0.986549786831928
+  },
+  {
+   "areaRatio": 13.35,
+   "thrustCoefficient": 1.5180017312045908,
+   "wallPressure": 100579.14944050067,
+   "massAveragedPressure": 76022.25741852037,
+   "areaAveragedPressure": 72968.84506680687,
+   "massClosure": 0.9865216379167806
+  },
+  {
+   "areaRatio": 13.4,
+   "thrustCoefficient": 1.5179609752774952,
+   "wallPressure": 100170.01549784285,
+   "massAveragedPressure": 75671.04425232638,
+   "areaAveragedPressure": 72609.01666974198,
+   "massClosure": 0.9865001970863838
+  },
+  {
+   "areaRatio": 13.45,
+   "thrustCoefficient": 1.5179277762009344,
+   "wallPressure": 99763.2630645311,
+   "massAveragedPressure": 75323.88790850823,
+   "areaAveragedPressure": 72253.26888755489,
+   "massClosure": 0.9864868318243232
+  },
+  {
+   "areaRatio": 13.5,
+   "thrustCoefficient": 1.5178995197788552,
+   "wallPressure": 99358.87282733434,
+   "massAveragedPressure": 74980.70249626698,
+   "areaAveragedPressure": 71901.4386745891,
+   "massClosure": 0.9864800854896554
+  },
+  {
+   "areaRatio": 13.55,
+   "thrustCoefficient": 1.517877710103471,
+   "wallPressure": 98956.82568297996,
+   "massAveragedPressure": 74640.84290675273,
+   "areaAveragedPressure": 71553.35471747615,
+   "massClosure": 0.9864801282048271
+  },
+  {
+   "areaRatio": 13.6,
+   "thrustCoefficient": 1.5178663626896103,
+   "wallPressure": 98557.10273522093,
+   "massAveragedPressure": 74303.43057753574,
+   "areaAveragedPressure": 71208.86116907813,
+   "massClosure": 0.9864881507013442
+  },
+  {
+   "areaRatio": 13.65,
+   "thrustCoefficient": 1.5178681464129975,
+   "wallPressure": 98159.68529195341,
+   "massAveragedPressure": 73967.37160486549,
+   "areaAveragedPressure": 70867.6462433004,
+   "massClosure": 0.9865040984367819
+  },
+  {
+   "areaRatio": 13.7,
+   "thrustCoefficient": 1.517874264689,
+   "wallPressure": 97764.55486238294,
+   "massAveragedPressure": 73635.1432302237,
+   "areaAveragedPressure": 70530.1539588291,
+   "massClosure": 0.9865263971114843
+  },
+  {
+   "areaRatio": 13.75,
+   "thrustCoefficient": 1.5179727084249395,
+   "wallPressure": 97374.7642529422,
+   "massAveragedPressure": 73303.95330375372,
+   "areaAveragedPressure": 70196.11656938451,
+   "massClosure": 0.9865839345444022
+  },
+  {
+   "areaRatio": 13.8,
+   "thrustCoefficient": 1.5178450705760258,
+   "wallPressure": 96990.72240528748,
+   "massAveragedPressure": 72970.95808237176,
+   "areaAveragedPressure": 69857.07801380819,
+   "massClosure": 0.9865250826300285
+  },
+  {
+   "areaRatio": 13.85,
+   "thrustCoefficient": 1.5177238126681245,
+   "wallPressure": 96608.85044871832,
+   "massAveragedPressure": 72641.82426785788,
+   "areaAveragedPressure": 69521.77765016451,
+   "massClosure": 0.986473595072475
+  },
+  {
+   "areaRatio": 13.9,
+   "thrustCoefficient": 1.5176082536950186,
+   "wallPressure": 96229.13129013935,
+   "massAveragedPressure": 72316.37331614958,
+   "areaAveragedPressure": 69190.08625205976,
+   "massClosure": 0.9864288317890697
+  },
+  {
+   "areaRatio": 13.95,
+   "thrustCoefficient": 1.5174985538071142,
+   "wallPressure": 95851.54801701657,
+   "massAveragedPressure": 71994.92541355769,
+   "areaAveragedPressure": 68862.10576703858,
+   "massClosure": 0.9863915019396612
+  },
+  {
+   "areaRatio": 14.0,
+   "thrustCoefficient": 1.517394412783129,
+   "wallPressure": 95476.08389492566,
+   "massAveragedPressure": 71677.0597153765,
+   "areaAveragedPressure": 68537.66162802842,
+   "massClosure": 0.9863609772875613
+  },
+  {
+   "areaRatio": 14.05,
+   "thrustCoefficient": 1.5172960769960269,
+   "wallPressure": 95102.72236514215,
+   "massAveragedPressure": 71362.80667836613,
+   "areaAveragedPressure": 68216.73141893306,
+   "massClosure": 0.9863374054919644
+  },
+  {
+   "areaRatio": 14.1,
+   "thrustCoefficient": 1.517213622325262,
+   "wallPressure": 94731.4470422712,
+   "massAveragedPressure": 71051.40014872243,
+   "areaAveragedPressure": 67899.05592491716,
+   "massClosure": 0.9863232165135086
+  },
+  {
+   "areaRatio": 14.15,
+   "thrustCoefficient": 1.517153719405952,
+   "wallPressure": 94362.24171191762,
+   "massAveragedPressure": 70742.53694787271,
+   "areaAveragedPressure": 67584.57167624036,
+   "massClosure": 0.9863206828759675
+  },
+  {
+   "areaRatio": 14.2,
+   "thrustCoefficient": 1.5172050324061253,
+   "wallPressure": 93995.09032839381,
+   "massAveragedPressure": 70435.58078491654,
+   "areaAveragedPressure": 67276.61661445825,
+   "massClosure": 0.9863792528528084
+  },
+  {
+   "areaRatio": 14.25,
+   "thrustCoefficient": 1.5171735511596183,
+   "wallPressure": 93629.97701246629,
+   "massAveragedPressure": 70130.53476236956,
+   "areaAveragedPressure": 66968.0939261722,
+   "massClosure": 0.9863934589201571
+  },
+  {
+   "areaRatio": 14.3,
+   "thrustCoefficient": 1.517152849878367,
+   "wallPressure": 93266.88604913936,
+   "massAveragedPressure": 69829.30416526078,
+   "areaAveragedPressure": 66662.95202126703,
+   "massClosure": 0.9864163934211694
+  },
+  {
+   "areaRatio": 14.35,
+   "thrustCoefficient": 1.5172302802452418,
+   "wallPressure": 92908.23305910431,
+   "massAveragedPressure": 69527.17887557253,
+   "areaAveragedPressure": 66354.92027777065,
+   "massClosure": 0.9864416423082132
+  },
+  {
+   "areaRatio": 14.4,
+   "thrustCoefficient": 1.5171134239023272,
+   "wallPressure": 92553.00500802146,
+   "massAveragedPressure": 69225.61599558989,
+   "areaAveragedPressure": 66048.96556183796,
+   "massClosure": 0.98640192695693
+  },
+  {
+   "areaRatio": 14.45,
+   "thrustCoefficient": 1.5170021192971315,
+   "wallPressure": 92199.71741376379,
+   "massAveragedPressure": 68927.72440762019,
+   "areaAveragedPressure": 65746.35947975203,
+   "massClosure": 0.9863693965268024
+  },
+  {
+   "areaRatio": 14.5,
+   "thrustCoefficient": 1.5168970181484576,
+   "wallPressure": 91848.35553666788,
+   "massAveragedPressure": 68633.15522875416,
+   "areaAveragedPressure": 65446.98977820686,
+   "massClosure": 0.9863440065604158
+  },
+  {
+   "areaRatio": 14.55,
+   "thrustCoefficient": 1.5167980748022658,
+   "wallPressure": 91498.9047869071,
+   "massAveragedPressure": 68341.75442814268,
+   "areaAveragedPressure": 65150.73727583613,
+   "massClosure": 0.9863252681422642
+  },
+  {
+   "areaRatio": 14.6,
+   "thrustCoefficient": 1.5167048216808137,
+   "wallPressure": 91151.35072253713,
+   "massAveragedPressure": 68053.31593835236,
+   "areaAveragedPressure": 64857.49247488972,
+   "massClosure": 0.9863126776650482
+  },
+  {
+   "areaRatio": 14.65,
+   "thrustCoefficient": 1.5167057993834874,
+   "wallPressure": 90805.67904757214,
+   "massAveragedPressure": 67768.44183049985,
+   "areaAveragedPressure": 64570.53236118307,
+   "massClosure": 0.9863552947494243
+  },
+  {
+   "areaRatio": 14.7,
+   "thrustCoefficient": 1.516619731703728,
+   "wallPressure": 90461.87561009184,
+   "massAveragedPressure": 67485.82435229782,
+   "areaAveragedPressure": 64283.12106641164,
+   "massClosure": 0.9863533214997448
+  },
+  {
+   "areaRatio": 14.75,
+   "thrustCoefficient": 1.5165416740792088,
+   "wallPressure": 90119.92640037995,
+   "massAveragedPressure": 67204.58546747177,
+   "areaAveragedPressure": 63998.28396577654,
+   "massClosure": 0.986357109473625
+  },
+  {
+   "areaRatio": 14.8,
+   "thrustCoefficient": 1.5164753215850135,
+   "wallPressure": 89779.81754909073,
+   "massAveragedPressure": 66924.2051301115,
+   "areaAveragedPressure": 63715.99699184514,
+   "massClosure": 0.9863682127800142
+  },
+  {
+   "areaRatio": 14.85,
+   "thrustCoefficient": 1.516414048377578,
+   "wallPressure": 89441.5353254462,
+   "massAveragedPressure": 66646.80897147454,
+   "areaAveragedPressure": 63436.57673638747,
+   "massClosure": 0.9863852967845606
+  },
+  {
+   "areaRatio": 14.9,
+   "thrustCoefficient": 1.5162932657605526,
+   "wallPressure": 89109.55769921387,
+   "massAveragedPressure": 66366.47851988606,
+   "areaAveragedPressure": 63153.79366061322,
+   "massClosure": 0.9863510118461671
+  },
+  {
+   "areaRatio": 14.95,
+   "thrustCoefficient": 1.5161103351438223,
+   "wallPressure": 88780.34516734851,
+   "massAveragedPressure": 66087.8574731737,
+   "areaAveragedPressure": 62872.714659489444,
+   "massClosure": 0.986294030801927
+  },
+  {
+   "areaRatio": 15.0,
+   "thrustCoefficient": 1.5159345330453227,
+   "wallPressure": 88452.87001112597,
+   "massAveragedPressure": 65812.66093889328,
+   "areaAveragedPressure": 62594.71571503638,
+   "massClosure": 0.9862450440190963
+  },
+  {
+   "areaRatio": 15.05,
+   "thrustCoefficient": 1.5157651121197624,
+   "wallPressure": 88127.11948671103,
+   "massAveragedPressure": 65540.24061176096,
+   "areaAveragedPressure": 62319.489108008645,
+   "massClosure": 0.9862023691963013
+  },
+  {
+   "areaRatio": 15.1,
+   "thrustCoefficient": 1.515600420764498,
+   "wallPressure": 87803.08097530507,
+   "massAveragedPressure": 65270.92191599477,
+   "areaAveragedPressure": 62047.08676238361,
+   "massClosure": 0.9861658270402085
+  },
+  {
+   "areaRatio": 15.15,
+   "thrustCoefficient": 1.5155237144455274,
+   "wallPressure": 87480.74198157204,
+   "massAveragedPressure": 65004.69593184138,
+   "areaAveragedPressure": 61780.28636657042,
+   "massClosure": 0.9861806856945975
+  },
+  {
+   "areaRatio": 15.2,
+   "thrustCoefficient": 1.5153660656762393,
+   "wallPressure": 87160.09013208882,
+   "massAveragedPressure": 64741.295066133374,
+   "areaAveragedPressure": 61513.32814555274,
+   "massClosure": 0.9861551428807118
+  },
+  {
+   "areaRatio": 15.25,
+   "thrustCoefficient": 1.5152152436463637,
+   "wallPressure": 86841.11317381942,
+   "massAveragedPressure": 64480.253432060206,
+   "areaAveragedPressure": 61248.94418709786,
+   "massClosure": 0.9861357503275997
+  },
+  {
+   "areaRatio": 15.3,
+   "thrustCoefficient": 1.5150900191010532,
+   "wallPressure": 86523.79897261354,
+   "massAveragedPressure": 64221.224115202196,
+   "areaAveragedPressure": 60987.07622795365,
+   "massClosure": 0.9861286998515757
+  },
+  {
+   "areaRatio": 15.35,
+   "thrustCoefficient": 1.5149799588065003,
+   "wallPressure": 86208.13551172736,
+   "massAveragedPressure": 63963.296958497434,
+   "areaAveragedPressure": 60727.47078621331,
+   "massClosure": 0.9861296082740098
+  },
+  {
+   "areaRatio": 15.4,
+   "thrustCoefficient": 1.5148847672607844,
+   "wallPressure": 85894.11089036756,
+   "massAveragedPressure": 63706.24126382541,
+   "areaAveragedPressure": 60470.059563820505,
+   "massClosure": 0.9861382078675568
+  },
+  {
+   "areaRatio": 15.45,
+   "thrustCoefficient": 1.5148014803756615,
+   "wallPressure": 85581.71332225701,
+   "massAveragedPressure": 63452.11869832419,
+   "areaAveragedPressure": 60215.31788773342,
+   "massClosure": 0.9861555612324877
+  },
+  {
+   "areaRatio": 15.5,
+   "thrustCoefficient": 1.5147301487171718,
+   "wallPressure": 85270.93113422382,
+   "massAveragedPressure": 63201.127954181735,
+   "areaAveragedPressure": 59963.298263380326,
+   "massClosure": 0.986182097312027
+  },
+  {
+   "areaRatio": 15.55,
+   "thrustCoefficient": 1.5146687905437561,
+   "wallPressure": 84961.75276480976,
+   "massAveragedPressure": 62952.96401850848,
+   "areaAveragedPressure": 59713.79538545556,
+   "massClosure": 0.9862161380265696
+  },
+  {
+   "areaRatio": 15.6,
+   "thrustCoefficient": 1.514672313274105,
+   "wallPressure": 84656.22856727485,
+   "massAveragedPressure": 62703.487970104354,
+   "areaAveragedPressure": 59461.18701446076,
+   "massClosure": 0.9862400908743084
+  },
+  {
+   "areaRatio": 15.65,
+   "thrustCoefficient": 1.5145858286036402,
+   "wallPressure": 84352.92706163897,
+   "massAveragedPressure": 62454.66641713944,
+   "areaAveragedPressure": 59213.02374846344,
+   "massClosure": 0.9862532448720306
+  },
+  {
+   "areaRatio": 15.7,
+   "thrustCoefficient": 1.514424005796958,
+   "wallPressure": 84051.17198108924,
+   "massAveragedPressure": 62208.2125799272,
+   "areaAveragedPressure": 58964.67027344347,
+   "massClosure": 0.986228521663106
+  },
+  {
+   "areaRatio": 15.75,
+   "thrustCoefficient": 1.5142691266299662,
+   "wallPressure": 83750.95240476559,
+   "massAveragedPressure": 61964.47116858687,
+   "areaAveragedPressure": 58718.84589046893,
+   "massClosure": 0.9862108235228937
+  },
+  {
+   "areaRatio": 15.8,
+   "thrustCoefficient": 1.5141206847157314,
+   "wallPressure": 83452.25751469686,
+   "massAveragedPressure": 61722.94533313758,
+   "areaAveragedPressure": 58475.36975893775,
+   "massClosure": 0.9861992390694762
+  },
+  {
+   "areaRatio": 15.85,
+   "thrustCoefficient": 1.5139785705493074,
+   "wallPressure": 83155.07659455923,
+   "massAveragedPressure": 61483.89818776358,
+   "areaAveragedPressure": 58234.2980008718,
+   "massClosure": 0.986194109062962
+  },
+  {
+   "areaRatio": 15.9,
+   "thrustCoefficient": 1.5138425675610845,
+   "wallPressure": 82859.3990284533,
+   "massAveragedPressure": 61246.63828740406,
+   "areaAveragedPressure": 57995.389809430424,
+   "massClosure": 0.9861942806441099
+  },
+  {
+   "areaRatio": 15.95,
+   "thrustCoefficient": 1.5137155307686738,
+   "wallPressure": 82565.21429969823,
+   "massAveragedPressure": 61009.855985557464,
+   "areaAveragedPressure": 57758.39420778225,
+   "massClosure": 0.9861999567635186
+  },
+  {
+   "areaRatio": 16.0,
+   "thrustCoefficient": 1.5135962624757964,
+   "wallPressure": 82272.51198964597,
+   "massAveragedPressure": 60773.93016544573,
+   "areaAveragedPressure": 57523.3733028667,
+   "massClosure": 0.9862110842732469
+  },
+  {
+   "areaRatio": 16.05,
+   "thrustCoefficient": 1.5134328427425388,
+   "wallPressure": 81984.27355710264,
+   "massAveragedPressure": 60536.71925420517,
+   "areaAveragedPressure": 57286.50756733458,
+   "massClosure": 0.9861852693882339
+  },
+  {
+   "areaRatio": 16.1,
+   "thrustCoefficient": 1.5131943778354464,
+   "wallPressure": 81699.10432617631,
+   "massAveragedPressure": 60299.41373162359,
+   "areaAveragedPressure": 57049.61937514164,
+   "massClosure": 0.9861245159627663
+  },
+  {
+   "areaRatio": 16.15,
+   "thrustCoefficient": 1.5130350099962935,
+   "wallPressure": 81415.34810112616,
+   "massAveragedPressure": 60064.68243854372,
+   "areaAveragedPressure": 56817.343614331854,
+   "massClosure": 0.9861098400702532
+  },
+  {
+   "areaRatio": 16.2,
+   "thrustCoefficient": 1.5128059782854801,
+   "wallPressure": 81132.99517863462,
+   "massAveragedPressure": 59832.71076678243,
+   "areaAveragedPressure": 56585.11135302878,
+   "massClosure": 0.9860610765581682
+  },
+  {
+   "areaRatio": 16.25,
+   "thrustCoefficient": 1.5125843843070526,
+   "wallPressure": 80852.03594430457,
+   "massAveragedPressure": 59603.13811976148,
+   "areaAveragedPressure": 56355.17281979505,
+   "massClosure": 0.9860192949630202
+  },
+  {
+   "areaRatio": 16.3,
+   "thrustCoefficient": 1.512370025725824,
+   "wallPressure": 80572.4608716151,
+   "massAveragedPressure": 59376.078573469385,
+   "areaAveragedPressure": 56127.53849905523,
+   "massClosure": 0.9859845905587704
+  },
+  {
+   "areaRatio": 16.35,
+   "thrustCoefficient": 1.5121629487703074,
+   "wallPressure": 80294.2605208926,
+   "massAveragedPressure": 59151.31985580992,
+   "areaAveragedPressure": 55902.132415916494,
+   "massClosure": 0.9859567304577062
+  },
+  {
+   "areaRatio": 16.4,
+   "thrustCoefficient": 1.5119613199398745,
+   "wallPressure": 80017.42553829792,
+   "massAveragedPressure": 58928.77848902488,
+   "areaAveragedPressure": 55678.828473164845,
+   "massClosure": 0.9859343932957942
+  },
+  {
+   "areaRatio": 16.45,
+   "thrustCoefficient": 1.5117658339064026,
+   "wallPressure": 79741.94665482611,
+   "massAveragedPressure": 58708.392417250834,
+   "areaAveragedPressure": 55457.64638572798,
+   "massClosure": 0.9859181598736302
+  },
+  {
+   "areaRatio": 16.5,
+   "thrustCoefficient": 1.511590378337123,
+   "wallPressure": 79467.81468532185,
+   "massAveragedPressure": 58489.42858614257,
+   "areaAveragedPressure": 55238.34668998366,
+   "massClosure": 0.9859114160112449
+  },
+  {
+   "areaRatio": 16.55,
+   "thrustCoefficient": 1.51143020124516,
+   "wallPressure": 79195.02052750887,
+   "massAveragedPressure": 58271.35146587555,
+   "areaAveragedPressure": 55020.8356161434,
+   "massClosure": 0.9859124171518648
+  },
+  {
+   "areaRatio": 16.6,
+   "thrustCoefficient": 1.5112817734930704,
+   "wallPressure": 78923.55516103258,
+   "massAveragedPressure": 58053.625407930514,
+   "areaAveragedPressure": 54804.944439413455,
+   "massClosure": 0.9859192592279898
+  },
+  {
+   "areaRatio": 16.65,
+   "thrustCoefficient": 1.5112129799891827,
+   "wallPressure": 78653.40964651736,
+   "massAveragedPressure": 57838.07595490589,
+   "areaAveragedPressure": 54593.14946772939,
+   "massClosure": 0.9859708819785816
+  },
+  {
+   "areaRatio": 16.7,
+   "thrustCoefficient": 1.5110811530533437,
+   "wallPressure": 78384.57512463606,
+   "massAveragedPressure": 57624.88810294083,
+   "areaAveragedPressure": 54381.223125152384,
+   "massClosure": 0.9859903532645948
+  },
+  {
+   "areaRatio": 16.75,
+   "thrustCoefficient": 1.5109623217023527,
+   "wallPressure": 78117.04281519356,
+   "massAveragedPressure": 57414.257073450884,
+   "areaAveragedPressure": 54171.49539493773,
+   "massClosure": 0.9860192278292983
+  },
+  {
+   "areaRatio": 16.8,
+   "thrustCoefficient": 1.5108544696021335,
+   "wallPressure": 77850.80401622289,
+   "massAveragedPressure": 57205.8680233797,
+   "areaAveragedPressure": 53963.78340634496,
+   "massClosure": 0.9860558416956781
+  },
+  {
+   "areaRatio": 16.85,
+   "thrustCoefficient": 1.510857536180611,
+   "wallPressure": 77586.23349879793,
+   "massAveragedPressure": 56999.75250523333,
+   "areaAveragedPressure": 53756.67511525596,
+   "massClosure": 0.9861218624582558
+  },
+  {
+   "areaRatio": 16.9,
+   "thrustCoefficient": 1.5106502796840175,
+   "wallPressure": 77324.41930899839,
+   "massAveragedPressure": 56790.262847357,
+   "areaAveragedPressure": 53547.664797784644,
+   "massClosure": 0.9860986852499365
+  },
+  {
+   "areaRatio": 16.95,
+   "thrustCoefficient": 1.5104465623707841,
+   "wallPressure": 77063.85785754386,
+   "massAveragedPressure": 56582.600263914035,
+   "areaAveragedPressure": 53340.45138397076,
+   "massClosure": 0.9860796270159689
+  },
+  {
+   "areaRatio": 17.0,
+   "thrustCoefficient": 1.5102496329908308,
+   "wallPressure": 76804.5408722911,
+   "massAveragedPressure": 56377.217249560854,
+   "areaAveragedPressure": 53135.284388565866,
+   "massClosure": 0.9860674701207158
+  },
+  {
+   "areaRatio": 17.05,
+   "thrustCoefficient": 1.510058076162585,
+   "wallPressure": 76546.46015375592,
+   "massAveragedPressure": 56173.52960900511,
+   "areaAveragedPressure": 52931.92552182452,
+   "massClosure": 0.9860604769324914
+  },
+  {
+   "areaRatio": 17.1,
+   "thrustCoefficient": 1.5098719877796207,
+   "wallPressure": 76289.6075742977,
+   "massAveragedPressure": 55971.71246185192,
+   "areaAveragedPressure": 52730.41222168036,
+   "massClosure": 0.9860589580544578
+  },
+  {
+   "areaRatio": 17.15,
+   "thrustCoefficient": 1.5096918978455138,
+   "wallPressure": 76033.97507731475,
+   "massAveragedPressure": 55770.82800472657,
+   "areaAveragedPressure": 52530.51361369772,
+   "massClosure": 0.9860620980966526
+  },
+  {
+   "areaRatio": 17.2,
+   "thrustCoefficient": 1.5095824404545994,
+   "wallPressure": 75779.55467645047,
+   "massAveragedPressure": 55569.35040279173,
+   "areaAveragedPressure": 52333.66324263038,
+   "massClosure": 0.9861028043976519
+  },
+  {
+   "areaRatio": 17.25,
+   "thrustCoefficient": 1.5093204452059266,
+   "wallPressure": 75529.98659024207,
+   "massAveragedPressure": 55364.420157399865,
+   "areaAveragedPressure": 52131.41493485315,
+   "massClosure": 0.9860461920581542
+  },
+  {
+   "areaRatio": 17.3,
+   "thrustCoefficient": 1.509033675675543,
+   "wallPressure": 75281.86589479278,
+   "massAveragedPressure": 55161.352374335875,
+   "areaAveragedPressure": 51930.847097553815,
+   "massClosure": 0.9859842600110533
+  },
+  {
+   "areaRatio": 17.35,
+   "thrustCoefficient": 1.508755114836372,
+   "wallPressure": 75034.90275884232,
+   "massAveragedPressure": 54960.560102788324,
+   "areaAveragedPressure": 51732.27438563705,
+   "massClosure": 0.9859298834246444
+  },
+  {
+   "areaRatio": 17.4,
+   "thrustCoefficient": 1.5084836631581349,
+   "wallPressure": 74789.08972130074,
+   "massAveragedPressure": 54761.75618280111,
+   "areaAveragedPressure": 51535.5631316088,
+   "massClosure": 0.985882006018442
+  },
+  {
+   "areaRatio": 17.45,
+   "thrustCoefficient": 1.5082180497490358,
+   "wallPressure": 74544.41938509114,
+   "massAveragedPressure": 54565.1450845796,
+   "areaAveragedPressure": 51340.72113856298,
+   "massClosure": 0.9858402706624716
+  },
+  {
+   "areaRatio": 17.5,
+   "thrustCoefficient": 1.5079568804051346,
+   "wallPressure": 74300.88441644673,
+   "massAveragedPressure": 54370.39008110479,
+   "areaAveragedPressure": 51147.58928786154,
+   "massClosure": 0.9858033320105987
+  },
+  {
+   "areaRatio": 17.55,
+   "thrustCoefficient": 1.5077034040569293,
+   "wallPressure": 74058.47754421941,
+   "massAveragedPressure": 54177.81939744095,
+   "areaAveragedPressure": 50956.367820119034,
+   "massClosure": 0.9857737256807398
+  },
+  {
+   "areaRatio": 17.6,
+   "thrustCoefficient": 1.5074559466885207,
+   "wallPressure": 73817.19155919456,
+   "massAveragedPressure": 53987.042871393685,
+   "areaAveragedPressure": 50766.87129809283,
+   "massClosure": 0.9857498407682174
+  },
+  {
+   "areaRatio": 17.65,
+   "thrustCoefficient": 1.5072141917041133,
+   "wallPressure": 73577.01931341828,
+   "massAveragedPressure": 53798.18285001309,
+   "areaAveragedPressure": 50579.10780948817,
+   "massClosure": 0.9857316652270129
+  },
+  {
+   "areaRatio": 17.7,
+   "thrustCoefficient": 1.5069785981532795,
+   "wallPressure": 73337.95371953136,
+   "massAveragedPressure": 53610.98156534361,
+   "areaAveragedPressure": 50393.00279615185,
+   "massClosure": 0.9857190605052768
+  },
+  {
+   "areaRatio": 17.75,
+   "thrustCoefficient": 1.5068255320190718,
+   "wallPressure": 73099.98775011273,
+   "massAveragedPressure": 53424.54832683043,
+   "areaAveragedPressure": 50209.92052371787,
+   "massClosure": 0.9857481268848567
+  },
+  {
+   "areaRatio": 17.8,
+   "thrustCoefficient": 1.5066202046327233,
+   "wallPressure": 72863.11443703285,
+   "massAveragedPressure": 53238.05599252879,
+   "areaAveragedPressure": 50026.30453476523,
+   "massClosure": 0.9857479602117946
+  },
+  {
+   "areaRatio": 17.85,
+   "thrustCoefficient": 1.5064271540160024,
+   "wallPressure": 72627.32687081351,
+   "massAveragedPressure": 53052.415356844205,
+   "areaAveragedPressure": 49844.17696425454,
+   "massClosure": 0.985754814000675
+  },
+  {
+   "areaRatio": 17.9,
+   "thrustCoefficient": 1.5062463254267648,
+   "wallPressure": 72392.61819999827,
+   "massAveragedPressure": 52868.93848892477,
+   "areaAveragedPressure": 49663.85389441328,
+   "massClosure": 0.985770399806718
+  },
+  {
+   "areaRatio": 17.95,
+   "thrustCoefficient": 1.5060752983860515,
+   "wallPressure": 72158.98163053002,
+   "massAveragedPressure": 52687.22234475516,
+   "areaAveragedPressure": 49485.13694775941,
+   "massClosure": 0.9857927488638376
+  },
+  {
+   "areaRatio": 18.0,
+   "thrustCoefficient": 1.5059136857185333,
+   "wallPressure": 71926.41042513703,
+   "massAveragedPressure": 52507.452996892454,
+   "areaAveragedPressure": 49308.05282118886,
+   "massClosure": 0.9858219280185924
+  }
+ ]
+}

@@ -1,9 +1,9 @@
 quantity                        coarse    medium      fine  order   extrap.     GCI      NOVA  NOVA/ext
 boundaryRadiusAtEndOfMarch      1.7481    1.7583     1.755    nan       nan  0.078%    1.7355      nan%
 lipBoundaryAngle                18.882    22.546    24.266   1.09    25.786  7.832%    25.439    -1.35%
-machDiskLocation                12.842    13.062    12.992    nan       nan  0.225%    7.9158      nan%
-machDiskDiameter                   nan       nan       nan    nan       nan    nan%    9.2168      nan%
-shockCellLength                 18.842    18.927     18.92    nan       nan  0.015%    19.664      nan%
-maximumBoundaryRadius           2.3195    2.2986    2.2662  -0.63       nan  0.595%    2.3044      nan%
+axisShockLocation               12.842    13.062    12.992    nan       nan  0.225%     13.54      nan%
+shockCellLength                 18.842    18.927     18.92    nan       nan  0.015%    19.545      nan%
+maximumBoundaryRadius           2.3195    2.2986    2.2662  -0.63       nan  0.595%     2.285      nan%
+machDiskDiameter: zero on every grid
 medium to fine, boundaryRadiusAtEndOfMarch: 0.187% (limit 0.5%) pass
-medium to fine, machDiskLocation: 0.539% (limit 2.0%) pass
+medium to fine, axisShockLocation: 0.539% (limit 2.0%) pass

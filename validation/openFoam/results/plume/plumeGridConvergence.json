@@ -31,7 +31,7 @@
       "novaAgainstExtrapolated": -0.013470157205178412,
       "novaAgainstFine": 0.04834560549682587
     },
-    "machDiskLocation": {
+    "axisShockLocation": {
       "coarse": 12.842154742624972,
       "medium": 13.062189947684162,
       "fine": 12.992178746501594,
@@ -40,22 +40,9 @@
       "extrapolated": NaN,
       "gridConvergenceIndex": 0.002245299606420913,
       "mediumToFine": 0.005388719055410191,
-      "nova": 7.915813146025133,
+      "nova": 13.540316792090792,
       "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": -0.39072473520604656
-    },
-    "machDiskDiameter": {
-      "coarse": NaN,
-      "medium": NaN,
-      "fine": NaN,
-      "monotonic": false,
-      "order": NaN,
-      "extrapolated": NaN,
-      "gridConvergenceIndex": NaN,
-      "mediumToFine": NaN,
-      "nova": 9.216794297942668,
-      "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": NaN
+      "novaAgainstFine": 0.04218984792960878
     },
     "shockCellLength": {
       "coarse": 18.842027179046433,
@@ -66,9 +53,9 @@
       "extrapolated": NaN,
       "gridConvergenceIndex": 0.0001525126700747126,
       "mediumToFine": 0.0003660304081793102,
-      "nova": 19.664424721817163,
+      "nova": 19.544969381984895,
       "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": 0.0393632019115453
+      "novaAgainstFine": 0.03304938972278859
     },
     "maximumBoundaryRadius": {
       "coarse": 2.319463724285443,
@@ -79,9 +66,9 @@
       "extrapolated": NaN,
       "gridConvergenceIndex": 0.005946331109856449,
       "mediumToFine": 0.014271194663655477,
-      "nova": 2.304367383725674,
+      "nova": 2.285004262674617,
       "novaAgainstExtrapolated": NaN,
-      "novaAgainstFine": 0.016828922969015503
+      "novaAgainstFine": 0.008284720485194574
     }
   },
   "criteria": {
@@ -90,10 +77,13 @@
       "limit": 0.005,
       "pass": true
     },
-    "machDiskLocation": {
+    "axisShockLocation": {
       "value": 0.005388719055410191,
       "limit": 0.02,
       "pass": true
     }
-  }
+  },
+  "absent": [
+    "machDiskDiameter"
+  ]
 }

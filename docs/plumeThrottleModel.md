@@ -1,6 +1,6 @@
 # Throttled Plume Model
 
-This document covers a plume solve driven by engine power level at a fixed ambient pressure, the counterpart of the existing sweep that holds the engine fixed and varies the ambient. It states what is and is not new physics in that change, the throttle range the reference engine has before its nozzle separates, a defect that has to be fixed before any of it is trustworthy, and the staged path to building it. The march itself is documented in `stationMarch.py`; the correlations it seeds from are in `plume.py`.
+This document covers a plume solve driven by engine power level at a fixed ambient pressure, the counterpart of the existing sweep that holds the engine fixed and varies the ambient. It states what is and is not new physics in that change, the throttle range the reference engine has before its nozzle separates, which pressures a power level has to scale together, and the staged path to building it. The march itself is documented in `stationMarch.py`; the correlations it seeds from are in `plume.py`.
 
 ---
 
@@ -71,43 +71,43 @@ Measured on the shipped case, which is a 100 kN LOX/LH2 upper stage at a chamber
 | Quantity | Value |
 |---|---|
 | $\gamma$ from the chamber solve | 1.14754 |
-| One-dimensional exit Mach number | 4.2234 |
-| Exit static pressure $p_e$ at full throttle | 13.993 kPa |
-| Lip static pressure $p_{lip}$ at full throttle | 24.626 kPa |
-| $p_{lip} / p_e$ | 1.7599 |
-| Ideally expanded altitude | 14.05 km |
+| One-dimensional exit Mach number, at the area ratio in the chamber gas | 3.9537 |
+| Exit static pressure $p_e$ at full throttle | 17.699 kPa |
+| Lip static pressure $p_{lip}$ at full throttle | 25.520 kPa |
+| $p_{lip} / p_e$ | 1.4419 |
+| Ideally expanded altitude | 12.56 km |
 
-The march admits $p_e/p_a$ from the Summerfield separation floor of 0.40 up to `plumeFieldMaxPressureRatio` of 2.0. At a fixed ambient $p_a$ the exit ratio is $13.993\,f / p_a$ in kPa, so both bounds map onto throttle fraction directly.
+The exit state is the one-dimensional one at the area ratio of 40 in the gas the contour is solved in. The thermochemistry's equilibrium exit state at the same area ratio, Mach 4.2234 and 13.993 kPa, belongs to a different gas and is not what the march or the correlations see.
 
-Choosing $p_a$ so that full throttle sits at the top of the envelope gives $p_a = 7.00$ kPa, an altitude of 18.44 km. Separation then arrives at
+The march admits $p_e/p_a$ from the Summerfield separation floor of 0.40 up to `plumeFieldMaxPressureRatio` of 2.0. At a fixed ambient $p_a$ the exit ratio is $17.699\,f / p_a$ in kPa, so both bounds map onto throttle fraction directly.
 
-$$f_{sep} = 0.40 \times \frac{7.00}{13.993} = 0.200$$
+Choosing $p_a$ so that full throttle sits at the top of the envelope gives $p_a = 8.85$ kPa, an altitude of 16.95 km. Separation then arrives at
 
-**A 5:1 throttle range, 100 percent down to 20 percent, at a fixed ambient of 7 kPa.** The sweep solves it in seventeen frames. The exit ratio walks 2.000 to 0.400 exactly linearly with power level, which is what a frozen gas state predicts, and the near-field mass continuity holds inside 0.6 percent over the whole range. Thrust falls from 106.4 to 19.5 kN and the one-dimensional ideal specific impulse from 462.5 to 423.8 s.
+$$f_{sep} = 0.40 \times \frac{8.85}{17.699} = 0.200$$
+
+**A 5:1 throttle range, 100 percent down to 20 percent, at a fixed ambient of 8.85 kPa.** The sweep solves sixteen frames, 100 to 25 percent. At 20 percent, on the Summerfield floor itself, the march declines first: the lip is compressed to 0.58 of the ambient, and the oblique shock that implies would destroy 2.25 percent of the stagnation pressure, past the 1 percent an isentropic turn may stand in for. The exit ratio walks 2.000 to 0.500 exactly linearly with power level, which is what a frozen gas state predicts, and the near-field mass continuity holds inside 0.5 percent over the whole range. Thrust falls from 104.0 to 23.9 kN and the one-dimensional ideal specific impulse from 452.0 to 415.0 s.
 
 The number worth reporting from it is which side binds. CECE demonstrated 17.6:1 on an RL10 derivative of this propellant combination and cycle, so the engine is not what stops this case at 20 percent: the nozzle is. Raise the ambient and the nozzle limit tightens further, until at sea level an area ratio of 40 is separated at any power level at all, which is why the shipped configuration draws its plume at 5 kPa.
 
 ---
 
-## The separation gate does not move with the chamber
+## Every pressure has to move with the chamber
 
-**`solvePlumeStructure` takes its exit pressure from a stored array that no throttle touches, so a fixed-ambient throttle sweep would never trip the separation check.** The structure sets
+**`solvePlumeStructure` reads two absolute pressures from the contour, and a power level has to scale both.** The structure sets
 
-- `exitPressure = targetExitPressure or nozzleNearWallPressure[-1]`, both carried from the rated-power nozzle solve,
-- `exitPressureRatio = exitPressure / ambientPressure`,
-- `nozzlePressureRatio = chamberPressure / ambientPressure`.
+- `exitPressure`, the one-dimensional exit state at the area ratio in the contour's gas, as a fraction of `chamberPressure`,
+- `exitPressureRatio = exitPressure / ambientPressure` and `nozzlePressureRatio = chamberPressure / ambientPressure`, both of which move with the chamber,
+- `lipPressure = nozzleNearWallPressure[-1]`, carried from the rated-power nozzle solve, which sizes the oblique shock at an overexpanded lip.
 
-The second ignores chamber pressure and the third does not. Scaling `chamberPressure` by 0.5 and the ambient by 0.5 leaves `exitPressureRatio` reporting 2.600 where the march is solving 1.300, which is the measurement behind the invariance result above.
+Every separation refusal in `solveStationField` and `solvePlumeStructure`, and the Mach disk switch, is written against `exitPressureRatio`, so they follow the chamber. Scaling `chamberPressure` alone leaves only the lip shock sized against the rated engine's lip while the jet around it is the throttled one's.
 
-At fixed ambient the error is worse than a factor: `exitPressureRatio` is then constant for the whole sweep. Every separation refusal in `solveStationField` and `solvePlumeStructure` is written against it, so the model would march a nozzle at 5 percent power, deep inside separated flow, and return a clean attached plume with no note. The Mach disk and shock cell correlations would meanwhile respond correctly through `nozzlePressureRatio`, so the structure would be internally inconsistent rather than uniformly wrong.
-
-`throttledContour` is what closes this. It scales every absolute pressure the contour carries and clears the structure, so the contour handed to a solve describes one engine at one power level. The hazard is not in the solvers, which are correct given a self-consistent contour; it is that nothing stopped a caller assembling an inconsistent one. `tests/testPlumeField.py` pins both halves: that the structure's exit ratio moves with the power level, and that the separation refusal fires when a sweep walks down to it.
+`throttledContour` scales both and clears the structure, so the contour handed to a solve describes one engine at one power level. The hazard is not in the solvers, which are correct given a self-consistent contour; it is that nothing stops a caller assembling an inconsistent one. `tests/testPlumeField.py` pins both halves: that the structure's exit ratio moves with the power level, and that the separation refusal fires when a sweep walks down to it.
 
 ---
 
 ## What the model does
 
-`plume.throttledContour(contour, throttleFraction)` returns the same nozzle at a different power level. It scales every absolute pressure the contour carries, named in `contourPressureFields`, and clears any structure solved at the old one. `ceaOutput` is left alone deliberately: the plume path reads one dimensionless number from it.
+`plume.throttledContour(contour, throttleFraction)` returns the same nozzle at a different power level. It scales every absolute pressure the contour carries, named in `contourPressureFields`, and clears any structure solved at the old one. The gas is left alone deliberately: the plume is solved in the contour's chamber gas, which does not move at a frozen gas state, and `PlumeContour` carries nothing from the thermochemistry.
 
 `Nozzle.throttledPlumeField(throttleFraction, ambientPressure)` is `plumeField` with the engine as the variable. It returns the field rather than keeping it, because a sweep produces one per power level and none of them is the nozzle's own state.
 
