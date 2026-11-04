@@ -340,6 +340,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # ratio, over a transition measured in parent pitches
         nozzle.channelSplitAreaRatio          = valueOr('channelSplitAreaRatio', None)
         nozzle.channelSplitLength             = valueOr('channelSplitLength', None)
+        # The coolant circuit: singlePass (A), oneAndHalfPass (B, inlet partway down the bell) or
+        # twoPass (C, inlet at the injector end), the down channels per up channel, and the
+        # turnaround ring's turning velocity over the channel's
+        nozzle.coolantCircuit                 = nameOr('coolantCircuit', 'singlePass')
+        nozzle.passChannelRatio               = valueOr('passChannelRatio', None)
+        nozzle.coolantInletAreaRatio          = valueOr('coolantInletAreaRatio', None)
+        nozzle.turnaroundVelocityRatio        = valueOr('turnaroundVelocityRatio', None)
 
         # -- Regen Volute Inputs -- #
         nozzle.makeInletVolute                = inputsPath['makeInletVolute']

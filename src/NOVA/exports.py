@@ -93,6 +93,12 @@ def exportData(nozzle, filename: str = 'default'):
         py2cad(filename[:-4] + 'Channel.stl', nozzle.zChannel, nozzle.yChannel, -nozzle.xChannel)
         # A split channel's two daughters, each patterned with the parent; their union through the
         # transition is the fork
+        # A multi-pass jacket's down channel and the ring it turns in
+        if getattr(nozzle, 'xChannelDown', None) is not None:
+            py2cad(filename[:-4] + 'ChannelDown.stl', nozzle.zChannelDown, nozzle.yChannelDown,
+                   -nozzle.xChannelDown)
+            py2cad(filename[:-4] + 'Turnaround.stl', nozzle.zTurnaround, nozzle.yTurnaround,
+                   -nozzle.xTurnaround)
         if getattr(nozzle, 'xChannelSplitA', None) is not None:
             py2cad(filename[:-4] + 'ChannelSplitA.stl', nozzle.zChannelSplitA, nozzle.yChannelSplitA,
                    -nozzle.xChannelSplitA)

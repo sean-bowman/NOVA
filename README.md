@@ -291,6 +291,10 @@ Every run marches a turbulent boundary layer along the finished wall and prices 
 | `minCoolantExitTemperature`                 | K    | Lower limit on coolant temperature at the jacket exit. Checked once the jacket is solved; unset is no limit |
 | `maxCoolantTemperature`                     | K    | Ceiling on the bulk coolant temperature anywhere in the jacket. Checked once the jacket is solved; unset is no limit |
 | `maxColdWallTemperature`                    | K    | Ceiling on the coolant-side wall, the coking limit of a hydrocarbon. The thermal sizing holds it; a manual profile is refused past it; unset is no limit |
+| `coolantCircuit`                            | --   | `singlePass` (A, the default), `oneAndHalfPass` (B: in partway down the bell, down one family to a turnaround at the aft end, up the other) or `twoPass` (C: in at the injector end, down and back). Circular channels, counterflow, no inlet scroll; `nChannel` is the up channels |
+| `passChannelRatio`                          | --   | Down channels per up channel in a multi-pass jacket: 1 (F-1) or 0.5 (J-2's 180 down to 360 up), default 1 |
+| `coolantInletAreaRatio`                     | --   | Where a `oneAndHalfPass` jacket's inlet manifold sits on the diverging wall |
+| `turnaroundVelocityRatio`                   | --   | Turning velocity in the turnaround ring over the down channel's, default 0.5. The ring loses one velocity head of the down channel and half of the up |
 | `channelSplitAreaRatio`                     | --   | Circular channels only: where on the diverging wall each channel forks into two. Unset is no split |
 | `channelSplitLength`                        | --   | Length of the fork's transition in parent pitches at its start, default 4. The daughters part on a cosine blend and the section through it is the two circles' union |
 

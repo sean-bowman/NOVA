@@ -326,6 +326,22 @@ At $d = 0$ that is one circle, and at $d = 2r$ two circles carrying one parent's
 
 In three dimensions each daughter is the parent's centerline turned about the nozzle axis by a quarter of the parent's angular pitch times $\beta$, so the two leave the parent and join their own runs tangentially. The parent is swept up to where the split starts and each daughter from there, and the three are exported as their own bodies, to be patterned and unioned in CAD as the single channel always is. A volute at a split end gathers twice the parent count. Rectangular and helical channels are refused a split: a rectangle would fork by a rib grown from nothing, whose own thickness the fin model does not carry.
 
+### Passing the coolant twice
+
+A single pass takes its coolant in at the jacket's aft end and runs it up every channel to the injector, which is `coolantCircuit` `singlePass` (A). Two other circuits run it down one family of channels and back up another, and both are in service: the J-2 took its hydrogen in partway down the bell, ran it down a third of its tubes to the exit and back up the rest (B, `oneAndHalfPass`, inlet at `coolantInletAreaRatio`), and the F-1 took its fuel in at the injector end and ran it down and back through alternating tubes (C, `twoPass`), which kept both manifolds forward of the gimbal. B suits hydrogen, which wants warming before it reaches the throat; C suits a large booster with a long tube bundle.
+
+The two families alternate around the circumference, so where both run they share the pitch: every channel of both has $2\pi R / (N_{down} + N_{up})$ of it, and forward of a B circuit's inlet the up channels have it to themselves. Each family is marched by the same sizing march as a single pass, in the direction its coolant runs and with its own flow per channel. At the aft end the coolant turns in a ring, a torus sized so the coolant turns in it at half the channel velocity, which loses one velocity head of the down channel and half of the up (the sudden expansion and the sharp entrance), and starts up the other family with the enthalpy it arrived with.
+
+Neighbors of the two families carry coolant at different temperatures, so the warmer hands heat to the colder through the rib between them:
+
+$$
+G = {1 \over {1 \over h_1 a_1} + {t \over k \bar{a}} + {1 \over h_2 a_2}}
+$$
+
+with each channel's face its half perimeter toward that neighbor and $t$ the thinnest web. Against a two-dimensional conduction solve of the web between two circular channels this runs 2 to 40 percent high, the most for large channels at high coolant coefficients, where conduction through the web rather than the coolant limits the exchange. Each family needs the other's coolant along the whole wall, so the two are marched in turn, each beside the other's last profile at the middle of each station, until neither moves by more than 0.05 [K]. The heat the two coolants take on together then matches what the wall gives them to 0.2 percent, and the rib heat one family gains the other loses.
+
+A two-pass jacket costs throat room. On the shipped hydrogen engine, 60 down and 60 up channels put 120 around the throat and the down family runs out of pressure before it gets there; 30 and 30 put the single pass's 60 there and close. The families are drawn running straight along the meridian side by side, the down family one slot round from the up, and exported beside the turnaround ring. A multi-pass jacket is built of circular channels, counterflow in its up family, with no inlet scroll: its inlet is a ring manifold.
+
 ### The cross sections
 
 A circle is drawn in the plane normal to the centerline, on a parallel transport frame: a frame that follows the curve without twisting about it. A circle is the same shape at any roll, so that is all it needs.

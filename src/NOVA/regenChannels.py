@@ -76,6 +76,9 @@ from .channelGeometry import (ChannelGeometryInputs,
                               getMaxChannelRadius as maxChannelRadius)
 from .channelSizing import ChannelSizingState, channelSizingOutputs, channelSplitBlend, solveChannelRadii
 from .channelSplit import daughterCenterlines, splitSeparation
+from .coolantCircuit import COOLANTCIRCUITS, passStations, solveCoolantCircuit
+from .turnaround import turnaroundSurface
+from .errors import InvalidInputError
 from .validation import (applyRules, arrayRule, choiceRule, integerRule, numericRule,
                          presentRule, read, textRule)
 
@@ -164,6 +167,12 @@ class RegenChannelState:
     maxColdWallTemperature:                    Any = None
     channelSplitAreaRatio:                     Any = None
     channelSplitLength:                        Any = None
+    coolantCircuit:                            Any = None
+    passChannelRatio:                          Any = None
+    coolantInletAreaRatio:                     Any = None
+    turnaroundVelocityRatio:                   Any = None
+    voluteFOS:                                 Any = None
+    minVoluteWallThickness:                    Any = None
     minChannelRadius:                          Any = None
 
     # -- Read and written as the build proceeds -- #
@@ -203,6 +212,16 @@ class RegenChannelState:
     yChannelSplitB:                            Any = None
     zChannelSplitB:                            Any = None
     channelSplitBlend:                         Any = None
+    # A multi-pass jacket, solved: both passes and the turnaround between them. The up pass is
+    # the channel family the rest of the build draws.
+    coolantCircuitSolution:                    Any = None
+    # The down family of a multi-pass jacket, swept on its own span, and the turnaround ring
+    xChannelDown:                              Any = None
+    yChannelDown:                              Any = None
+    zChannelDown:                              Any = None
+    xTurnaround:                               Any = None
+    yTurnaround:                               Any = None
+    zTurnaround:                               Any = None
     xChannelCenterline2D:                      Any = None
     xChannelCenterline3D:                      Any = None
     xInletInterface:                           Any = None
@@ -247,6 +266,7 @@ class RegenChannelState:
 # and a static read of this module cannot see that it does.
 _buildOutputs = (
     'channelDepth', 'channelRadius', 'channelRibThickness', 'channelSplitBlend', 'channelWidth',
+    'coolantCircuitSolution',
     'channelSizingSolution', 'gammaRegenSectionTrimmed',
     'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed',
     'numInletInterfaceCS', 'numOutletInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
@@ -263,7 +283,8 @@ _buildOutputs = (
     'zChannel', 'zChannelCenterline3D',
     'zNozzleColdWallMesh', 'zNozzleHotWallMesh', 'zNozzleShellMesh',
     'xChannelSplitA', 'yChannelSplitA', 'zChannelSplitA',
-    'xChannelSplitB', 'yChannelSplitB', 'zChannelSplitB')
+    'xChannelSplitB', 'yChannelSplitB', 'zChannelSplitB',
+    'xChannelDown', 'yChannelDown', 'zChannelDown', 'xTurnaround', 'yTurnaround', 'zTurnaround')
 
 regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs)))
 
@@ -326,6 +347,8 @@ regenChannelRules = (
     choiceRule('channelSizingMode', 'Channel sizing mode', choices = CHANNELSIZINGMODES,
                required = False,
                note = 'Absent is the search against the wall temperature limit'),
+    choiceRule('coolantCircuit', 'Coolant circuit', choices = COOLANTCIRCUITS, required = False,
+               note = 'Absent is a single pass, the coolant up every channel to the injector'),
     choiceRule('jacketFlowDirection', 'Jacket flow direction', choices = JACKETFLOWDIRECTIONS,
                required = False,
                note = 'Absent is counterflow, the coolant entering at the aft end of the jacket'),
@@ -408,6 +431,25 @@ def validateRegenChannelInputs(state) -> None:
     '''
 
     applyRules(state, regenChannelRules)
+
+    # A multi-pass jacket turns at its aft end in a ring, where a single pass has its inlet
+    # scroll, and returns up the channels that reach the injector, counterflow
+    if isinstance(state.coolantCircuit, str) and state.coolantCircuit != 'singlePass':
+        if state.makeInletVolute == 'on':
+            raise InvalidInputError(
+                message = (f'A {state.coolantCircuit} jacket turns its coolant in a ring at the aft '
+                           f'end and takes it in through a ring manifold, so it has no inlet scroll. '
+                           f'Switch makeInletVolute off.'),
+                parameterName = 'makeInletVolute', value = state.makeInletVolute, validRange = 'off')
+        if jacketFlowDirectionOf(state) != 'counterflow':
+            raise InvalidInputError(
+                message = 'A multi-pass jacket returns up its channels to the injector, counterflow.',
+                parameterName = 'jacketFlowDirection', value = state.jacketFlowDirection,
+                validRange = 'counterflow')
+        if state.channelType != 'circle':
+            raise InvalidInputError(
+                message = 'The passes of a multi-pass jacket alternate circular channels.',
+                parameterName = 'channelType', value = state.channelType, validRange = 'circle')
 
 def voluteInterfaceCurve(xWall: np.ndarray, rWall: np.ndarray, axialOffset: float,
                          filletRadius: float, flareAngle: float, flareLength: float,
@@ -653,6 +695,14 @@ def _sizingState(state) -> 'ChannelSizingState':
         maxColdWallTemperature             = state.maxColdWallTemperature,
         channelSplitAreaRatio              = state.channelSplitAreaRatio,
         channelSplitLength                 = state.channelSplitLength,
+        # A single pass has the jacket to itself; coolantCircuit sets these for each of its passes
+        pitchChannelCount                  = None,
+        channelMassFlow                    = None,
+        neighborCoolantTemperature         = None,
+        neighborCoolantCoefficient         = None,
+        neighborChannelRadius              = None,
+        ribFaceCount                       = None,
+        stationRise                        = None,
         hotWallThickness                   = state.hotWallThickness,
         infillThickness                    = state.infillThickness,
         material                           = state.material,
@@ -786,6 +836,26 @@ def solveRegenChannels(state, thermal):
         '''How far through the channel split each station of the interfaced wall is.'''
 
         return channelSplitBlend(state, state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced)
+
+    def pitchShareOnInterfacedWall():
+
+        '''
+
+        The share of the parent pitch one up channel has at each station of the interfaced wall.
+
+        One, except where a multi-pass jacket's down channels run beside the up channels, where
+        the up channel has its count over the count of both.
+
+        '''
+
+        share = np.ones(len(state.xRegenNozzleInterfaced))
+        circuit = state.coolantCircuitSolution
+        if circuit is not None:
+            downStations, _ = passStations(circuit.circuit, state.xRegenNozzleInterfaced,
+                                           state.rRegenNozzleInterfaced, state.nozzleScalingFactor,
+                                           state.coolantInletAreaRatio)
+            share[downStations] = circuit.up.channelCount / (circuit.up.channelCount + circuit.down.channelCount)
+        return share
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Generate volute interfaces -- #
@@ -942,8 +1012,24 @@ def solveRegenChannels(state, thermal):
     def generateChannelRadii():
 
         # The sizing loop lives in channelSizing.py, which takes the engine, the coolant and
-        # the regen section explicitly and reaches the geometry and thermal modules directly.
-        sizingSolution = solveChannelRadii(_sizingState(state), _geometryInputs(state), thermal)
+        # the regen section explicitly and reaches the geometry and thermal modules directly. A
+        # multi-pass jacket is two of those marches coupled through the rib between them, in
+        # coolantCircuit.py; its up pass, the channels that reach the injector, is the family the
+        # rest of the build draws.
+        circuit = state.coolantCircuit if isinstance(state.coolantCircuit, str) else 'singlePass'
+        if circuit == 'singlePass':
+            sizingSolution = solveChannelRadii(_sizingState(state), _geometryInputs(state), thermal)
+        else:
+            state.coolantCircuitSolution = solveCoolantCircuit(
+                _sizingState(state), _geometryInputs(state), thermal, circuit,
+                passChannelRatio        = valueOrDefault(state.passChannelRatio, 1.0),
+                inletAreaRatio          = state.coolantInletAreaRatio,
+                material                = state.material,
+                factorOfSafety          = valueOrDefault(state.voluteFOS, 1.5),
+                minWallThickness        = valueOrDefault(state.minVoluteWallThickness, 0.0),
+                turnaroundVelocityRatio = valueOrDefault(state.turnaroundVelocityRatio, 0.5))
+            print(state.coolantCircuitSolution.report())
+            sizingSolution = state.coolantCircuitSolution.up.state
 
         # Anything the solve left as None is a branch it did not reach, so it is not copied
         # and a value from an earlier step survives rather than being overwritten.
@@ -1102,10 +1188,10 @@ def solveRegenChannels(state, thermal):
         else:
             # A circle answers to the room between its neighbors and to the depth limit every
             # family shares, which is the only thing bounding it on a wide bell.
-            splitBlend = splitBlendOnInterfacedWall()
+            splitBlend, pitchShare = splitBlendOnInterfacedWall(), pitchShareOnInterfacedWall()
             for i in range(len(state.channelRadius)):
                 maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i,
-                                                           1.0 - 0.5*splitBlend[i]),
+                                                           (1.0 - 0.5*splitBlend[i])*pitchShare[i]),
                                        depthLimitedHalfExtent(state.maxChannelDepth))
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
@@ -1135,10 +1221,10 @@ def solveRegenChannels(state, thermal):
                                           - state.infillThickness, geometry.channelAspectRatio, geometry.maxChannelDepth)
             state.channelRadius = np.minimum(state.channelRadius, halfLimit)
         else:
-            splitBlend = splitBlendOnInterfacedWall()
+            splitBlend, pitchShare = splitBlendOnInterfacedWall(), pitchShareOnInterfacedWall()
             for i in range(len(state.channelRadius)):
                 maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i,
-                                                           1.0 - 0.5*splitBlend[i]),
+                                                           (1.0 - 0.5*splitBlend[i])*pitchShare[i]),
                                        depthLimitedHalfExtent(state.maxChannelDepth))
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
@@ -1183,6 +1269,10 @@ def solveRegenChannels(state, thermal):
         else:
             state.channelSplitBlend = splitBlendOnInterfacedWall()
             state.wrapAngles = kineosAlgorithm(state.xChannelCenterline2D,state.rChannelCenterline2D,state.channelRadius)
+            # The two families of a multi-pass jacket run straight along the meridian side by
+            # side; each is held inside its slot of the shared pitch, which a lean would leave
+            if state.coolantCircuitSolution is not None:
+                state.wrapAngles = np.zeros(state.numCrossSections)
 
         # -- Wrap -- #
         state.xChannelCenterline3D = state.xChannelCenterline2D.copy()
@@ -1233,6 +1323,22 @@ def solveRegenChannels(state, thermal):
                 sweeps.append((xSweep[:, start:], ySweep[:, start:], zSweep[:, start:]))
             (state.xChannelSplitA, state.yChannelSplitA, state.zChannelSplitA), \
                 (state.xChannelSplitB, state.yChannelSplitB, state.zChannelSplitB) = sweeps
+
+        # A multi-pass jacket's down family, on its own span of the sized wall, one slot of the
+        # shared pitch round from the up channel, and the ring it turns in at the aft end
+        circuit = state.coolantCircuitSolution
+        if circuit is not None:
+            downState = circuit.down.state
+            xWall = np.asarray(downState.xRegenNozzleTrimmed)
+            rWall = np.asarray(downState.rRegenNozzleTrimmed)
+            radius = np.asarray(downState.channelRadius)
+            xCenter, rCenter = parallelOffset(xWall, rWall, state.hotWallThickness + radius)
+            slot = 2*np.pi / (circuit.up.channelCount + circuit.down.channelCount)
+            downGeometry = _geometryInputs(state)
+            downGeometry.numCrossSections = len(xWall)
+            state.xChannelDown, state.yChannelDown, state.zChannelDown, _ = buildCrossSections(
+                downGeometry, xCenter, rCenter*np.cos(slot), rCenter*np.sin(slot), radius, 'circle')
+            state.xTurnaround, state.yTurnaround, state.zTurnaround = turnaroundSurface(circuit.turnaround)
 
     generate3DChannels()
 

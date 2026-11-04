@@ -181,7 +181,7 @@ THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'ma
                    'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
                    'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
                    'reynoldsNumber', 'radiativeHeatTransfer', 'drivingTemperature',
-                   'coldWallTemperature')
+                   'coldWallTemperature', 'ribHeatTransfer')
 
 @dataclass
 class ChannelSizingState:
@@ -310,6 +310,19 @@ class ChannelSizingState:
     maxColdWallTemperature:                 Any   = None
     channelSplitAreaRatio:                  Any   = None
     channelSplitLength:                     Any   = None
+    # A pass of a multi-pass jacket shares the circumference with the other pass's channels:
+    # pitchChannelCount is how many channels share it at each station, in wall order, and
+    # channelMassFlow the flow of one of this pass's channels. Unset, the jacket is this pass's
+    # alone and nChannel carries coolantMassFlow. The other pass's coolant temperature and
+    # coefficient, in wall order and NaN where it does not reach, drive the rib exchange, through
+    # ribFaceCount rib faces per channel.
+    pitchChannelCount:                      Any   = None
+    channelMassFlow:                        Any   = None
+    neighborCoolantTemperature:             Any   = None
+    neighborCoolantCoefficient:             Any   = None
+    neighborChannelRadius:                  Any   = None
+    ribFaceCount:                           Any   = None
+    stationRise:                            Any   = None
     hotWallThickness:                       float = 0.0
     infillThickness:                        float = 0.0
     material:                               str   = 'GRCop-42'
@@ -962,7 +975,7 @@ def solveChannelRadii(state, geometry, thermal):
             rNozzleStep = rPathline2D[2] - rPathline2D[1]
 
             # Calculate the arc length of the nozzle region allocated to each channel.
-            nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness \
+            nozzleArcSlice = 2*np.pi*rPathline2D[1]/pitchCountAt(i, nChannel) - state.infillThickness \
                 - splitSeparation(state.dcrData['splitBlend'][i], rPathline2D[1], nChannel)
 
             # Calculate the arc length of the channel.
@@ -982,7 +995,7 @@ def solveChannelRadii(state, geometry, thermal):
 
         # Calculate the arc length of the nozzle region allocated to each channel.
         # Through a split the pair has the parent pitch less the separation already spent
-        nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness \
+        nozzleArcSlice = 2*np.pi*rPathline2D[1]/pitchCountAt(i, nChannel) - state.infillThickness \
             - splitSeparation(state.dcrData['splitBlend'][i], rPathline2D[1], nChannel)
 
         # Calculate the diameter of each channel perpendicular to the pathline.
@@ -1105,6 +1118,28 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["nearWallPressure"]    = np.array([state.regenSectionNearWallPressureTrimmed    [marchOrder[i]]])
         if state.gasCoefficientProfile is not None:
             heatTransferDict_i["prescribedGasCoefficient"] = np.array([state.gasCoefficientProfile[marchOrder[i]]])
+        # A shared jacket's hot wall sector is the pitch of every channel there, not this pass's
+        if state.pitchChannelCount is not None:
+            heatTransferDict_i["nChannel"] = pitchCountAt(i, state.nChannel)
+        # The other pass's coolant across the rib, where it reaches. The station dictionary is
+        # carried from station to station, so where the other pass does not reach its entries are
+        # taken out rather than left from the station before.
+        ribKeys = ('neighborCoolantTemperature', 'neighborCoolantCoefficient', 'ribFaceHeight',
+                   'neighborFaceHeight', 'ribFaceCount', 'stationRise', 'ribThickness')
+        for key in ribKeys:
+            heatTransferDict_i.pop(key, None)
+        if (state.neighborCoolantTemperature is not None
+                and np.isfinite(state.neighborCoolantTemperature[marchOrder[i]])):
+            heatTransferDict_i["neighborCoolantTemperature"] = np.array([state.neighborCoolantTemperature[marchOrder[i]]])
+            heatTransferDict_i["neighborCoolantCoefficient"] = np.array([state.neighborCoolantCoefficient[marchOrder[i]]])
+            # Each channel's half perimeter toward the other, one face per neighbor of the other pass
+            heatTransferDict_i["ribFaceHeight"]              = np.array([np.pi * channelRadius[i]])
+            heatTransferDict_i["neighborFaceHeight"]         = np.array([np.pi * state.neighborChannelRadius[marchOrder[i]]])
+            heatTransferDict_i["ribFaceCount"]               = np.array([float(state.ribFaceCount)
+                                                                         if specified(state, 'ribFaceCount') else 1.0])
+            if state.stationRise is not None:
+                heatTransferDict_i["stationRise"]            = np.array([state.stationRise[marchOrder[i]]])
+            heatTransferDict_i["ribThickness"]               = np.array([state.infillThickness])
 
         # get geometry properties for heat transfer
         # A helix's width follows the depth being tried, and its rib is what the pass spacing leaves
@@ -1170,6 +1205,14 @@ def solveChannelRadii(state, geometry, thermal):
     # writes is in that order and is placed back in wall order when the march returns.
     marchOrder = coolantMarchOrder(len(xNozzle), state.jacketFlowDirection)
     outwardSide = 1.0 if marchOrder[-1] > marchOrder[0] else -1.0
+
+    def pitchCountAt(i: int, nChannel) -> float:
+
+        '''Channels sharing the circumference at march station i: every pass's in a shared jacket.'''
+
+        if state.pitchChannelCount is None:
+            return nChannel
+        return int(round(float(np.asarray(state.pitchChannelCount)[marchOrder[i]])))
 
     def toWallOrder(values) -> np.ndarray:
 
@@ -1368,7 +1411,9 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["throatDiameter"]                  = 2 * throatRadius
         heatTransferDict_i["throatArea"]                      = np.pi * throatRadius**2
         heatTransferDict_i["coolant"]                         = state.coolant
-        heatTransferDict_i["mdot"]                            = state.coolantMassFlow / state.nChannel
+        heatTransferDict_i["mdot"]                            = (float(state.channelMassFlow)
+                                                                 if specified(state, 'channelMassFlow')
+                                                                 else state.coolantMassFlow / state.nChannel)
         heatTransferDict_i["chamberPressure"]                 = state.chamberPressure
         heatTransferDict_i["coolantInitialTemperature"]       = state.coolantInitialTemperature
         heatTransferDict_i["coolantInitialPressure"]          = state.coolantInitialPressure

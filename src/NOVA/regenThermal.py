@@ -477,6 +477,54 @@ def itoCurvatureFactor(reynoldsNumber, sectionRadius, bendRadius):
 
     return np.where(parameter > 6.0, np.maximum(parameter, 1.0)**0.05, 1.0)
 
+def ribExchangeConductance(firstCoefficient: float, secondCoefficient: float, firstFaceArea: float,
+                           secondFaceArea: float, ribThickness: float, wallConductivity: float) -> float:
+
+    '''
+
+    Conductance from one channel's coolant to its neighbor's through the rib between them [W/K].
+
+    Three resistances in series: convection off the first channel's face of the rib, conduction
+    through the rib, and convection into the second channel's face,
+
+        G = 1 / (1 / (h_1 a_1) + t / (k (a_1 + a_2) / 2) + 1 / (h_2 a_2))
+
+    with a_1 and a_2 the faces the two channels present to each other over the station. In a jacket
+    of alternating passes the neighbors carry coolant at different temperatures, and this is the
+    heat the warmer hands the colder across the rib. For a circular channel the face is half the
+    circle's perimeter along the station's path, the half that looks toward that neighbor, and t
+    the thinnest web between the two. The expression is symmetric in the two channels, so the heat
+    one gains the other loses whichever side computes it. Against a two-dimensional conduction solve of the web
+    between two circular channels with a 1.5 mm rib, the hot wall and the shell either side of
+    them, this reading runs 2 to 40 percent high over channel radii of 2 to 4 mm and coolant
+    coefficients of 1e4 to 1e5 W/m^2 K: least for small channels and modest coefficients, most
+    for large channels at high coefficients, where conduction through the web rather than the
+    coolant limits the exchange (validation/coolingCircuits/phase4).
+
+    Parameters:
+    -----------
+    firstCoefficient, secondCoefficient : float
+        Coolant coefficients of the two channels [W/m^2 K].
+    firstFaceArea, secondFaceArea : float
+        Rib face each channel presents to the other over the station [m^2].
+    ribThickness : float
+        Rib between the channels [m].
+    wallConductivity : float
+        Wall alloy conductivity [W/m K].
+
+    Returns:
+    --------
+    float
+        Conductance [W/K]; zero where either coefficient or the face is zero.
+
+    '''
+
+    if min(firstCoefficient, secondCoefficient, firstFaceArea, secondFaceArea) <= 0.0:
+        return 0.0
+    meanFace = 0.5 * (firstFaceArea + secondFaceArea)
+    return 1.0 / (1.0 / (firstCoefficient * firstFaceArea) + ribThickness / (wallConductivity * meanFace)
+                  + 1.0 / (secondCoefficient * secondFaceArea))
+
 def hotWallSectorArea(wallRadius, nChannel: int, wallSegmentLength):
 
     '''
@@ -1265,6 +1313,21 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
     # One correlation constant along the whole wall, or the measured distribution over it
     gasSideAxialModel = inputsDict.get('gasSideAxialModel') or 'uniform'
 
+    # A neighboring channel of another pass, whose coolant exchanges heat with this one's through
+    # the rib between them. Absent, or NaN where the neighbor does not reach, there is no exchange.
+    neighborCoolantTemperature = inputsDict.get('neighborCoolantTemperature')
+    if neighborCoolantTemperature is not None:
+        neighborCoolantTemperature = optionalInput('neighborCoolantTemperature', np.nan)
+        neighborCoolantCoefficient = optionalInput('neighborCoolantCoefficient', 0.0)
+        ribFaceHeight              = optionalInput('ribFaceHeight', 0.0)
+        neighborFaceHeight         = optionalInput('neighborFaceHeight', 0.0)
+        ribFaceCount               = optionalInput('ribFaceCount', 1.0)
+        # Both channels are taken at their station mid-temperature, so the heat one gains the
+        # other loses: this channel's own rise over the station, from the last pass of the coupled
+        # solve, puts it there
+        stationRise                = optionalInput('stationRise', 0.0)
+        ribThickness               = optionalInput('ribThickness', 0.0)
+
     # A gas-side coefficient solved over the whole wall rather than at the station, which is how a
     # method that carries the wall's history reaches the station solve. Absent, Bartz runs.
     prescribedGasCoefficient = inputsDict.get('prescribedGasCoefficient')
@@ -1343,6 +1406,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         # shows how much of the coefficient it removed. Inert values unless asked for.
         radiativeHeatTransfer = np.zeros(numCrossSections)
         blowingReduction      = np.ones(numCrossSections)
+        ribHeatTransfer       = np.zeros(numCrossSections)
 
         # Adiabatic Cold Wall Properties
         adiabaticConvectiveHeatTransferCoef, adiabaticHeatTransfer, \
@@ -1574,16 +1638,30 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 radiativeHeatTransfer[i]             = solution.radiativeHeatTransfer
                 blowingReduction[i]                  = solution.blowingReduction
 
+                # The heat this coolant takes on: what the wall passes it, and what its neighbor
+                # of another pass hands it across the rib
+                pickedUp = solution.heatTransfer
+                if neighborCoolantTemperature is not None and np.isfinite(neighborCoolantTemperature[i]):
+                    # One rib face toward each neighbor of the other pass
+                    conductance = ribFaceCount[i] * ribExchangeConductance(
+                        solution.coolantConvectiveCoefficient, neighborCoolantCoefficient[i],
+                        ribFaceHeight[i] * differentialPathLength[i],
+                        neighborFaceHeight[i] * differentialPathLength[i], ribThickness[i],
+                        solution.wallConductivity)
+                    ribHeatTransfer[i] = conductance * (neighborCoolantTemperature[i]
+                                                        - (coolantTemperature[i] + 0.5 * stationRise[i]))
+                    pickedUp = solution.heatTransfer + ribHeatTransfer[i]
+
                 # The march runs from the coolant inlet toward the chamber, so the heat picked
                 # up here raises the coolant at the next station down the index. A single
                 # station has no next one, so it takes the rise itself.
                 if i > 0:
                     coolantTemperature[i-1] = downstreamTemperature(coolantEnthalpy[i],
-                                                                    solution.heatTransfer,
+                                                                    pickedUp,
                                                                     coolantPressure[i-1])
                 if solution.converged and iterationMode == 'single':
                     coolantTemperature[i] = downstreamTemperature(coolantEnthalpy[i],
-                                                                  solution.heatTransfer,
+                                                                  pickedUp,
                                                                   coolantPressure[i])
 
                 if not solution.converged:
@@ -1671,7 +1749,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             'reynoldsNumber'                    : coolantReynoldsNumber,
             'radiativeHeatTransfer'             : radiativeHeatTransfer,
             'drivingTemperature'                : drivingTemperature,
-            'coldWallTemperature'               : coldWallTemperature
+            'coldWallTemperature'               : coldWallTemperature,
+            'ribHeatTransfer'                   : ribHeatTransfer
         }
 
     else:

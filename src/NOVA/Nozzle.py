@@ -663,6 +663,17 @@ class Nozzle:
         self.maxCoolantTemperature                    = None     # [K], bulk coolant ceiling
         self.maxColdWallTemperature                   = None     # [K], coolant-side wall ceiling
         self.channelSplitAreaRatio                    = None     # [-], where the channels double
+        self.coolantCircuit                           = 'singlePass' # [str], A, B or C
+        self.passChannelRatio                         = None     # [-], down channels per up channel
+        self.coolantInletAreaRatio                    = None     # [-], a B circuit's inlet manifold
+        self.turnaroundVelocityRatio                  = None     # [-], ring over channel velocity
+        self.coolantCircuitSolution                   = None     # [CircuitSolution]
+        self.xChannelDown                             = None     # [m], down family's sweep
+        self.yChannelDown                             = None     # [m]
+        self.zChannelDown                             = None     # [m]
+        self.xTurnaround                              = None     # [m], turnaround ring surface
+        self.yTurnaround                              = None     # [m]
+        self.zTurnaround                              = None     # [m]
         self.channelSplitLength                       = None     # [parent pitches]
         self.channelSplitBlend                        = None     # [-], progress through the split
         self.xChannelSplitA                           = None     # [m], first daughter's sweep

@@ -352,6 +352,22 @@ harnessCases = {
             'channelSplitLength': 6.0,
         },
     },
+    # Thirty down and thirty up channels to an area ratio of ten, the coolant turning in a ring at
+    # the aft end; and the same with the inlet at an area ratio of three. They pin the two passes,
+    # the rib between them and the turnaround.
+    'regenTwoPass': {
+        'config': 'NOVANozzle.json',
+        'description': 'Two-pass jacket of 30 down and 30 up channels turning at the aft end',
+        'overrides': {**regenOverrides, 'regenTruncationType': 'er', 'regenTruncationValue': 10.0,
+                      'nChannel': 30, 'coolantCircuit': 'twoPass', 'makeInletVolute': False},
+    },
+    'regenOneAndHalfPass': {
+        'config': 'NOVANozzle.json',
+        'description': 'One-and-a-half-pass jacket with its inlet at an area ratio of 3',
+        'overrides': {**regenOverrides, 'regenTruncationType': 'er', 'regenTruncationValue': 10.0,
+                      'nChannel': 30, 'coolantCircuit': 'oneAndHalfPass', 'coolantInletAreaRatio': 3.0,
+                      'makeInletVolute': False},
+    },
     'contourEffectiveGamma': {
         'config': 'NOVANozzle.json',
         'description': 'The contour solved at the effective gamma rather than the chamber value',
