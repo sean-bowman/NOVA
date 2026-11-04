@@ -236,7 +236,7 @@ Three channel families are built, one per run:
 
 `channelRadius` references both a circle's radius and half a rectangle's depth for consistency in the backend variables. At each station it is converged to be the largest channel that holds the wall at `maxWallTemperature`, within the limits of each family. Spirally fluted channels are kept in [experimental/flutedChannels.py](experimental/flutedChannels.py).
 
-A channel may not exceed the largest that fits between its neighbors, may not reach past `maxChannelDepth` out from the wall, and may not fall below `minChannelRadius`. Coolant outlet properties are checked against `minCoolantExitPressure` and `minCoolantExitTemperature`.
+A channel may not exceed the largest that fits between its neighbors, may not reach past `maxChannelDepth` out from the wall, and may not fall below `minChannelRadius`. Coolant outlet properties are checked against `minCoolantExitPressure` and `minCoolantExitTemperature`, and the coolant along the whole jacket against `maxCoolantTemperature` and `maxColdWallTemperature`.
 
 The size is arrived at one of two ways, set by `channelSizingMode`. `thermal`: each station converges its own size, at about seven passes of the thermal model per station. `manual` reads the size off `manualChannelProfile` and marches each station once, so the wall temperature, the pressure drop and the coolant exit state come out as results rather than targets.
 
@@ -284,9 +284,13 @@ Every run marches a turbulent boundary layer along the finished wall and prices 
 | `coolant`                                   | --   | REFPROP / CoolProp fluid name                                                                       |
 | `coolantInitialTemperature`                | K    | Coolant temperature entering the jacket                                                             |
 | `coolantInitialPressure`                    | Pa   | Coolant pressure entering the jacket                                                                 |
-| `coolantMassFlow`                           | kg/s | Coolant mass flow through the jacket                                                                |
+| `coolantMassFlow`                           | kg/s | Coolant mass flow through the jacket. Unset draws the chamber's whole flow of the coolant's propellant, less any bypass; more than that flow is refused |
+| `coolantBypassFraction`                     | --   | Share of the coolant's propellant sent around the jacket to the injector, read only when `coolantMassFlow` is unset; naming both is refused |
+| `jacketFlowDirection`                       | --   | `counterflow` (inlet at the aft end, the default) or `coflow` (inlet at the injector face); the volutes swap ends with it |
 | `minCoolantExitPressure`                    | Pa   | Lower limit on coolant pressure at the jacket exit. Checked once the jacket is solved; unset is no limit |
 | `minCoolantExitTemperature`                 | K    | Lower limit on coolant temperature at the jacket exit. Checked once the jacket is solved; unset is no limit |
+| `maxCoolantTemperature`                     | K    | Ceiling on the bulk coolant temperature anywhere in the jacket. Checked once the jacket is solved; unset is no limit |
+| `maxColdWallTemperature`                    | K    | Ceiling on the coolant-side wall, the coking limit of a hydrocarbon. The thermal sizing holds it; a manual profile is refused past it; unset is no limit |
 
 The `material` field is a wall alloy name resolved by `src/NOVA/materials.py`: `GRCop-42`, `CuCrZr`, `OFHC Copper`, `NARloy-Z`, `AlSi10Mg`, `Al 6061-T6`, `Inconel 718`, `Inconel 625`, `316L`, `Ti-6Al-4V`, or a recognized free-text alias. The heat transfer model samples that module's temperature-dependent thermal conductivity curve for whichever alloy is named; an unrecognized name falls back to GRCop-42 with a warning. Conductivity curves are validated against their cited sources in `tests/testMaterials.py`.
 

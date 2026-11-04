@@ -640,6 +640,12 @@ class Nozzle:
         self.coolantInitialTemperature: float | None  = None     # [K]
         self.coolantInitialPressure: float | None     = None     # [Pa]
         self.coolantMassFlow: float | None            = None     # [kg/s]
+        self.jacketFlowDirection                      = None     # 'counterflow' or 'coflow'
+        self.coolantBypassFraction                    = None     # [-], of the coolant's propellant
+        self.maxCoolantTemperature                    = None     # [K], bulk coolant ceiling
+        self.maxColdWallTemperature                   = None     # [K], coolant-side wall ceiling
+        self.fuelMassFlow                             = None     # [kg/s], chamber fuel flow
+        self.oxidizerMassFlow                         = None     # [kg/s], chamber oxidizer flow
         self.swirlPercent                             = None     # [-]
 
         # -- Plume -- #

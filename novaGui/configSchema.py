@@ -556,7 +556,24 @@ groups = [
         Field('coolantInitialPressure', 'Coolant inlet pressure', 'float', default = None, unit = 'Pa', showWhen = _coolingOn,
               help = 'Coolant pressure entering the jacket.'),
         Field('coolantMassFlow', 'Coolant mass flow', 'float', default = None, unit = 'kg/s', showWhen = _coolingOn,
-              help = 'Coolant mass flow through the jacket. Leave blank to derive from O/F.'),
+              help = 'Coolant mass flow through the jacket. Leave blank to draw the engine\'s whole '
+                     'flow of the coolant\'s propellant, less any bypass.'),
+        Field('coolantBypassFraction', 'Coolant bypass fraction', 'float', advanced = True,
+              default = None, unit = '-', showWhen = _coolingOn,
+              help = 'Share of the coolant\'s propellant sent around the jacket straight to the '
+                     'injector, read only when the coolant mass flow is blank. The F-1 bypassed 30 '
+                     'percent of its fuel; the SSME meters its chamber coolant with a valve. A run '
+                     'naming both the flow and the bypass is refused, since the two say the same '
+                     'thing. Blank is no bypass.'),
+        Field('jacketFlowDirection', 'Jacket flow direction', 'choice', advanced = True,
+              choices = [('Counterflow', 'counterflow'), ('Coflow', 'coflow')],
+              default = 'counterflow', showWhen = _coolingOn,
+              help = 'Which way the coolant runs relative to the gas. Counterflow enters at the aft '
+                     'end of the jacket and leaves at the injector face, so the coldest coolant '
+                     'meets the bell and arrives at the throat already warmed; it is the usual '
+                     'choice for a chamber and nozzle. Coflow enters at the injector face and '
+                     'carries the coolant with the gas, the practice on nozzle extensions (LUMEN), '
+                     'and puts the inlet manifold where the feed line already is.'),
         Field('gasSideAxialModel', 'Gas-side axial model', 'choice', advanced = True,
               choices = [('Uniform constant (Bartz)', 'uniform'),
                          ('Measured distribution (TN D-2832)', 'measured'),
@@ -635,6 +652,17 @@ groups = [
               default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
               help = 'Lower limit on coolant temperature at the jacket exit, for a cycle that needs the '
                      'enthalpy. Checked once the jacket is solved. Blank is no limit.'),
+        Field('maxCoolantTemperature', 'Max bulk coolant temperature', 'float',
+              default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
+              help = 'Ceiling on the bulk coolant temperature anywhere in the jacket, checked once the '
+                     'jacket is solved. No channel size fixes it: the coolant warms by the heat the wall '
+                     'passes, which barely depends on the channel. Blank is no limit.'),
+        Field('maxColdWallTemperature', 'Max coolant-side wall temperature', 'float',
+              default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
+              help = 'Ceiling on the wall the coolant touches: the coking limit of a hydrocarbon, about '
+                     '560 to 590 K for RP-1. The thermal sizing shrinks the channel wherever the cold wall '
+                     'would pass it before the hot wall reaches its own limit; a manual profile is '
+                     'checked against it and refused where it is passed. Blank is no limit.'),
         Field('maxWallTempUpperBound', 'Max wall temp upper bound', 'float',
               default = None, unit = 'K', showWhen = _coolingOn, advanced = True,
               help = 'Upper bound for a wall temperature search. Carried in the configuration and read '

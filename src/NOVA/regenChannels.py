@@ -156,8 +156,11 @@ class RegenChannelState:
     coolantInitialPressure:                    Any = None
     coolantInitialTemperature:                 Any = None
     coolantMassFlow:                           Any = None
+    jacketFlowDirection:                       Any = None
     minCoolantExitPressure:                    Any = None
     minCoolantExitTemperature:                 Any = None
+    maxCoolantTemperature:                     Any = None
+    maxColdWallTemperature:                    Any = None
     minChannelRadius:                          Any = None
 
     # -- Read and written as the build proceeds -- #
@@ -291,6 +294,9 @@ def _makesOutletVolute(source):
 
     return read(source, 'makeOutletVolute') == 'on'
 
+# Which way the coolant may run relative to the gas
+JACKETFLOWDIRECTIONS = ('counterflow', 'coflow')
+
 regenChannelRules = (
 
     # -- The regen section the channels run along -- #
@@ -305,6 +311,9 @@ regenChannelRules = (
     choiceRule('channelSizingMode', 'Channel sizing mode', choices = CHANNELSIZINGMODES,
                required = False,
                note = 'Absent is the search against the wall temperature limit'),
+    choiceRule('jacketFlowDirection', 'Jacket flow direction', choices = JACKETFLOWDIRECTIONS,
+               required = False,
+               note = 'Absent is counterflow, the coolant entering at the aft end of the jacket'),
     choiceRule('manualChannelProfileKey', 'Manual channel profile key', choices = PROFILEKEYS,
                required = False, when = _isManualSizing),
     presentRule('manualChannelProfile', 'Manual channel profile', when = _isManualSizing,
@@ -522,6 +531,68 @@ def valueOrDefault(value, default: float) -> float:
 
     return float(value)
 
+def jacketFlowDirectionOf(state) -> str:
+
+    '''
+
+    Which way the coolant runs, 'counterflow' where the configuration did not say.
+
+    Counterflow takes the coolant in at the aft end of the jacket, so the inlet volute sits there
+    and the outlet volute at the injector face; coflow reverses both.
+
+    '''
+
+    direction = getattr(state, 'jacketFlowDirection', None)
+    return direction if isinstance(direction, str) else 'counterflow'
+
+def voluteRolesByEnd(state) -> tuple:
+
+    '''
+
+    Which volute each end of the jacket leads to: ('inlet', 'outlet') for the aft end and the
+    injector face of a counterflow jacket, the reverse for coflow.
+
+    '''
+
+    if jacketFlowDirectionOf(state) == 'counterflow':
+        return 'inlet', 'outlet'
+    return 'outlet', 'inlet'
+
+def voluteRoleFields(state, role: str) -> dict:
+
+    '''
+
+    The settings of the inlet or the outlet volute, whichever end of the jacket it sits at.
+
+    Each field is read by its own name rather than built from the role, so a static read of this
+    module sees every field it reaches.
+
+    '''
+
+    if role == 'inlet':
+        return dict(make = state.makeInletVolute, interfaceCount = state.numInletInterfaceCS,
+                    flareRoverD = state.inletVoluteFlareRoverD, axialOffset = state.inletVoluteAxialOffset,
+                    tilt = state.inletVoluteTilt, flareLength = state.inletVoluteFlareLength)
+    return dict(make = state.makeOutletVolute, interfaceCount = state.numOutletInterfaceCS,
+                flareRoverD = state.outletVoluteFlareRoverD, axialOffset = state.outletVoluteAxialOffset,
+                tilt = state.outletVoluteTilt, flareLength = state.outletVoluteFlareLength)
+
+def interfaceCountsByEnd(state) -> tuple:
+
+    '''Interface stations at the injector face and at the aft end, in that order.'''
+
+    aftRole, forwardRole = voluteRolesByEnd(state)
+    return (voluteRoleFields(state, forwardRole)['interfaceCount'],
+            voluteRoleFields(state, aftRole)['interfaceCount'])
+
+def setInterfaceCountsByEnd(state, forwardCount: int, aftCount: int) -> None:
+
+    '''Write back the interface station counts at the injector face and at the aft end.'''
+
+    aftRole, forwardRole = voluteRolesByEnd(state)
+    counts = {forwardRole: forwardCount, aftRole: aftCount}
+    state.numInletInterfaceCS, state.numOutletInterfaceCS = counts['inlet'], counts['outlet']
+
 def _sizingState(state) -> 'ChannelSizingState':
 
     '''
@@ -563,11 +634,14 @@ def _sizingState(state) -> 'ChannelSizingState':
         # coolant exit condition to, rather than a limit of zero.
         minCoolantExitPressure             = state.minCoolantExitPressure,
         minCoolantExitTemperature          = state.minCoolantExitTemperature,
+        maxCoolantTemperature              = state.maxCoolantTemperature,
+        maxColdWallTemperature             = state.maxColdWallTemperature,
         hotWallThickness                   = state.hotWallThickness,
         infillThickness                    = state.infillThickness,
         material                           = state.material,
         coolant                            = state.coolant,
         coolantMassFlow                    = state.coolantMassFlow,
+        jacketFlowDirection                = jacketFlowDirectionOf(state),
         coolantInitialTemperature          = state.coolantInitialTemperature,
         coolantInitialPressure             = state.coolantInitialPressure,
         chamberPressure                    = state.chamberPressure,
@@ -700,10 +774,12 @@ def solveRegenChannels(state, thermal):
 
         Trim the regen section at each end and build the fillet and flare to each volute.
 
-        The inlet volute sits at the aft end of the regen section and the outlet volute at the
-        injector face. The outlet interface is `upstreamVoluteInterfaceCurve`, the inlet one
-        reflected through a plane normal to the axis, so the outlet is the mirror image of the
-        inlet for the same offset, fillet, flare and tilt.
+        The construction belongs to the end: `voluteInterfaceCurve` at the aft end of the regen
+        section, and `upstreamVoluteInterfaceCurve`, the same curve reflected through a plane
+        normal to the axis, at the injector face. Which volute each end leads to follows the
+        coolant: a counterflow jacket takes it in at the aft end, so the inlet volute and its
+        settings sit there and the outlet volute at the injector face; a coflow jacket reverses
+        both. `xInletInterface` is always the interface to the inlet volute, wherever that is.
 
         Author: Isabella Duprey-Churn
         Date:   4/28/2026
@@ -738,26 +814,35 @@ def solveRegenChannels(state, thermal):
 
             return flareRoverD * (state.shellThickness + maxChannelRadius*2 + state.hotWallThickness)
 
-        def interfaceToInlet():
+        def settings(role):
 
-            filletRadius = filletRadiusAt(state.inletVoluteFlareRoverD, len(state.xRegenNozzleTrimmed)-1)
+            '''The flare, offset, tilt and flare length of the inlet or the outlet volute.'''
+
+            fields = voluteRoleFields(state, role)
+            return fields['flareRoverD'], fields['axialOffset'], fields['tilt'], fields['flareLength']
+
+        def aftInterface(role):
+
+            flareRoverD, axialOffset, tilt, flareLength = settings(role)
+            filletRadius = filletRadiusAt(flareRoverD, len(state.xRegenNozzleTrimmed)-1)
 
             # The volute tilt is the flare angle, which keeps the flare normal to the volute face
             xInterface, rInterface, keep = voluteInterfaceCurve(
-                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, state.inletVoluteAxialOffset,
-                filletRadius, -np.deg2rad(state.inletVoluteTilt), state.inletVoluteFlareLength)
+                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, axialOffset,
+                filletRadius, -np.deg2rad(tilt), flareLength)
             keepStations(keep)
 
             return xInterface, rInterface
 
-        def interfaceToOutlet():
+        def forwardInterface(role):
 
-            filletRadius = filletRadiusAt(state.outletVoluteFlareRoverD, 0)
+            flareRoverD, axialOffset, tilt, flareLength = settings(role)
+            filletRadius = filletRadiusAt(flareRoverD, 0)
 
-            # The mirror image of the inlet construction, at the injector face
+            # The mirror image of the aft construction, at the injector face
             xInterface, rInterface, keep = upstreamVoluteInterfaceCurve(
-                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, state.outletVoluteAxialOffset,
-                filletRadius, -np.deg2rad(state.outletVoluteTilt), state.outletVoluteFlareLength)
+                state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed, axialOffset,
+                filletRadius, -np.deg2rad(tilt), flareLength)
             keepStations(keep)
 
             return xInterface, rInterface
@@ -781,15 +866,15 @@ def solveRegenChannels(state, thermal):
         state.regenSectionNearWallMachNumberTrimmed  = state.regenSectionNearWallMachNumber.copy()
         state.regenSectionNearWallPressureTrimmed    = state.regenSectionNearWallPressure.copy()
 
-        # Call helpers
-        if state.makeInletVolute == 'on':
-            state.xInletInterface, state.rInletInterface = interfaceToInlet()
-        else:
-            state.xInletInterface, state.rInletInterface = [], []
-        if state.makeOutletVolute == 'on':
-            state.xOutletInterface, state.rOutletInterface = interfaceToOutlet()
-        else:
-            state.xOutletInterface, state.rOutletInterface = [], []
+        # Call helpers, the aft end first
+        aftRole, forwardRole = voluteRolesByEnd(state)
+        built = {'inlet': ([], []), 'outlet': ([], [])}
+        if voluteRoleFields(state, aftRole)['make'] == 'on':
+            built[aftRole] = aftInterface(aftRole)
+        if voluteRoleFields(state, forwardRole)['make'] == 'on':
+            built[forwardRole] = forwardInterface(forwardRole)
+        state.xInletInterface, state.rInletInterface = built['inlet']
+        state.xOutletInterface, state.rOutletInterface = built['outlet']
 
         # Resize arrays to correct lengths
         if state.makeInletVolute == 'on' or state.makeOutletVolute == 'on':
@@ -819,8 +904,10 @@ def solveRegenChannels(state, thermal):
 
         state.numInletInterfaceCS  = len(state.xInletInterface)
         state.numOutletInterfaceCS = len(state.xOutletInterface)
-        state.xRegenNozzleInterfaced = np.concatenate([state.xOutletInterface,state.xRegenNozzleTrimmed,state.xInletInterface])
-        state.rRegenNozzleInterfaced = np.concatenate([state.rOutletInterface,state.rRegenNozzleTrimmed,state.rInletInterface])
+        # Wall order: the injector face's interface, the jacketed wall, the aft end's interface
+        (xForward, rForward), (xAft, rAft) = built[forwardRole], built[aftRole]
+        state.xRegenNozzleInterfaced = np.concatenate([xForward, state.xRegenNozzleTrimmed, xAft])
+        state.rRegenNozzleInterfaced = np.concatenate([rForward, state.rRegenNozzleTrimmed, rAft])
 
     generateVoluteInterfaces()
 
@@ -970,9 +1057,10 @@ def solveRegenChannels(state, thermal):
         # ------------------------------------------------------------------------------------------------------------------------------------ #
 
         # -- Get Centerline -- #
-        state.channelRadius = np.concatenate([np.ones(state.numOutletInterfaceCS)*state.channelRadius[0],
+        forwardCount, aftCount = interfaceCountsByEnd(state)
+        state.channelRadius = np.concatenate([np.ones(forwardCount)*state.channelRadius[0],
                                              state.channelRadius,
-                                             np.ones(state.numInletInterfaceCS)*state.channelRadius[-1]])
+                                             np.ones(aftCount)*state.channelRadius[-1]])
         if state.channelType in ('rectangular', 'helical'):
             # The width, or for a helix the pass spacing, is set at the cold wall along the whole
             # interfaced line, flares included, and the depth may not pass its limits there.
@@ -1026,12 +1114,14 @@ def solveRegenChannels(state, thermal):
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
 
-        if state.numOutletInterfaceCS > 0:
-            wallStart = fractionOld[state.numOutletInterfaceCS]
-            state.numOutletInterfaceCS = int(np.sum(fractionNew < wallStart))
-        if state.numInletInterfaceCS > 0:
-            wallEnd = fractionOld[len(xOld) - state.numInletInterfaceCS - 1]
-            state.numInletInterfaceCS = int(np.sum(fractionNew > wallEnd))
+        forwardCount, aftCount = interfaceCountsByEnd(state)
+        if forwardCount > 0:
+            wallStart = fractionOld[forwardCount]
+            forwardCount = int(np.sum(fractionNew < wallStart))
+        if aftCount > 0:
+            wallEnd = fractionOld[len(xOld) - aftCount - 1]
+            aftCount = int(np.sum(fractionNew > wallEnd))
+        setInterfaceCountsByEnd(state, forwardCount, aftCount)
 
         offset = np.ones(state.numCrossSections)*state.hotWallThickness + state.channelRadius
         state.xChannelCenterline2D,state.rChannelCenterline2D = parallelOffset(state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced, offset)
@@ -1057,8 +1147,9 @@ def solveRegenChannels(state, thermal):
         elif state.channelType == 'helical':
             meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
             onWall = np.ones(state.numCrossSections, dtype = bool)
-            onWall[:state.numOutletInterfaceCS] = False
-            onWall[state.numCrossSections - state.numInletInterfaceCS:] = False
+            forwardCount, aftCount = interfaceCountsByEnd(state)
+            onWall[:forwardCount] = False
+            onWall[state.numCrossSections - aftCount:] = False
             state.wrapAngles = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle, active = onWall)
         else:
             state.wrapAngles = kineosAlgorithm(state.xChannelCenterline2D,state.rChannelCenterline2D,state.channelRadius)

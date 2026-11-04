@@ -119,6 +119,7 @@ from .channelSections import (depthLimitedHalfExtent, helicalSpacing, loxodromeW
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import hotWallSectorArea
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
+from .validation import specified
 
 def _zeroIfUnset(value) -> float:
 
@@ -178,7 +179,8 @@ def drivingTemperatureArray(state):
 THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'machNumber',
                    'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
                    'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
-                   'reynoldsNumber', 'radiativeHeatTransfer', 'drivingTemperature')
+                   'reynoldsNumber', 'radiativeHeatTransfer', 'drivingTemperature',
+                   'coldWallTemperature')
 
 @dataclass
 class ChannelSizingState:
@@ -240,6 +242,9 @@ class ChannelSizingState:
         Coolant species.
     coolantMassFlow : float
         Total coolant flow through the jacket [kg/s].
+    jacketFlowDirection : str
+        'counterflow', the coolant entering at the aft end of the jacket, or 'coflow', entering at
+        the injector end. It sets the order the march visits the stations in.
     coolantInitialTemperature, coolantInitialPressure : float
         Coolant state at the jacket inlet [K], [Pa].
     chamberPressure : float
@@ -300,11 +305,14 @@ class ChannelSizingState:
     maxWallTemperature:                     float = float('nan')
     minCoolantExitPressure:                 Any   = None
     minCoolantExitTemperature:              Any   = None
+    maxCoolantTemperature:                  Any   = None
+    maxColdWallTemperature:                 Any   = None
     hotWallThickness:                       float = 0.0
     infillThickness:                        float = 0.0
     material:                               str   = 'GRCop-42'
     coolant:                                str   = ''
     coolantMassFlow:                        float = float('nan')
+    jacketFlowDirection:                    str   = 'counterflow'
     coolantInitialTemperature:              float = float('nan')
     coolantInitialPressure:                 float = float('nan')
     chamberPressure:                        float = float('nan')
@@ -552,6 +560,59 @@ def coolantPastWallLimit(stationIndex: int, coolantTemperature: float,
         value           = float(coolantTemperature),
         limit           = float(limit))
 
+def checkCoolantCeilings(state, results: dict) -> None:
+
+    '''
+
+    Refuse a jacket whose coolant passes its bulk temperature or cold wall ceiling anywhere.
+
+    The bulk ceiling is a limit no channel size can fix: the coolant warms by the heat the wall
+    passes it, and a channel of any size passes nearly the same heat. The cold wall ceiling is one
+    the thermal sizing holds by shrinking the channel; it can still be passed in the manual mode,
+    where the size is given, or where the channel reached its smallest buildable size first.
+
+    Parameters:
+    -----------
+    state : ChannelSizingState
+        Carries `maxCoolantTemperature` and `maxColdWallTemperature`, either unset.
+    results : dict
+        The march's station results, with 'temperature' and 'coldWallTemperature'.
+
+    Raises:
+    -------
+    ThermalConstraintError
+        At the first station past either ceiling.
+
+    '''
+
+    # The thermal search holds its target to one part in ten thousand of the hot wall limit, and
+    # the cold wall inherits that tolerance through the effective target it is folded into
+    searchTolerance = 0.0
+    if getattr(state, 'channelSizingMode', 'thermal') == 'thermal' and specified(state, 'maxWallTemperature'):
+        searchTolerance = 1.0e-4 * float(state.maxWallTemperature)
+
+    ceilings = (
+        ('temperature', 'maxCoolantTemperature', 'bulk coolant', 0.0,
+         'No channel size lowers it; a lower inlet temperature, more coolant, or a shorter jacket does.'),
+        ('coldWallTemperature', 'maxColdWallTemperature', 'coolant-side wall', searchTolerance,
+         'For a hydrocarbon this is the coking limit. Smaller channels, which the thermal sizing '
+         'chooses itself, or more coolant lower it.'))
+
+    for key, field, what, allowance, remedy in ceilings:
+        if not specified(state, field):
+            continue
+        limit = float(getattr(state, field))
+        values = np.asarray(results[key], dtype = float)
+        past = np.flatnonzero(values > limit * (1.0 + 1.0e-6) + allowance)
+        if past.size:
+            station = int(past[0])
+            raise ThermalConstraintError(
+                message = (f'The {what} temperature reaches {values[station]:.1f} K at station '
+                           f'{station}, past the {limit:.1f} K ceiling (`{field}`), and '
+                           f'{values.max():.1f} K at its hottest. {remedy}'),
+                context = createErrorContext(stationIndex = station, ceiling = field),
+                thermalProperty = field, value = float(values[station]), limit = limit)
+
 def checkCoolantExitState(state) -> None:
 
     '''
@@ -667,6 +728,47 @@ def reportSizingResult(state, results: dict) -> None:
     print('  the profile it converged to, which rebuilds this jacket without the search:')
     print(profileConfigurationBlock(document))
 
+def coolantMarchOrder(stations: int, direction: str = 'counterflow') -> np.ndarray:
+
+    '''
+
+    The wall stations in the order the coolant visits them, inlet first.
+
+    A counterflow jacket takes its coolant in at the aft end of the jacket and carries it toward
+    the injector, so the march runs the wall backwards. A coflow jacket takes it in at the injector
+    end and carries it with the gas. The station arrays a march writes are in this order and are
+    scattered back to wall order through it, so a march written for one direction runs the other
+    without a change of its own.
+
+    Parameters:
+    -----------
+    stations : int
+        Stations on the jacket's wall.
+    direction : str
+        'counterflow' or 'coflow'.
+
+    Returns:
+    --------
+    np.ndarray
+        Wall station indices in march order.
+
+    Raises:
+    -------
+    InvalidInputError
+        If the direction is neither.
+
+    '''
+
+    if direction == 'counterflow':
+        return np.arange(stations)[::-1]
+    if direction == 'coflow':
+        return np.arange(stations)
+    raise InvalidInputError(
+        message = 'A coolant either runs against the gas, entering at the aft end of the jacket, '
+                  'or with it, entering at the injector end.',
+        parameterName = 'jacketFlowDirection', value = direction,
+        validRange = "'counterflow' or 'coflow'")
+
 def solveChannelRadii(state, geometry, thermal):
 
     '''
@@ -711,18 +813,20 @@ def solveChannelRadii(state, geometry, thermal):
 
         '''
 
-        channelOffsetDistance = state.hotWallThickness + channelRadius[i]
+        # parallelOffset puts a positive offset on the outer side of a wall traversed toward the
+        # exit, so the sign follows the direction the march runs the wall
+        channelOffsetDistance = outwardSide * (state.hotWallThickness + channelRadius[i])
 
         match i:
             case 0:
-                xChannelCenterline2D[:2], rChannelCenterline2D[:2] = parallelOffset(np.flip(xNozzle)[:2], np.flip(rNozzle)[:2], -channelOffsetDistance)
+                xChannelCenterline2D[:2], rChannelCenterline2D[:2] = parallelOffset(xNozzle[marchOrder][:2], rNozzle[marchOrder][:2], channelOffsetDistance)
                 return xChannelCenterline2D[:2], rChannelCenterline2D[:2]
             case _ if i == state.numCrossSections - 1:
-                xChannelCenterline2D_temp, rChannelCenterline2D_temp = parallelOffset(np.flip(xNozzle)[:i+1], np.flip(rNozzle)[:i+1], -channelOffsetDistance)
+                xChannelCenterline2D_temp, rChannelCenterline2D_temp = parallelOffset(xNozzle[marchOrder][:i+1], rNozzle[marchOrder][:i+1], channelOffsetDistance)
                 xChannelCenterline2D[-1], rChannelCenterline2D[-1] = xChannelCenterline2D_temp[-1], rChannelCenterline2D_temp[-1]
                 return xChannelCenterline2D[i-1:i+1], rChannelCenterline2D[i-1:i+1]
             case _:
-                xChannelCenterline2D_temp, rChannelCenterline2D_temp = parallelOffset(np.flip(xNozzle)[:i+2], np.flip(rNozzle)[:i+2], -channelOffsetDistance)
+                xChannelCenterline2D_temp, rChannelCenterline2D_temp = parallelOffset(xNozzle[marchOrder][:i+2], rNozzle[marchOrder][:i+2], channelOffsetDistance)
                 xChannelCenterline2D[i:i+2], rChannelCenterline2D[i:i+2] = xChannelCenterline2D_temp[i:i+2], rChannelCenterline2D_temp[i:i+2]
                 return xChannelCenterline2D[i-1:i+2], rChannelCenterline2D[i-1:i+2]
 
@@ -908,18 +1012,18 @@ def solveChannelRadii(state, geometry, thermal):
         '''
 
         # get local combustion properties
-        heatTransferDict_i["xHotWall3D"]          = np.array([xNozzle                                     [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["rHotWall3D"]          = np.array([rNozzle                                     [state.numCrossSections - 1 - i]])
+        heatTransferDict_i["xHotWall3D"]          = np.array([xNozzle                                     [marchOrder[i]]])
+        heatTransferDict_i["rHotWall3D"]          = np.array([rNozzle                                     [marchOrder[i]]])
         heatTransferDict_i["hotWallSegmentLength"] = np.array([wallSegmentLength[i]])
-        heatTransferDict_i["gamma"]               = np.array([state.gammaRegenSectionTrimmed               [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["molecularWeight"]     = np.array([state.molecularWeightRegenSectionTrimmed     [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["gasConstant"]         = np.array([state.gasConstantRegenSectionTrimmed         [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["nearWallMachNumber"]  = np.array([state.regenSectionNearWallMachNumberTrimmed  [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["nearWallTemperature"] = np.array([state.regenSectionNearWallTemperatureTrimmed [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["drivingTemperature"]  = np.array([drivingTemperatureArray(state)      [state.numCrossSections - 1 - i]])
-        heatTransferDict_i["nearWallPressure"]    = np.array([state.regenSectionNearWallPressureTrimmed    [state.numCrossSections - 1 - i]])
+        heatTransferDict_i["gamma"]               = np.array([state.gammaRegenSectionTrimmed               [marchOrder[i]]])
+        heatTransferDict_i["molecularWeight"]     = np.array([state.molecularWeightRegenSectionTrimmed     [marchOrder[i]]])
+        heatTransferDict_i["gasConstant"]         = np.array([state.gasConstantRegenSectionTrimmed         [marchOrder[i]]])
+        heatTransferDict_i["nearWallMachNumber"]  = np.array([state.regenSectionNearWallMachNumberTrimmed  [marchOrder[i]]])
+        heatTransferDict_i["nearWallTemperature"] = np.array([state.regenSectionNearWallTemperatureTrimmed [marchOrder[i]]])
+        heatTransferDict_i["drivingTemperature"]  = np.array([drivingTemperatureArray(state)      [marchOrder[i]]])
+        heatTransferDict_i["nearWallPressure"]    = np.array([state.regenSectionNearWallPressureTrimmed    [marchOrder[i]]])
         if state.gasCoefficientProfile is not None:
-            heatTransferDict_i["prescribedGasCoefficient"] = np.array([state.gasCoefficientProfile[state.numCrossSections - 1 - i]])
+            heatTransferDict_i["prescribedGasCoefficient"] = np.array([state.gasCoefficientProfile[marchOrder[i]]])
 
         # get geometry properties for heat transfer
         # A helix's width follows the depth being tried, and its rib is what the pass spacing leaves
@@ -945,13 +1049,21 @@ def solveChannelRadii(state, geometry, thermal):
         # always did.
         hotWallTemperature                          = heatTransferOutputs.get(
             'metalWallTemperature', heatTransferOutputs['hotWallTemperature'])
+        # A ceiling on the coolant's own wall, the coking temperature of a hydrocarbon, binds
+        # wherever the cold wall would pass it before the hot wall reaches its limit. The search
+        # is handed the hot wall limit plus that excess, so it shrinks the channel, which raises
+        # the coolant coefficient and cools both faces, until the cold wall sits at its ceiling.
+        if specified(state, 'maxColdWallTemperature'):
+            excess = heatTransferOutputs['coldWallTemperature'] - float(state.maxColdWallTemperature)
+            hotWallTemperature = np.maximum(hotWallTemperature, float(state.maxWallTemperature) + excess)
         heatTransferDict_i['newCoolantTemperature'] = heatTransferOutputs['coolantTemperature'][0]
         heatTransferDict_i['newCoolantPressure']    = heatTransferOutputs['coolantPressure'][0]
         # update global plot outputs
         for key in THERMALPLOTKEYS:
-            heatTransferPlots[key][state.numCrossSections - 1 - i] = plotOutputs[key][0]
+            heatTransferPlots[key][marchOrder[i]] = plotOutputs[key][0]
 
-        return heatTransferDict_i, heatTransferPlots, hotWallTemperature
+        # The station solve returns one-element arrays; the search compares and steps on a scalar
+        return heatTransferDict_i, heatTransferPlots, float(np.asarray(hotWallTemperature).reshape(-1)[0])
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Do The Thing -- #
@@ -964,11 +1076,25 @@ def solveChannelRadii(state, geometry, thermal):
     # Locally scope nozzle wall values
     xNozzle, rNozzle = state.xRegenNozzleTrimmed, state.rRegenNozzleTrimmed
 
+    # The march visits the stations in coolant order, inlet first. Every station array the march
+    # writes is in that order and is placed back in wall order when the march returns.
+    marchOrder = coolantMarchOrder(len(xNozzle), state.jacketFlowDirection)
+    outwardSide = 1.0 if marchOrder[-1] > marchOrder[0] else -1.0
+
+    def toWallOrder(values) -> np.ndarray:
+
+        '''An array the march wrote in coolant order, placed back in wall order.'''
+
+        values = np.asarray(values)
+        placed = np.empty_like(values)
+        placed[marchOrder] = values
+        return placed
+
     # Meridional length of hot wall each station covers, in march order and on the convention
     # the channel path length uses: the segment to the next station, the last one repeated. The
     # gas-side area is taken from this rather than from the channel path, which is longer
     # wherever the channel wraps.
-    wallSegmentLength = np.hypot(np.diff(np.flip(xNozzle)), np.diff(np.flip(rNozzle)))
+    wallSegmentLength = np.hypot(np.diff(xNozzle[marchOrder]), np.diff(rNozzle[marchOrder]))
     wallSegmentLength = np.append(wallSegmentLength, wallSegmentLength[-1])
 
     # Temperature-dependent wall alloy properties, sampled from
@@ -1067,7 +1193,7 @@ def solveChannelRadii(state, geometry, thermal):
 
             # The loxodrome and the pass spacing along the cold wall, in march order
             xColdWall, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
-            xColdWall, rColdWall = np.flip(xColdWall), np.flip(rColdWall)
+            xColdWall, rColdWall = xColdWall[marchOrder], rColdWall[marchOrder]
             meridional = np.insert(np.cumsum(np.hypot(np.diff(xColdWall), np.diff(rColdWall))), 0, 0.0)
             state.dcrData['helicalWrap'] = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle)
             state.dcrData['passSpacing'] = helicalSpacing(rColdWall, nChannel, state.channelHelixAngle)
@@ -1084,7 +1210,7 @@ def solveChannelRadii(state, geometry, thermal):
             # offset by its thickness, so the rib at its root is the infill thickness. Held in
             # march order, which is the order every station array in the solve is written in.
             _, rColdWall = parallelOffset(xNozzle, rNozzle, state.hotWallThickness)
-            state.dcrData['channelWidth'] = np.flip(rectangularWidth(rColdWall, nChannel, state.infillThickness))
+            state.dcrData['channelWidth'] = rectangularWidth(rColdWall, nChannel, state.infillThickness)[marchOrder]
         else:
             throatRadius = min(rNozzle)
             offsetHotWallThickness = state.hotWallThickness - state.infillThickness
@@ -1561,11 +1687,11 @@ def solveChannelRadii(state, geometry, thermal):
         # volute is sized from it: the wall thickness comes from the GRCop yield strength
         # at that temperature, and a cryogenic inlet temperature reports a far higher
         # yield strength than the warm exit the volute actually sees.
-        state.coolantExitPressure    = heatTransferPlots['pressure'][0]
-        state.coolantExitTemperature = heatTransferPlots['temperature'][0]
+        state.coolantExitPressure    = heatTransferPlots['pressure'][marchOrder[-1]]
+        state.coolantExitTemperature = heatTransferPlots['temperature'][marchOrder[-1]]
 
-        return np.flip(channelRadius), np.flip(xChannelCenterline3D), np.flip(yChannelCenterline3D), np.flip(zChannelCenterline3D), \
-            heatTransferPlots, baseHeatTransferDict
+        return toWallOrder(channelRadius), toWallOrder(xChannelCenterline3D), toWallOrder(yChannelCenterline3D), \
+            toWallOrder(zChannelCenterline3D), heatTransferPlots, baseHeatTransferDict
 
     # Build the channel at the size a profile already decided
     def manualChannelRadii(maxWallTemperature, halfExtent, profileKey, keyName, nChannel):
@@ -1639,8 +1765,8 @@ def solveChannelRadii(state, geometry, thermal):
 
         for i in tqdm(range(state.numCrossSections), desc = 'Building channel radii', colour = '#ABD038'):
 
-            # The march runs from the coolant inlet, which is the last station in nozzle order.
-            station   = state.numCrossSections - 1 - i
+            # The station the march is on, in wall order
+            station   = marchOrder[i]
             requested = float(halfExtent[station])
 
             maxChannelRadius = kineosAlgorithm_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, i, findMaxRadius=True)
@@ -1685,12 +1811,12 @@ def solveChannelRadii(state, geometry, thermal):
             heatTransferDict_i['coolantInitialTemperature'] = heatTransferDict_i['newCoolantTemperature']
             heatTransferDict_i['coolantInitialPressure']    = heatTransferDict_i['newCoolantPressure']
 
-        # Nozzle order, so the exit is the first index. See the note in dynamicChannelRadii.
-        state.coolantExitPressure    = heatTransferPlots['pressure'][0]
-        state.coolantExitTemperature = heatTransferPlots['temperature'][0]
+        # The exit is the last station the march visits. See the note in dynamicChannelRadii.
+        state.coolantExitPressure    = heatTransferPlots['pressure'][marchOrder[-1]]
+        state.coolantExitTemperature = heatTransferPlots['temperature'][marchOrder[-1]]
 
-        return np.flip(channelRadius), np.flip(xChannelCenterline3D), np.flip(yChannelCenterline3D), np.flip(zChannelCenterline3D), \
-            heatTransferPlots, baseHeatTransferDict
+        return toWallOrder(channelRadius), toWallOrder(xChannelCenterline3D), toWallOrder(yChannelCenterline3D), \
+            toWallOrder(zChannelCenterline3D), heatTransferPlots, baseHeatTransferDict
 
     if state.channelSizingMode not in CHANNELSIZINGMODES:
         raise InvalidInputError(
@@ -1718,10 +1844,10 @@ def solveChannelRadii(state, geometry, thermal):
 
     state.channelRadius = channelRadius.copy()
     if state.channelType == 'rectangular':
-        state.channelWidth = np.flip(state.dcrData['channelWidth'])
+        state.channelWidth = toWallOrder(state.dcrData['channelWidth'])
     elif state.channelType == 'helical':
         state.channelWidth        = 2*channelRadius/state.channelAspectRatio
-        state.channelRibThickness = np.flip(state.dcrData['passSpacing']) - state.channelWidth
+        state.channelRibThickness = toWallOrder(state.dcrData['passSpacing']) - state.channelWidth
 
     # The wall the jacket held, station by station. In the thermal mode this is the target
     # wherever the search converged and the bound wherever it did not; in the manual mode it is
@@ -1736,7 +1862,7 @@ def solveChannelRadii(state, geometry, thermal):
     state.channelThermalResults = {key: np.array(value, dtype = float, copy = True)
                                    for key, value in heatTransferPlots.items()}
     sectorArea = hotWallSectorArea(state.channelThermalResults['rHotWall3D'], state.nChannel,
-                                   np.flip(wallSegmentLength))
+                                   toWallOrder(wallSegmentLength))
     state.channelThermalResults['heatFlux'] = state.channelThermalResults['heatTransfer'] / sectorArea
 
     # The profile this run built, keyed on the fraction along the jacket rather than on area
@@ -1747,6 +1873,9 @@ def solveChannelRadii(state, geometry, thermal):
         [stationKeys('jacketFraction', xNozzle, rNozzle), state.channelRadius])
 
     reportSizingResult(state, heatTransferPlots)
+
+    # The ceilings on the coolant, checked once the whole jacket has been marched
+    checkCoolantCeilings(state, heatTransferPlots)
 
     # Reported first, then checked, so a run that fails on its coolant exit condition still
     # says what jacket it built before it says why that jacket is not usable.

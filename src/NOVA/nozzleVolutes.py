@@ -191,6 +191,7 @@ class RegenVoluteState:
     inletVoluteAlignment:                  Any = None
     inletVoluteCrossSection:               Any = None
     inletVolutePrintability:               Any = None
+    jacketFlowDirection:                   Any = None
     material:                              Any = None
     inletVoluteTilt:                       Any = None
     makeInletVolute:                       Any = None
@@ -460,6 +461,14 @@ def solveRegenVolutes(state):
 
         return throatArea, velocity, head
 
+    # The end each volute sits at follows the coolant: a counterflow jacket takes it in at the aft
+    # end of the channels, the last station, and gives it up at the injector face, the first; a
+    # coflow jacket the reverse. The scroll's hand belongs to the end, so a volute at either end is
+    # built the way the one usually there is.
+    direction = state.jacketFlowDirection if isinstance(state.jacketFlowDirection, str) else 'counterflow'
+    inletStation, outletStation = (-1, 0) if direction == 'counterflow' else (0, -1)
+    scrollHand = {-1: 'ccw', 0: 'cw'}
+
     def generateRegenInletVolute():
 
         print(f'Generating Inlet Volute:')
@@ -480,12 +489,12 @@ def solveRegenVolutes(state):
         inletVolute.crossSectionResolution         = state.numCSPointsVolute
         inletVolute.numCrossSections               = state.numCSVolute
         # scroll properties
-        inletVolute.scrollDirection                = 'ccw'
+        inletVolute.scrollDirection                = scrollHand[inletStation]
         # area distribution properties
         inletVolute.scrollType                     = state.voluteScrollType
-        inletVolute.interfaceHydraulicDiameter     = portDiameter(-1)*tongueOverPort
+        inletVolute.interfaceHydraulicDiameter     = portDiameter(inletStation)*tongueOverPort
         state.inletVoluteThroatArea, state.inletVoluteVelocity, state.inletVoluteVelocityHead = \
-            scrollThroat('inlet', -1, inletVolute.interfaceHydraulicDiameter,
+            scrollThroat('inlet', inletStation, inletVolute.interfaceHydraulicDiameter,
                          units.toSI(state.inletGraylocDiameter, 'length', 'in'),
                          state.coolantInitialTemperature, state.coolantInitialPressure)
         inletVolute.expandedArea                   = state.inletVoluteThroatArea
@@ -493,8 +502,8 @@ def solveRegenVolutes(state):
         # at a station part way along it.
         inletVolute.voluteScrollRadius, inletVolute.axialOffset = scrollPlacement(
             state.inletVoluteCrossSection, inletVolute.interfaceHydraulicDiameter,
-            state.inletVoluteAlignment, state.xChannelCenterline2D[-1],
-            state.rChannelCenterline2D[-1], portDiameter(-1))
+            state.inletVoluteAlignment, state.xChannelCenterline2D[inletStation],
+            state.rChannelCenterline2D[inletStation], portDiameter(inletStation))
         # wall properties
         inletVolute.wallHoopStress                 = hoopStressTarget
         inletVolute.minWallThickness               = state.minVoluteWallThickness or 0.0
@@ -512,7 +521,7 @@ def solveRegenVolutes(state):
                 context=createErrorContext(
                     scrollRadius=inletVolute.voluteScrollRadius,
                     axialOffset=inletVolute.axialOffset,
-                    channelRadius=state.channelRadius[-1],
+                    channelRadius=state.channelRadius[inletStation],
                     coolantPressure=state.coolantInitialPressure,
                     coolantTemperature=state.coolantInitialTemperature
                 ),
@@ -595,12 +604,12 @@ def solveRegenVolutes(state):
         outletVolute.crossSectionResolution     = state.numCSPointsVolute
         outletVolute.numCrossSections           = state.numCSVolute
         # scroll properties
-        outletVolute.scrollDirection            = 'cw'
+        outletVolute.scrollDirection            = scrollHand[outletStation]
         # area distribution properties
         outletVolute.scrollType                 = state.voluteScrollType
-        outletVolute.interfaceHydraulicDiameter = portDiameter(0)*tongueOverPort
+        outletVolute.interfaceHydraulicDiameter = portDiameter(outletStation)*tongueOverPort
         state.outletVoluteThroatArea, state.outletVoluteVelocity, state.outletVoluteVelocityHead = \
-            scrollThroat('outlet', 0, outletVolute.interfaceHydraulicDiameter,
+            scrollThroat('outlet', outletStation, outletVolute.interfaceHydraulicDiameter,
                          units.toSI(state.outletGraylocDiameter, 'length', 'in'),
                          state.coolantExitTemperature, state.coolantExitPressure)
         outletVolute.expandedArea               = state.outletVoluteThroatArea
@@ -608,8 +617,8 @@ def solveRegenVolutes(state):
         # scroll is placed the same way on the port at the other end of the centerline.
         outletVolute.voluteScrollRadius, outletVolute.axialOffset = scrollPlacement(
             state.outletVoluteCrossSection, outletVolute.interfaceHydraulicDiameter,
-            state.outletVoluteAlignment, state.xChannelCenterline2D[0],
-            state.rChannelCenterline2D[0], portDiameter(0))
+            state.outletVoluteAlignment, state.xChannelCenterline2D[outletStation],
+            state.rChannelCenterline2D[outletStation], portDiameter(outletStation))
         # wall properties
         outletVolute.wallHoopStress             = hoopStressTarget
         outletVolute.minWallThickness           = state.minVoluteWallThickness or 0.0
@@ -627,7 +636,7 @@ def solveRegenVolutes(state):
                 context=createErrorContext(
                     scrollRadius=outletVolute.voluteScrollRadius,
                     axialOffset=outletVolute.axialOffset,
-                    channelRadius=state.channelRadius[0],
+                    channelRadius=state.channelRadius[outletStation],
                     coolantPressure=state.coolantExitPressure,
                     coolantTemperature=state.coolantExitTemperature
                 ),

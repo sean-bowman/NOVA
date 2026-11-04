@@ -1670,7 +1670,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             'coolantConvectiveHeatTransferCoef' : coolantConvectiveHeatTransferCoef,
             'reynoldsNumber'                    : coolantReynoldsNumber,
             'radiativeHeatTransfer'             : radiativeHeatTransfer,
-            'drivingTemperature'                : drivingTemperature
+            'drivingTemperature'                : drivingTemperature,
+            'coldWallTemperature'               : coldWallTemperature
         }
 
     else:

@@ -61,6 +61,7 @@ from .channelProfile import CHANNELSIZINGMODES, PROFILEKEYS
 from .channelSections import SECTIONFAMILIES
 from .voluteSections import SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS
 from .ceaInterface import CEA
+from .flowAccounting import accountForFlows
 from . import units
 from .contour import divergingSectionFamily
 from .contourKernel import nearWallStateModels, transonicModels
@@ -310,6 +311,16 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.coolantInitialTemperature      = inputsPath['coolantInitialTemperature']
         nozzle.coolantInitialPressure         = inputsPath['coolantInitialPressure']
         nozzle.coolantMassFlow                = inputsPath['coolantMassFlow']
+        # Which way the coolant runs relative to the gas. Counterflow enters at the aft end of the
+        # jacket and leaves at the injector face, which is what every configuration written before
+        # the choice existed asked for without saying so; coflow enters at the injector face.
+        nozzle.jacketFlowDirection            = nameOr('jacketFlowDirection', 'counterflow')
+        # The share of the coolant's propellant sent around the jacket to the injector, read when
+        # the jacket flow is left unset, and two ceilings on the coolant: its bulk temperature and
+        # the temperature of the wall it washes, which for a hydrocarbon is the coking limit
+        nozzle.coolantBypassFraction          = valueOr('coolantBypassFraction', None)
+        nozzle.maxCoolantTemperature          = valueOr('maxCoolantTemperature', None)
+        nozzle.maxColdWallTemperature         = valueOr('maxColdWallTemperature', None)
 
         # -- Regen Volute Inputs -- #
         nozzle.makeInletVolute                = inputsPath['makeInletVolute']
@@ -396,6 +407,21 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.thrust                   = nozzle.ceaOutput.nozzlePerformance['idealISP[s]'] * units.GRAVITY * nozzle.engineMassFlow
     elif np.isnan(nozzle.engineMassFlow):
         nozzle.engineMassFlow           = nozzle.thrust / (nozzle.ceaOutput.nozzlePerformance['idealISP[s]'] * units.GRAVITY)
+    # Where the propellant goes: the chamber's fuel and oxidizer flows, and the jacket's share of
+    # its stream, refused where the jacket or the chamber film asks for more than the chamber burns
+    cooled = nozzle.makeCoolingChannels == 'on'
+    filmed = nozzle.filmCooling == 'on'
+    account = accountForFlows(
+        nozzle.engineMassFlow, nozzle.OFRatio,
+        nozzle.coolantClass if cooled and isinstance(nozzle.coolantClass, str) else 'fuel',
+        coolantMassFlow = nozzle.coolantMassFlow if cooled else 0.0,
+        coolantBypassFraction = nozzle.coolantBypassFraction if cooled else None,
+        filmMassFlow = nozzle.filmMassFlow if filmed else None)
+    nozzle.fuelMassFlow, nozzle.oxidizerMassFlow = account.fuelMassFlow, account.oxidizerMassFlow
+    if cooled:
+        nozzle.coolantMassFlow        = account.coolantMassFlow
+        nozzle.coolantBypassFraction  = account.coolantBypassFraction
+
     # Exit Pressure or Expansion Ratio
     if not (np.isnan(nozzle.targetExitPressure)) and not (np.isnan(nozzle.expansionRatio)):
         raise ValueError('You cannot specify both nozzle exit pressure and expansion ratio, specify one or the other')
