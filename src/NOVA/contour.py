@@ -54,6 +54,7 @@ from .gasDynamics import (prandtlMeyerAngle, radiusMachRelation, conicalLength,
                           isentropicValues)
 from .wallGeometry import bezierBellWall, thrustOptimizedParabolaWall
 from .geometryTools import arcSpline, lineIntersection
+from . import units
 
 def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGamma: float,
                         gasConstant: float, stagnationTemperature: float,
@@ -133,8 +134,10 @@ class ContourSolution:
         which sets where the truncated ideal contour's kernel stops turning the wall. Rao's
         assumption is one quarter and is the default. Read only by the truncated ideal contour:
         the prescribed-wall families end their arc at the inflection angle their wall was drawn to.
-    ambientSpecificImpulse : float
-        Ambient specific impulse from the thermochemistry, used for the delivered c-star [s]
+    idealSpecificImpulse : float
+        Specific impulse of matched expansion at the area ratio, from the thermochemistry, used
+        for the delivered c-star [s]. Matched, because the thrust coefficient the solve integrates
+        takes its pressure term against the one-dimensional exit pressure.
 
     '''
 
@@ -143,7 +146,7 @@ class ContourSolution:
                  targetExitPressure: float, numContourPoints: int,
                  requestedAreaRatio: float = float('nan'),
                  numCharacteristicsRequested: int = 50, initialWallAngleFraction: float = 0.25,
-                 ambientSpecificImpulse: float = float('nan')):
+                 idealSpecificImpulse: float = float('nan')):
 
         # -- What the solve reads -- #
         self.gas                                 = gas
@@ -160,15 +163,21 @@ class ContourSolution:
         self.requestedAreaRatio                  = requestedAreaRatio
         self.numCharacteristicsRequested         = numCharacteristicsRequested
         self.initialWallAngleFraction            = initialWallAngleFraction
-        self.ambientSpecificImpulse              = ambientSpecificImpulse
+        self.idealSpecificImpulse                = idealSpecificImpulse
         self.throatRadiusNonDimensional          = throat.throatRadius
         self.throatInletCurvatureNonDimensional  = throat.inletCurvature
         self.throatOutletCurvatureNonDimensional = throat.outletCurvature
 
         # -- Figures of merit -- #
-        self.thrustCoef                          = None   # [-]
+        # The solve's own objective: the exit plane's thrust against the design back pressure,
+        # `targetExitPressure`. With only an area ratio named, that pressure is the one-dimensional
+        # equilibrium exit pressure at the area ratio, which is not an ambient anything flies in;
+        # the delivered coefficients against real back pressures are `vacuumThrustCoef` and the
+        # performance summary built from it.
+        self.thrustCoef                          = None   # [-], against targetExitPressure
         self.velocityTermThrustCoef              = None   # [-]
-        self.pressureTermThrustCoef              = None   # [-]
+        self.pressureTermThrustCoef              = None   # [-], against targetExitPressure
+        self.vacuumThrustCoef                    = None   # [-], the exit plane against no back pressure
         self.pressureError                       = None   # [Pa], wall exit pressure against target
 
         # -- What the contour actually delivered, as opposed to what was asked for -- #
@@ -187,6 +196,11 @@ class ContourSolution:
         self.exitMassAveragedPressure            = None   # [Pa]
         self.exitMassFlux                        = None   # [kg/s], non-dimensional radius squared
         self.exitMassClosure                     = None   # [-], exit flux over choked throat flux
+        self.exitPlaneAreaRatio                  = None   # [-], plane area over throat area
+        self.exitMassAveragedMach                = None   # [-]
+        self.exitMassAveragedTemperature         = None   # [K]
+        self.exitMassAveragedVelocity            = None   # [m/s], axial
+        self.exitVacuumSpecificImpulse           = None   # [s], plane thrust over plane mass flow
         self.exitPlaneSampledFraction            = None   # [-], of the exit area the mesh supplied
 
         # -- What a prescribed-wall family reports about its own solve -- #
@@ -264,7 +278,8 @@ contourSolutionOutputs = (
     'deliveredCharacteristicVelocity', 'velocityTermThrustCoef', 'pressureTermThrustCoef',
     'exitPlaneRadius', 'exitPlaneMach', 'exitPlaneFlowAngle', 'exitPlanePressure',
     'exitAreaAveragedPressure', 'exitMassAveragedPressure', 'exitMassFlux', 'exitMassClosure',
-    'exitPlaneSampledFraction',
+    'exitPlaneSampledFraction', 'vacuumThrustCoef', 'exitPlaneAreaRatio', 'exitMassAveragedMach',
+    'exitMassAveragedTemperature', 'exitMassAveragedVelocity', 'exitVacuumSpecificImpulse',
     'chartExtrapolated', 'marchTerminatedOn', 'marchFoldedLines', 'internalShock', 'shockFront',
     'thrustCoefWithoutShock', 'shockThrustDebit',
     'deliveredAreaRatio', 'deliveredLengthFraction', 'referenceConeLength', 'exitWallAngle',
@@ -904,6 +919,12 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
     velocityTermThrustCoef = planeIntegral(exitDensity * exitVelocity**2 * np.cos(flowAngleExitPlane)**2) / throatForce
     pressureTermThrustCoef = planeIntegral(exitPressure - state.targetExitPressure) / throatForce
 
+    # The same plane against no back pressure. A coefficient at any real ambient follows from it
+    # exactly, C_F(p_a) = C_F,vac - p_a A_e / (p_c A_t), so this is the one the delivered
+    # performance is built from; the design back pressure above is the solve's own objective.
+    state.vacuumThrustCoef = velocityTermThrustCoef + planeIntegral(exitPressure) / throatForce
+    state.exitPlaneAreaRatio = float((rExitPlane[0] / state.throatRadiusNonDimensional)**2)
+
     # The exit plane is the only place the solve knows what the whole flow is doing rather
     # than what the wall is doing, so it is kept. The area average is what the thrust
     # coefficient is built from; the mass average is what an exit pressure ought to be matched
@@ -918,6 +939,16 @@ def exitPlaneThrustCoefficient(state: ContourSolution, rExitPlane: np.ndarray,
     massFlux = exitDensity * exitVelocity * np.cos(flowAngleExitPlane)
     state.exitMassFlux = planeIntegral(massFlux)
     state.exitMassAveragedPressure = planeIntegral(exitPressure * massFlux) / state.exitMassFlux
+    state.exitMassAveragedMach = planeIntegral(machNumberExitPlane * massFlux) / state.exitMassFlux
+    state.exitMassAveragedTemperature = planeIntegral(exitTemperature * massFlux) / state.exitMassFlux
+    state.exitMassAveragedVelocity = planeIntegral(exitVelocity * np.cos(flowAngleExitPlane)
+                                                   * massFlux) / state.exitMassFlux
+
+    # Vacuum specific impulse as the plane's own thrust over the plane's own mass flow. It does not
+    # inherit the throat sizing or the mass the march loses on the way, because both sit in the
+    # numerator and the denominator alike.
+    state.exitVacuumSpecificImpulse = float(state.vacuumThrustCoef * throatForce
+                                            / (state.exitMassFlux * units.GRAVITY))
 
     # Mass through the exit plane against the one-dimensional choked throat flow.
     #
@@ -1012,7 +1043,9 @@ def finishContourSolution(state: ContourSolution, xNozzleWall: np.ndarray,
         dischargeCoefficient = throatDischargeCoefficient(state.throatGamma, state.throat.inletCurvature)
         state.theoreticalCharacteristicVelocity = (state.chamberPressure * state.throatArea * dischargeCoefficient
                                                    / state.engineMassFlow)
-        state.deliveredCharacteristicVelocity   = state.ambientSpecificImpulse * 9.81 / thrustCoef
+        # The characteristic velocity that, with this nozzle's thrust coefficient, delivers the
+        # matched-expansion impulse; both at the same back pressure and in standard gravity
+        state.deliveredCharacteristicVelocity   = state.idealSpecificImpulse * units.GRAVITY / thrustCoef
 
         # Assign calculated properties to object
         state.xNozzleWallDivergingNonDimensional = xNozzleWall
@@ -1409,6 +1442,8 @@ def truncatedIdealContour(state: ContourSolution, targetExitMach: float, lengthF
                                     ((2 / (state.chamberGamma + 1))**((state.chamberGamma + 1) / (state.chamberGamma - 1))) * \
                                     (1 - (exitPressure / state.chamberPressure)**((state.chamberGamma - 1) / state.chamberGamma)))
         pressureTermThrustCoef = (exitPressure - state.targetExitPressure) * exitArea / \
+                                    (state.chamberPressure * np.pi * state.throatRadiusNonDimensional**2)
+        state.vacuumThrustCoef = velocityTermThrustCoef + exitPressure * exitArea / \
                                     (state.chamberPressure * np.pi * state.throatRadiusNonDimensional**2)
 
     else:

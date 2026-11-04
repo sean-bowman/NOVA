@@ -80,7 +80,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.interpolate import CubicSpline
 
 from . import units
 from .geometryTools import DCM
@@ -90,82 +89,44 @@ from .channelSections import equivalentDiameter
 from .fluidProperties import fluidProps
 from .voluteSections import (constantVelocityThroatArea, portsPerScroll,
                              scrollPlacement, sectionArea, sectionHydraulicDiameter)
+from .materials import wallMaterialCurves
 from .validation import applyRules, arrayRule, presentRule
 
 # How much wider the tongue section is drawn than the port it meets, so the port opens into the
 # scroll rather than meeting its wall tangentially.
 tongueOverPort = 1.1
 
-# Manufacturer 0.2 per cent yield and ultimate tensile data for the GRCop alloys, in degrees
-# Fahrenheit and ksi as published. The tables are the whole basis of the wall thickness, so the
-# lookup below refuses to read outside them rather than letting a spline invent a number.
-grcopStrengthData = {
-    (42, 'yield'):    ([-320, 70, 392, 752, 1112, 1472], [33.5, 25.8, 24, 20.4, 15.1, 7.4]),
-    (42, 'ultimate'): ([-320, 70, 392, 752, 1112, 1472], [76.6, 52.3, 37, 28.3, 16.3, 8.9]),
-    (84, 'yield'):    ([-423.4, -315.4, 70, 392, 752, 1112, 1472], [37, 37, 30, 28, 24, 16, 7]),
-    (84, 'ultimate'): ([-423.4, -315.4, 70, 392, 752, 1112, 1472],
-                       [103, 90, 57, 38, 29, 17, 8]),
-}
-
 # A pressurized part is proof tested and leak checked at room temperature, where a copper alloy is
 # weaker than it is at coolant temperature, so that is the case the wall has to carry.
 ambientProofTemperature = 293.15
 
-def grcopStrength(stressType: str = 'yield', temperature: float = 298.0, alloy: int = 42) -> float:
+def voluteYieldStrength(material, temperature: float) -> float:
 
     '''
 
-    0.2 per cent yield or ultimate tensile strength of a GRCop alloy [Pa].
+    Yield strength of the jacket alloy at a temperature, which the volute wall is sized on.
 
-    Manufacturer data on a cubic spline. Outside the data the nearest measured temperature is used
-    rather than the spline's continuation, because a spline extrapolates without saying so and the
-    values it returns below the lowest datum are not supported by any measurement: on GRCop-42 the
-    lowest yield datum is 77.6 K, and a hydrogen inlet at 30 K sits 48 K below it.
+    The volutes are printed with the jacket, so their wall is the jacket's alloy, and the strength
+    comes from the same materials store the jacket's own properties do. For GRCop-42 that is the
+    0.2 percent yield curve of the NASA tensile report; an alloy the store holds only a
+    room-temperature value for is held flat, which the store's own `measured` map records.
 
     Parameters:
     -----------
-    stressType : str
-        `yield` or `ultimate`.
+    material : str
+        Jacket alloy, a canonical name or an alias the materials store recognizes.
     temperature : float
-        Metal temperature [K].
-    alloy : int
-        42 or 84.
+        Sizing temperature [K].
 
     Returns:
     --------
     float
-        Strength [Pa].
-
-    Raises:
-    -------
-    InvalidInputError
-        On an unrecognized alloy or stress type.
+        Yield strength [Pa].
 
     '''
 
-    key = (int(alloy), str(stressType).lower())
-
-    if key[1] not in ('yield', 'ultimate'):
-        raise InvalidInputError(
-            message = 'Unrecognized stress type',
-            parameterName = 'stressType',
-            value = stressType,
-            validRange = 'yield or ultimate')
-
-    if key not in grcopStrengthData:
-        raise InvalidInputError(
-            message = f'Unrecognized GRCopper alloy for {key[1]} strength',
-            parameterName = 'alloy',
-            value = alloy,
-            validRange = '42 or 84')
-
-    temperatureF, strengthKSI = grcopStrengthData[key]
-    temperatureK = units.toSI(np.asarray(temperatureF, dtype = float), 'temperature', 'degF')
-    strengthPa = np.asarray(strengthKSI, dtype = float)*6.895e6
-
-    held = float(np.clip(temperature, temperatureK.min(), temperatureK.max()))
-
-    return float(CubicSpline(temperatureK, strengthPa)(held))
+    curves = wallMaterialCurves(material if isinstance(material, str) else 'GRCop-42')
+    return float(np.interp(temperature, curves['temperatureK'], curves['yieldStrength']))
 
 # What a volute needs from the channel build it attaches to. The volute is grown onto the ends of
 # the channels, so what it reads is geometry the sizing solve produced rather than configuration.
@@ -230,6 +191,7 @@ class RegenVoluteState:
     inletVoluteAlignment:                  Any = None
     inletVoluteCrossSection:               Any = None
     inletVolutePrintability:               Any = None
+    material:                              Any = None
     inletVoluteTilt:                       Any = None
     makeInletVolute:                       Any = None
     makeOutletVolute:                      Any = None
@@ -505,7 +467,7 @@ def solveRegenVolutes(state):
         # wall thickness sizing. The wall is proof tested at room temperature, where the alloy
         # is weaker than it is at hydrogen temperature, so it is sized on the warmer of the two.
         sizingTemperature = max(float(state.coolantInitialTemperature), ambientProofTemperature)
-        hoopStressTarget = grcopStrength('yield', sizingTemperature, 42)/state.voluteFOS
+        hoopStressTarget = voluteYieldStrength(state.material, sizingTemperature)/state.voluteFOS
 
         ## Create volute object
         # instantiate
@@ -620,7 +582,7 @@ def solveRegenVolutes(state):
 
         # wall thickness sizing, on the warmer of the coolant and the ambient proof case
         sizingTemperature = max(float(state.coolantExitTemperature), ambientProofTemperature)
-        hoopStressTarget = grcopStrength('yield', sizingTemperature, 42)/state.voluteFOS
+        hoopStressTarget = voluteYieldStrength(state.material, sizingTemperature)/state.voluteFOS
 
         ## Create volute object
         # instantiate

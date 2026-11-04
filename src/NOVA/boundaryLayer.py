@@ -781,6 +781,60 @@ def frictionPerformanceDebit(dragForce: float, thrustCoefficient: float, throatA
 
     return lossCoefficient, float(thrustCoefficient) * (1.0 - lossCoefficient)
 
+def wallTemperatureProfile(xWall, jacketX, jacketTemperature, extensionX = None,
+                           extensionTemperature = None) -> np.ndarray:
+
+    '''
+
+    The solved wall temperature at every station of the wall, placed by axial position.
+
+    The jacket solves its wall on its own stations, which cover the cooled section and are
+    resampled rather than shared with the wall the boundary layer marches on; an extension solves
+    its shell on its own stations again. Matching them by index fraction puts a jacket station
+    wherever the same fraction of the other array happens to fall, which on a truncated jacket
+    stretches the throat's wall temperature over the bell and hands the extension a copper
+    jacket's temperature. Each is placed by axial position instead. A station past the jacket
+    with no extension solution takes the jacket's last value, the conservative reading of an
+    uncooled wall whose temperature was not solved, since a hotter wall carries less friction.
+
+    Parameters:
+    -----------
+    xWall : array
+        Axial position of the stations to fill [m].
+    jacketX, jacketTemperature : array
+        Jacket stations and their solved hot-wall temperature [m], [K].
+    extensionX, extensionTemperature : array, optional
+        Extension stations and their solved shell temperature [m], [K].
+
+    Returns:
+    --------
+    np.ndarray
+        Wall temperature at each of `xWall` [K].
+
+    '''
+
+    xWall = np.asarray(xWall, dtype = float)
+    jacketX = np.asarray(jacketX, dtype = float)
+    jacketTemperature = np.asarray(jacketTemperature, dtype = float)
+
+    # Stations the jacket and the extension report are not always in ascending order
+    order = np.argsort(jacketX)
+    temperature = np.interp(xWall, jacketX[order], jacketTemperature[order])
+
+    if extensionX is not None and extensionTemperature is not None:
+        extensionX = np.asarray(extensionX, dtype = float)
+        extensionTemperature = np.asarray(extensionTemperature, dtype = float)
+        if extensionX.size and extensionX.size == extensionTemperature.size:
+            # From where the extension begins. The jacket's own stations can stop short of it,
+            # where the inlet interface turns the channels off the wall, and that stretch is still
+            # the jacket's wall rather than the extension's shell.
+            beyond = xWall >= float(np.min(extensionX))
+            order = np.argsort(extensionX)
+            temperature[beyond] = np.interp(xWall[beyond], extensionX[order],
+                                            extensionTemperature[order])
+
+    return temperature
+
 def offsetWall(x, radius, displacementThickness) -> tuple:
 
     '''

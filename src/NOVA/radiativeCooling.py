@@ -691,6 +691,19 @@ def radiativeNozzleExtension(shell: RadiativeShell, axialPosition, radius, machN
             value = sorted(lengths),
             validRange = 'all the same length')
 
+    # The driving temperature is the film's adiabatic wall temperature where a film is laid on the
+    # extension, and a closure taken outside its range can return a value no gas has. Without this
+    # the equilibrium root find floors such a station at 1 K and the solve carries on.
+    if not np.all(np.isfinite(recoveryTemperature)) or np.any(recoveryTemperature <= 0.0):
+        bad = int(np.flatnonzero(~np.isfinite(recoveryTemperature) | (recoveryTemperature <= 0.0))[0])
+        raise InvalidInputError(
+            message = (f'The driving temperature at extension station {bad} is '
+                       f'{float(recoveryTemperature[bad]):.1f} K, which no gas can be. Where a '
+                       f'film supplied it, the film closure was taken outside its range.'),
+            parameterName = 'recoveryTemperature',
+            value = float(recoveryTemperature[bad]),
+            validRange = 'finite and greater than zero at every station')
+
     if shell.thickness <= 0.0:
         raise InvalidInputError(
             message = 'A shell with no thickness conducts nothing along itself.',
@@ -779,6 +792,11 @@ def radiativeNozzleExtension(shell: RadiativeShell, axialPosition, radius, machN
         equilibrium = updated
         if shift < tolerance:
             break
+    else:
+        # Newton starts from it either way, and converges or raises on its own terms; what is lost
+        # is only the claim that the starting guess is the zero-conduction answer
+        print(f'  extension starting guess still moving {shift:.3g} K after 50 iterations; the '
+              f'Newton solve starts from it regardless')
 
     wallTemperature = equilibrium.copy()
 

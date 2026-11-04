@@ -1324,8 +1324,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         coolantTemperature, coolantPressure, coolantVelocity, \
         coolantMachNumber, coolantReynoldsNumber, coolantNusseltNumber, \
         coolantConvectiveHeatTransferCoef, exhaustConvectiveHeatTransferCoef, heatTransfer, wallConductivity, \
-        hotWallTemperature, coldWallTemperature \
-        = [np.zeros(numCrossSections) for _ in range(12)]
+        hotWallTemperature, coldWallTemperature, metalWallTemperature \
+        = [np.zeros(numCrossSections) for _ in range(13)]
 
         coolantTemperature[-1] = coolantInitialTemperature
         coolantPressure[-1]    = coolantInitialPressure
@@ -1568,6 +1568,9 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
                 heatTransfer[i]                      = solution.heatTransfer
                 hotWallTemperature[i]                = solution.hotWallTemperature
                 coldWallTemperature[i]               = solution.coldWallTemperature
+                # The metal's own hot face, under the coating where there is one. Without a
+                # coating it is the hot wall temperature itself.
+                metalWallTemperature[i]              = solution.coatingInterfaceTemperature
                 radiativeHeatTransfer[i]             = solution.radiativeHeatTransfer
                 blowingReduction[i]                  = solution.blowingReduction
 
@@ -1647,7 +1650,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             'coolantPressure':     coolantPressure,
             'coolantTemperature':  coolantTemperature,
             'hotWallTemperature':  hotWallTemperature,
-            'coldWallTemperature': coldWallTemperature
+            'coldWallTemperature': coldWallTemperature,
+            'metalWallTemperature': metalWallTemperature
         }
         plotOutputs = {
             'xHotWall3D'                        : xHotWall3D,
@@ -1674,7 +1678,8 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             'coolantPressure':     coolantPressure,
             'coolantTemperature':  coolantTemperature,
             'hotWallTemperature':  hotWallTemperature,
-            'coldWallTemperature': coldWallTemperature
+            'coldWallTemperature': coldWallTemperature,
+            'metalWallTemperature': hotWallTemperature
         }
         plotOutputs = {
             'xHotWall3D'                          : xHotWall3D,

@@ -1019,6 +1019,9 @@ class TestFrictionLoss:
         nozzle.chamberGamma = 1.2
         nozzle.chamberRGasConstant = 700.0
         nozzle.channelWallTemperature = np.full(stations, 800.0)
+        # The jacket's solved wall temperature and the stations it was solved on, which the
+        # friction stage places along the wall by axial position
+        nozzle.channelThermalResults = {'xHotWall3D': x, 'wallTemperature': np.full(stations, 800.0)}
         nozzle.thrustCoef = 1.8
         nozzle.throatArea = np.pi*0.05**2
         nozzle.chamberPressure = 6.9e6

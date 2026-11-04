@@ -52,18 +52,19 @@ Author: Sean Bowman
 
 '''
 
+import os
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 from scipy.interpolate import interp1d
 
-from .geometryTools import arcSpline, chunkInterpolate
+from .geometryTools import arcSpline, chunkInterpolate, sizedThroatRadius
 from .errors import ThermalConstraintError, createErrorContext, InvalidInputError
 from .figures import showFigure, drawContourFigure, drawNearWallFigure, drawFieldFigure
 from .filmCooling import filmCoolantState, filmCoolingArrays, entrainmentFilmArrays
 from .ceaInterface import CEA
-from .contour import divergingSectionFamily
+from .validation import specified
 
 @dataclass
 class RegenStationState:
@@ -240,7 +241,8 @@ def solveRegenSectionFilm(state):
         slotHeight  = state.filmSlotHeight,
         slotRadius  = float(state.rRegenNozzle[slotIndex]))
 
-    model = state.filmCoolingModel or 'hatchPapell'
+    # A null arrives as NaN, which `or` would keep, so unset is tested rather than truthiness
+    model = state.filmCoolingModel if isinstance(state.filmCoolingModel, str) else 'hatchPapell'
 
     if model == 'hatchPapell':
 
@@ -299,8 +301,12 @@ def solveRegenSectionFilm(state):
             coolantSpecificHeat     = coolant.specificHeat,
             coolantTotalTemperature = state.filmInletTemperature,
             coreMixtureRatio        = state.OFRatio,
-            coolantMixtureRatio     = state.filmCoolantMixtureRatio or 0.0,
-            injectionMultiplier     = state.filmEntrainmentMultiplier or 3.5)
+            coolantMixtureRatio     = (float(state.filmCoolantMixtureRatio)
+                                       if specified(state, 'filmCoolantMixtureRatio') else 0.0),
+            injectionMultiplier     = (float(state.filmEntrainmentMultiplier)
+                                       if specified(state, 'filmEntrainmentMultiplier') else 3.5),
+            throatRadius            = sizedThroatRadius(state.rRegenNozzle,
+                                                        state.nozzleScalingFactor))
 
     else:
         raise InvalidInputError(
@@ -349,10 +355,78 @@ def stationAreaRatios(rNozzle, nozzleScalingFactor = None) -> np.ndarray:
     '''
 
     rNozzle = np.asarray(rNozzle, dtype = float)
-    throatRadius = float(np.min(rNozzle))                                    # [m]
-    if nozzleScalingFactor is not None and float(nozzleScalingFactor) > 0.0:
-        throatRadius = min(throatRadius, float(nozzleScalingFactor))
-    return (rNozzle / throatRadius)**2
+    return (rNozzle / sizedThroatRadius(rNozzle, nozzleScalingFactor))**2
+
+def stationGasProperties(state, areaRatios, section: str) -> tuple:
+
+    '''
+
+    CEA's transport and thermodynamic properties at a run of stations along one section.
+
+    Each station is solved at its own area ratio: a contraction ratio for the converging section,
+    an expansion ratio downstream of the throat. A station at an area ratio of exactly one takes
+    the throat values. CEA does not raise on a failed solve, it returns NaN with a warning, so
+    every property is checked and a failure stops the run at the station that caused it rather
+    than reaching the thermal model as NaN.
+
+    Parameters:
+    -----------
+    state : RegenStationState
+        Carries the propellants, chamber pressure and mixture ratio.
+    areaRatios : array
+        Area ratio at each station [-].
+    section : str
+        'converging', 'diverging' or 'extension'. The first reads CEA's chamber group at a
+        contraction ratio; the other two read its exit group at an expansion ratio.
+
+    Returns:
+    --------
+    tuple of np.ndarray
+        Thermal conductivity [W/m-K], viscosity [Pa s], Prandtl number [-], ratio of specific
+        heats [-], gas constant [J/kg-K], specific heat [J/kg-K] and molecular weight [kg/kmol].
+
+    Raises:
+    -------
+    ThermalConstraintError
+        If CEA returns NaN for any property at any station.
+
+    '''
+
+    names = ('ThermalConductivity', 'Viscosity', 'PrandtlNumber', 'Gamma', 'GasConstant',
+             'HeatCapacity', 'MolecularWeight')
+    properties = [np.zeros(len(areaRatios)) for _ in names]
+
+    for i, ratio in enumerate(areaRatios):
+
+        if section == 'converging':
+            ceaOutput = CEA(fuelName = state.Fuel, oxidizerName = state.Oxidizer,
+                            oxidizerInitialTemperature = state.oxidizerInitialTemperature,
+                            chamberPressure = state.chamberPressure, contractionRatio = ratio,
+                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
+            group = 'combustionChamber'
+        else:
+            ceaOutput = CEA(fuelName = state.Fuel, oxidizerName = state.Oxidizer,
+                            oxidizerInitialTemperature = state.oxidizerInitialTemperature,
+                            chamberPressure = state.chamberPressure, expansionRatio = ratio,
+                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
+            group = 'throat' if ratio == 1.0 else 'exit'
+
+        for j, name in enumerate(names):
+            value = ceaOutput.ceaResults[group + name]
+            if np.isnan(value):
+                ratioName = 'contractionRatio' if section == 'converging' else 'expansionRatio'
+                raise ThermalConstraintError(
+                    message = (f'CEA calculation failed for {section} section properties at '
+                               f'{ratioName} {ratio}'),
+                    context = createErrorContext(fuelName = state.Fuel,
+                                                 oxidizerName = state.Oxidizer,
+                                                 chamberPressure = state.chamberPressure,
+                                                 OFRatio = state.OFRatio,
+                                                 **{ratioName: float(ratio)}),
+                    thermalProperty = group + name, value = value)
+            properties[j][i] = value
+
+    return tuple(properties)
 
 def solveRegenStations(state):
 
@@ -425,14 +499,57 @@ def solveRegenStations(state):
         xExtension = np.concatenate([[truncationLocation],xNozzle[truncationIndex+1:]])
         rExtension = np.concatenate([[truncationRadius],  rNozzle[truncationIndex+1:]])
 
-        # -- Flow properties -- #
+    else:
 
-        # MoC outputs
-        temperatureNearWallRegen         = state.nozzleNearWallTemperature[:truncationIndex]
-        pressureNearWallRegen            = state.nozzleNearWallPressure[:truncationIndex]
-        velocityNearWallRegen            = state.nozzleNearWallVelocity[:truncationIndex]
-        machNumberNearWallRegen          = state.nozzleNearWallMachNumber[:truncationIndex]
-        recoveryTemperatureNearWallRegen = state.nozzleNearWallRecoveryTemperature[:truncationIndex]
+        # The jacket runs the whole contour, every family alike: the cut index is one past the
+        # last station, so the regen section is the wall and the extension is empty.
+        truncationIndex = len(rNozzle)
+        xRegenNozzle = state.xNozzleWall.copy()
+        rRegenNozzle = state.rNozzleWall.copy()
+
+    # -- Flow properties -- #
+
+    # MoC outputs
+    temperatureNearWallRegen         = state.nozzleNearWallTemperature[:truncationIndex].copy()
+    pressureNearWallRegen            = state.nozzleNearWallPressure[:truncationIndex].copy()
+    velocityNearWallRegen            = state.nozzleNearWallVelocity[:truncationIndex].copy()
+    machNumberNearWallRegen          = state.nozzleNearWallMachNumber[:truncationIndex].copy()
+    recoveryTemperatureNearWallRegen = state.nozzleNearWallRecoveryTemperature[:truncationIndex].copy()
+
+    # Transport and thermodynamic properties from CEA at each station's own area ratio: the
+    # converging stations at their contraction ratio, the diverging ones at their expansion ratio
+    convergingProperties = stationGasProperties(state, areaRatios[:throatIndex], 'converging')
+    divergingProperties  = stationGasProperties(state, areaRatios[throatIndex:truncationIndex], 'diverging')
+
+    (thermalCondRegen, viscosityRegen, prandtlRegen, gammaRegen, gasConstantRegen,
+     specificHeatRegen, molecularWeightRegen) = [np.concatenate([converging, diverging])
+                                                 for converging, diverging
+                                                 in zip(convergingProperties, divergingProperties)]
+
+    densityRegen  = pressureNearWallRegen / (gasConstantRegen * temperatureNearWallRegen)
+    reynoldsRegen = densityRegen * velocityNearWallRegen * 2 * rNozzle[:truncationIndex] / viscosityRegen
+
+    # arcSpline and interpolate
+
+    xRegenRough = xRegenNozzle.copy()
+    xRegenNozzle, rRegenNozzle = arcSpline(xRegenNozzle,rRegenNozzle,newNumPoints=state.numCrossSections)
+
+    temperatureNearWallRegen         = chunkInterpolate(xRegenRough, temperatureNearWallRegen, xRegenNozzle)
+    pressureNearWallRegen            = chunkInterpolate(xRegenRough, pressureNearWallRegen, xRegenNozzle)
+    velocityNearWallRegen            = chunkInterpolate(xRegenRough, velocityNearWallRegen, xRegenNozzle)
+    machNumberNearWallRegen          = chunkInterpolate(xRegenRough, machNumberNearWallRegen, xRegenNozzle)
+    recoveryTemperatureNearWallRegen = chunkInterpolate(xRegenRough, recoveryTemperatureNearWallRegen, xRegenNozzle)
+    thermalCondRegen                 = chunkInterpolate(xRegenRough, thermalCondRegen, xRegenNozzle)
+    viscosityRegen                   = chunkInterpolate(xRegenRough, viscosityRegen, xRegenNozzle)
+    prandtlRegen                     = chunkInterpolate(xRegenRough, prandtlRegen, xRegenNozzle)
+    gammaRegen                       = chunkInterpolate(xRegenRough, gammaRegen, xRegenNozzle)
+    gasConstantRegen                 = chunkInterpolate(xRegenRough, gasConstantRegen, xRegenNozzle)
+    specificHeatRegen                = chunkInterpolate(xRegenRough, specificHeatRegen, xRegenNozzle)
+    densityRegen                     = chunkInterpolate(xRegenRough, densityRegen, xRegenNozzle)
+    reynoldsRegen                    = chunkInterpolate(xRegenRough, reynoldsRegen, xRegenNozzle)
+    molecularWeightRegen             = chunkInterpolate(xRegenRough, molecularWeightRegen, xRegenNozzle)
+
+    if regenTruncationType != 'none':
 
         temperatureNearWallExtension         = state.nozzleNearWallTemperature[truncationIndex:]
         pressureNearWallExtension            = state.nozzleNearWallPressure[truncationIndex:]
@@ -440,104 +557,12 @@ def solveRegenStations(state):
         machNumberNearWallExtension          = state.nozzleNearWallMachNumber[truncationIndex:]
         recoveryTemperatureNearWallExtension = state.nozzleNearWallRecoveryTemperature[truncationIndex:]
 
-        # derived values, converging
-        contractionRatios = areaRatios[:throatIndex]
-
-        thermalCondConverging, viscosityConverging, prandtlConverging, \
-        gammaConverging, gasConstantConverging, specificHeatConverging, molecularWeightConverging \
-        = [np.zeros(len(contractionRatios)) for _ in range(7)]
-
-        for i, contractionRatio in enumerate(contractionRatios):
-
-            # Call CEA at each contraction ratio and expansion ratio to build a distribuion of transport properties
-            ceaOutput = CEA(fuelName = state.Fuel,
-                            oxidizerName = state.Oxidizer, oxidizerInitialTemperature = state.oxidizerInitialTemperature,
-                            chamberPressure = state.chamberPressure, contractionRatio = contractionRatio,
-                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
-            thermalCondConverging[i]     = ceaOutput.ceaResults['combustionChamberThermalConductivity']
-            viscosityConverging[i]       = ceaOutput.ceaResults['combustionChamberViscosity']
-            prandtlConverging[i]         = ceaOutput.ceaResults['combustionChamberPrandtlNumber']
-            gammaConverging[i]           = ceaOutput.ceaResults['combustionChamberGamma']
-            gasConstantConverging[i]     = ceaOutput.ceaResults['combustionChamberGasConstant']
-            specificHeatConverging[i]    = ceaOutput.ceaResults['combustionChamberHeatCapacity']
-            molecularWeightConverging[i] = ceaOutput.ceaResults['combustionChamberMolecularWeight']
-
-        # derived values, diverging
-        expansionRatios = areaRatios[throatIndex:truncationIndex]
-
-        extensionExpansionRatios = areaRatios[truncationIndex:]
-
-        thermalCondDiverging, viscosityDiverging, prandtlDiverging, \
-        gammaDiverging, gasConstantDiverging, specificHeatDiverging, molecularWeightDiverging \
-        = [np.zeros(len(expansionRatios)) for _ in range(7)]
-
-        thermalCondExtension, viscosityExtension, prandtlExtension, \
-        gammaExtension, gasConstantExtension, specificHeatExtension, molecularWeightExtension \
-        = [np.zeros(len(extensionExpansionRatios)) for _ in range(7)]
-
-        for i, expansionRatio in enumerate(expansionRatios):
-
-            # Call CEA at each contraction ratio and expansion ratio to build a distribuion of transport properties
-            ceaOutput = CEA(fuelName = state.Fuel,
-                            oxidizerName = state.Oxidizer, oxidizerInitialTemperature = state.oxidizerInitialTemperature,
-                            chamberPressure = state.chamberPressure, expansionRatio = expansionRatio,
-                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
-            thermalCondDiverging[i]     = ceaOutput.ceaResults['exitThermalConductivity']
-            viscosityDiverging[i]       = ceaOutput.ceaResults['exitViscosity']
-            prandtlDiverging[i]         = ceaOutput.ceaResults['exitPrandtlNumber']
-            gammaDiverging[i]           = ceaOutput.ceaResults['exitGamma']
-            gasConstantDiverging[i]     = ceaOutput.ceaResults['exitGasConstant']
-            specificHeatDiverging[i]    = ceaOutput.ceaResults['exitHeatCapacity']
-            molecularWeightDiverging[i] = ceaOutput.ceaResults['exitMolecularWeight']
-
-        for i, extensionExpansionRatio in enumerate(extensionExpansionRatios):
-
-            # Call CEA at each contraction ratio and expansion ratio to build a distribuion of transport properties
-            ceaOutput = CEA(fuelName = state.Fuel,
-                            oxidizerName = state.Oxidizer, oxidizerInitialTemperature = state.oxidizerInitialTemperature,
-                            chamberPressure = state.chamberPressure, expansionRatio = extensionExpansionRatio,
-                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
-            thermalCondExtension[i]     = ceaOutput.ceaResults['exitThermalConductivity']
-            viscosityExtension[i]       = ceaOutput.ceaResults['exitViscosity']
-            prandtlExtension[i]         = ceaOutput.ceaResults['exitPrandtlNumber']
-            gammaExtension[i]           = ceaOutput.ceaResults['exitGamma']
-            gasConstantExtension[i]     = ceaOutput.ceaResults['exitGasConstant']
-            specificHeatExtension[i]    = ceaOutput.ceaResults['exitHeatCapacity']
-            molecularWeightExtension[i] = ceaOutput.ceaResults['exitMolecularWeight']
-
-        thermalCondRegen     = np.concatenate([thermalCondConverging, thermalCondDiverging])
-        viscosityRegen       = np.concatenate([viscosityConverging, viscosityDiverging])
-        prandtlRegen         = np.concatenate([prandtlConverging, prandtlDiverging])
-        gammaRegen           = np.concatenate([gammaConverging, gammaDiverging])
-        gasConstantRegen     = np.concatenate([gasConstantConverging, gasConstantDiverging])
-        specificHeatRegen    = np.concatenate([specificHeatConverging, specificHeatDiverging])
-        molecularWeightRegen = np.concatenate([molecularWeightConverging, molecularWeightDiverging])
-
-        densityRegen  = pressureNearWallRegen / (gasConstantRegen * temperatureNearWallRegen)
-        reynoldsRegen = densityRegen * velocityNearWallRegen * 2 * rNozzle[:truncationIndex] / viscosityRegen
+        (thermalCondExtension, viscosityExtension, prandtlExtension, gammaExtension,
+         gasConstantExtension, specificHeatExtension, molecularWeightExtension) = stationGasProperties(
+            state, areaRatios[truncationIndex:], 'extension')
 
         densityExtension  = pressureNearWallExtension / (gasConstantExtension * temperatureNearWallExtension)
         reynoldsExtension = densityExtension * velocityNearWallExtension * 2 * rNozzle[truncationIndex:] / viscosityExtension
-
-        # arcSpline and interpolate
-
-        xRegenRough = xRegenNozzle.copy()
-        xRegenNozzle, rRegenNozzle = arcSpline(xRegenNozzle,rRegenNozzle,newNumPoints=state.numCrossSections)
-
-        temperatureNearWallRegen         = chunkInterpolate(xRegenRough, temperatureNearWallRegen, xRegenNozzle)
-        pressureNearWallRegen            = chunkInterpolate(xRegenRough, pressureNearWallRegen, xRegenNozzle)
-        velocityNearWallRegen            = chunkInterpolate(xRegenRough, velocityNearWallRegen, xRegenNozzle)
-        machNumberNearWallRegen          = chunkInterpolate(xRegenRough, machNumberNearWallRegen, xRegenNozzle)
-        recoveryTemperatureNearWallRegen = chunkInterpolate(xRegenRough, recoveryTemperatureNearWallRegen, xRegenNozzle)
-        thermalCondRegen                 = chunkInterpolate(xRegenRough, thermalCondRegen, xRegenNozzle)
-        viscosityRegen                   = chunkInterpolate(xRegenRough, viscosityRegen, xRegenNozzle)
-        prandtlRegen                     = chunkInterpolate(xRegenRough, prandtlRegen, xRegenNozzle)
-        gammaRegen                       = chunkInterpolate(xRegenRough, gammaRegen, xRegenNozzle)
-        gasConstantRegen                 = chunkInterpolate(xRegenRough, gasConstantRegen, xRegenNozzle)
-        specificHeatRegen                = chunkInterpolate(xRegenRough, specificHeatRegen, xRegenNozzle)
-        densityRegen                     = chunkInterpolate(xRegenRough, densityRegen, xRegenNozzle)
-        reynoldsRegen                    = chunkInterpolate(xRegenRough, reynoldsRegen, xRegenNozzle)
-        molecularWeightRegen             = chunkInterpolate(xRegenRough, molecularWeightRegen, xRegenNozzle)
 
         xExtensionRough = xExtension
         xExtension, rExtension = arcSpline(xExtension,rExtension,newNumPoints=state.numContourPoints)
@@ -556,166 +581,6 @@ def solveRegenStations(state):
         densityExtension                     = interp1d(xExtensionRough, densityExtension,fill_value='extrapolate')(xExtension)
         reynoldsExtension                    = interp1d(xExtensionRough, reynoldsExtension,fill_value='extrapolate')(xExtension)
         molecularWeightExtension             = interp1d(xExtensionRough, molecularWeightExtension,fill_value='extrapolate')(xExtension)
-
-    elif regenTruncationType == 'none' and divergingSectionFamily(state.divergingSectionType) != 'conical':
-
-        xRegenNozzle = state.xNozzleWall.copy()
-        rRegenNozzle = state.rNozzleWall.copy()
-
-        xExtension = []
-        rExtension = []
-
-        # -- Flow properties -- #
-
-        # MoC outputs
-        temperatureNearWallRegen         = state.nozzleNearWallTemperature.copy()
-        pressureNearWallRegen            = state.nozzleNearWallPressure.copy()
-        velocityNearWallRegen            = state.nozzleNearWallVelocity.copy()
-        machNumberNearWallRegen          = state.nozzleNearWallMachNumber.copy()
-        recoveryTemperatureNearWallRegen = state.nozzleNearWallRecoveryTemperature.copy()
-
-        temperatureNearWallExtension         = []
-        pressureNearWallExtension            = []
-        velocityNearWallExtension            = []
-        machNumberNearWallExtension          = []
-        recoveryTemperatureNearWallExtension = []
-
-        # derived values, converging
-        contractionRatios = areaRatios[:throatIndex]
-
-        thermalCondConverging, viscosityConverging, prandtlConverging, \
-        gammaConverging, gasConstantConverging, specificHeatConverging, molecularWeightConverging \
-        = [np.zeros(len(contractionRatios)) for _ in range(7)]
-
-        for i, contractionRatio in enumerate(contractionRatios):
-
-            # Call CEA at each contraction ratio and expansion ratio to build a distribuion of transport properties
-            ceaOutput = CEA(fuelName = state.Fuel,
-                            oxidizerName = state.Oxidizer, oxidizerInitialTemperature = state.oxidizerInitialTemperature,
-                            chamberPressure = state.chamberPressure, contractionRatio = contractionRatio,
-                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
-
-            neededKeys = ['combustionChamberThermalConductivity',
-                          'combustionChamberViscosity',
-                          'combustionChamberPrandtlNumber',
-                          'combustionChamberGamma',
-                          'combustionChamberGasConstant',
-                          'combustionChamberHeatCapacity',
-                          'combustionChamberMolecularWeight']
-
-            for k in neededKeys:
-                if np.isnan(ceaOutput.ceaResults[k]):
-                    raise ThermalConstraintError(
-                        message=f"CEA calculation failed for converging section properties at contraction ratio {contractionRatio}",
-                        context=createErrorContext(
-                            fuelName=state.Fuel,
-                            oxidizerName=state.Oxidizer,
-                            oxidizerInitialTemperature=state.oxidizerInitialTemperature,
-                            chamberPressure=state.chamberPressure,
-                            contractionRatio=contractionRatio,
-                            pressureUnits='Pa',
-                            OFRatio=state.OFRatio
-                        ),
-                        thermalProperty=k,
-                        value=ceaOutput.ceaResults[k]
-                    )
-
-            thermalCondConverging[i]     = ceaOutput.ceaResults['combustionChamberThermalConductivity']
-            viscosityConverging[i]       = ceaOutput.ceaResults['combustionChamberViscosity']
-            prandtlConverging[i]         = ceaOutput.ceaResults['combustionChamberPrandtlNumber']
-            gammaConverging[i]           = ceaOutput.ceaResults['combustionChamberGamma']
-            gasConstantConverging[i]     = ceaOutput.ceaResults['combustionChamberGasConstant']
-            specificHeatConverging[i]    = ceaOutput.ceaResults['combustionChamberHeatCapacity']
-            molecularWeightConverging[i] = ceaOutput.ceaResults['combustionChamberMolecularWeight']
-
-        # derived values, diverging
-        expansionRatios = areaRatios[throatIndex:]
-
-        thermalCondDiverging, viscosityDiverging, prandtlDiverging, \
-        gammaDiverging, gasConstantDiverging, specificHeatDiverging, molecularWeightDiverging \
-        = [np.zeros(len(expansionRatios)) for _ in range(7)]
-
-        for i, expansionRatio in enumerate(expansionRatios):
-
-            # Call CEA at each contraction ratio and expansion ratio to build a distribuion of transport properties
-            ceaOutput = CEA(fuelName = state.Fuel,
-                            oxidizerName = state.Oxidizer, oxidizerInitialTemperature = state.oxidizerInitialTemperature,
-                            chamberPressure = state.chamberPressure, expansionRatio = expansionRatio,
-                            pressureUnits = 'Pa', OFRatio = state.OFRatio)
-
-            neededKeys = ['exitThermalConductivity',
-                          'exitViscosity',
-                          'exitPrandtlNumber',
-                          'exitGamma',
-                          'exitGasConstant',
-                          'exitHeatCapacity',
-                          'exitMolecularWeight']
-
-            for k in neededKeys:
-                if np.isnan(ceaOutput.ceaResults[k]):
-                    raise ThermalConstraintError(
-                        message=f"CEA calculation failed for diverging section properties at expansion ratio {expansionRatio}",
-                        context=createErrorContext(
-                            fuelName=state.Fuel,
-                            oxidizerName=state.Oxidizer,
-                            oxidizerInitialTemperature=state.oxidizerInitialTemperature,
-                            chamberPressure=state.chamberPressure,
-                            expansionRatio=expansionRatio,
-                            pressureUnits='Pa',
-                            OFRatio=state.OFRatio
-                        ),
-                        thermalProperty=k,
-                        value=ceaOutput.ceaResults[k]
-                    )
-
-            # if at throat use throat quantities
-            if expansionRatio == 1.0:
-                thermalCondDiverging[i]     = ceaOutput.ceaResults['throatThermalConductivity']
-                viscosityDiverging[i]       = ceaOutput.ceaResults['throatViscosity']
-                prandtlDiverging[i]         = ceaOutput.ceaResults['throatPrandtlNumber']
-                gammaDiverging[i]           = ceaOutput.ceaResults['throatGamma']
-                gasConstantDiverging[i]     = ceaOutput.ceaResults['throatGasConstant']
-                specificHeatDiverging[i]    = ceaOutput.ceaResults['throatHeatCapacity']
-                molecularWeightDiverging[i] = ceaOutput.ceaResults['throatMolecularWeight']
-            else:
-                thermalCondDiverging[i]     = ceaOutput.ceaResults['exitThermalConductivity']
-                viscosityDiverging[i]       = ceaOutput.ceaResults['exitViscosity']
-                prandtlDiverging[i]         = ceaOutput.ceaResults['exitPrandtlNumber']
-                gammaDiverging[i]           = ceaOutput.ceaResults['exitGamma']
-                gasConstantDiverging[i]     = ceaOutput.ceaResults['exitGasConstant']
-                specificHeatDiverging[i]    = ceaOutput.ceaResults['exitHeatCapacity']
-                molecularWeightDiverging[i] = ceaOutput.ceaResults['exitMolecularWeight']
-
-        thermalCondRegen     = np.concatenate([thermalCondConverging, thermalCondDiverging])
-        viscosityRegen       = np.concatenate([viscosityConverging, viscosityDiverging])
-        prandtlRegen         = np.concatenate([prandtlConverging, prandtlDiverging])
-        gammaRegen           = np.concatenate([gammaConverging, gammaDiverging])
-        gasConstantRegen     = np.concatenate([gasConstantConverging, gasConstantDiverging])
-        specificHeatRegen    = np.concatenate([specificHeatConverging, specificHeatDiverging])
-        molecularWeightRegen = np.concatenate([molecularWeightConverging, molecularWeightDiverging])
-
-        densityRegen  = pressureNearWallRegen / (gasConstantRegen * temperatureNearWallRegen)
-        reynoldsRegen = densityRegen * velocityNearWallRegen * 2 * rNozzle / viscosityRegen
-
-        # arcSpline and interpolate
-
-        xRegenRough = xRegenNozzle.copy()
-        xRegenNozzle, rRegenNozzle = arcSpline(xRegenNozzle,rRegenNozzle,newNumPoints=state.numCrossSections)
-
-        temperatureNearWallRegen         = chunkInterpolate(xRegenRough, temperatureNearWallRegen, xRegenNozzle)
-        pressureNearWallRegen            = chunkInterpolate(xRegenRough, pressureNearWallRegen, xRegenNozzle)
-        velocityNearWallRegen            = chunkInterpolate(xRegenRough, velocityNearWallRegen, xRegenNozzle)
-        machNumberNearWallRegen          = chunkInterpolate(xRegenRough, machNumberNearWallRegen, xRegenNozzle)
-        recoveryTemperatureNearWallRegen = chunkInterpolate(xRegenRough, recoveryTemperatureNearWallRegen, xRegenNozzle)
-        thermalCondRegen                 = chunkInterpolate(xRegenRough, thermalCondRegen, xRegenNozzle)
-        viscosityRegen                   = chunkInterpolate(xRegenRough, viscosityRegen, xRegenNozzle)
-        prandtlRegen                     = chunkInterpolate(xRegenRough, prandtlRegen, xRegenNozzle)
-        gammaRegen                       = chunkInterpolate(xRegenRough, gammaRegen, xRegenNozzle)
-        gasConstantRegen                 = chunkInterpolate(xRegenRough, gasConstantRegen, xRegenNozzle)
-        specificHeatRegen                = chunkInterpolate(xRegenRough, specificHeatRegen, xRegenNozzle)
-        densityRegen                     = chunkInterpolate(xRegenRough, densityRegen, xRegenNozzle)
-        reynoldsRegen                    = chunkInterpolate(xRegenRough, reynoldsRegen, xRegenNozzle)
-        molecularWeightRegen             = chunkInterpolate(xRegenRough, molecularWeightRegen, xRegenNozzle)
 
     # Assign properties to object
 
@@ -778,7 +643,7 @@ def solveRegenStations(state):
                 return
             showFigure(figure)
             if state.export == 'on':
-                figure.savefig(state.dataFolder + '\\' + filename, dpi = 160,
+                figure.savefig(os.path.join(state.dataFolder, filename), dpi = 160,
                                bbox_inches = 'tight')
 
         showAndExport(drawContourFigure(state), 'contourSegmentsVisualization.png')

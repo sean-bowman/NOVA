@@ -272,7 +272,7 @@ def solveThrustOptimizedContour(nozzle, lengthFraction: float,
             numContourPoints = nozzle.numContourPoints,
             requestedAreaRatio = float(nozzle.expansionRatio),
             numCharacteristicsRequested = mesh,
-            ambientSpecificImpulse = nozzle.ceaOutput.nozzlePerformance['ambientISP[s]'])
+            idealSpecificImpulse = nozzle.ceaOutput.nozzlePerformance['idealISP[s]'])
 
     evaluations = {'count': 0}
 

@@ -631,3 +631,33 @@ def chunkInterpolate(xPoints: ArrayLike, yPoints: ArrayLike, xNewPoints: ArrayLi
         yNewPoints = np.append(yNewPoints,np.flip(yNewChunk))
 
     return yNewPoints
+
+def sizedThroatRadius(rNozzle, nozzleScalingFactor = None) -> float:
+
+    '''
+
+    The throat radius of a sampled wall: the smaller of the sized radius and the smallest station.
+
+    A wall resampled along its arc length carries no station exactly at the throat, so its
+    smallest radius overstates the throat the contour was sized to. Everything that scales on the
+    throat, an area ratio or Bartz's coefficient, reads this rather than the smallest station.
+
+    Parameters:
+    -----------
+    rNozzle : array
+        Wall radius at each station [m].
+    nozzleScalingFactor : float
+        Throat radius the contour was sized to [m], or None.
+
+    Returns:
+    --------
+    float
+        Throat radius [m].
+
+    '''
+
+    throatRadius = float(np.min(np.asarray(rNozzle, dtype = float)))         # [m]
+    if nozzleScalingFactor is not None and np.isfinite(float(nozzleScalingFactor)) \
+            and float(nozzleScalingFactor) > 0.0:
+        throatRadius = min(throatRadius, float(nozzleScalingFactor))
+    return throatRadius

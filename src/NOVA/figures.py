@@ -1545,7 +1545,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
 
             print('Saving Heat Transfer Outputs to .html')
 
-            _writePlotlyFigure(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
+            _writePlotlyFigure(fig, filename = os.path.join(context.dataFolder, 'heatTransferModelOutput.html'), auto_open = not headlessPlots())
 
         else:
 
@@ -1625,7 +1625,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
 
             print('Saving Heat Transfer Outputs to .html')
 
-            _writePlotlyFigure(fig, filename = context.dataFolder + '\\heatTransferModelOutput.html', auto_open = not headlessPlots())
+            _writePlotlyFigure(fig, filename = os.path.join(context.dataFolder, 'heatTransferModelOutput.html'), auto_open = not headlessPlots())
 
         else:
 

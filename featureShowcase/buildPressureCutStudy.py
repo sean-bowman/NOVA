@@ -110,7 +110,7 @@ def cut(nozzle: Nozzle, mach: float, areaRatio: float) -> dict:
         idealMachNumber = nozzle.idealMachNumber, targetExitPressure = ambientPressure,
         numContourPoints = nozzle.numContourPoints, requestedAreaRatio = float(areaRatio),
         numCharacteristicsRequested = int(getattr(nozzle, 'numCharacteristicsRequested', 50)),
-        ambientSpecificImpulse = nozzle.ceaOutput.nozzlePerformance['ambientISP[s]'])
+        idealSpecificImpulse = nozzle.ceaOutput.nozzlePerformance['idealISP[s]'])
     solution = truncatedIdealContour(solution, mach, float(nozzle.lengthFraction), truncate = True,
                                      assignOutputsToObject = False)
 

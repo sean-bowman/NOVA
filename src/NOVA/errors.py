@@ -34,8 +34,11 @@ class RegenGeometryError(Exception):
     Attributes:
         message (str): Human-readable error message
         context (dict): Additional context about the error (station index, variable values, etc.)
+        title (str): Banner heading, set per class so a failure names its own kind
 
     '''
+
+    title = 'REGENERATIVE GEOMETRY ERROR'
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None):
 
@@ -54,7 +57,7 @@ class RegenGeometryError(Exception):
 
         # Build detailed error message
         fullMessage = f'\n{"=" * 80}\n'
-        fullMessage += f'REGENERATIVE GEOMETRY ERROR\n'
+        fullMessage += f'{self.title}\n'
         fullMessage += f'{"=" * 80}\n'
         fullMessage += f'{message}\n'
 
@@ -102,6 +105,8 @@ class ConvergenceFailureError(RegenGeometryError):
         residual (float): Final residual/error value
 
     '''
+
+    title = 'CONVERGENCE FAILURE'
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  iterations: Optional[int] = None, tolerance: Optional[float] = None,
@@ -153,6 +158,8 @@ class GeometricConstraintError(RegenGeometryError):
 
     '''
 
+    title = 'GEOMETRIC CONSTRAINT'
+
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  constraintType: Optional[str] = None, value: Optional[float] = None,
                  limit: Optional[float] = None):
@@ -201,6 +208,8 @@ class ThermalConstraintError(RegenGeometryError):
         limit (float): Limit that was exceeded
 
     '''
+
+    title = 'THERMAL CONSTRAINT'
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  thermalProperty: Optional[str] = None, value: Optional[float] = None,
@@ -255,6 +264,8 @@ class PressureDropError(RegenGeometryError):
         minExitPressure (float): Minimum required exit pressure [Pa]
 
     '''
+
+    title = 'PRESSURE DROP'
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  pressureDrop: Optional[float] = None, maxPressureDrop: Optional[float] = None,
@@ -312,6 +323,8 @@ class InvalidInputError(RegenGeometryError):
 
     '''
 
+    title = 'INVALID INPUT'
+
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  parameterName: Optional[str] = None, value: Any = None,
                  validRange: Optional[str] = None):
@@ -361,6 +374,8 @@ class NumericalInstabilityError(RegenGeometryError):
         operation (str): Operation that produced the non-finite value
 
     '''
+
+    title = 'NUMERICAL INSTABILITY'
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  variableName: Optional[str] = None, value: Any = None,
@@ -414,6 +429,8 @@ class REFPROPError(RegenGeometryError):
 
     '''
 
+    title = 'REFPROP PROPERTY FAILURE'
+
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  species: Optional[str] = None, errorCode: Optional[int] = None,
                  requested: Optional[str] = None):
@@ -462,6 +479,8 @@ class VoluteGenerationError(RegenGeometryError):
         failureMode (str): Specific failure mode
 
     '''
+
+    title = 'VOLUTE GENERATION ERROR'
 
     def __init__(self, message: str, context: Optional[Dict[str, Any]] = None,
                  voluteType: Optional[str] = None, failureMode: Optional[str] = None):

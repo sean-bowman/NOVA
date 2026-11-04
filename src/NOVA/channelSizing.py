@@ -107,7 +107,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-from .geometryTools import DCM, parallelOffset
+from .geometryTools import DCM, parallelOffset, sizedThroatRadius
 from .errors import (ConvergenceFailureError, createErrorContext, GeometricConstraintError,
                      InvalidInputError, PressureDropError, ThermalConstraintError)
 from .materials import wallMaterialCurves
@@ -1139,8 +1139,12 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i["hotWallThickness"]                = state.hotWallThickness
         heatTransferDict_i["throatRadiusOfCurvature"]         = (state.throatInletCurvatureNonDimensional*state.nozzleScalingFactor + \
                                                                  state.throatOutletCurvatureNonDimensional*state.nozzleScalingFactor) / 2
-        heatTransferDict_i["throatDiameter"]                  = 2 * min(rNozzle)
-        heatTransferDict_i["throatArea"]                      = np.pi * (min(rNozzle)**2)
+        # Bartz scales on the throat the contour was sized to, not on the smallest station of the
+        # resampled wall, which sits above it and is not on this circuit's wall at all for a
+        # circuit that starts past the throat
+        throatRadius = sizedThroatRadius(rNozzle, state.nozzleScalingFactor)       # [m]
+        heatTransferDict_i["throatDiameter"]                  = 2 * throatRadius
+        heatTransferDict_i["throatArea"]                      = np.pi * throatRadius**2
         heatTransferDict_i["coolant"]                         = state.coolant
         heatTransferDict_i["mdot"]                            = state.coolantMassFlow / state.nChannel
         heatTransferDict_i["chamberPressure"]                 = state.chamberPressure

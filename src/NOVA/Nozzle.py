@@ -78,6 +78,7 @@ try:
     from .chamber import (ConvergingSectionState, convergingSectionOutputs,
                           solveConvergingSection)
     from .regenStations import RegenStationState, regenStationOutputs, solveRegenStations
+    from .geometryTools import sizedThroatRadius
     from .radiativeCooling import (RadiativeShell, radiativeExtensionOutputs,
                                    radiativeNozzleExtension)
     from .config import setInputs as readConfiguration
@@ -115,7 +116,8 @@ except ImportError as error:
 # studies in experimental/, the showcase scripts and the test suite all reach for them through
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
-from .boundaryLayer import frictionPerformanceDebit, solveBoundaryLayer
+from .boundaryLayer import frictionPerformanceDebit, solveBoundaryLayer, wallTemperatureProfile
+from .performance import summarizePerformance
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
                     PlumeFlow, PlumePoint, solvePlumeStructure, throttledContour,
                     plumeCharacteristicSeed,
@@ -415,7 +417,8 @@ class Nozzle:
         self.nozzleNearWallPressure                   = None     # [Pa]
         self.nozzleNearWallVelocity                   = None     # [m/s]
         self.nozzleNearWallMachNumber                 = None     # [-]
-        self.thrustCoef                               = None     # [-]
+        self.thrustCoef                               = None     # [-], against targetExitPressure
+        self.performance                              = None     # PerformanceSummary, estimated and delivered
 
         self.xRegenNozzle: np.ndarray | None          = None     # [m]
         self.rRegenNozzle: np.ndarray | None          = None     # [m]
@@ -794,7 +797,7 @@ class Nozzle:
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
+            idealSpecificImpulse = self.ceaOutput.nozzlePerformance['idealISP[s]'])
 
         solution = solveTruncatedIdealContour(solution, targetExitMach, lengthFraction,
                                               truncate = truncate,
@@ -861,7 +864,7 @@ class Nozzle:
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
+            idealSpecificImpulse = self.ceaOutput.nozzlePerformance['idealISP[s]'])
 
         solution = solveThrustOptimizedParabolicContour(
             solution, lengthFraction, wallAngles = wallAngles,
@@ -940,7 +943,7 @@ class Nozzle:
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
+            idealSpecificImpulse = self.ceaOutput.nozzlePerformance['idealISP[s]'])
 
         solution = solveThrustOptimizedContourWall(solution, lengthFraction, designVariables,
                                                    assignOutputsToObject = True)
@@ -1151,7 +1154,7 @@ class Nozzle:
             numContourPoints = self.numContourPoints,
             requestedAreaRatio = float(self.expansionRatio),
             numCharacteristicsRequested = int(getattr(self, 'numCharacteristicsRequested', 50)),
-            ambientSpecificImpulse = self.ceaOutput.nozzlePerformance['ambientISP[s]'])
+            idealSpecificImpulse = self.ceaOutput.nozzlePerformance['idealISP[s]'])
 
         solution = solveConicalContour(solution, conicalHalfAngle = conicalHalfAngle,
                                        assignOutputsToObject = True)
@@ -1374,10 +1377,9 @@ class Nozzle:
 
         '''
 
-        # The joint is adiabatic unless a temperature is given for it. The jacket solve does not
-        # surface a per-station hot wall temperature onto the Nozzle, so there is nothing to read
-        # it from automatically; an adiabatic flange lets no heat out and is the conservative
-        # reading of an unknown one.
+        # The joint is adiabatic unless a temperature is given for it. An adiabatic flange lets
+        # no heat out, which is the conservative reading of a joint whose conduction path into
+        # the jacket is not modeled.
         shell = RadiativeShell(
             thermalConductivity = self.extensionThermalConductivity,
             thickness           = self.extensionThickness,
@@ -1401,7 +1403,7 @@ class Nozzle:
             exhaustGamma           = self.gammaExtension,
             exhaustGasConstant     = self.gasConstantExtension,
             exhaustMolecularWeight = self.molecularWeightExtension,
-            throatRadius           = float(np.min(self.rNozzleWall)),
+            throatRadius           = sizedThroatRadius(self.rNozzleWall, self.nozzleScalingFactor),
             throatRadiusOfCurvature = 0.5 * self.nozzleScalingFactor
                                       * (self.throatInletCurvatureNonDimensional
                                          + self.throatOutletCurvatureNonDimensional))
@@ -1427,6 +1429,11 @@ class Nozzle:
             If the balance does not settle.
 
         '''
+
+        if self.xExtension is None or len(self.xExtension) < 3:
+            print('Radiative extension skipped: the jacket runs to the exit, so there is no '
+                  'extension to solve.')
+            return
 
         shell, arguments = self.radiativeExtensionInputs()
         result = radiativeNozzleExtension(shell, **arguments)
@@ -1715,11 +1722,12 @@ class Nozzle:
         **The drag charged is the diverging section's.** The march covers the whole wall, because
         the thickness arriving at the throat is set by the chamber upstream of it, but friction on
         the subsonic wall does not reduce exit plane momentum and is not a thrust debit. On the
-        reference nozzle the chamber and converging section carry a further 212 N, which is
+        reference nozzle the chamber and converging section carry a further 211 N, which is
         reported as `chamberDragForce` and left out of the coefficient.
 
-        The wall temperature is the jacket's own solved distribution where there is a jacket, so
-        a cold wall is charged the higher friction a cold wall really carries. Without a jacket
+        The wall temperature is the jacket's own solved distribution over the cooled section and
+        the extension's solved shell temperature beyond it, each placed by axial position, so a
+        cold wall is charged the higher friction a cold wall really carries. Without a jacket
         there is no wall temperature to use and the march is skipped rather than invented.
 
         Sets `frictionDragForce`, `chamberDragForce`, `frictionLossCoefficient`,
@@ -1746,17 +1754,14 @@ class Nozzle:
         if wall.size < 3 or mach.size != wall.size:
             return
 
-        wallTemperature = getattr(self, 'channelWallTemperature', None)
-        if wallTemperature is None:
+        thermalResults = getattr(self, 'channelThermalResults', None)
+        if thermalResults is None or getattr(self, 'channelWallTemperature', None) is None:
             return
 
-        # The jacket covers the cooled section only, so its temperature is carried forward over
-        # any uncooled extension rather than extrapolated into one.
-        wallTemperature = np.asarray(wallTemperature, dtype = float)
-        if wallTemperature.size != wall.size:
-            wallTemperature = np.interp(np.linspace(0.0, 1.0, wall.size),
-                                        np.linspace(0.0, 1.0, wallTemperature.size),
-                                        wallTemperature)
+        # The jacket's and the extension's solved temperatures, placed by axial position
+        wallTemperature = wallTemperatureProfile(
+            self.xNozzleWall, thermalResults['xHotWall3D'], thermalResults['wallTemperature'],
+            getattr(self, 'xExtension', None), getattr(self, 'extensionWallTemperature', None))
 
         layer = solveBoundaryLayer(
             np.asarray(self.xNozzleWall, dtype = float), wall, mach,
@@ -1779,6 +1784,25 @@ class Nozzle:
 
         print(f'  friction drag {self.frictionDragForce:.1f} N over the diverging section, '
               f'{self.frictionLossCoefficient:.2%} of ideal thrust')
+
+    def solvePerformance(self):
+
+        '''
+
+        Report what the nozzle was estimated to deliver and what the solved exit plane delivers.
+
+        The estimate is one-dimensional at the area ratio, in CEA's equilibrium gas and in the
+        frozen chamber gas the characteristics are solved in. The delivered values are integrated
+        over the solved exit plane, and every thrust coefficient and specific impulse is given at
+        a named back pressure: vacuum, sea level, the design back pressure the engine was sized
+        at, and the plume ambient when one is set. See `performance.summarizePerformance`.
+
+        Sets `performance`, a `PerformanceSummary`.
+
+        '''
+
+        self.performance = summarizePerformance(self)
+        print(self.performance.report())
 
     def generateNozzle(self, configPath: str = None):
 
@@ -1861,14 +1885,20 @@ class Nozzle:
             if self.makeInletVolute == 'on' or self.makeOutletVolute == 'on':
                 self.generateRegenVolutes()
 
-        # -- Boundary Layer and the Friction It Costs -- #
-
-        self.solveFrictionLoss()
-
         # -- Radiation-Cooled Extension -- #
 
         if self.makeRadiativeExtension == 'on':
             self.generateRadiativeExtension()
+
+        # -- Boundary Layer and the Friction It Costs -- #
+
+        # After the extension, so the wall the layer marches over carries the extension's own
+        # solved temperature rather than the jacket's carried past its end
+        self.solveFrictionLoss()
+
+        # -- Estimated and Delivered Performance -- #
+
+        self.solvePerformance()
 
         # -- Exhaust Plume -- #
 

@@ -250,7 +250,7 @@ What a rough wall may do to the coolant-side heat transfer is set by `coolantRou
 
 A thermal barrier coating is a second shell inside the metal one, set by `thermalBarrierThickness` and `thermalBarrierConductivity`. It raises its own gas-side surface temperature and lowers the metal behind it, which is the point of fitting one, so `maxWallTemperature` applies to the metal rather than to the ceramic.
 
-Every run marches a turbulent boundary layer along the finished wall and prices the drag it costs, reporting `frictionLossCoefficient` and a corrected thrust coefficient. The march starts at the injector face, so the layer arriving at the throat carries the chamber's history, but only the diverging section's drag is charged against exit thrust: friction on the subsonic wall is a chamber momentum loss and is reported separately as `chamberDragForce`. On the reference nozzle the debit is 1.99 percent of ideal thrust, from 2001 N over the bell against 212 N over the chamber. The displacement thickness is reported and **not** applied to the wall: offsetting the contour by it is SP-8120's reference practice and would move every contour the tool produces.
+Every run marches a turbulent boundary layer along the finished wall and prices the drag it costs, reporting `frictionLossCoefficient` and a corrected thrust coefficient. The march starts at the injector face, so the layer arriving at the throat carries the chamber's history, but only the diverging section's drag is charged against exit thrust: friction on the subsonic wall is a chamber momentum loss and is reported separately as `chamberDragForce`. On the reference nozzle the debit is 1.72 percent of the thrust at the design back pressure, from 1730 N over the bell against 211 N over the chamber; the bell's wall temperature is the jacket's over the cooled section and the extension's solved shell temperature beyond it. The displacement thickness is reported and **not** applied to the wall: offsetting the contour by it is SP-8120's reference practice and would move every contour the tool produces.
 
 | Field                                       | Unit | Meaning                                                                                            |
 | --------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------- |
@@ -361,8 +361,8 @@ A run writes to `{filename}Outputs/` beside the repository root.
 | `contourSegmentsVisualization.png`                                                                   | `plotsEnabled`                                            |
 | `machContours.png`, `pressureContours.png`, `temperatureContours.png`                            | `plotsEnabled`                                            |
 | `nearWallProperties.png`                                                                             | `plotsEnabled`                                            |
-| `heatTransferModelOutput.png` / `.html`                                                            | cooling channels enabled                                   |
-| `threeChannelMeshViewInterfaced.html`, `regenJacketView.html`                                      | `plotsEnabled` with cooling channels                      |
+| `heatTransferModelOutput.html`                                                                       | `export` with cooling channels                             |
+| `threeChannelMeshViewInterfaced.html`                                                                | `plotsEnabled` with cooling channels                      |
 | `contourInteractive.html`, `nearWallInteractive.html`, `revolvedContourView.html`                | `export`                                                     |
 | `machFieldInteractive.html`, `pressureFieldInteractive.html`, `temperatureFieldInteractive.html` | `export`                                                     |
 | `plumeStructureInteractive.html`                                                                     | `export`, `plumeAmbientPressure` set                     |
@@ -419,8 +419,27 @@ CEA output at the chamber, compared against CEARun for the same case:
 | Delivered area ratio      | 40.000      |
 | Delivered length fraction | 0.8000      |
 | Mass flow                 | 23.466 kg/s |
-| Thrust coefficient        | 1.826       |
-| Ideal Isp                 | 434.4 s     |
+
+### Performance: estimated and delivered
+
+The engine is sized before any contour exists, from a one-dimensional estimate: the requested thrust becomes a mass flow through CEA's matched-expansion specific impulse at the area ratio. After the solve, the same quantities are integrated over the solved exit plane. Every run prints this table and writes it to `*Performance.json`; the Analyze tab shows it too. The one-dimensional estimate appears in two gases: CEA's equilibrium gas, and the frozen chamber gas the method of characteristics is solved in, which is the like-for-like reference for what the contour delivers. Delivered exit-state values are mass averages over the plane. Each thrust coefficient and specific impulse is given at a named back pressure, because a thrust coefficient means nothing without one. The design back pressure is the one-dimensional equilibrium exit pressure, 13.99 kPa: the requested thrust is defined there.
+
+| Quantity                                    | 1D equilibrium | 1D chamber gas | Delivered | Delivered, after friction |
+| ------------------------------------------- | -------------- | -------------- | --------- | ------------------------- |
+| Exit Mach number                            | 4.223          | 3.954          | 3.945     |                           |
+| Exit pressure [kPa]                         | 13.99          | 17.70          | 18.61     |                           |
+| Exit temperature [K]                        | 1275           | 1578           | 1583      |                           |
+| Exit velocity [m/s]                         | 4260           | 4312           | 4282      |                           |
+| Thrust coefficient, vacuum                  | 1.902          | 1.945          | 1.907     | 1.876                     |
+| Thrust coefficient, design back pressure    | 1.821          | 1.863          | 1.826     | 1.795                     |
+| Thrust coefficient, sea level               | 1.314          | 1.357          | 1.319     | 1.288                     |
+| Specific impulse, vacuum [s]                | 453.8          | 464.2          | 461.5     | 453.9                     |
+| Specific impulse, design back pressure [s]  | 434.4          | 444.8          | 441.8     | 434.2                     |
+| Thrust, design back pressure [kN]           | 100.0          |                | 101.7     | 100.0                     |
+
+The delivered vacuum coefficient is 0.981 of the chamber-gas estimate: that is the contour's own divergence and exit non-uniformity, with the gas held the same. The delivered plane's exit pressure runs from 25.5 kPa at the wall to 10.7 kPa on the axis, with an area average of 17.6 kPa.
+
+The chamber-gas column delivers more than the equilibrium column because the frozen gas, with the chamber's ratio of specific heats, expands to a lower Mach number and a higher temperature at the same area ratio. Wall friction costs 0.031 of thrust coefficient.
 
 ### Generated geometry
 

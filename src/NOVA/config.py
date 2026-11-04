@@ -61,6 +61,7 @@ from .channelProfile import CHANNELSIZINGMODES, PROFILEKEYS
 from .channelSections import SECTIONFAMILIES
 from .voluteSections import SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS
 from .ceaInterface import CEA
+from . import units
 from .contour import divergingSectionFamily
 from .contourKernel import nearWallStateModels, transonicModels
 from .gasSideHeatTransfer import GASSIDEAXIALMODELS
@@ -156,6 +157,18 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
 
+        # A null reads back as the NaN this reader makes of it, and `value or default` keeps the
+        # NaN because NaN is truthy. These two return the default for absent, null and NaN alike:
+        # a name is taken only when it arrived as a string, a number only when it is finite.
+        def nameOr(key, default):
+            value = inputsPath.get(key)
+            return value if isinstance(value, str) else default
+
+        def valueOr(name, default):
+            value = inputsPath.get(name)
+            unset = value is None or (isinstance(value, float) and np.isnan(value))
+            return default if unset else float(value)
+
         # -- Read dict and assign values -- #
 
         # -- Contour Definition Inputs -- #
@@ -186,13 +199,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.plumeFieldReach            = inputsPath.get('plumeFieldReach')
         nozzle.lengthFraction             = inputsPath['lengthFraction']
         nozzle.expansionRatio             = inputsPath['expansionRatio']
-        nozzle.numCharacteristicsRequested = inputsPath.get('numCharacteristics', 50)
+        nozzle.numCharacteristicsRequested = int(valueOr('numCharacteristics', 50))
 
         # Where the regen section ends, as a type and a value rather than one string carrying
         # both. 'none' ignores the value; 'temp' reads it as a near-wall recovery temperature
         # [K]; 'er' reads it as an area ratio [-]. Validated below, once the design point has
         # somewhere to report a bad value against.
-        nozzle.regenTruncationType         = inputsPath.get('regenTruncationType', 'none')
+        nozzle.regenTruncationType         = nameOr('regenTruncationType', 'none')
         nozzle.regenTruncationValue        = inputsPath.get('regenTruncationValue')
 
         # -- Regenerative Cooling Jacket Inputs -- #
@@ -210,12 +223,6 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # manual mode asked for without saying so. 'manual' reads the size off
         # manualChannelProfile instead: a half-extent [m], a list of [key, half-extent] pairs,
         # or a path to a profile a run recorded. See channelProfile.
-        # A null reads back as the NaN this reader makes of it, so each of the three is taken
-        # only when it arrived as the type it is meant to be, and is the default otherwise.
-        def nameOr(key, default):
-            value = inputsPath.get(key)
-            return value if isinstance(value, str) else default
-
         nozzle.channelSizingMode              = nameOr('channelSizingMode', 'thermal')
         nozzle.manualChannelProfileKey        = nameOr('manualChannelProfileKey', 'areaRatio')
         nozzle.manualChannelProfile           = inputsPath.get('manualChannelProfile')
@@ -224,23 +231,19 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # How the gas-side correlation constant runs along the wall. Absent or null is 'uniform',
         # which is the single constant Bartz assumes and what every configuration written before
         # the measured distribution existed asked for without saying so.
-        nozzle.gasSideAxialModel              = inputsPath.get('gasSideAxialModel') or 'uniform'
+        nozzle.gasSideAxialModel              = nameOr('gasSideAxialModel', 'uniform')
         # The entrance and curvature corrections a coolant correlation written for a straight
         # developed passage needs where the passage is neither. Absent or null is off.
         nozzle.coolantGeometryCorrections     = inputsPath.get('coolantGeometryCorrections') in (True, 'on')
         # What a rough wall is allowed to do to the coolant-side heat transfer
-        nozzle.coolantRoughnessModel          = inputsPath.get('coolantRoughnessModel') or 'dippreySabersky'
-        nozzle.coolantPropertyCorrection      = inputsPath.get('coolantPropertyCorrection') or 'none'
+        nozzle.coolantRoughnessModel          = nameOr('coolantRoughnessModel', 'dippreySabersky')
+        nozzle.coolantPropertyCorrection      = nameOr('coolantPropertyCorrection', 'none')
         nozzle.thermalBarrierThickness        = inputsPath.get('thermalBarrierThickness')
         nozzle.thermalBarrierConductivity     = inputsPath.get('thermalBarrierConductivity')
 
         # A rectangle's width and depth limits and a helix's angle and aspect ratio. Read with
         # defaults, so a configuration written for circular channels needs none of them; a null
         # reads as unset like everywhere else here.
-        def valueOr(name, default):
-            value = inputsPath.get(name)
-            unset = value is None or (isinstance(value, float) and np.isnan(value))
-            return default if unset else float(value)
 
         # The roughness the coolant-side friction factor is built on. Absent is a printed channel.
         nozzle.channelSurfaceRoughness        = valueOr('channelSurfaceRoughness', printedSurfaceRoughness)
@@ -265,13 +268,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # negative rather than positive. It is not the default because the thermal model reads
         # its driving temperature off this same solve, and a wall gas biased cold undersizes a
         # jacket. See the gammaModel note in gasDynamics.effectiveGamma.
-        nozzle.gammaModel                     = inputsPath.get('gammaModel', 'chamber')
+        nozzle.gammaModel                     = nameOr('gammaModel', 'chamber')
 
         # -- Film Cooling -- #
         #
         # Optional throughout. A configuration that names none of these describes an engine
         # with no film, which is what every configuration written before this did.
-        nozzle.filmCooling                    = inputsPath.get('filmCooling', 'off')
+        nozzle.filmCooling                    = nameOr('filmCooling', 'off')
         nozzle.filmCoolant                    = inputsPath.get('filmCoolant')
         nozzle.filmMassFlow                   = inputsPath.get('filmMassFlow')
         nozzle.filmInletTemperature           = inputsPath.get('filmInletTemperature')
@@ -281,33 +284,26 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # Which closure solves the film. 'hatchPapell' is the correlation with a stated
         # accuracy from its own source; 'sp8124Entrainment' is the model whose empirical
         # multiplier is how NASA SP-8124 accounts for acceleration and flow turning.
-        nozzle.filmCoolingModel               = inputsPath.get('filmCoolingModel',
-                                                               'hatchPapell')
-        nozzle.filmCoolantMixtureRatio        = inputsPath.get('filmCoolantMixtureRatio',
-                                                               0.0)
-        nozzle.filmEntrainmentMultiplier      = inputsPath.get('filmEntrainmentMultiplier',
-                                                               3.5)
+        nozzle.filmCoolingModel               = nameOr('filmCoolingModel', 'hatchPapell')
+        nozzle.filmCoolantMixtureRatio        = valueOr('filmCoolantMixtureRatio', 0.0)
+        nozzle.filmEntrainmentMultiplier      = valueOr('filmEntrainmentMultiplier', 3.5)
 
         # -- Radiation-Cooled Extension -- #
         #
         # The conductivity is asked for rather than looked up because the materials store
         # carries curves only for the jacket alloys, and its fallback to GRCop-42 would give
         # a refractory shell eight times the conductivity it has.
-        nozzle.makeRadiativeExtension         = inputsPath.get('makeRadiativeExtension',
-                                                               'off')
+        nozzle.makeRadiativeExtension         = nameOr('makeRadiativeExtension', 'off')
         nozzle.extensionMaterial              = inputsPath.get('extensionMaterial')
         nozzle.extensionThickness             = inputsPath.get('extensionThickness')
         nozzle.extensionThermalConductivity   = inputsPath.get(
                                                     'extensionThermalConductivity')
         nozzle.extensionInnerEmissivity       = inputsPath.get('extensionInnerEmissivity')
         nozzle.extensionOuterEmissivity       = inputsPath.get('extensionOuterEmissivity')
-        nozzle.extensionOuterViewFactor       = inputsPath.get('extensionOuterViewFactor',
-                                                               1.0)
-        nozzle.extensionSinkTemperature       = inputsPath.get('extensionSinkTemperature',
-                                                               0.0)
-        nozzle.extensionGasEmissivity         = inputsPath.get('extensionGasEmissivity', 0.0)
-        nozzle.extensionAtmosphere            = inputsPath.get('extensionAtmosphere',
-                                                               'inert')
+        nozzle.extensionOuterViewFactor       = valueOr('extensionOuterViewFactor', 1.0)
+        nozzle.extensionSinkTemperature       = valueOr('extensionSinkTemperature', 0.0)
+        nozzle.extensionGasEmissivity         = valueOr('extensionGasEmissivity', 0.0)
+        nozzle.extensionAtmosphere            = nameOr('extensionAtmosphere', 'inert')
         nozzle.extensionJointTemperature      = inputsPath.get('extensionJointTemperature')
         nozzle.coolantClass                   = inputsPath['coolantClass']
         nozzle.coolant                        = inputsPath['coolant']
@@ -321,10 +317,10 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.numCSVolute                    = inputsPath['numCSVolute']
         nozzle.numCSPointsVolute              = inputsPath['numCSPointsVolute']
         nozzle.voluteRelativeRoll             = inputsPath['voluteRelativeRoll']
-        nozzle.voluteScrollType               = inputsPath.get('voluteScrollType', 'ring')
-        nozzle.maxVoluteBore                  = inputsPath.get('maxVoluteBore', 0.15)
-        nozzle.minVoluteWallThickness         = inputsPath.get('minVoluteWallThickness', 1.0e-3)
-        nozzle.voluteFOS                      = inputsPath.get('voluteFOS', 1.5)
+        nozzle.voluteScrollType               = nameOr('voluteScrollType', 'ring')
+        nozzle.maxVoluteBore                  = valueOr('maxVoluteBore', 0.15)
+        nozzle.minVoluteWallThickness         = valueOr('minVoluteWallThickness', 1.0e-3)
+        nozzle.voluteFOS                      = valueOr('voluteFOS', 1.5)
         nozzle.inletVoluteCrossSection        = inputsPath['inletVoluteCrossSection']
         nozzle.inletVoluteAlignment           = inputsPath['inletVoluteAlignment']
         nozzle.inletVolutePrintability        = inputsPath['inletVolutePrintability']
@@ -393,10 +389,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
     # Thrust or Engine Mass Flow
     if not (np.isnan(nozzle.thrust)) and not (np.isnan(nozzle.engineMassFlow)):
         raise ValueError('You cannot specify both thrust and engine mass flow, specify one or the other')
+    # Both directions through the same impulse: CEA's matched-expansion value at the area ratio,
+    # in standard gravity. Thrust is therefore defined at the design back pressure, the
+    # one-dimensional exit pressure, which is where the performance summary compares it.
     if np.isnan(nozzle.thrust):
-        nozzle.thrust                   = nozzle.ceaOutput.nozzlePerformance['ambientISP[s]'] * 9.81 * nozzle.engineMassFlow
+        nozzle.thrust                   = nozzle.ceaOutput.nozzlePerformance['idealISP[s]'] * units.GRAVITY * nozzle.engineMassFlow
     elif np.isnan(nozzle.engineMassFlow):
-        nozzle.engineMassFlow           = nozzle.thrust / (nozzle.ceaOutput.nozzlePerformance['idealISP[s]'] * 9.81)
+        nozzle.engineMassFlow           = nozzle.thrust / (nozzle.ceaOutput.nozzlePerformance['idealISP[s]'] * units.GRAVITY)
     # Exit Pressure or Expansion Ratio
     if not (np.isnan(nozzle.targetExitPressure)) and not (np.isnan(nozzle.expansionRatio)):
         raise ValueError('You cannot specify both nozzle exit pressure and expansion ratio, specify one or the other')
@@ -579,7 +578,8 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
 
     # Which transonic solution the starting line carries. 'sauer' is what NOVA has always used and
     # stays the default, so a configuration that does not mention this cannot move.
-    nozzle.transonicModel = inputsPath.get('transonicModel', None) or 'sauer'
+    transonicModel = inputsPath.get('transonicModel')
+    nozzle.transonicModel = transonicModel if isinstance(transonicModel, str) and transonicModel else 'sauer'
     if nozzle.transonicModel not in transonicModels:
         raise InvalidInputError(
             message = 'No transonic model by that name. Sauer is the first term of the series '
@@ -592,7 +592,9 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
     # Where the converging near-wall state comes from. One-dimensional is what NOVA has always
     # used and stays the default; 'transonic' carries the starting line's own solution over the
     # entrant arc, so the wall goes sonic ahead of the throat as a real one does.
-    nozzle.nearWallStateModel = inputsPath.get('nearWallStateModel', None) or 'oneDimensional'
+    nearWallStateModel = inputsPath.get('nearWallStateModel')
+    nozzle.nearWallStateModel = (nearWallStateModel if isinstance(nearWallStateModel, str) and nearWallStateModel
+                                 else 'oneDimensional')
     if nozzle.nearWallStateModel not in nearWallStateModels:
         raise InvalidInputError(
             message = 'No near-wall state model by that name. The one-dimensional state puts the '

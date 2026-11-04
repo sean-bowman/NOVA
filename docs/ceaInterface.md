@@ -230,9 +230,9 @@ FORTRAN COMMON blocks. Two threads interleaving calls silently return each
 other's numbers with no exception raised: the dangerous failure mode is a wrong
 answer, not a crash.
 
-Every solve in this module is serialized behind a module-level lock. Do not wrap
-CEA calls in `joblib.Parallel` with a threading backend. Process-based
-parallelism is safe, since each process gets its own copy of the COMMON blocks.
+**It is not process-safe either.** Separate processes do not share the COMMON blocks, but every process writes its CEA input and reads its output through the same files in the user's RocketCEA directory (`f.inp`, `f.out`, `temp.dat`). Two processes solving at once read each other's half-written files and the FORTRAN reader fails with `Fortran runtime error: End of file`.
+
+Every solve in this module is therefore serialized behind one lock, held across threads in the process and, through a lock file (`nova.lock`) in the RocketCEA directory, across processes on the machine. Parallel work that calls CEA, whether in threads or processes, runs at the speed of one solver.
 
 ### PATH sanitization
 

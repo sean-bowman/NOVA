@@ -166,7 +166,7 @@ from .fluidProperties import fluidProps
 __all__ = [
     'FILMCONDUCTIVITYEXPONENT', 'FILMPRANDTLEXPONENT', 'FILMVISCOSITYEXPONENT',
     'FilmCoolantState', 'FilmCoolingResult', 'HATCHPAPELLONSET',
-    'SP8124EFFECTIVENESSASYMPTOTE', 'SP8124EFFECTIVENESSONSET',
+    'SP8124EFFECTIVENESSASYMPTOTE', 'SP8124EFFECTIVENESSONSET', 'SP8124INJECTIONBAND',
     'SP8124EXPANSIONMULTIPLIER', 'SP8124INJECTIONMULTIPLIER', 'SP8124THROATMULTIPLIER',
     'SP8124VELOCITYFUNCTION', 'entrainmentAdiabaticWallTemperature',
     'entrainmentEffectiveness', 'entrainmentFilmArrays', 'entrainmentMultiplier',
@@ -234,6 +234,10 @@ SP8124VELOCITYFUNCTION = (
 
 # Figure A-2, film-coolant effectiveness against entrainment flow ratio. Both limits are printed
 # on the figure and are exact; the band between them is a plotted curve with no equation.
+# Design criteria 3.5.3, the coolant-to-core velocity ratio a gaseous slot film is injected at.
+# The entrainment closure is calibrated for a film inside this band and extrapolated outside it.
+SP8124INJECTIONBAND = (0.9, 1.15)
+
 SP8124EFFECTIVENESSONSET     = 0.06
 SP8124EFFECTIVENESSASYMPTOTE = 1.4
 
@@ -567,6 +571,10 @@ class FilmCoolingResult:
         Distance from the slot over which the effectiveness stays above 0.3 [m]. Below that the
         correlation is pessimistic by its own authors' account, so it is the honest end of the
         film's useful reach rather than the point it disappears.
+    injectionVelocityRatio : float | None
+        Coolant velocity over core velocity at the slot [-]. SP-8124 recommends 0.9 to 1.15;
+        the entrainment closure is extrapolated outside that band. None from Hatch and Papell,
+        which carries its own velocity-ratio correction.
 
     """
 
@@ -580,6 +588,15 @@ class FilmCoolingResult:
     entrainmentFlowRatio:  Any = None
     wallMixtureRatio:      Any = None
     entrainmentMultiplier: Any = None
+    injectionVelocityRatio: Any = None
+
+    @property
+    def withinInjectionBand(self) -> bool:
+
+        '''True when the injection velocity ratio lies in SP-8124's recommended 0.9 to 1.15.'''
+
+        ratio = self.injectionVelocityRatio
+        return ratio is not None and SP8124INJECTIONBAND[0] <= ratio <= SP8124INJECTIONBAND[1]
 
 def filmCoolingArrays(axialPosition, radius, gasVelocity, gasStaticTemperature,
                       recoveryTemperature, gasThermalConductivity, gasDensity, gasViscosity,
@@ -1162,26 +1179,37 @@ def wallMixtureRatio(effectiveness: float, coreMixtureRatio: float,
 def entrainmentAdiabaticWallTemperature(effectiveness: float, totalTemperature: float,
                                         recoveryTemperature: float, coreSpecificHeat: float,
                                         coolantSpecificHeat: float,
-                                        coolantTotalTemperature: float) -> float:
+                                        coolantTotalTemperature: float,
+                                        layerVelocityRatio: float = 1.0) -> float:
 
     '''
 
     The non-reactive adiabatic wall temperature of Appendix A.
 
-        T_aw = T_o,e - [ eta C_p,c (T_o,e - T_c) + (1 - Pr^1/3)(H_o,e - H_e) ]
+        T_aw = T_o,e - [ eta C_p,c (T_o,e - T_c) + (1 - Pr^1/3)(H_o,e - H_e) (u_L/u_e)^2 ]
                        / [ eta C_p,c + (1 - eta) C_p,e ]
 
     written here with the recovery temperature standing in for the enthalpy defect, since
-    (1 - Pr^1/3)(H_o,e - H_e) is C_p,e (T_o,e - T_recovery) by definition. That substitution is
-    what makes the two limits exact rather than nearly right:
+    (1 - Pr^1/3)(H_o,e - H_e) is C_p,e (T_o,e - T_recovery) by definition.
 
-        eta = 0 returns the recovery temperature, to the bit
-        eta = 1 returns the coolant's own recovery temperature at the core velocity
+    **The recovery defect belongs to the gas at the wall, at the velocity it moves at.** The source
+    writes it at the core velocity u_e, which is right for the film it was written for: SP-8124
+    recommends injecting at a coolant-to-core velocity ratio of 0.9 to 1.15, and there the mixing
+    layer moves with the core. A film injected slower than that is not recovering the core's
+    kinetic energy. At the slot the layer is coolant alone, moving at its own velocity, and the
+    core defect weighted by the coolant's specific heat there subtracts a kinetic energy the
+    coolant does not have: a methane film entering at a twentieth of a Mach 3 core reads 164 K
+    below zero. The defect is therefore scaled by the square of the layer velocity over the core
+    velocity, u_L/u_e, which the march builds from the injection velocity ratio and the core
+    entrained so far. The limits:
 
-    The second limit is why T_c is read as a total temperature rather than a static one. The
-    source writes it against H_o,e in a difference of total enthalpies, and only that reading
-    makes a wall bathed in pure coolant sit at the coolant's recovery temperature instead of
-    below it.
+        eta = 0 returns the recovery temperature, to the bit (a layer of pure core moves at u_e)
+        eta = 1 at the slot returns the coolant's recovery temperature at its own velocity
+        u_L/u_e = 1 returns the source's expression exactly, which is the case it was written for
+
+    T_c is read as a total temperature rather than a static one. The source writes it against
+    H_o,e in a difference of total enthalpies, and only that reading makes a wall bathed in pure
+    coolant sit at the coolant's recovery temperature instead of below it.
 
     The reactive model of the source is not implemented. It reads a temperature off the wall
     mixture ratio and the wall enthalpy through an equilibrium solve, and it is the half of
@@ -1200,6 +1228,9 @@ def entrainmentAdiabaticWallTemperature(effectiveness: float, totalTemperature: 
         Specific heats at constant pressure [J/kg-K].
     coolantTotalTemperature : float
         Total temperature of the coolant at the slot [K].
+    layerVelocityRatio : float
+        Velocity of the mixing layer over the core velocity at this station [-]. One is the
+        source's assumption of a layer moving with the core.
 
     Returns:
     --------
@@ -1233,7 +1264,8 @@ def entrainmentAdiabaticWallTemperature(effectiveness: float, totalTemperature: 
                   + (1.0 - effectiveness) * coreSpecificHeat
     numerator = effectiveness * coolantSpecificHeat \
                 * (totalTemperature - coolantTotalTemperature) \
-                + coreSpecificHeat * (totalTemperature - recoveryTemperature)
+                + coreSpecificHeat * (totalTemperature - recoveryTemperature) \
+                * layerVelocityRatio**2
 
     return totalTemperature - numerator / denominator
 
@@ -1245,8 +1277,8 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
                           coolantViscosity: float, coolantSpecificHeat: float,
                           coolantTotalTemperature: float,
                           coreMixtureRatio: float, coolantMixtureRatio: float = 0.0,
-                          injectionMultiplier: float = SP8124INJECTIONMULTIPLIER
-                          ) -> FilmCoolingResult:
+                          injectionMultiplier: float = SP8124INJECTIONMULTIPLIER,
+                          throatRadius: float = None) -> FilmCoolingResult:
 
     """
 
@@ -1305,12 +1337,18 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
     injectionMultiplier : float
         psi_m at the slot [-]. SP-8124 recommends 3 to 4, and it is the single largest lever in
         the model.
+    throatRadius : float
+        Throat radius [m], which sets the area ratio Figure 17 is read against. Left unset it is
+        the smallest radius in the arrays, which is only the throat when the arrays run through
+        it; a film solved on an extension alone has to be given the real one.
 
     Returns:
     --------
     FilmCoolingResult
         With `entrainmentFlowRatio` and `wallMixtureRatio` filled and `transferGroup` and
         `propertyCorrection` left as None, both being Hatch and Papell quantities.
+        `injectionVelocityRatio` is reported against SP-8124's recommended band of 0.9 to 1.15,
+        outside which the closure is extrapolated.
 
     Raises:
     -------
@@ -1366,7 +1404,8 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
 
     stations = axialPosition.size
     throatIndex = int(np.argmin(radius))
-    throatRadius = float(radius[throatIndex])
+    if throatRadius is None:
+        throatRadius = float(radius[throatIndex])
     areaRatio = (radius / throatRadius)**2
 
     arcLength = np.zeros(stations)
@@ -1375,6 +1414,11 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
     referenceFraction = referenceEntrainmentFraction(
         coolantVelocity, float(velocity[injectionIndex]), coolantDensity,
         float(density[injectionIndex]), coolantViscosity, slotHeight)
+
+    # The layer starts as coolant at its injection velocity ratio and tends to the core velocity
+    # as core is entrained. The coolant is taken to accelerate with the core, which holds its
+    # velocity ratio, because the same pressure gradient acts on both.
+    injectionVelocityRatio = coolantVelocity / float(velocity[injectionIndex])
 
     effectiveness = np.zeros(stations)
     flowRatio = np.zeros(stations)
@@ -1408,9 +1452,11 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
         effectiveness[index] = entrainmentEffectiveness(flowRatio[index])
         mixtureRatio[index] = wallMixtureRatio(effectiveness[index], coreMixtureRatio,
                                                coolantMixtureRatio)
+        layerVelocityRatio = (injectionVelocityRatio + flowRatio[index]) / (1.0 + flowRatio[index])
         adiabaticWall[index] = entrainmentAdiabaticWallTemperature(
             effectiveness[index], float(total[index]), float(recovery[index]),
-            float(specificHeat[index]), coolantSpecificHeat, coolantTotalTemperature)
+            float(specificHeat[index]), coolantSpecificHeat, coolantTotalTemperature,
+            layerVelocityRatio)
 
     useful = np.flatnonzero(effectiveness[injectionIndex:] >= 0.3)
     survivalLength = float(axialPosition[injectionIndex + useful[-1]]
@@ -1426,4 +1472,5 @@ def entrainmentFilmArrays(axialPosition, radius, gasVelocity, gasDensity, totalT
         entrainmentMultiplier = multiplier,
         filmMassFlux         = np.zeros(stations),
         injectionIndex       = injectionIndex,
-        survivalLength       = survivalLength)
+        survivalLength       = survivalLength,
+        injectionVelocityRatio = injectionVelocityRatio)

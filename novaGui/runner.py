@@ -58,7 +58,6 @@ figureFiles = {
     'pressure':     'pressureContours.png',
     'temperature':  'temperatureContours.png',
     'nearWall':     'nearWallProperties.png',
-    'heatTransfer': 'heatTransferModelOutput.png',
 }
 htmlFiles = {
     'channelMesh':  'threeChannelMeshViewInterfaced.html',

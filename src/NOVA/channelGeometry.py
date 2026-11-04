@@ -536,10 +536,16 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     differentialPathLength  = np.sqrt(np.diff(xChannelCenterline3D)**2 + np.diff(yChannelCenterline3D)**2 + np.diff(zChannelCenterline3D)**2)
     differentialPathLength  = np.append(differentialPathLength, differentialPathLength[-1])
 
-    # The coolant enters at the last station and marches toward the first, so its distance along
-    # the channel from the inlet manifold accumulates backwards. The entrance correction on the
-    # coolant side reads it, and the sizing march cannot work it out from one station.
-    distanceFromInlet       = np.flip(np.cumsum(np.flip(differentialPathLength)))
+    # Distance along the channel from the inlet manifold, which the entrance correction on the
+    # coolant side reads and one station cannot work out alone. A full sweep is in wall order,
+    # with the inlet at the last station, so the distance accumulates backwards. The sizing march
+    # hands the centerline over in march order instead, inlet first, filled up to the station it
+    # is solving and the one after it, so there the distance accumulates forwards and only the
+    # filled stations are read.
+    if i is None:
+        distanceFromInlet   = np.flip(np.cumsum(np.flip(differentialPathLength)))
+    else:
+        distanceFromInlet   = np.cumsum(differentialPathLength[:i + 1])
 
     # A circular section is rotationally symmetric, so it takes no roll about the path tangent.
     crossSectionRoll        = np.zeros(geometry.numCrossSections)
@@ -609,7 +615,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     heatTransferDict["finHeight"]              = section.finHeight
     heatTransferDict["finThickness"]           = section.finThickness
     heatTransferDict["differentialPathLength"] = pathLength
-    heatTransferDict["distanceFromInlet"]      = distanceFromInlet if fullSweep                                                  else distanceFromInlet[stationIndex]
+    heatTransferDict["distanceFromInlet"]      = distanceFromInlet if fullSweep                                                  else distanceFromInlet[-1:]
     heatTransferDict["turnAngle"]              = turnAngle
     heatTransferDict["radiusOfCurvature"]      = radiusOfCurvature
 

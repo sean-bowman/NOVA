@@ -18,6 +18,17 @@ from tkinter import ttk
 from .. import theme
 from ..widgets import card
 
+def _cell(value) -> str:
+
+    """One number of a three-column performance row, blank where the column has no value."""
+
+    number = _num(value)
+    if number is None or number != number:
+        return '--'
+    if abs(number) >= 1000.0:
+        return f'{number:.0f}'
+    return f'{number:.4g}'
+
 def _num(value):
 
     '''
@@ -116,7 +127,8 @@ class AnalysisTab(ttk.Frame):
         row(sizing, 'Expansion ratio (1D)', getattr(nozzle, 'expansionRatio', None))
         row(sizing, 'Geometric area ratio', getattr(nozzle, 'exitExpansionRatio', None))
         row(sizing, 'Contraction ratio', getattr(nozzle, 'inletContractionRatio', None))
-        row(sizing, 'Exit pressure (1D)', getattr(nozzle, 'targetExitPressure', None), '{:.0f}', 'Pa')
+        row(sizing, 'Design back pressure (1D exit)', getattr(nozzle, 'targetExitPressure', None),
+            '{:.0f}', 'Pa')
 
         chamberGeometry = section('Combustion Chamber')
         row(chamberGeometry, 'Barrel length', self._mm(getattr(nozzle, 'chamberBarrelLength', None)), '{:.1f}', 'mm')
@@ -125,15 +137,29 @@ class AnalysisTab(ttk.Frame):
         row(chamberGeometry, 'Contraction ratio', getattr(nozzle, 'chamberContractionRatio', None))
         row(chamberGeometry, 'Chamber diameter', self._mm(getattr(nozzle, 'chamberDiameter', None)), '{:.1f}', 'mm')
 
-        perf = section('Performance')
-        row(perf, 'Ideal Isp', performance.get('idealISP[s]'), '{:.1f}', 's')
-        row(perf, 'Vacuum Isp', performance.get('vacuumISP[s]'), '{:.1f}', 's')
-        row(perf, 'Sea level Isp', performance.get('seaLevelISP[s]'), '{:.1f}', 's')
-        row(perf, 'Vacuum thrust coefficient', performance.get('vacuumThrustCoef'))
-        row(perf, 'Characteristic velocity', ceaGet('characteristicVelocity'), '{:.1f}', 'm/s')
-        row(perf, 'Exit Mach', getattr(nozzle, 'exitMachNumber', None) or ceaGet('exitMach'))
-        row(perf, 'Ideal Mach', getattr(nozzle, 'idealMachNumber', None))
-        row(perf, 'Operating mode', performance.get('mode') or '--')
+        # One-dimensional estimates beside what the solved exit plane delivers, each thrust
+        # coefficient and impulse at a named back pressure
+        summary = getattr(nozzle, 'performance', None)
+        perf = section('Performance: 1D estimate and delivered')
+        if summary is not None:
+            self._tree.insert(perf, 'end', text = 'Columns',
+                              values = ('equilibrium 1D  |  chamber gas 1D  |  delivered',))
+            for quantity, unit, equilibrium, chamberGas, delivered in summary.rows():
+                cells = '  |  '.join(_cell(value) for value in (equilibrium, chamberGas, delivered))
+                label = quantity + (f' [{unit}]' if unit != '-' else '')
+                self._tree.insert(perf, 'end', text = label, values = (cells,))
+            row(perf, 'Nozzle efficiency, vacuum', summary.nozzleEfficiency, '{:.4f}')
+            row(perf, 'Friction cost of thrust coefficient', summary.frictionThrustCoef, '{:.4f}')
+            row(perf, 'Requested thrust, design back pressure', summary.requestedThrust, '{:.0f}', 'N')
+            row(perf, 'Delivered thrust, design back pressure',
+                summary.thrustDelivered.get('design'), '{:.0f}', 'N')
+            row(perf, 'Delivered thrust after friction',
+                summary.thrustDeliveredFrictionCorrected.get('design'), '{:.0f}', 'N')
+            row(perf, 'Exit mass closure', summary.exitMassClosure, '{:.4f}')
+        else:
+            row(perf, 'Vacuum Isp (1D equilibrium)', performance.get('vacuumISP[s]'), '{:.1f}', 's')
+            row(perf, 'Vacuum thrust coefficient (1D equilibrium)', performance.get('vacuumThrustCoef'))
+        row(perf, 'Operating mode at sea level (1D)', performance.get('mode') or '--')
 
         chamber = section('Chamber')
         row(chamber, 'Temperature', ceaGet('combustionChamberTemperature')
@@ -149,16 +175,15 @@ class AnalysisTab(ttk.Frame):
         row(throat, 'Pressure', ceaGet('throatPressure'), '{:.0f}', 'Pa')
         row(throat, 'Gamma', ceaGet('throatGamma') or getattr(nozzle, 'throatGamma', None))
 
-        exit_ = section('Exit')
-        row(exit_, 'Temperature', ceaGet('exitTemperature'), '{:.1f}', 'K')
-        row(exit_, 'Pressure', ceaGet('exitPressure'), '{:.0f}', 'Pa')
-        row(exit_, 'Mach', ceaGet('exitMach'))
-        row(exit_, 'Velocity', ceaGet('exitVelocity'), '{:.1f}', 'm/s')
 
         if str(getattr(nozzle, 'makeCoolingChannels', 'off')) not in ('off', 'False', ''):
             cooling = section('Cooling')
             row(cooling, 'Number of channels', getattr(nozzle, 'nChannel', None), '{:.0f}')
-            row(cooling, 'Max hot wall temperature', getattr(nozzle, 'maxWallTemperature', None), '{:.1f}', 'K')
+            wallTemperature = getattr(nozzle, 'channelWallTemperature', None)
+            row(cooling, 'Peak hot wall temperature',
+                None if wallTemperature is None else float(max(wallTemperature)), '{:.1f}', 'K')
+            row(cooling, 'Hot wall temperature limit', getattr(nozzle, 'maxWallTemperature', None),
+                '{:.1f}', 'K')
             row(cooling, 'Coolant exit temperature',
                 getattr(nozzle, 'coolantExitTemperature', None), '{:.1f}', 'K')
             row(cooling, 'Coolant exit pressure',
@@ -197,7 +222,8 @@ class AnalysisTab(ttk.Frame):
                     row(plume, 'Mach disk (correlated)', 'none')
 
         thrust = _num(getattr(nozzle, 'thrust', None))
-        isp = performance.get('idealISP[s]')
+        isp = (summary.specificImpulseDelivered.get('design') if summary is not None
+               else performance.get('idealISP[s]'))
         parts = []
         if thrust:
             parts.append(f'{thrust / 1e3:.0f} kN')

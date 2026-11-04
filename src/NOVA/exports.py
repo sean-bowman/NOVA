@@ -68,9 +68,9 @@ def exportData(nozzle, filename: str = 'default'):
         filename = nozzle.filename
 
     if filename == 'default' and nozzle.filename is None:
-        filename = nozzle.dataFolder + '\\default.stl'
+        filename = os.path.join(nozzle.dataFolder, 'default.stl')
     elif nozzle.filename is not None:
-        filename = nozzle.dataFolder + '\\' + nozzle.filename + '.stl'
+        filename = os.path.join(nozzle.dataFolder, nozzle.filename + '.stl')
 
     # Nozzle contours
     print(f'Writing Nozzle Contour(s) and Shell to .txt')
@@ -98,6 +98,13 @@ def exportData(nozzle, filename: str = 'default'):
         print(f'Writing Channel Profile to .json')
         writeChannelProfile(filename[:-4] + 'ChannelProfile.json', nozzle)
 
+    # Estimated and delivered performance, both kinds of number in one place
+    if getattr(nozzle, 'performance', None) is not None:
+        import json
+        print(f'Writing Performance Summary to .json')
+        with open(filename[:-4] + 'Performance.json', 'w', encoding = 'utf-8', newline = '\n') as handle:
+            json.dump(nozzle.performance.toDict(), handle, indent = 2)
+
     # Volutes
     if nozzle.makeInletVolute == 'on':
         print(f'Exporting Inlet Volute Surface Mesh to .stl')
@@ -114,7 +121,7 @@ def exportData(nozzle, filename: str = 'default'):
     if nozzle.makeOutletVolute == 'on':
         print(f'Exporting Outlet Volute Surface Mesh to .stl')
         py2cad(filename[:-4] + 'OutletVolute.stl', nozzle.xOutletVolute, nozzle.yOutletVolute, nozzle.zOutletVolute)
-        if nozzle.inletVolute.wallThickness is not None:
+        if nozzle.outletVolute.wallThickness is not None:
             print(f'Exporting Outlet Volute Shell Surface Mesh to .stl')
             py2cad(filename[:-4] + 'OutletVoluteShell.stl', nozzle.xOutletVoluteShell, nozzle.yOutletVoluteShell, nozzle.zOutletVoluteShell)
         if nozzle.outletVolute.circlePrintability == 'thick' or nozzle.outletVolute.circlePrintability == 'thin':

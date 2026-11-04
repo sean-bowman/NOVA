@@ -10,12 +10,18 @@ The public surface intentionally mirrors the old wrapper: construct a CEA
 object and read `ceaResults` / `nozzlePerformance`. All returned values are
 SI (Pa, K, m/s, J/kg-K, W/m-K, Pa-s, kg/m^3), matching what Nozzle.py expects.
 
-THREAD SAFETY: rocketcea is NOT thread-safe. It carries module-level state
-(`_last_called`, `_CacheObjDict`) and reads results out of process-global
-FORTRAN COMMON blocks. Two threads interleaving calls silently return each
-other's numbers with no error raised. Every solve here is serialized behind
-_CEAOBJLOCK. Do NOT wrap CEA calls in joblib.Parallel with a threading
-backend; use processes if parallelism is ever needed.
+CONCURRENCY: rocketcea is safe neither across threads nor across processes.
+It carries module-level state (`_last_called`, `_CacheObjDict`) and reads
+results out of process-global FORTRAN COMMON blocks, so two threads
+interleaving calls silently return each other's numbers. Separate processes
+do not share those blocks, but every process writes its CEA input and reads
+its output through the same files in the user's RocketCEA directory
+(`f.inp`, `f.out`, `temp.dat`), so two processes solving at once read each
+other's half-written files and the FORTRAN reader fails with an end-of-file
+error. Every solve here is therefore serialized behind _CEAOBJLOCK, which is
+held across threads in this process and, through a lock file in that same
+directory, across processes on the machine. Parallel work that calls CEA
+runs at the speed of one solver however it is launched.
 
 Sean Bowman
 
@@ -185,8 +191,98 @@ CUSTOMOXIDIZERCARDS = {}
 # slowdown rather than an error.
 _REGISTEREDPROPELLANTS = set()
 
-# rocketcea is not thread-safe; every solve is serialized behind this lock.
-_CEAOBJLOCK = threading.RLock()
+# rocketcea writes its CEA input and output through fixed files in this directory, one directory
+# per user rather than per process. The lock file lives beside them.
+ROCKETCEADIRECTORY = os.path.join(os.path.expanduser('~'), 'RocketCEA')
+
+def _acquireFileLock():
+
+    '''
+
+    Take the machine-wide CEA lock, blocking until it is free, and return its file handle.
+
+    Returns None when the lock file cannot be opened, in which case the solve still runs under the
+    thread lock alone and a warning says that other processes are not excluded.
+
+    '''
+
+    try:
+        os.makedirs(ROCKETCEADIRECTORY, exist_ok = True)
+        handle = open(os.path.join(ROCKETCEADIRECTORY, 'nova.lock'), 'a+')
+    except OSError as error:
+        warnings.warn(f'CEA lock file unavailable ({error}); concurrent processes are not '
+                      f'excluded from the RocketCEA working files.')
+        return None
+
+    if os.name == 'nt':
+        import msvcrt
+        import time
+        while True:
+            try:
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                break
+            except OSError:
+                time.sleep(0.02)
+    else:
+        import fcntl
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+    return handle
+
+def _releaseFileLock(handle) -> None:
+
+    '''Release the machine-wide CEA lock taken by `_acquireFileLock`.'''
+
+    if handle is None:
+        return
+    try:
+        if os.name == 'nt':
+            import msvcrt
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
+
+class _SolverLock:
+
+    '''
+
+    A reentrant lock held across threads in this process and across processes on the machine.
+
+    The thread lock is taken on every entry; the file lock only on the outermost one, so nested
+    solves in one thread cost one file lock between them.
+
+    '''
+
+    def __init__(self):
+
+        self._thread = threading.RLock()
+        self._depth = 0
+        self._handle = None
+
+    def __enter__(self):
+
+        self._thread.acquire()
+        if self._depth == 0:
+            self._handle = _acquireFileLock()
+        self._depth += 1
+        return self
+
+    def __exit__(self, *exception):
+
+        self._depth -= 1
+        if self._depth == 0:
+            handle, self._handle = self._handle, None
+            _releaseFileLock(handle)
+        self._thread.release()
+        return False
+
+# Every rocketcea solve is serialized behind this lock, within the process and across processes.
+_CEAOBJLOCK = _SolverLock()
 
 # Cache of resolved max-Isp mixture ratios, keyed on (fuel, ox, Pc, eps).
 _MAXISPCACHE = {}
