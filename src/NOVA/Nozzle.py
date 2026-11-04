@@ -117,7 +117,11 @@ except ImportError as error:
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
 from .boundaryLayer import frictionPerformanceDebit, solveBoundaryLayer, wallTemperatureProfile
+from .extensionFilm import ExtensionFilmState, solveExtensionFilm
+from .errors import InvalidInputError
 from .performance import summarizePerformance
+from .turbineExhaust import turbineExhaustState
+from .validation import specified
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
                     PlumeFlow, PlumePoint, solvePlumeStructure, throttledContour,
                     plumeCharacteristicSeed,
@@ -609,6 +613,20 @@ class Nozzle:
         self.regenSectionFilmEntrainmentFlowRatio     = None     # [-]
         self.regenSectionFilmWallMixtureRatio         = None     # [-]
         self.regenSectionFilmEntrainmentMultiplier    = None     # [-]
+
+        # Gas generator and turbine, specified rather than solved; their exhaust can film the
+        # extension. Unset mixture ratio means no gas generator.
+        self.gasGeneratorMixtureRatio                 = None     # [-]
+        self.gasGeneratorPressure                     = None     # [Pa]
+        self.turbinePressureRatio                     = None     # [-]
+        self.turbineEfficiency                        = None     # [-]
+        self.turbineExhaustMassFlow                   = None     # [kg/s]
+        self.turbineExhaust                           = None     # [TurbineExhaustState]
+        # Films laid on the extension, and the closure that drives it
+        self.extensionFilmSlots                       = None     # [list of dict]
+        self.extensionFilmModel                       = None     # [str]
+        self.extensionFilmSolution                    = None     # [ExtensionFilmResult]
+        self.extensionFilmDrivingTemperature          = None     # [K]
 
         self.makeRadiativeExtension                   = 'off'    # [str]
         self.extensionMaterial                        = None     # [material name]
@@ -1398,12 +1416,17 @@ class Nozzle:
             material            = self.extensionMaterial,
             atmosphere          = self.extensionAtmosphere)
 
+        # A film on the extension drives the wall with its own adiabatic temperature in place of
+        # the recovery temperature; the coefficient stays the core gas's
+        drive = (self.extensionFilmDrivingTemperature if self.extensionFilmDrivingTemperature is not None
+                 else self.extensionNearWallRecoveryTemperature)
+
         return shell, dict(
             axialPosition          = self.xExtension,
             radius                 = self.rExtension,
             machNumber             = self.extensionNearWallMachNumber,
             staticTemperature      = self.extensionNearWallTemperature,
-            recoveryTemperature    = self.extensionNearWallRecoveryTemperature,
+            recoveryTemperature    = drive,
             chamberPressure        = self.chamberPressure,
             characteristicVelocity = self.theoreticalCharacteristicVelocity,
             exhaustGamma           = self.gammaExtension,
@@ -1413,6 +1436,76 @@ class Nozzle:
             throatRadiusOfCurvature = 0.5 * self.nozzleScalingFactor
                                       * (self.throatInletCurvatureNonDimensional
                                          + self.throatOutletCurvatureNonDimensional))
+
+    def solveTurbineExhaust(self):
+
+        '''
+
+        The gas generator's turbine exhaust, when a gas generator is specified.
+
+        The solve is `turbineExhaust.turbineExhaustState`: an equilibrium gas generator, frozen
+        through a turbine of the given pressure ratio and efficiency.
+
+        '''
+
+        if not specified(self, 'gasGeneratorMixtureRatio'):
+            return
+        required = ('gasGeneratorPressure', 'turbinePressureRatio', 'turbineEfficiency',
+                    'turbineExhaustMassFlow')
+        missing = [name for name in required if not specified(self, name)]
+        if missing:
+            raise InvalidInputError(
+                message = 'A gas generator is specified by its mixture ratio, and it also needs a '
+                          'pressure, a turbine pressure ratio and efficiency, and a flow.',
+                parameterName = ', '.join(missing), value = None,
+                validRange = 'all of ' + ', '.join(required))
+        self.turbineExhaust = turbineExhaustState(
+            self.Fuel, self.Oxidizer, float(self.gasGeneratorMixtureRatio),
+            float(self.gasGeneratorPressure), float(self.turbinePressureRatio),
+            float(self.turbineEfficiency), float(self.turbineExhaustMassFlow),
+            oxidizerInitialTemperature = self.oxidizerInitialTemperature)
+        print(self.turbineExhaust.report())
+
+    def extensionFilmState(self):
+
+        '''
+
+        The wall, the gas and the films the extension film solve reads, seeded by name.
+
+        Returns:
+        --------
+        ExtensionFilmState
+
+        '''
+
+        state = ExtensionFilmState()
+        for name in ExtensionFilmState.__dataclass_fields__:
+            setattr(state, name, getattr(self, name, None))
+
+        return state
+
+    def solveExtensionFilm(self):
+
+        '''
+
+        The films over the extension, stacked into the temperature that drives it.
+
+        Runs where the extension has a film to carry: a slot on the extension, or the chamber film
+        past the joint when the extension's wall is solved. The solve is
+        `extensionFilm.solveExtensionFilm`; this method seeds its state by name and keeps the
+        extension's share of the drive.
+
+        '''
+
+        hasExtension = self.xExtension is not None and len(self.xExtension) >= 3
+        slotted = isinstance(self.extensionFilmSlots, (list, tuple)) and len(self.extensionFilmSlots) > 0
+        carried = self.filmCooling == 'on' and self.makeRadiativeExtension == 'on'
+        if not hasExtension or not (slotted or carried):
+            return
+
+        self.extensionFilmSolution = solveExtensionFilm(self.extensionFilmState())
+        self.extensionFilmDrivingTemperature = self.extensionFilmSolution.extensionDrivingTemperature
+        print(self.extensionFilmSolution.report())
 
     def generateRadiativeExtension(self):
 
@@ -1890,6 +1983,11 @@ class Nozzle:
             # Generate volute(s)
             if self.makeInletVolute == 'on' or self.makeOutletVolute == 'on':
                 self.generateRegenVolutes()
+
+        # -- Turbine Exhaust and the Films Over the Extension -- #
+
+        self.solveTurbineExhaust()
+        self.solveExtensionFilm()
 
         # -- Radiation-Cooled Extension -- #
 

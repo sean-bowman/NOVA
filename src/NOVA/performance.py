@@ -30,6 +30,13 @@ efficiency: divergence and non-uniformity of the exit, with the gas held the sam
 Friction is charged separately, as the wall drag the boundary layer march returns over the throat
 force, and both the inviscid and the friction-corrected values are reported.
 
+**The engine** draws more than the chamber burns when films are slotted onto the extension or a gas
+generator's exhaust is dumped. Those flows are listed beside the chamber flow, the films' thrust
+is added at two bounds (expanded apart from the core, and fully mixed into it; see
+extensionFilm.py), and the engine specific impulse is the friction-corrected chamber thrust plus
+the film thrust over the total flow. Turbine exhaust not slotted onto the extension is counted as
+dumped with no thrust, the conservative reading of an exhaust duct this module does not model.
+
 ----------------------------------------------------------------------
                             Validation status
 ----------------------------------------------------------------------
@@ -65,6 +72,7 @@ from typing import Any
 import numpy as np
 
 from . import units
+from .extensionFilm import filmExpansionVelocity, mixedFilmThrust
 from .gasDynamics import machFromAreaRatio
 from .validation import specified
 
@@ -114,6 +122,17 @@ class PerformanceSummary:
         boundary layer march did not run.
     exitMassClosure : float
         Mass through the exit plane over the one-dimensional choked throat flow [-].
+    extraMassFlows : dict
+        Flows that leave the engine without passing through the chamber, by name [kg/s]: slot
+        films on the extension and any turbine exhaust not slotted, which is counted as dumped
+        with no thrust.
+    engineTotalMassFlow : float
+        Chamber flow plus the extra flows [kg/s].
+    filmThrustUnmixed, filmThrustMixed : float
+        Thrust the slot films add kept apart from the core, and mixed into it at injection [N].
+    engineSpecificImpulse, engineSpecificImpulseMixed : dict
+        Engine specific impulse at each named back pressure after friction, on the total flow,
+        with the films' unmixed and mixed thrust [s].
 
     '''
 
@@ -154,6 +173,13 @@ class PerformanceSummary:
     nozzleEfficiency:               float = float('nan')
     frictionThrustCoef:             float = 0.0
     exitMassClosure:                float = float('nan')
+
+    extraMassFlows:                 dict = field(default_factory = dict)
+    engineTotalMassFlow:            float = float('nan')
+    filmThrustUnmixed:              float = 0.0
+    filmThrustMixed:                float = 0.0
+    engineSpecificImpulse:          dict = field(default_factory = dict)
+    engineSpecificImpulseMixed:     dict = field(default_factory = dict)
 
     def toDict(self) -> dict:
 
@@ -229,6 +255,14 @@ class PerformanceSummary:
                          f'{design:.0f} N')
         lines.append(f'  Requested thrust {self.requestedThrust:.0f} N at the design back pressure; '
                      f'delivered {self.thrustDelivered.get("design", float("nan")):.0f} N inviscid')
+        if self.extraMassFlows:
+            listed = ', '.join(f'{name} {flow:.3g}' for name, flow in self.extraMassFlows.items())
+            lines.append(f'  Engine flow {self.engineTotalMassFlow:.4g} kg/s with {listed} kg/s beside '
+                         f'the chamber; the films add {self.filmThrustUnmixed:.0f} N kept apart and '
+                         f'{self.filmThrustMixed:.0f} N fully mixed')
+            lines.append(f'  Engine specific impulse after friction at the design back pressure '
+                         f'{self.engineSpecificImpulse.get("design", float("nan")):.1f} s unmixed, '
+                         f'{self.engineSpecificImpulseMixed.get("design", float("nan")):.1f} s mixed')
         return '\n'.join(lines)
 
 def _backPressureLabel(name: str, backPressures: dict) -> str:
@@ -369,6 +403,41 @@ def summarizePerformance(source) -> PerformanceSummary:
     exitPressureWall = float(np.asarray(planePressure)[0]) if planePressure is not None else float('nan')
     exitMachWall = float(np.asarray(planeMach)[0]) if planeMach is not None else float('nan')
 
+    # -- The engine: flows beside the chamber and the thrust the films add -- #
+    extraMassFlows, filmFlows, filmEnthalpies = {}, [], []
+    filmThrustUnmixed = 0.0
+    exitPressureDelivered = read('exitMassAveragedPressure')
+    film = getattr(source, 'extensionFilmSolution', None)
+    slottedExhaust = 0.0
+    for layer in (film.layers if film is not None else []):
+        if not layer.extraDraw:
+            continue
+        extraMassFlows[layer.name] = layer.massFlow
+        if layer.source == 'turbineExhaust':
+            slottedExhaust += layer.massFlow
+        velocity = filmExpansionVelocity(layer.coolantTemperature, layer.coolant.velocity,
+                                         layer.slotPressure, exitPressureDelivered,
+                                         layer.coolantSpecificHeat, layer.coolantGasConstant)
+        filmThrustUnmixed += layer.massFlow * velocity
+        filmFlows.append(layer.massFlow)
+        filmEnthalpies.append(layer.coolantSpecificHeat * layer.coolantTemperature
+                              + 0.5 * layer.coolant.velocity**2)
+    exhaust = getattr(source, 'turbineExhaust', None)
+    if exhaust is not None and exhaust.massFlow - slottedExhaust > 1.0e-9 * exhaust.massFlow:
+        extraMassFlows['turbine exhaust overboard'] = exhaust.massFlow - slottedExhaust
+    engineMassFlow = float(source.engineMassFlow)
+    engineTotalMassFlow = engineMassFlow + sum(extraMassFlows.values())
+    gamma, gasConstant = float(source.chamberGamma), float(source.chamberRGasConstant)
+    coreTotalEnthalpy = gamma * gasConstant / (gamma - 1.0) * float(source.chamberStagnationTemperature)
+    filmThrustMixed = (mixedFilmThrust(engineMassFlow, read('exitMassAveragedVelocity'),
+                                       coreTotalEnthalpy, filmFlows, filmEnthalpies)
+                       if filmFlows else 0.0)
+    chamberThrust = {name: impulse * engineWeightFlow for name, impulse in specificImpulseFriction.items()}
+    engineSpecificImpulse = {name: (thrust + filmThrustUnmixed) / (engineTotalMassFlow * gravity)
+                             for name, thrust in chamberThrust.items()}
+    engineSpecificImpulseMixed = {name: (thrust + filmThrustMixed) / (engineTotalMassFlow * gravity)
+                                  for name, thrust in chamberThrust.items()}
+
     return PerformanceSummary(
         areaRatio                      = areaRatio,
         backPressures                  = backPressures,
@@ -404,4 +473,10 @@ def summarizePerformance(source) -> PerformanceSummary:
         requestedThrust                = float(source.thrust),
         nozzleEfficiency               = deliveredVacuum / chamberGas['vacuumThrustCoef'],
         frictionThrustCoef             = frictionThrustCoef,
-        exitMassClosure                = read('exitMassClosure'))
+        exitMassClosure                = read('exitMassClosure'),
+        extraMassFlows                 = extraMassFlows,
+        engineTotalMassFlow            = engineTotalMassFlow,
+        filmThrustUnmixed              = filmThrustUnmixed,
+        filmThrustMixed                = filmThrustMixed,
+        engineSpecificImpulse          = engineSpecificImpulse,
+        engineSpecificImpulseMixed     = engineSpecificImpulseMixed)

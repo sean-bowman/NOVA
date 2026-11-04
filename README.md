@@ -310,6 +310,22 @@ Optional throughout: a configuration that names none of these describes an engin
 | `filmCoolantMixtureRatio`          | --   | Oxidizer to fuel ratio of the coolant itself. Zero is a pure fuel film                           |
 | `filmEntrainmentMultiplier`        | --   | psi_m at the slot, for the entrainment closure. SP-8124 recommends 3 to 4                        |
 
+### Gas generator and extension film
+
+Optional. A gas generator exists when its mixture ratio is given, and is specified rather than solved: no power balance with the pumps is carried. Its turbine exhaust, and any named coolant, can be injected through slots on the extension. Every film over the extension, the chamber film carried past the joint included, is stacked by Sellers superposition into the temperature that drives the extension wall; see [turbineExhaust.py](src/NOVA/turbineExhaust.py) and [extensionFilm.py](src/NOVA/extensionFilm.py).
+
+| Field                              | Unit | Meaning                                                                                          |
+| ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------ |
+| `gasGeneratorMixtureRatio`         | --   | Gas generator oxidizer to fuel ratio. Unset is no gas generator                                  |
+| `gasGeneratorPressure`             | Pa   | Gas generator chamber pressure, the turbine inlet                                                |
+| `turbinePressureRatio`             | --   | Turbine inlet over exhaust static pressure, at least the gas's sonic ratio                       |
+| `turbineEfficiency`                | --   | Actual over isentropic enthalpy drop, in (0, 1]                                                  |
+| `turbineExhaustMassFlow`           | kg/s | Turbine flow. Exhaust not slotted onto the extension is counted as dumped with no thrust         |
+| `extensionFilmSlots`               | --   | List of slots, each `{areaRatio, slotHeight, source}` with `source` one of `turbineExhaust` (optional `massFlow`, default the whole exhaust) or `species` (`species`, `massFlow`, `temperature`, optional `mixtureRatio`) |
+| `extensionFilmModel`               | --   | Closure that drives the extension, `hatchPapell` or `sp8124Entrainment`; defaults to `filmCoolingModel`. The other closure is reported beside it |
+
+Slot films are drawn beside the chamber flow, so the performance summary reports the engine's total flow, the thrust the films add expanded apart from the core and fully mixed into it, and the engine specific impulse on the total flow. A fuel-rich hydrocarbon gas generator forms graphite at CEA's equilibrium and runs hot: 1252 K against the F-1's published 1063 K at a mixture ratio of 0.416.
+
 ### Radiative extension
 
 Solves the wall temperature of an uncooled extension beyond the jacket. Needs a non-`none` `regenTruncationType`, since with none the jacket runs the whole contour and there is no extension to solve.

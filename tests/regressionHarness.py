@@ -305,6 +305,39 @@ harnessCases = {
             'filmCoolingModel': 'sp8124Entrainment',
         },
     },
+    # The jacket cut at an area ratio of three with the C103 extension beyond it, the hydrogen
+    # chamber film carried past the joint, and a hydrogen-oxygen gas generator's turbine exhaust
+    # slotted onto the extension at an area ratio of ten. It pins the turbine exhaust state, the
+    # stacked film drive, the extension wall it produces and the engine flow and impulse.
+    'extensionFilmTurbineExhaust': {
+        'config': 'NOVANozzle.json',
+        'description': 'Chamber film and turbine exhaust film stacked over the radiative extension',
+        'overrides': {
+            **regenOverrides,
+            'makeInletVolute': False,
+            'makeOutletVolute': False,
+            'regenTruncationType': 'er',
+            'regenTruncationValue': 3.0,
+            'filmCooling': True,
+            'filmCoolant': 'Hydrogen',
+            'filmMassFlow': 0.30,
+            'filmInletTemperature': 250.0,
+            'filmInjectionAxialPosition': -1.0,
+            'filmSlotHeight': 0.0015,
+            'makeRadiativeExtension': 'on',
+            'extensionMaterial': 'C103',
+            'extensionThickness': 0.001,
+            'extensionThermalConductivity': 42.0,
+            'extensionInnerEmissivity': 0.7,
+            'extensionOuterEmissivity': 0.7,
+            'gasGeneratorMixtureRatio': 0.9,
+            'gasGeneratorPressure': 8.0e6,
+            'turbinePressureRatio': 16.0,
+            'turbineEfficiency': 0.6,
+            'turbineExhaustMassFlow': 0.7,
+            'extensionFilmSlots': [{'areaRatio': 10.0, 'slotHeight': 0.004, 'source': 'turbineExhaust'}],
+        },
+    },
     'contourEffectiveGamma': {
         'config': 'NOVANozzle.json',
         'description': 'The contour solved at the effective gamma rather than the chamber value',

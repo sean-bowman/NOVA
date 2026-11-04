@@ -176,6 +176,7 @@ class TestStateObjectsAreComplete:
         'chamber':       'ConvergingSectionState',
         'regenStations': 'RegenStationState',
         'plume':         'PlumeContour',
+        'extensionFilm': 'ExtensionFilmState',
     }
 
     def fieldsReached(self, name: str, variableName: str) -> set:
@@ -219,7 +220,8 @@ class TestStateObjectsAreComplete:
                    'RegenVoluteState':       'regenVoluteState',
                    'ConvergingSectionState': 'convergingSectionState',
                    'RegenStationState':      'regenStationState',
-                   'PlumeContour':           'plumeContour'}[stateName]
+                   'PlumeContour':           'plumeContour',
+                   'ExtensionFilmState':     'extensionFilmState'}[stateName]
 
         state = getattr(Nozzle(), builder)()
         missing = [field for field in getattr(module, stateName).__dataclass_fields__

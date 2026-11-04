@@ -289,6 +289,21 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.filmCoolantMixtureRatio        = valueOr('filmCoolantMixtureRatio', 0.0)
         nozzle.filmEntrainmentMultiplier      = valueOr('filmEntrainmentMultiplier', 3.5)
 
+        # -- Gas Generator, Turbine and Extension Film -- #
+        #
+        # A gas generator is specified, not solved, and exists when its mixture ratio is given;
+        # its turbine exhaust can then feed a slot on the extension. The slots are a list of
+        # dicts (extensionFilm.readFilmSlots), and the extension's closure defaults to the
+        # chamber film's.
+        nozzle.gasGeneratorMixtureRatio       = valueOr('gasGeneratorMixtureRatio', None)
+        nozzle.gasGeneratorPressure           = valueOr('gasGeneratorPressure', None)
+        nozzle.turbinePressureRatio           = valueOr('turbinePressureRatio', None)
+        nozzle.turbineEfficiency              = valueOr('turbineEfficiency', None)
+        nozzle.turbineExhaustMassFlow         = valueOr('turbineExhaustMassFlow', None)
+        slots = inputsPath.get('extensionFilmSlots')
+        nozzle.extensionFilmSlots             = slots if isinstance(slots, (list, tuple)) else []
+        nozzle.extensionFilmModel             = nameOr('extensionFilmModel', nozzle.filmCoolingModel)
+
         # -- Radiation-Cooled Extension -- #
         #
         # The conductivity is asked for rather than looked up because the materials store

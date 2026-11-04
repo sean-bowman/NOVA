@@ -134,6 +134,36 @@ Sources gathered on multi-pass coolant circuits that carry a jacket over a nozzl
   - US2977754A pairs first-pass and second-pass tubes, the first pass nearer the axis, coolant collecting in an annulus and returning through the outer tube.
   - US8689540B2 surveys single-pass, double-pass and balanced double-pass layouts: double-pass layouts are hard to connect to manifolds, and flow imbalance between paths costs cooling and life.
 
+## F-1 Rocket Engine Gas Generator (Heroic Relics)
+
+- **URL:** http://heroicrelics.org/info/f-1/f-1-gas-generator.html
+- **Accessed:** 2026-11-04
+- **Relevance:** The one source found giving a gas generator's mixture ratio and temperature together, used as the hardware comparison for `turbineExhaust.py`.
+- **Key findings:**
+  - Gas generator flow 167 lb/s: 49 lb/s of LOX and 118 lb/s of RP-1, a mixture ratio of about 0.416.
+  - Operating temperature about 1453 F (1063 K), "relatively cool" from the fuel-rich, incomplete combustion.
+  - No gas generator pressure is given. A scanned F-1 document on Scribd shows 965 psia and 1465 F in OCR text whose labels are scrambled, so neither is attributable.
+  - CEA at equilibrium, 6.65 MPa and 0.416, gives 1252 K, 17.8 percent high, with 35 percent graphite by mass in the products.
+
+## Altitude Developmental Testing of the J-2 Rocket Engine (AEDC, DTIC AD0827434)
+
+- **URL:** https://apps.dtic.mil/sti/tr/pdf/AD0827434.pdf
+- **Accessed:** 2026-11-04 (search summary; the PDF was not read)
+- **Relevance:** Searched for hydrogen-oxygen gas generator conditions to compare `turbineExhaust.py` against.
+- **Key findings (search summary):**
+  - Gas generator outlet temperature peaks of roughly 1180 to 1590 F across firings, some with a second peak (1390 F then 1510 F).
+  - No gas generator mixture ratio is stated with them, so they cannot be compared against a CEA state.
+
+## Vulcain-2 Cryogenic Engine Passes First Test with New Nozzle Extension (ESA Bulletin 102)
+
+- **URL:** https://www.esa.int/esapub/bulletin/bullet102/Coulon102.pdf
+- **Accessed:** 2026-11-04 (search summary)
+- **Relevance:** Vulcain 2's turbine exhaust reinjection, the heritage for a turbine exhaust film on an extension.
+- **Key findings (search summary):**
+  - Mixture ratio raised from 5.3 to 6.1, nozzle extension area ratio up 30 percent, turbine exhaust gases reintroduced into the nozzle.
+  - The 20 percent thrust increase needed 25 percent more hydrogen turbine power, from a 16 percent rise in hydrogen turbine inlet pressure.
+  - No gas generator temperature or mixture ratio is given.
+
 ## Sources generated rather than retrieved
 
 - **Extension feasibility runs on NOVA, 2026-11-03.** The shipped LOX/LH2 nozzle and a sea-level LOX/CH4 first stage (500 kN, 10 MPa, mixture ratio 3.5, area ratio 25, 120 channels, 33 kg/s of methane at 115 K and 20 MPa) were solved with the jacket ending at an area ratio of 3 and carried to the exit, and a slot film at the joint was run through the existing SP-8124 and Hatch-Papell closures into the radiative extension solver. These are computed results of unvalidated models, recorded so they are not mistaken for literature values.
