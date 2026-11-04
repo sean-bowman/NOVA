@@ -354,7 +354,7 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
                         inletAreaRatio: float = None, material = None, factorOfSafety: float = 1.5,
                         minWallThickness: float = 0.0,
                         turnaroundVelocityRatio: float = DEFAULTVELOCITYRATIO,
-                        tolerance: float = 0.05, maxIterations: int = 12,
+                        tolerance: float = 0.05, maxIterations: int = 30,
                         ribExchange: bool = True) -> CircuitSolution:
 
     '''
@@ -485,7 +485,10 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
     else:
         raise ConvergenceFailureError(
             message = (f'The two passes did not settle in {maxIterations} passes: the up coolant '
-                       f'still moved {history[-1]:.3f} K on the last.'),
+                       f'still moved {history[-1]:.3f} K on the last, against {tolerance} K, after '
+                       f'{", ".join(f"{change:.3f}" for change in history[-4:])} K on the last four. '
+                       f'A strongly coupled pair, a hot up pass beside a cold down pass, settles '
+                       f'slowly; more passes or a looser tolerance close it.'),
             context = createErrorContext(circuit = circuit, history = history),
             iterations = maxIterations, tolerance = tolerance, residual = history[-1])
 

@@ -154,7 +154,7 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         # this normalization every plot and export is quietly disabled.
         for key in ('plotsEnabled', 'export',
                     'makeCoolingChannels', 'makeInletVolute', 'makeOutletVolute',
-                    'filmCooling', 'makeRadiativeExtension'):
+                    'filmCooling', 'makeRadiativeExtension', 'extensionCircuit'):
             if isinstance(inputsPath.get(key), bool):
                 inputsPath[key] = 'on' if inputsPath[key] else 'off'
 
@@ -304,6 +304,18 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.extensionFilmSlots             = slots if isinstance(slots, (list, tuple)) else []
         nozzle.extensionFilmModel             = nameOr('extensionFilmModel', nozzle.filmCoolingModel)
 
+        # A coolant circuit of the extension's own (architecture D)
+        nozzle.extensionCircuit               = nameOr('extensionCircuit', 'off')
+        nozzle.extensionCircuitEndAreaRatio   = valueOr('extensionCircuitEndAreaRatio', None)
+        nozzle.extensionCoolant               = nameOr('extensionCoolant', None)
+        nozzle.extensionCoolantMassFlow       = valueOr('extensionCoolantMassFlow', None)
+        nozzle.extensionCoolantInitialTemperature = valueOr('extensionCoolantInitialTemperature', None)
+        nozzle.extensionCoolantInitialPressure = valueOr('extensionCoolantInitialPressure', None)
+        nozzle.extensionChannelCount          = valueOr('extensionChannelCount', None)
+        nozzle.extensionCircuitPasses         = valueOr('extensionCircuitPasses', None)
+        nozzle.extensionCircuitDirection      = nameOr('extensionCircuitDirection', 'coflow')
+        nozzle.extensionCircuitOutlet         = nameOr('extensionCircuitOutlet', 'return')
+
         # -- Radiation-Cooled Extension -- #
         #
         # The conductivity is asked for rather than looked up because the materials store
@@ -444,6 +456,13 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         coolantBypassFraction = nozzle.coolantBypassFraction if cooled else None,
         filmMassFlow = nozzle.filmMassFlow if filmed else None)
     nozzle.fuelMassFlow, nozzle.oxidizerMassFlow = account.fuelMassFlow, account.oxidizerMassFlow
+    # An extension circuit returned to the feed draws on the same propellant as the chamber jacket,
+    # so the two together may not ask for more than the chamber burns; a dumped one is a draw beside
+    # the chamber, accounted in the performance summary
+    if nozzle.extensionCircuit == 'on' and nozzle.extensionCircuitOutlet == 'return' and cooled:
+        accountForFlows(nozzle.engineMassFlow, nozzle.OFRatio,
+                        nozzle.coolantClass if isinstance(nozzle.coolantClass, str) else 'fuel',
+                        coolantMassFlow = account.coolantMassFlow + float(nozzle.extensionCoolantMassFlow or 0.0))
     if cooled:
         nozzle.coolantMassFlow        = account.coolantMassFlow
         nozzle.coolantBypassFraction  = account.coolantBypassFraction

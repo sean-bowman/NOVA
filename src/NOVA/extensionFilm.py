@@ -139,6 +139,7 @@ class ExtensionFilmState:
     extensionFilmSlots:                      Any = None
     extensionFilmModel:                      Any = None
     turbineExhaust:                          Any = None
+    extensionCircuitSolution:                Any = None
 
 @dataclass
 class ExtensionFilmSlot:
@@ -362,8 +363,7 @@ def readFilmSlots(rawSlots) -> list:
                 validRange = ' or '.join(repr(name) for name in FILMSOURCES))
         needed = ['areaRatio', 'slotHeight'] + {'species': ['species', 'massFlow', 'temperature'],
                                                  'turbineExhaust': [],
-                                                 'extensionCircuitOutlet': ['massFlow', 'temperature',
-                                                                            'species']}[source]
+                                                 'extensionCircuitOutlet': []}[source]
         missing = [key for key in needed if raw.get(key) is None]
         if missing:
             raise InvalidInputError(
@@ -646,6 +646,19 @@ def solveExtensionFilm(state: ExtensionFilmState, circuitOutlet: dict = None) ->
 
     def addLayer(name, source, index, massFlow, coolantTemperature, slotHeight, coolant,
                  gasConstant, specificHeat, mixtureRatio, extraDraw, margin = None):
+        # The closures take the film's static state at the wall pressure, which is a subsonic slot;
+        # a slot too small for its flow there would have to run supersonic, which neither describes
+        gamma = specificHeat / (specificHeat - gasConstant)
+        slotMach = coolant.velocity / np.sqrt(gamma * gasConstant * coolantTemperature)
+        if slotMach >= 1.0:
+            raise InvalidInputError(
+                message = (f'The {name} leaves its {1e3 * slotHeight:.1f} mm slot at Mach {slotMach:.1f}: '
+                           f'at the {1e-3 * float(wall["p"][index]):.1f} kPa wall pressure there, '
+                           f'{massFlow:.3g} kg/s needs a slot about {1e3 * slotHeight * slotMach / 0.6:.0f} mm '
+                           f'tall to leave at Mach 0.6. A taller slot, or one where the wall pressure is '
+                           f'higher, brings it subsonic.'),
+                parameterName = 'slotHeight', value = slotHeight,
+                validRange = 'a subsonic slot')
         position = float(wall['x'][index])
         result = _solveLayer(wall, closure, position, slotHeight, coolant, massFlow,
                              coolantTemperature, mixtureRatio, state)
@@ -724,7 +737,24 @@ def solveExtensionFilm(state: ExtensionFilmState, circuitOutlet: dict = None) ->
                      margin = exhaust.pressure / slotPressure - 1.0)
             continue
 
-        outlet = dict(circuitOutlet or {}) if slot.source == 'extensionCircuitOutlet' else {}
+        outlet = {}
+        if slot.source == 'extensionCircuitOutlet':
+            # The circuit's outlet is known only once the circuit is solved, which happens after a
+            # first pass of the films ahead of it; that pass leaves the slot out
+            circuit = state.extensionCircuitSolution
+            if circuitOutlet is None and circuit is None:
+                continue
+            if circuitOutlet is None:
+                if circuit.outlet != 'film':
+                    raise InvalidInputError(
+                        message = (f'Extension film slot {number} takes the extension circuit\'s '
+                                   f'outlet, and the circuit\'s outlet is {circuit.outlet}. Set '
+                                   f'extensionCircuitOutlet to film.'),
+                        parameterName = 'extensionFilmSlots[].source', value = slot.source,
+                        validRange = 'a circuit whose outlet is film')
+                circuitOutlet = {'species': circuit.coolant, 'temperature': circuit.outletTemperature,
+                                 'massFlow': circuit.massFlow}
+            outlet = dict(circuitOutlet)
         species = outlet.get('species', slot.species)
         temperature = float(outlet.get('temperature', slot.temperature))
         flow = float(outlet.get('massFlow', slot.massFlow))

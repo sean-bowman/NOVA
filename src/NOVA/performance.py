@@ -422,6 +422,9 @@ def summarizePerformance(source) -> PerformanceSummary:
         filmFlows.append(layer.massFlow)
         filmEnthalpies.append(layer.coolantSpecificHeat * layer.coolantTemperature
                               + 0.5 * layer.coolant.velocity**2)
+    circuit = getattr(source, 'extensionCircuitSolution', None)
+    if circuit is not None and circuit.outlet == 'overboard':
+        extraMassFlows['extension circuit overboard'] = circuit.massFlow
     exhaust = getattr(source, 'turbineExhaust', None)
     if exhaust is not None and exhaust.massFlow - slottedExhaust > 1.0e-9 * exhaust.massFlow:
         extraMassFlows['turbine exhaust overboard'] = exhaust.massFlow - slottedExhaust

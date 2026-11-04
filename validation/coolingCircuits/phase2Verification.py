@@ -59,7 +59,7 @@ colors = palette.colors('dark')
 plt.rcParams.update(palette.matplotlibStyle('dark'))
 plt.rcParams.update({'font.size': 9, 'axes.grid': True, 'grid.alpha': 0.4})
 
-EXHAUSTSLOT = {'areaRatio': 3.0, 'slotHeight': 0.006, 'source': 'turbineExhaust'}
+EXHAUSTSLOT = {'areaRatio': 3.0, 'slotHeight': 0.015, 'source': 'turbineExhaust'}
 DUMPSLOT = {'areaRatio': 8.0, 'slotHeight': 0.004, 'source': 'species', 'species': 'Methane',
             'massFlow': 1.0, 'temperature': 300.0}
 METHANESTAGE = {'Fuel': 'LCH4', 'Oxidizer': 'LOX', 'OFRatio': 3.5, 'fuelInitialTemperature': 111.7,

@@ -329,6 +329,13 @@ Optional. A gas generator exists when its mixture ratio is given, and is specifi
 | `turbineExhaustMassFlow`           | kg/s | Turbine flow. Exhaust not slotted onto the extension is counted as dumped with no thrust         |
 | `extensionFilmSlots`               | --   | List of slots, each `{areaRatio, slotHeight, source}` with `source` one of `turbineExhaust` (optional `massFlow`, default the whole exhaust) or `species` (`species`, `massFlow`, `temperature`, optional `mixtureRatio`) |
 | `extensionFilmModel`               | --   | Closure that drives the extension, `hatchPapell` or `sp8124Entrainment`; defaults to `filmCoolingModel`. The other closure is reported beside it |
+| `extensionCircuit`                 | --   | Cool the extension with a circuit of its own (architecture D), from the joint to `extensionCircuitEndAreaRatio`, with the shell radiation cooled beyond |
+| `extensionCoolant`, `extensionCoolantMassFlow` | --, kg/s | The circuit's coolant and flow |
+| `extensionCoolantInitialTemperature`, `extensionCoolantInitialPressure` | K, Pa | The circuit's inlet state |
+| `extensionChannelCount`            | --   | Circular channels of the circuit, sized against `maxWallTemperature` as the chamber jacket is |
+| `extensionCircuitPasses`           | --   | 1 (default) or 2, down to the far end and back to the joint |
+| `extensionCircuitDirection`        | --   | One pass: `coflow` from the joint (default) or `counterflow` from the far end |
+| `extensionCircuitOutlet`           | --   | `return` to the feed (held with the chamber jacket to the chamber flow of their propellant), `film` (slot it with a `source: extensionCircuitOutlet` entry in `extensionFilmSlots`), or `overboard` (counted as flow with no thrust) |
 
 Slot films are drawn beside the chamber flow, so the performance summary reports the engine's total flow, the thrust the films add expanded apart from the core and fully mixed into it, and the engine specific impulse on the total flow. A fuel-rich hydrocarbon gas generator forms graphite at CEA's equilibrium and runs hot: 1252 K against the F-1's published 1063 K at a mixture ratio of 0.416.
 

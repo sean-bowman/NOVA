@@ -450,6 +450,16 @@ def validateRegenChannelInputs(state) -> None:
             raise InvalidInputError(
                 message = 'The passes of a multi-pass jacket alternate circular channels.',
                 parameterName = 'channelType', value = state.channelType, validRange = 'circle')
+        # Two families already share the pitch, and a split's daughters would have to part within
+        # the share each family has, which the split as built does not do. A one-and-a-half-pass
+        # circuit doubles the count aft of its inlet manifold, which is what a split would do there.
+        splitRatio = state.channelSplitAreaRatio
+        if splitRatio is not None and not (isinstance(splitRatio, float) and np.isnan(splitRatio)):
+            raise InvalidInputError(
+                message = (f'A channel split is not built in a {state.coolantCircuit} jacket. A '
+                           f'one-and-a-half-pass jacket doubles its channels aft of the inlet manifold.'),
+                parameterName = 'channelSplitAreaRatio', value = splitRatio,
+                validRange = 'unset in a multi-pass jacket')
 
 def voluteInterfaceCurve(xWall: np.ndarray, rWall: np.ndarray, axialOffset: float,
                          filletRadius: float, flareAngle: float, flareLength: float,

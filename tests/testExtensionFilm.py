@@ -100,7 +100,7 @@ def filmedNozzle(tmp_path_factory):
 
     from testDefectGuards import runConfiguration
 
-    slots = [{'areaRatio': 10.0, 'slotHeight': 0.004, 'source': 'turbineExhaust'}]
+    slots = [{'areaRatio': 10.0, 'slotHeight': 0.015, 'source': 'turbineExhaust'}]
     return runConfiguration(tmp_path_factory.mktemp('extensionFilm'), makeRadiativeExtension = True,
                             makeInletVolute = False, makeOutletVolute = False,
                             extensionFilmSlots = slots, **GASGENERATOR)
@@ -179,7 +179,7 @@ class TestTheShippedNozzleFilmed:
     def testASlotOffTheExtensionIsRefused(self, filmedNozzle):
 
         state = seededState(filmedNozzle)
-        state.extensionFilmSlots = [{'areaRatio': 1.5, 'slotHeight': 0.004, 'source': 'turbineExhaust'}]
+        state.extensionFilmSlots = [{'areaRatio': 1.5, 'slotHeight': 0.015, 'source': 'turbineExhaust'}]
 
         with pytest.raises(InvalidInputError, match = 'off the'):
             solveExtensionFilm(state)
@@ -187,8 +187,17 @@ class TestTheShippedNozzleFilmed:
     def testSlotsDrawingMoreExhaustThanTheTurbinePassesAreRefused(self, filmedNozzle):
 
         state = seededState(filmedNozzle)
-        state.extensionFilmSlots = [{'areaRatio': 10.0, 'slotHeight': 0.004, 'source': 'turbineExhaust'},
-                                    {'areaRatio': 20.0, 'slotHeight': 0.004, 'source': 'turbineExhaust'}]
+        state.extensionFilmSlots = [{'areaRatio': 10.0, 'slotHeight': 0.015, 'source': 'turbineExhaust'},
+                                    {'areaRatio': 20.0, 'slotHeight': 0.015, 'source': 'turbineExhaust'}]
 
         with pytest.raises(InvalidInputError, match = 'draw'):
+            solveExtensionFilm(state)
+
+    def testASlotThatWouldRunSupersonicIsRefused(self, filmedNozzle):
+
+        # A 2 mm slot cannot pass the turbine's 0.7 kg/s at the wall pressure there below Mach 1
+        state = seededState(filmedNozzle)
+        state.extensionFilmSlots = [{'areaRatio': 10.0, 'slotHeight': 0.002, 'source': 'turbineExhaust'}]
+
+        with pytest.raises(InvalidInputError, match = 'Mach'):
             solveExtensionFilm(state)

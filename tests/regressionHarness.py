@@ -88,6 +88,19 @@ strippedToContour = {
 
     'makeRadiativeExtension'        : 'off',
 
+    # A single pass with no split, no extension circuit, no gas generator and no extension film.
+    # Each reads the same set as unset, so the captured state is the one recorded before they existed.
+    'coolantCircuit'                : 'singlePass',
+    'passChannelRatio'              : None,
+    'coolantInletAreaRatio'         : None,
+    'turnaroundVelocityRatio'       : None,
+    'channelSplitAreaRatio'         : None,
+    'channelSplitLength'            : None,
+    'extensionCircuit'              : False,
+    'gasGeneratorMixtureRatio'      : None,
+    'extensionFilmSlots'            : None,
+    'extensionFilmModel'            : None,
+
     # These six are read with .get(), so an absent key reaches the nozzle as None while a key
     # present and null reaches it as NaN: config.py rewrites every null before the .get() runs.
     # Both mean unset and neither is read with the extension off, but the captured state records
@@ -335,7 +348,7 @@ harnessCases = {
             'turbinePressureRatio': 16.0,
             'turbineEfficiency': 0.6,
             'turbineExhaustMassFlow': 0.7,
-            'extensionFilmSlots': [{'areaRatio': 10.0, 'slotHeight': 0.004, 'source': 'turbineExhaust'}],
+            'extensionFilmSlots': [{'areaRatio': 10.0, 'slotHeight': 0.015, 'source': 'turbineExhaust'}],
         },
     },
     # Sixty circular channels forking to 120 at an area ratio of three over six parent pitches,
@@ -367,6 +380,36 @@ harnessCases = {
         'overrides': {**regenOverrides, 'regenTruncationType': 'er', 'regenTruncationValue': 10.0,
                       'nChannel': 30, 'coolantCircuit': 'oneAndHalfPass', 'coolantInletAreaRatio': 3.0,
                       'makeInletVolute': False},
+    },
+    # The jacket cut at an area ratio of three and the extension cooled to twelve by a circuit of
+    # its own, 0.5 kg/s of hydrogen at 40 K coflow through 90 channels, dumped as a film over the
+    # C103 shell beyond. It pins the circuit, the film it lays and the shell under it.
+    'regenExtensionCircuit': {
+        'config': 'NOVANozzle.json',
+        'description': 'Extension cooled to an area ratio of 12 by its own circuit, dumped as a film',
+        'overrides': {
+            **regenOverrides,
+            'makeInletVolute': False,
+            'makeOutletVolute': False,
+            'regenTruncationType': 'er',
+            'regenTruncationValue': 3.0,
+            'makeRadiativeExtension': 'on',
+            'extensionMaterial': 'C103',
+            'extensionThickness': 0.001,
+            'extensionThermalConductivity': 42.0,
+            'extensionInnerEmissivity': 0.7,
+            'extensionOuterEmissivity': 0.7,
+            'extensionCircuit': True,
+            'extensionCircuitEndAreaRatio': 12.0,
+            'extensionCoolant': 'Hydrogen',
+            'extensionCoolantMassFlow': 0.5,
+            'extensionCoolantInitialTemperature': 40.0,
+            'extensionCoolantInitialPressure': 8.0e6,
+            'extensionChannelCount': 90,
+            'extensionCircuitDirection': 'coflow',
+            'extensionCircuitOutlet': 'film',
+            'extensionFilmSlots': [{'areaRatio': 12.0, 'slotHeight': 0.012, 'source': 'extensionCircuitOutlet'}],
+        },
     },
     'contourEffectiveGamma': {
         'config': 'NOVANozzle.json',

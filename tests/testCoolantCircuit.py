@@ -235,3 +235,10 @@ class TestTheMultiPassGeometry:
         radius = np.hypot(oneAndAHalf.yTurnaround, oneAndAHalf.zTurnaround)
         assert radius.min() == pytest.approx(ring.ringRadius - ring.sectionRadius, rel = 1e-3)
         assert ring.axialPosition == pytest.approx(float(oneAndAHalf.channelSizingSolution.xRegenNozzleTrimmed[-1]))
+
+def testASplitInAMultiPassJacketIsRefused(tmp_path):
+
+    from testDefectGuards import runConfiguration
+
+    with pytest.raises(InvalidInputError, match = 'split is not built'):
+        runConfiguration(tmp_path, **{**ONEANDAHALF, 'channelSplitAreaRatio': 5.0})

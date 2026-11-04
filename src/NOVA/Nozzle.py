@@ -117,6 +117,8 @@ except ImportError as error:
 # this module, and Nozzle.plumeStructure and Nozzle.plumeField below are their product face.
 
 from .boundaryLayer import frictionPerformanceDebit, solveBoundaryLayer, wallTemperatureProfile
+from .extensionCircuit import (ExtensionCircuitState, extensionWallProfile, radiativeRemainder,
+                               solveExtensionCircuit)
 from .extensionFilm import ExtensionFilmState, solveExtensionFilm
 from .errors import InvalidInputError
 from .performance import summarizePerformance
@@ -627,6 +629,19 @@ class Nozzle:
         self.extensionFilmModel                       = None     # [str]
         self.extensionFilmSolution                    = None     # [ExtensionFilmResult]
         self.extensionFilmDrivingTemperature          = None     # [K]
+        # A coolant circuit of the extension's own (architecture D), from the joint to an area
+        # ratio, its outlet returned, dumped as a film or dumped overboard
+        self.extensionCircuit                         = 'off'    # [str]
+        self.extensionCircuitEndAreaRatio             = None     # [-]
+        self.extensionCoolant                         = None     # [fluid name]
+        self.extensionCoolantMassFlow                 = None     # [kg/s]
+        self.extensionCoolantInitialTemperature       = None     # [K]
+        self.extensionCoolantInitialPressure          = None     # [Pa]
+        self.extensionChannelCount                    = None     # [-]
+        self.extensionCircuitPasses                   = None     # [-], 1 or 2
+        self.extensionCircuitDirection                = None     # [str], coflow or counterflow
+        self.extensionCircuitOutlet                   = None     # [str], return, film or overboard
+        self.extensionCircuitSolution                 = None     # [ExtensionCircuitSolution]
 
         self.makeRadiativeExtension                   = 'off'    # [str]
         self.extensionMaterial                        = None     # [material name]
@@ -1440,18 +1455,20 @@ class Nozzle:
         # the recovery temperature; the coefficient stays the core gas's
         drive = (self.extensionFilmDrivingTemperature if self.extensionFilmDrivingTemperature is not None
                  else self.extensionNearWallRecoveryTemperature)
+        # Past an extension circuit, the shell starts at the circuit's far end
+        remainder = radiativeRemainder(self.extensionCircuitSolution, len(self.xExtension))
 
         return shell, dict(
-            axialPosition          = self.xExtension,
-            radius                 = self.rExtension,
-            machNumber             = self.extensionNearWallMachNumber,
-            staticTemperature      = self.extensionNearWallTemperature,
-            recoveryTemperature    = drive,
+            axialPosition          = np.asarray(self.xExtension)[remainder],
+            radius                 = np.asarray(self.rExtension)[remainder],
+            machNumber             = np.asarray(self.extensionNearWallMachNumber)[remainder],
+            staticTemperature      = np.asarray(self.extensionNearWallTemperature)[remainder],
+            recoveryTemperature    = np.asarray(drive)[remainder],
             chamberPressure        = self.chamberPressure,
             characteristicVelocity = self.theoreticalCharacteristicVelocity,
-            exhaustGamma           = self.gammaExtension,
-            exhaustGasConstant     = self.gasConstantExtension,
-            exhaustMolecularWeight = self.molecularWeightExtension,
+            exhaustGamma           = np.asarray(self.gammaExtension)[remainder],
+            exhaustGasConstant     = np.asarray(self.gasConstantExtension)[remainder],
+            exhaustMolecularWeight = np.asarray(self.molecularWeightExtension)[remainder],
             throatRadius           = sizedThroatRadius(self.rNozzleWall, self.nozzleScalingFactor),
             throatRadiusOfCurvature = 0.5 * self.nozzleScalingFactor
                                       * (self.throatInletCurvatureNonDimensional
@@ -1504,6 +1521,44 @@ class Nozzle:
 
         return state
 
+    def extensionCircuitState(self):
+
+        '''
+
+        The extension and the circuit's definition the extension circuit solve reads, by name.
+
+        Returns:
+        --------
+        ExtensionCircuitState
+
+        '''
+
+        state = ExtensionCircuitState()
+        for name in ExtensionCircuitState.__dataclass_fields__:
+            setattr(state, name, getattr(self, name, None))
+
+        return state
+
+    def solveExtensionCircuit(self):
+
+        '''
+
+        The extension's own coolant circuit, when one is asked for.
+
+        The solve is `extensionCircuit.solveExtensionCircuit`, the chamber jacket's sizing march on
+        the extension's stations. A circuit dumping its coolant as a film puts that film on the
+        extension, so the films are solved again with it before the radiative remainder.
+
+        '''
+
+        if self.extensionCircuit != 'on' or self.xExtension is None or len(self.xExtension) < 4:
+            return
+        self.extensionCircuitSolution = solveExtensionCircuit(self.extensionCircuitState(),
+                                                              self.regenThermalContext())
+        print(self.extensionCircuitSolution.report())
+        if self.extensionCircuitSolution.outlet == 'film':
+            self.solveExtensionFilm()
+
     def solveExtensionFilm(self):
 
         '''
@@ -1553,6 +1608,10 @@ class Nozzle:
             print('Radiative extension skipped: the jacket runs to the exit, so there is no '
                   'extension to solve.')
             return
+        remainder = radiativeRemainder(self.extensionCircuitSolution, len(self.xExtension))
+        if len(range(*remainder.indices(len(self.xExtension)))) < 3:
+            print('Radiative extension skipped: the extension circuit runs to the exit.')
+            return
 
         shell, arguments = self.radiativeExtensionInputs()
         result = radiativeNozzleExtension(shell, **arguments)
@@ -1561,6 +1620,10 @@ class Nozzle:
             setattr(self, name, getattr(result, name))
 
         self.radiativeExtensionSolution = result
+        print(f'Radiative extension: peak wall {result.extensionPeakWallTemperature:.0f} K, '
+              f'{result.extensionTemperatureMargin:+.0f} K of margin to its limit'
+              if result.extensionTemperatureMargin is not None
+              else f'Radiative extension: peak wall {result.extensionPeakWallTemperature:.0f} K')
 
     def regenVoluteState(self):
 
@@ -1878,9 +1941,12 @@ class Nozzle:
             return
 
         # The jacket's and the extension's solved temperatures, placed by axial position
+        extensionX, extensionWall = extensionWallProfile(
+            getattr(self, 'xExtension', None), self.extensionCircuitSolution,
+            getattr(self, 'extensionWallTemperature', None))
         wallTemperature = wallTemperatureProfile(
             self.xNozzleWall, thermalResults['xHotWall3D'], thermalResults['wallTemperature'],
-            getattr(self, 'xExtension', None), getattr(self, 'extensionWallTemperature', None))
+            extensionX, extensionWall)
 
         layer = solveBoundaryLayer(
             np.asarray(self.xNozzleWall, dtype = float), wall, mach,
@@ -2008,6 +2074,7 @@ class Nozzle:
 
         self.solveTurbineExhaust()
         self.solveExtensionFilm()
+        self.solveExtensionCircuit()
 
         # -- Radiation-Cooled Extension -- #
 

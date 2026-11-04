@@ -177,6 +177,7 @@ class TestStateObjectsAreComplete:
         'regenStations': 'RegenStationState',
         'plume':         'PlumeContour',
         'extensionFilm': 'ExtensionFilmState',
+        'extensionCircuit': 'ExtensionCircuitState',
     }
 
     def fieldsReached(self, name: str, variableName: str) -> set:
@@ -221,7 +222,8 @@ class TestStateObjectsAreComplete:
                    'ConvergingSectionState': 'convergingSectionState',
                    'RegenStationState':      'regenStationState',
                    'PlumeContour':           'plumeContour',
-                   'ExtensionFilmState':     'extensionFilmState'}[stateName]
+                   'ExtensionFilmState':     'extensionFilmState',
+                   'ExtensionCircuitState':  'extensionCircuitState'}[stateName]
 
         state = getattr(Nozzle(), builder)()
         missing = [field for field in getattr(module, stateName).__dataclass_fields__
