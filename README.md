@@ -291,6 +291,8 @@ Every run marches a turbulent boundary layer along the finished wall and prices 
 | `minCoolantExitTemperature`                 | K    | Lower limit on coolant temperature at the jacket exit. Checked once the jacket is solved; unset is no limit |
 | `maxCoolantTemperature`                     | K    | Ceiling on the bulk coolant temperature anywhere in the jacket. Checked once the jacket is solved; unset is no limit |
 | `maxColdWallTemperature`                    | K    | Ceiling on the coolant-side wall, the coking limit of a hydrocarbon. The thermal sizing holds it; a manual profile is refused past it; unset is no limit |
+| `channelSplitAreaRatio`                     | --   | Circular channels only: where on the diverging wall each channel forks into two. Unset is no split |
+| `channelSplitLength`                        | --   | Length of the fork's transition in parent pitches at its start, default 4. The daughters part on a cosine blend and the section through it is the two circles' union |
 
 The `material` field is a wall alloy name resolved by `src/NOVA/materials.py`: `GRCop-42`, `CuCrZr`, `OFHC Copper`, `NARloy-Z`, `AlSi10Mg`, `Al 6061-T6`, `Inconel 718`, `Inconel 625`, `316L`, `Ti-6Al-4V`, or a recognized free-text alias. The heat transfer model samples that module's temperature-dependent thermal conductivity curve for whichever alloy is named; an unrecognized name falls back to GRCop-42 with a warning. Conductivity curves are validated against their cited sources in `tests/testMaterials.py`.
 

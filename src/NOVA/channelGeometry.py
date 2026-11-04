@@ -278,7 +278,7 @@ def wallNormalFrames(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> tuple:
 
 def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                           channelRadius, crossSectionStyle, i: int = None, channelWidth = None,
-                          ribThickness = None):
+                          ribThickness = None, splitSeparation = None):
 
     '''
 
@@ -286,6 +286,8 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     when only generating a single station. channelRadius is the section's radial half-extent: a circle's radius, half a
     rectangle's depth. channelWidth is a rectangle's width and is not read for a circle. ribThickness is the rib at each
     station where it varies, as a helix's does; left out, the rib is the infill thickness.
+    splitSeparation is, for a circle through a channel split, the daughters' center separation
+    across the section at each station, which makes the section their union; left out, a circle.
 
     If i is specified, one cross section is generated at that station along (x,y,z)ChannelCenterline3D with the local
     channel radius, and only the heat transfer dictionary is returned.
@@ -584,7 +586,9 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
     # The section at the stations drawn, and the areas it makes over each station's path
     stationIndex = np.arange(arrLen) if fullSweep else np.array([j])
     if crossSectionStyle == 'circle':
-        section = sectionProperties(crossSectionStyle, channelRadius[stationIndex])
+        separation = None if splitSeparation is None else np.asarray(splitSeparation)[stationIndex]
+        section = sectionProperties(crossSectionStyle, channelRadius[stationIndex],
+                                    separation = separation)
     else:
         if channelWidth is None:
             raise ValueError(f"A '{crossSectionStyle}' section needs channelWidth at every station.")
@@ -627,7 +631,7 @@ def generateCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, 
 
         return heatTransferDict
 
-def getMaxChannelRadius(geometry, rNozzle, i):
+def getMaxChannelRadius(geometry, rNozzle, i, pitchFraction: float = 1.0):
 
     '''
 
@@ -656,7 +660,8 @@ def getMaxChannelRadius(geometry, rNozzle, i):
                                    geometry.channelAspectRatio, geometry.maxChannelDepth))
 
     offsetHotWallThickness = geometry.hotWallThickness - geometry.infillThickness
-    arcAngle = 2*np.pi / geometry.nChannel
+    # Through a channel split a daughter has the parent pitch less the separation already spent
+    arcAngle = 2*np.pi / geometry.nChannel * pitchFraction
     theta = arcAngle/2
     R = rNozzle[i] + offsetHotWallThickness
     r = R*np.sin(theta) / (1 - np.sin(theta))

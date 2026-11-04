@@ -119,6 +119,7 @@ from .channelSections import (depthLimitedHalfExtent, helicalSpacing, loxodromeW
 from .figures import regenHeatTransferModelPlots as drawRegenHeatTransfer
 from .regenThermal import hotWallSectorArea
 from .regenThermal import regenHeatTransferModel as solveRegenHeatTransfer
+from .channelSplit import splitBlend, splitSeparation
 from .validation import specified
 
 def _zeroIfUnset(value) -> float:
@@ -307,6 +308,8 @@ class ChannelSizingState:
     minCoolantExitTemperature:              Any   = None
     maxCoolantTemperature:                  Any   = None
     maxColdWallTemperature:                 Any   = None
+    channelSplitAreaRatio:                  Any   = None
+    channelSplitLength:                     Any   = None
     hotWallThickness:                       float = 0.0
     infillThickness:                        float = 0.0
     material:                               str   = 'GRCop-42'
@@ -338,6 +341,7 @@ class ChannelSizingState:
     dcrData:                                dict  = field(default_factory = dict)
 
     # -- What the solve produces -- #
+    channelSplitBlend:                      Any   = None   # [-], progress through a channel split
     channelRadius:                          Any   = None   # [m], one per station
     channelWidth:                           Any   = None   # [m], one per station, rectangles and helices
     channelRibThickness:                    Any   = None   # [m], one per station, helices only
@@ -361,7 +365,7 @@ channelSizingOutputs = (
     'channelThermalResults', 'channelProfilePoints', 'nChannel', 'coolantExitPressure', 'coolantExitTemperature',
     'wallMaterialResolved', 'tempRangeKelvin', 'wallThermalConductivityData',
     'wallThermalConductivityInterpolator', 'wallCTEInterpolator',
-    'wallYieldStrengthInterpolator', 'wallFractureStrainInterpolator')
+    'wallYieldStrengthInterpolator', 'wallFractureStrainInterpolator', 'channelSplitBlend')
 
 def wallTemperatureLimit(state) -> float:
 
@@ -711,8 +715,12 @@ def reportSizingResult(state, results: dict) -> None:
     pressureDrop    = float(state.coolantInitialPressure) - float(state.coolantExitPressure)
 
     print(f'\nChannel sizing, {state.channelSizingMode} mode:')
+    splitNote = ''
+    if state.channelSplitBlend is not None and np.any(np.asarray(state.channelSplitBlend) > 0.0):
+        splitNote = (f', splitting to {2*state.nChannel} from an area ratio of '
+                     f'{float(state.channelSplitAreaRatio):.3g}')
     print(f'  half-extent {1e3*halfExtent.min():.3f} to {1e3*halfExtent.max():.3f} mm over '
-          f'{state.numCrossSections} stations, {state.nChannel} channels')
+          f'{state.numCrossSections} stations, {state.nChannel} channels{splitNote}')
     print(f'  peak hot wall {wallTemperature[hottest]:.1f} K at station {hottest}, '
           f'{wallTemperature[hottest] - limit:+.1f} K against the {limit:.1f} K limit')
     print(f'  coolant exit {float(state.coolantExitTemperature):.1f} K at '
@@ -727,6 +735,76 @@ def reportSizingResult(state, results: dict) -> None:
 
     print('  the profile it converged to, which rebuilds this jacket without the search:')
     print(profileConfigurationBlock(document))
+
+DEFAULTSPLITLENGTH = 4.0      # [parent pitches]
+
+def channelSplitBlend(state, xWall, rWall) -> np.ndarray:
+
+    '''
+
+    How far through the channel split each wall station is, zero everywhere without a split.
+
+    The split starts where the diverging wall reaches `channelSplitAreaRatio`, interpolated
+    between stations, and runs `channelSplitLength` parent pitches along the wall, the pitch taken
+    at the start (`DEFAULTSPLITLENGTH` when unset).
+
+    Parameters:
+    -----------
+    state : object
+        Carries `channelSplitAreaRatio`, `channelSplitLength`, `channelType`, `nChannel` and
+        `nozzleScalingFactor`.
+    xWall, rWall : array_like
+        The jacket's hot wall, injector face first [m].
+
+    Returns:
+    --------
+    numpy.ndarray
+        The blend at each station, in wall order [-].
+
+    Raises:
+    -------
+    InvalidInputError
+        For a split on a channel family other than the circle, at an area ratio not above one, or
+        past the end of the jacket.
+
+    '''
+
+    xWall, rWall = np.asarray(xWall, dtype = float), np.asarray(rWall, dtype = float)
+    if not specified(state, 'channelSplitAreaRatio'):
+        return np.zeros(len(xWall))
+
+    areaRatioTarget = float(state.channelSplitAreaRatio)
+    if state.channelType != 'circle':
+        raise InvalidInputError(
+            message = (f'A channel split is built for circular channels. A {state.channelType} '
+                       f'channel splits by a rib grown from nothing, whose own thickness the fin '
+                       f'model does not carry.'),
+            parameterName = 'channelSplitAreaRatio', value = areaRatioTarget,
+            validRange = 'unset, or circular channels')
+    if areaRatioTarget <= 1.0:
+        raise InvalidInputError(
+            message = 'A channel split sits on the diverging wall, past the throat.',
+            parameterName = 'channelSplitAreaRatio', value = areaRatioTarget,
+            validRange = 'above 1')
+
+    throatIndex = int(np.argmin(rWall))
+    areaRatio = (rWall / sizedThroatRadius(rWall, state.nozzleScalingFactor))**2
+    meridional = np.insert(np.cumsum(np.hypot(np.diff(xWall), np.diff(rWall))), 0, 0.0)
+    past = np.flatnonzero((np.arange(len(xWall)) > throatIndex) & (areaRatio >= areaRatioTarget))
+    if past.size == 0:
+        raise InvalidInputError(
+            message = (f'The channel split at an area ratio of {areaRatioTarget:.3g} lies past the '
+                       f'end of the jacket, which reaches {areaRatio[-1]:.3g}.'),
+            parameterName = 'channelSplitAreaRatio', value = areaRatioTarget,
+            validRange = f'below {areaRatio[-1]:.3g}')
+    k = int(past[0])
+    fraction = (areaRatioTarget - areaRatio[k - 1]) / (areaRatio[k] - areaRatio[k - 1])
+    startPosition = meridional[k - 1] + fraction * (meridional[k] - meridional[k - 1])
+    startRadius = rWall[k - 1] + fraction * (rWall[k] - rWall[k - 1])
+    pitches = (float(state.channelSplitLength) if specified(state, 'channelSplitLength')
+               else DEFAULTSPLITLENGTH)
+    length = pitches * 2.0 * np.pi * startRadius / float(state.nChannel)
+    return splitBlend(meridional, startPosition, length)
 
 def coolantMarchOrder(stations: int, direction: str = 'counterflow') -> np.ndarray:
 
@@ -884,7 +962,8 @@ def solveChannelRadii(state, geometry, thermal):
             rNozzleStep = rPathline2D[2] - rPathline2D[1]
 
             # Calculate the arc length of the nozzle region allocated to each channel.
-            nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness
+            nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness \
+                - splitSeparation(state.dcrData['splitBlend'][i], rPathline2D[1], nChannel)
 
             # Calculate the arc length of the channel.
             channelArcLength = 4* rPathline2D[1] * np.arccos((2 * rPathline2D[1]**2 - (channelDiameter/4)**2) / (2 * rPathline2D[1]**2))
@@ -902,7 +981,9 @@ def solveChannelRadii(state, geometry, thermal):
         rNozzleStep = rPathline2D[2] - rPathline2D[1]
 
         # Calculate the arc length of the nozzle region allocated to each channel.
-        nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness
+        # Through a split the pair has the parent pitch less the separation already spent
+        nozzleArcSlice = 2*np.pi*rPathline2D[1]/nChannel - state.infillThickness \
+            - splitSeparation(state.dcrData['splitBlend'][i], rPathline2D[1], nChannel)
 
         # Calculate the diameter of each channel perpendicular to the pathline.
         channelDiameter = 2 * channelRadius[i]
@@ -1032,10 +1113,19 @@ def solveChannelRadii(state, geometry, thermal):
             channelWidth = 2*channelRadius/state.channelAspectRatio
             ribThickness = state.dcrData['passSpacing'] - channelWidth
 
+        # Through a split the section is the daughters' union, at their separation across the
+        # leaning channel
+        separation = None
+        if state.dcrData['splitBlend'][i] > 0.0:
+            pathRadius = np.hypot(yChannelCenterline3D[i], zChannelCenterline3D[i])
+            separation = np.zeros(state.numCrossSections)
+            separation[i] = (splitSeparation(state.dcrData['splitBlend'][i], pathRadius, state.nChannel)
+                             * np.cos(state.dcrData['projectionAngle'][i]))
+
         heatTransferDict_iUpdate = \
             buildCrossSections(geometry, xChannelCenterline3D, yChannelCenterline3D, zChannelCenterline3D,
                                        channelRadius, channelType, i, channelWidth = channelWidth,
-                                       ribThickness = ribThickness)
+                                       ribThickness = ribThickness, splitSeparation = separation)
 
         # update local heat transfer dictionary
         heatTransferDict_i = heatTransferDict_i | heatTransferDict_iUpdate
@@ -1096,6 +1186,12 @@ def solveChannelRadii(state, geometry, thermal):
     # wherever the channel wraps.
     wallSegmentLength = np.hypot(np.diff(xNozzle[marchOrder]), np.diff(rNozzle[marchOrder]))
     wallSegmentLength = np.append(wallSegmentLength, wallSegmentLength[-1])
+
+    # A channel split doubles the count partway along. The march stays one parent channel wide:
+    # the pair carries the parent's flow over the parent's share of the wall, and only its section
+    # and the room it has change through the transition.
+    state.channelSplitBlend = channelSplitBlend(state, xNozzle, rNozzle)
+    state.dcrData['splitBlend'] = state.channelSplitBlend[marchOrder]
 
     # Temperature-dependent wall alloy properties, sampled from
     # materials.wallMaterialCurves so the model is not tied to one alloy. The legacy

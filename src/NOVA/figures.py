@@ -1351,10 +1351,17 @@ def channelMeshFigure(nozzle):
     figure.add_trace(go.Surface(x = nozzle.zChannel, y = nozzle.xChannel, z = nozzle.yChannel,
                                 colorscale = _solid(_color('accent')), opacity = 0.975,
                                 showscale = False))
+    # A split channel's daughters, which carry on where the parent's sweep ends
+    if getattr(nozzle, 'xChannelSplitA', None) is not None:
+        for daughter in ((nozzle.xChannelSplitA, nozzle.yChannelSplitA, nozzle.zChannelSplitA),
+                         (nozzle.xChannelSplitB, nozzle.yChannelSplitB, nozzle.zChannelSplitB)):
+            figure.add_trace(go.Surface(x = daughter[2], y = daughter[0], z = daughter[1],
+                                        colorscale = _solid(_color('accent')), opacity = 0.975,
+                                        showscale = False))
     figure.add_trace(go.Scatter3d(x = nozzle.zChannelCenterline3D, y = nozzle.xChannelCenterline3D,
                                   z = nozzle.yChannelCenterline3D, mode = 'lines',
                                   line = dict(color = _color('yellow'), width = 10)))
-    for i in range(nozzle.numCrossSections):
+    for i in range(np.shape(nozzle.xChannel)[1]):
         figure.add_trace(go.Scatter3d(x = nozzle.zChannel[:, i], y = nozzle.xChannel[:, i],
                                       z = nozzle.yChannel[:, i], mode = 'lines', opacity = 0.8,
                                       line = dict(color = colors[i], width = 10), name = f'CS {i}'))

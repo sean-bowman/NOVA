@@ -662,6 +662,15 @@ class Nozzle:
         self.coolantBypassFraction                    = None     # [-], of the coolant's propellant
         self.maxCoolantTemperature                    = None     # [K], bulk coolant ceiling
         self.maxColdWallTemperature                   = None     # [K], coolant-side wall ceiling
+        self.channelSplitAreaRatio                    = None     # [-], where the channels double
+        self.channelSplitLength                       = None     # [parent pitches]
+        self.channelSplitBlend                        = None     # [-], progress through the split
+        self.xChannelSplitA                           = None     # [m], first daughter's sweep
+        self.yChannelSplitA                           = None     # [m]
+        self.zChannelSplitA                           = None     # [m]
+        self.xChannelSplitB                           = None     # [m], second daughter's sweep
+        self.yChannelSplitB                           = None     # [m]
+        self.zChannelSplitB                           = None     # [m]
         self.fuelMassFlow                             = None     # [kg/s], chamber fuel flow
         self.oxidizerMassFlow                         = None     # [kg/s], chamber oxidizer flow
         self.swirlPercent                             = None     # [-]

@@ -74,7 +74,8 @@ from .channelSections import (SECTIONFAMILIES, depthLimitedHalfExtent, helicalSp
 from .channelGeometry import (ChannelGeometryInputs,
                               generateCrossSections as buildCrossSections,
                               getMaxChannelRadius as maxChannelRadius)
-from .channelSizing import ChannelSizingState, channelSizingOutputs, solveChannelRadii
+from .channelSizing import ChannelSizingState, channelSizingOutputs, channelSplitBlend, solveChannelRadii
+from .channelSplit import daughterCenterlines, splitSeparation
 from .validation import (applyRules, arrayRule, choiceRule, integerRule, numericRule,
                          presentRule, read, textRule)
 
@@ -161,6 +162,8 @@ class RegenChannelState:
     minCoolantExitTemperature:                 Any = None
     maxCoolantTemperature:                     Any = None
     maxColdWallTemperature:                    Any = None
+    channelSplitAreaRatio:                     Any = None
+    channelSplitLength:                        Any = None
     minChannelRadius:                          Any = None
 
     # -- Read and written as the build proceeds -- #
@@ -191,6 +194,15 @@ class RegenChannelState:
     gasCoefficientProfile:                     Any = None
     gasSideIterationChanges:                   Any = None
     xChannel:                                  Any = None
+    # The two daughters of a split channel, swept from where the split starts; the parent's own
+    # sweep, xChannel, ends there
+    xChannelSplitA:                            Any = None
+    yChannelSplitA:                            Any = None
+    zChannelSplitA:                            Any = None
+    xChannelSplitB:                            Any = None
+    yChannelSplitB:                            Any = None
+    zChannelSplitB:                            Any = None
+    channelSplitBlend:                         Any = None
     xChannelCenterline2D:                      Any = None
     xChannelCenterline3D:                      Any = None
     xInletInterface:                           Any = None
@@ -234,7 +246,8 @@ class RegenChannelState:
 # outputs are appended rather than restated, because the build copies them onto its state by name
 # and a static read of this module cannot see that it does.
 _buildOutputs = (
-    'channelDepth', 'channelRadius', 'channelRibThickness', 'channelWidth', 'channelSizingSolution', 'gammaRegenSectionTrimmed',
+    'channelDepth', 'channelRadius', 'channelRibThickness', 'channelSplitBlend', 'channelWidth',
+    'channelSizingSolution', 'gammaRegenSectionTrimmed',
     'gasConstantRegenSectionTrimmed', 'molecularWeightRegenSectionTrimmed',
     'numInletInterfaceCS', 'numOutletInterfaceCS', 'rChannelCenterline2D', 'rChannelCenterline3D',
     'rInletInterface', 'rNozzleShell', 'rRegenNozzleInterfaced', 'rRegenNozzleTrimmed',
@@ -248,7 +261,9 @@ _buildOutputs = (
     'xRegenNozzleTrimmed', 'xOutletInterface', 'yChannel', 'yChannelCenterline3D',
     'yNozzleColdWallMesh', 'yNozzleHotWallMesh', 'yNozzleShellMesh',
     'zChannel', 'zChannelCenterline3D',
-    'zNozzleColdWallMesh', 'zNozzleHotWallMesh', 'zNozzleShellMesh')
+    'zNozzleColdWallMesh', 'zNozzleHotWallMesh', 'zNozzleShellMesh',
+    'xChannelSplitA', 'yChannelSplitA', 'zChannelSplitA',
+    'xChannelSplitB', 'yChannelSplitB', 'zChannelSplitB')
 
 regenChannelOutputs = tuple(sorted(set(_buildOutputs) | set(channelSizingOutputs)))
 
@@ -636,6 +651,8 @@ def _sizingState(state) -> 'ChannelSizingState':
         minCoolantExitTemperature          = state.minCoolantExitTemperature,
         maxCoolantTemperature              = state.maxCoolantTemperature,
         maxColdWallTemperature             = state.maxColdWallTemperature,
+        channelSplitAreaRatio              = state.channelSplitAreaRatio,
+        channelSplitLength                 = state.channelSplitLength,
         hotWallThickness                   = state.hotWallThickness,
         infillThickness                    = state.infillThickness,
         material                           = state.material,
@@ -760,9 +777,15 @@ def solveRegenChannels(state, thermal):
                                   channelRadius, crossSectionStyle, i = i, channelWidth = channelWidth,
                                   ribThickness = ribThickness)
 
-    def getMaxChannelRadius(rNozzle, i):
+    def getMaxChannelRadius(rNozzle, i, pitchFraction: float = 1.0):
 
-        return maxChannelRadius(_geometryInputs(state), rNozzle, i)
+        return maxChannelRadius(_geometryInputs(state), rNozzle, i, pitchFraction)
+
+    def splitBlendOnInterfacedWall():
+
+        '''How far through the channel split each station of the interfaced wall is.'''
+
+        return channelSplitBlend(state, state.xRegenNozzleInterfaced, state.rRegenNozzleInterfaced)
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Generate volute interfaces -- #
@@ -980,7 +1003,9 @@ def solveRegenChannels(state, thermal):
             rCenterline2DStep = np.insert(rCenterline2DStep, 0, 0)
 
             # Calculate the arc length of the nozzle region allocated to each channel.
-            nozzleArcSlice = 2*np.pi*rCenterline2D/state.nChannel - state.infillThickness
+            # Through a split the pair has the parent pitch less the separation already spent
+            nozzleArcSlice = 2*np.pi*rCenterline2D/state.nChannel - state.infillThickness \
+                - splitSeparation(state.channelSplitBlend, rCenterline2D, state.nChannel)
 
             # Calculate the diameter of each channel perpendicular to the pathline.
             channelDiameter = 2 * channelRadius
@@ -1077,8 +1102,10 @@ def solveRegenChannels(state, thermal):
         else:
             # A circle answers to the room between its neighbors and to the depth limit every
             # family shares, which is the only thing bounding it on a wide bell.
+            splitBlend = splitBlendOnInterfacedWall()
             for i in range(len(state.channelRadius)):
-                maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i),
+                maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i,
+                                                           1.0 - 0.5*splitBlend[i]),
                                        depthLimitedHalfExtent(state.maxChannelDepth))
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
@@ -1108,8 +1135,10 @@ def solveRegenChannels(state, thermal):
                                           - state.infillThickness, geometry.channelAspectRatio, geometry.maxChannelDepth)
             state.channelRadius = np.minimum(state.channelRadius, halfLimit)
         else:
+            splitBlend = splitBlendOnInterfacedWall()
             for i in range(len(state.channelRadius)):
-                maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i),
+                maxChannelRadius = min(getMaxChannelRadius(state.rRegenNozzleInterfaced, i,
+                                                           1.0 - 0.5*splitBlend[i]),
                                        depthLimitedHalfExtent(state.maxChannelDepth))
                 if state.channelRadius[i] > maxChannelRadius:
                     state.channelRadius[i] = maxChannelRadius
@@ -1152,6 +1181,7 @@ def solveRegenChannels(state, thermal):
             onWall[state.numCrossSections - aftCount:] = False
             state.wrapAngles = loxodromeWrap(meridional, rColdWall, state.channelHelixAngle, active = onWall)
         else:
+            state.channelSplitBlend = splitBlendOnInterfacedWall()
             state.wrapAngles = kineosAlgorithm(state.xChannelCenterline2D,state.rChannelCenterline2D,state.channelRadius)
 
         # -- Wrap -- #
@@ -1185,6 +1215,24 @@ def solveRegenChannels(state, thermal):
         state.xChannel, state.yChannel, state.zChannel, _ = \
             generateCrossSections(state.xChannelCenterline3D,state.yChannelCenterline3D,state.zChannelCenterline3D,state.channelRadius,state.channelType,
                                   channelWidth = state.channelWidth, ribThickness = state.channelRibThickness)
+
+        # A split channel is the parent up to where the split starts and two daughters from
+        # there, each the parent's line turned about the axis. Through the transition the two
+        # daughters overlap and their union is the fork; past it they are two channels.
+        blend = state.channelSplitBlend
+        if blend is not None and np.any(np.asarray(blend) > 0.0):
+            start = max(int(np.flatnonzero(np.asarray(blend) > 0.0)[0]) - 1, 0)
+            state.xChannel, state.yChannel, state.zChannel = \
+                state.xChannel[:, :start+1], state.yChannel[:, :start+1], state.zChannel[:, :start+1]
+            sweeps = []
+            for xDaughter, yDaughter, zDaughter in daughterCenterlines(
+                    state.xChannelCenterline3D, state.yChannelCenterline3D, state.zChannelCenterline3D,
+                    blend, state.nChannel):
+                xSweep, ySweep, zSweep, _ = generateCrossSections(xDaughter, yDaughter, zDaughter,
+                                                                  state.channelRadius, 'circle')
+                sweeps.append((xSweep[:, start:], ySweep[:, start:], zSweep[:, start:]))
+            (state.xChannelSplitA, state.yChannelSplitA, state.zChannelSplitA), \
+                (state.xChannelSplitB, state.yChannelSplitB, state.zChannelSplitB) = sweeps
 
     generate3DChannels()
 

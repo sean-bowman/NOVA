@@ -312,6 +312,20 @@ where $\theta$ is the wrap angle, $s_m$ the arc length along the cold wall's mer
 
 With the wrap angles in hand, the 2D centerline is rolled about the nozzle axis into three dimensions.
 
+### Splitting the channel
+
+A bell's circumference grows several times between the throat and the exit, and a channel count chosen for the throat leaves each channel a wide pitch downstream: either the channel grows with it, which slows the coolant and costs heat transfer, or it stays small and leans over to fill the pitch, which makes it longer. Wadel's bifurcated designs for NASA, and the tubes of the SSME and the RL10, double the count partway along instead. Setting `channelSplitAreaRatio` does that for circular channels: each parent forks into two daughters where the diverging wall reaches that area ratio, over `channelSplitLength` parent pitches.
+
+Through the fork the two daughters' centers part along the circumference on a cosine blend $\beta$, from coincident to half a parent pitch apart, so the passage is the union of two circles at a separation $d = \beta \pi R / N$:
+
+$$
+A = 2\pi r^2 - \left(2r^2\cos^{-1}{d \over 2r} - {d \over 2}\sqrt{4r^2 - d^2}\right), \qquad P = 4r\left(\pi - \cos^{-1}{d \over 2r}\right)
+$$
+
+At $d = 0$ that is one circle, and at $d = 2r$ two circles carrying one parent's flow have exactly the mass flux and hydraulic diameter of the two daughters each carrying half. So the sizing march stays one parent channel wide straight through the split: the flow per passage and the share of the hot wall are the parent's, and only the section and the room the pair has change. That room is the parent pitch less the separation already spent, which runs continuously from the parent's limit to the daughter's, and a daughter smaller than it leans by Kineo's Algorithm as any circle does. Mid-split the waisted section gains area faster than perimeter, so its hydraulic diameter swells and its mass flux falls, which is the dip in heat transfer Wadel's bifurcations show; the sizing march answers it by shrinking the channel there.
+
+In three dimensions each daughter is the parent's centerline turned about the nozzle axis by a quarter of the parent's angular pitch times $\beta$, so the two leave the parent and join their own runs tangentially. The parent is swept up to where the split starts and each daughter from there, and the three are exported as their own bodies, to be patterned and unioned in CAD as the single channel always is. A volute at a split end gathers twice the parent count. Rectangular and helical channels are refused a split: a rectangle would fork by a rib grown from nothing, whose own thickness the fin model does not carry.
+
 ### The cross sections
 
 A circle is drawn in the plane normal to the centerline, on a parallel transport frame: a frame that follows the curve without twisting about it. A circle is the same shape at any roll, so that is all it needs.

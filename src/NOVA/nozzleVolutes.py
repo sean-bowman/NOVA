@@ -199,6 +199,7 @@ class RegenVoluteState:
     maxVoluteBore:                         Any = None
     minVoluteWallThickness:                Any = None
     nChannel:                              Any = None
+    channelSplitBlend:                     Any = None
     numCSPointsVolute:                     Any = None
     numCSVolute:                           Any = None
     rChannelCenterline2D:                  Any = None
@@ -296,6 +297,28 @@ def solveRegenVolutes(state):
 
     # Validate inputs before volute generation
     validateRegenVoluteInputs(state)
+
+    def portCount(station: int) -> int:
+
+        '''
+
+        Channel ports at one end: the parent count, or twice it past a channel split.
+
+        A volute cannot gather channels partway through a split, where each pair is one passage
+        becoming two, so an end there is refused.
+
+        '''
+
+        blend = state.channelSplitBlend
+        progress = 0.0 if blend is None else float(np.asarray(blend)[station])
+        if 0.0 < progress < 1.0:
+            raise VoluteGenerationError(
+                message = (f'The jacket ends partway through its channel split, {100*progress:.0f} '
+                           f'percent of the way from one channel to two, where no volute can gather '
+                           f'it. Move the split or the end of the jacket.'),
+                context = createErrorContext(station = station, splitProgress = progress),
+                voluteType = 'inlet/outlet', failureMode = 'endInsideSplit')
+        return int(state.nChannel) * (2 if progress > 0.0 else 1)
 
     def portDiameter(station: int) -> float:
 
@@ -422,7 +445,8 @@ def solveRegenVolutes(state):
         scrollType = str(state.voluteScrollType).lower()
 
         tongueArea = sectionArea(family, hydraulicDiameter = tongueDiameter)
-        throatArea = constantVelocityThroatArea(tongueArea, state.nChannel, scrollType)
+        ports = portCount(station)
+        throatArea = constantVelocityThroatArea(tongueArea, ports, scrollType)
         bore = 2.0*np.sqrt(throatArea/np.pi)
 
         if state.maxVoluteBore is not None and np.isfinite(state.maxVoluteBore) \
@@ -440,7 +464,7 @@ def solveRegenVolutes(state):
                     throatBore = bore,
                     maxVoluteBore = state.maxVoluteBore,
                     channelPortDiameter = portDiameter(station),
-                    portsPerRun = portsPerScroll(state.nChannel, scrollType),
+                    portsPerRun = portsPerScroll(ports, scrollType),
                     scrollType = scrollType),
                 voluteType = side,
                 failureMode = 'throatBeyondLimit')
@@ -448,8 +472,7 @@ def solveRegenVolutes(state):
         velocity, head = None, None
         if state.coolant is not None and state.coolantMassFlow is not None:
             density = float(fluidProps(state.coolant, 'TP', 'D', temperature, pressure))
-            runFlow = state.coolantMassFlow*portsPerScroll(state.nChannel, scrollType) \
-                / state.nChannel
+            runFlow = state.coolantMassFlow*portsPerScroll(ports, scrollType) / ports
             velocity = runFlow/(density*throatArea)
             head = 0.5*density*velocity**2
             drop = float(state.coolantInitialPressure - state.coolantExitPressure)

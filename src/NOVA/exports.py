@@ -91,6 +91,13 @@ def exportData(nozzle, filename: str = 'default'):
         centerlineArray = np.array([nozzle.zChannelCenterline3D, nozzle.yChannelCenterline3D, nozzle.xChannelCenterline3D]).T
         writeFile(filename[:-4] + 'ChannelCenterline3D.txt', centerlineArray*1e3)
         py2cad(filename[:-4] + 'Channel.stl', nozzle.zChannel, nozzle.yChannel, -nozzle.xChannel)
+        # A split channel's two daughters, each patterned with the parent; their union through the
+        # transition is the fork
+        if getattr(nozzle, 'xChannelSplitA', None) is not None:
+            py2cad(filename[:-4] + 'ChannelSplitA.stl', nozzle.zChannelSplitA, nozzle.yChannelSplitA,
+                   -nozzle.xChannelSplitA)
+            py2cad(filename[:-4] + 'ChannelSplitB.stl', nozzle.zChannelSplitB, nozzle.yChannelSplitB,
+                   -nozzle.xChannelSplitB)
 
     # The channel size distribution the run built, which a later run rebuilds by naming this
     # file as its manualChannelProfile instead of searching for the sizes again.

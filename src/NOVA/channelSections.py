@@ -87,6 +87,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .channelSplit import circleUnion
+
 # The families the package builds, and how a figure names them.
 SECTIONFAMILIES = ('circle', 'rectangular', 'helical')
 SECTIONLABELS   = {'circle': 'Circular', 'rectangular': 'Rectangular', 'helical': 'Helical'}
@@ -223,7 +225,7 @@ def roundedRectangle(width, depth, cornerRadius) -> tuple:
     return corner, width*depth - (4 - np.pi)*corner**2, 2*(width + depth) - (8 - 2*np.pi)*corner
 
 def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
-                      ribThickness = 0.0) -> SectionProperties:
+                      ribThickness = 0.0, separation = None) -> SectionProperties:
 
     '''
 
@@ -241,6 +243,10 @@ def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
         Corner radius of a rectangle or a helix [m].
     ribThickness : array_like
         Rib between neighboring channels, at its root [m]. Used by a rectangle or a helix.
+    separation : array_like | None
+        For a circle through a channel split, the distance between the two daughters' centers
+        across the section [m]. Where it is above zero the section is the two circles' union
+        (channelSplit.circleUnion); where it is zero or unset, one circle.
 
     Returns:
     --------
@@ -262,7 +268,20 @@ def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
         flowArea          = np.pi*halfExtent**2
         wettedPerimeter   = np.pi*2*halfExtent
         hydraulicDiameter = np.sqrt(4 * flowArea / np.pi)
+        heatedPerimeter   = np.pi*halfExtent
         zeros             = np.zeros_like(halfExtent)
+
+        # Through a split the passage is two circles' union; elsewhere the single circle above is
+        # left exactly as it was
+        if separation is not None:
+            apart = np.broadcast_to(np.asarray(separation, dtype = float), halfExtent.shape)
+            if np.any(apart > 0.0):
+                union = circleUnion(halfExtent, apart)
+                inSplit = apart > 0.0
+                flowArea          = np.where(inSplit, union['flowArea'], flowArea)
+                wettedPerimeter   = np.where(inSplit, union['wettedPerimeter'], wettedPerimeter)
+                hydraulicDiameter = np.where(inSplit, union['hydraulicDiameter'], hydraulicDiameter)
+                heatedPerimeter   = np.where(inSplit, union['heatedPerimeter'], heatedPerimeter)
 
         return SectionProperties(
             halfExtent        = halfExtent,
@@ -272,7 +291,7 @@ def sectionProperties(family: str, halfExtent, width = None, cornerRadius = 0.0,
             flowArea          = flowArea,
             wettedPerimeter   = wettedPerimeter,
             hydraulicDiameter = hydraulicDiameter,
-            heatedPerimeter   = np.pi*halfExtent,
+            heatedPerimeter   = heatedPerimeter,
             finHeight         = zeros,
             finThickness      = zeros)
 

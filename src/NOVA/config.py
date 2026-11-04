@@ -336,6 +336,10 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.coolantBypassFraction          = valueOr('coolantBypassFraction', None)
         nozzle.maxCoolantTemperature          = valueOr('maxCoolantTemperature', None)
         nozzle.maxColdWallTemperature         = valueOr('maxColdWallTemperature', None)
+        # A channel split doubles the circular channels where the diverging wall reaches an area
+        # ratio, over a transition measured in parent pitches
+        nozzle.channelSplitAreaRatio          = valueOr('channelSplitAreaRatio', None)
+        nozzle.channelSplitLength             = valueOr('channelSplitLength', None)
 
         # -- Regen Volute Inputs -- #
         nozzle.makeInletVolute                = inputsPath['makeInletVolute']

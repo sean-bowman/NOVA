@@ -338,6 +338,20 @@ harnessCases = {
             'extensionFilmSlots': [{'areaRatio': 10.0, 'slotHeight': 0.004, 'source': 'turbineExhaust'}],
         },
     },
+    # Sixty circular channels forking to 120 at an area ratio of three over six parent pitches,
+    # the jacket cut at ten so the aft volute gathers the daughters. It pins the union section
+    # through the transition, the room each daughter has past it and the forked geometry.
+    'regenSplit': {
+        'config': 'NOVANozzle.json',
+        'description': 'Circular channels splitting from 60 to 120 at an area ratio of 3',
+        'overrides': {
+            **regenOverrides,
+            'regenTruncationType': 'er',
+            'regenTruncationValue': 10.0,
+            'channelSplitAreaRatio': 3.0,
+            'channelSplitLength': 6.0,
+        },
+    },
     'contourEffectiveGamma': {
         'config': 'NOVANozzle.json',
         'description': 'The contour solved at the effective gamma rather than the chamber value',
