@@ -189,6 +189,73 @@ class AnalysisTab(ttk.Frame):
             row(cooling, 'Coolant exit pressure',
                 getattr(nozzle, 'coolantExitPressure', None), '{:.0f}', 'Pa')
             row(cooling, 'Coolant mass flow', getattr(nozzle, 'coolantMassFlow', None), '{:.3f}', 'kg/s')
+            row(cooling, 'Coolant circuit', {'singlePass': 'A, single pass', 'oneAndHalfPass': 'B, one and a half pass',
+                                             'twoPass': 'C, two pass'}.get(getattr(nozzle, 'coolantCircuit', None),
+                                                                           'A, single pass'))
+            if getattr(nozzle, 'channelSplitAreaRatio', None):
+                row(cooling, 'Channels split to', 2 * int(getattr(nozzle, 'nChannel', 0) or 0), '{:.0f}')
+                row(cooling, 'Split area ratio', getattr(nozzle, 'channelSplitAreaRatio', None), '{:.3g}')
+
+            # Each pass of a multi-pass jacket, and the ring between them
+            circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+            if circuit is not None:
+                passes = section('Coolant passes')
+                for passSolution in (circuit.down, circuit.up):
+                    state = passSolution.state
+                    row(passes, f'{passSolution.name.capitalize()} pass',
+                        f'{passSolution.channelCount} channels, {1e3*passSolution.channelMassFlow:.1f} g/s each')
+                    row(passes, f'  coolant', f'{float(state.coolantInitialTemperature):.1f} to '
+                                              f'{float(state.coolantExitTemperature):.1f} K')
+                    row(passes, f'  pressure drop', float(state.coolantInitialPressure) - float(state.coolantExitPressure),
+                        '{:.0f}', 'Pa')
+                    row(passes, f'  peak hot wall', float(max(passSolution.results['wallTemperature'])), '{:.1f}', 'K')
+                row(passes, 'Turnaround loss', circuit.turnaround.pressureDrop, '{:.0f}', 'Pa')
+                row(passes, 'Turnaround section radius', self._mm(circuit.turnaround.sectionRadius), '{:.1f}', 'mm')
+                downRib, upRib = circuit.ribHeatBalance()
+                row(passes, 'Rib heat into the down pass', downRib, '{:.0f}', 'W')
+                row(passes, 'Outer iteration', f'{circuit.iterations} passes, last change {circuit.history[-1]:.3f} K')
+
+        # The extension's own circuit, the gas generator, and the films over the extension
+        extensionCircuit = getattr(nozzle, 'extensionCircuitSolution', None)
+        if extensionCircuit is not None:
+            extensionSection = section('Extension circuit')
+            row(extensionSection, 'Passes', extensionCircuit.passes, '{:.0f}')
+            row(extensionSection, 'Direction', extensionCircuit.direction)
+            row(extensionSection, 'Coolant', f'{extensionCircuit.massFlow:.3g} kg/s of {extensionCircuit.coolant}')
+            row(extensionSection, 'Outlet', f'{extensionCircuit.outlet} at area ratio {extensionCircuit.outletAreaRatio:.3g}')
+            row(extensionSection, 'Outlet temperature', extensionCircuit.outletTemperature, '{:.1f}', 'K')
+            row(extensionSection, 'Peak hot wall', float(max(extensionCircuit.wallTemperature)), '{:.1f}', 'K')
+
+        exhaust = getattr(nozzle, 'turbineExhaust', None)
+        if exhaust is not None:
+            generator = section('Gas generator and turbine')
+            row(generator, 'Gas generator temperature', exhaust.gasGeneratorTemperature, '{:.0f}', 'K')
+            row(generator, 'Turbine exhaust temperature', exhaust.temperature, '{:.0f}', 'K')
+            row(generator, 'Turbine exhaust pressure', exhaust.pressure, '{:.0f}', 'Pa')
+            row(generator, 'Turbine power', exhaust.turbinePower, '{:.4g}', 'W')
+            if exhaust.condensedSpecies:
+                row(generator, 'Condensed at equilibrium', f'{100*exhaust.condensedMassFraction:.1f} % by mass')
+
+        film = getattr(nozzle, 'extensionFilmSolution', None)
+        if film is not None:
+            films = section('Films over the extension')
+            for layer in film.layers:
+                row(films, layer.name, f'{layer.massFlow:.3g} kg/s at {layer.coolantTemperature:.0f} K, '
+                                       f'velocity ratio {layer.velocityRatio:.2f}')
+            margin = getattr(nozzle, 'extensionTemperatureMargin', None)
+            if margin is not None:
+                row(films, 'Shell peak wall', getattr(nozzle, 'extensionPeakWallTemperature', None), '{:.0f}', 'K')
+                row(films, 'Shell margin to its limit', margin, '{:.0f}', 'K')
+
+        if summary is not None and summary.extraMassFlows:
+            engine = section('Engine flows')
+            for name, flow in summary.extraMassFlows.items():
+                row(engine, name, flow, '{:.3f}', 'kg/s')
+            row(engine, 'Engine total flow', summary.engineTotalMassFlow, '{:.3f}', 'kg/s')
+            row(engine, 'Film thrust, kept apart', summary.filmThrustUnmixed, '{:.0f}', 'N')
+            row(engine, 'Film thrust, fully mixed', summary.filmThrustMixed, '{:.0f}', 'N')
+            row(engine, 'Engine Isp after friction, design back pressure',
+                summary.engineSpecificImpulse.get('design'), '{:.1f}', 's')
 
         # The march's own numbers first, because they say whether its picture can be used, then
         # the correlated quantities the march cannot produce

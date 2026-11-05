@@ -236,3 +236,22 @@ def testTheViewTabOffersOnlyWhatARunProduced():
                                       'extensionWallTemperature': np.ones(40)})
     available = availableViews(cooled, {'figures': {}})
     assert {'plume', 'channelMesh', 'volute'} | cooling <= available
+
+def testACircuitChoiceExplainsTheOptionSelected():
+    from novaGui import configSchema
+    from novaGui.widgets import fieldHelpText
+
+    spec = next(field for field in configSchema.allFields() if field.key == 'coolantCircuit')
+    assert set(spec.optionHelp) == {value for _, value in spec.choices}
+    assert 'F-1' in fieldHelpText(spec, value = 'twoPass')
+    assert 'J-2' in fieldHelpText(spec, value = 'oneAndHalfPass')
+    assert 'F-1' not in fieldHelpText(spec)
+
+def testEveryOptionAccountNamesWhereItFitsAndWhatFlewIt():
+    from novaGui import configSchema
+
+    for table in (configSchema.coolantCircuitHelp, configSchema.extensionOutletHelp):
+        for entry in table.values():
+            assert set(entry) == {'name', 'circuit', 'viable', 'heritage'}
+            assert all(entry[key].strip() for key in entry)
+

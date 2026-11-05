@@ -300,7 +300,17 @@ def setInputs(nozzle, inputsPath: str | dict) -> None:
         nozzle.turbinePressureRatio           = valueOr('turbinePressureRatio', None)
         nozzle.turbineEfficiency              = valueOr('turbineEfficiency', None)
         nozzle.turbineExhaustMassFlow         = valueOr('turbineExhaustMassFlow', None)
+        # A list from a JSON file; JSON text from the GUI's slot field
         slots = inputsPath.get('extensionFilmSlots')
+        if isinstance(slots, str):
+            import json
+            try:
+                slots = json.loads(slots) if slots.strip() else []
+            except ValueError as error:
+                raise InvalidInputError(
+                    message = f'The extension film slots are not readable as a JSON list: {error}.',
+                    parameterName = 'extensionFilmSlots', value = slots,
+                    validRange = 'a JSON list of slot objects') from error
         nozzle.extensionFilmSlots             = slots if isinstance(slots, (list, tuple)) else []
         nozzle.extensionFilmModel             = nameOr('extensionFilmModel', nozzle.filmCoolingModel)
 

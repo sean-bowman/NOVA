@@ -589,3 +589,142 @@ def drawExtension(pane: MplPane, nozzle) -> None:
     fluxAxes.set_title(f'Energy balance closes to {residual:.1e}', color = theme.textMuted, fontsize = 9)
     _legend(fluxAxes, loc = 'upper right')
     pane.redraw()
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The coolant circuit -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+circuitNames = {'singlePass': 'A, single pass', 'oneAndHalfPass': 'B, one and a half pass', 'twoPass': 'C, two pass'}
+
+def _arrows(ax, x, r, color: str, forward: bool, count: int = 4) -> None:
+
+    '''Arrowheads along a line, pointing the way the coolant runs.'''
+
+    if len(x) < 3:
+        return
+    for k in np.linspace(0, len(x) - 2, count + 2)[1:-1].astype(int):
+        start, end = (k, k + 1) if forward else (k + 1, k)
+        ax.annotate('', xy = (x[end], r[end]), xytext = (x[start], r[start]),
+                    arrowprops = dict(arrowstyle = '-|>', color = color, lw = 1.4))
+
+def drawCircuit(pane: MplPane, nozzle) -> None:
+
+    '''
+
+    The nozzle's half section with the coolant's paths drawn on it: each family of the chamber
+    jacket with the way it runs, its manifolds, turnaround and split, the extension's own circuit
+    and its outlet, the film slots and the radiation-cooled shell.
+
+    '''
+
+    results = thermalResults(nozzle)
+    if results is None:
+        pane.message('No cooling jacket was built for this run.')
+        return
+    (ax,) = _panels(pane, 1)
+    xWall, rWall = np.asarray(nozzle.xNozzleWall), np.asarray(nozzle.rNozzleWall)
+    ax.plot(xWall, rWall, color = theme.textDim, linewidth = 1.2, label = 'Hot wall')
+    step = 0.03 * float(np.max(rWall))
+
+    x, r = np.asarray(results['xHotWall3D']), np.asarray(results['rHotWall3D'])
+    circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+    if circuit is None:
+        coflow = getattr(nozzle, 'jacketFlowDirection', 'counterflow') == 'coflow'
+        ax.plot(x, r + step, color = theme.accent, linewidth = 2.2, label = 'Chamber jacket')
+        _arrows(ax, x, r + step, theme.accent, forward = coflow)
+        inlet, outlet = (0, -1) if coflow else (-1, 0)
+        ax.plot(x[inlet], r[inlet] + step, marker = 'v', color = theme.accent, markersize = 9,
+                linestyle = 'none', label = 'Inlet manifold')
+        ax.plot(x[outlet], r[outlet] + step, marker = '^', color = theme.accent, markersize = 9,
+                linestyle = 'none', label = 'Outlet manifold')
+    else:
+        down = circuit.down.stations
+        ax.plot(x, r + step, color = theme.accent, linewidth = 2.2,
+                label = f'Up family, {circuit.up.channelCount} channels')
+        _arrows(ax, x, r + step, theme.accent, forward = False)
+        ax.plot(x[down], r[down] + 2 * step, color = theme.blue, linewidth = 2.2,
+                label = f'Down family, {circuit.down.channelCount} channels')
+        _arrows(ax, x[down], r[down] + 2 * step, theme.blue, forward = True)
+        ax.plot(x[down[0]], r[down[0]] + 2 * step, marker = 'v', color = theme.blue, markersize = 9,
+                linestyle = 'none', label = 'Inlet manifold')
+        ax.plot(x[-1], r[-1] + 1.5 * step, marker = 'o', markersize = 12, markerfacecolor = 'none',
+                markeredgecolor = theme.purple, markeredgewidth = 2.0, linestyle = 'none',
+                label = 'Turnaround ring')
+        ax.plot(x[0], r[0] + step, marker = '^', color = theme.accent, markersize = 9, linestyle = 'none',
+                label = 'Outlet manifold')
+
+    blend = getattr(nozzle, 'channelSplitBlend', None)
+    xInterfaced = getattr(nozzle, 'xRegenNozzleInterfaced', None)
+    if blend is not None and xInterfaced is not None:
+        inside = np.flatnonzero((np.asarray(blend) > 0.0) & (np.asarray(blend) < 1.0))
+        if inside.size:
+            ax.axvspan(float(np.asarray(xInterfaced)[inside[0]]), float(np.asarray(xInterfaced)[inside[-1]]),
+                       color = theme.purple, alpha = 0.18, label = 'Channel split')
+
+    extension = getattr(nozzle, 'extensionCircuitSolution', None)
+    xExtension = getattr(nozzle, 'xExtension', None)
+    if extension is not None and xExtension is not None:
+        xe = np.asarray(xExtension)[extension.stations]
+        re = np.asarray(nozzle.rExtension)[extension.stations]
+        ax.plot(xe, re + step, color = theme.orange, linewidth = 2.2,
+                label = f'Extension circuit, outlet {extension.outlet}')
+        _arrows(ax, xe, re + step, theme.orange, forward = extension.direction == 'coflow')
+    shell = getattr(nozzle, 'extensionWallTemperature', None)
+    if shell is not None and xExtension is not None:
+        start = len(xExtension) - len(shell)
+        ax.plot(np.asarray(xExtension)[start:], np.asarray(nozzle.rExtension)[start:] + step, color = theme.red,
+                linewidth = 1.6, linestyle = '--', label = 'Radiation-cooled shell')
+
+    film = getattr(nozzle, 'extensionFilmSolution', None)
+    if film is not None:
+        for layer in film.layers:
+            xf = float(film.x[layer.injectionIndex])
+            rf = float(np.interp(xf, xWall, rWall))
+            ax.plot(xf, rf - step, marker = '>', color = theme.cyan, markersize = 9, linestyle = 'none')
+            ax.annotate(layer.name.split(' slot')[0], (xf, rf - step), xytext = (4, -12),
+                        textcoords = 'offset points', color = theme.cyan, fontsize = 7)
+
+    ax.set_xlabel('Nozzle axis [m]')
+    ax.set_ylabel('Radius [m]')
+    ax.set_aspect('equal', adjustable = 'datalim')
+    title = 'Coolant circuit: ' + circuitNames.get(getattr(nozzle, 'coolantCircuit', None), 'A, single pass')
+    if extension is not None:
+        title += ', with an extension circuit (D)'
+    ax.set_title(title, color = theme.text)
+    _legend(ax, loc = 'upper left')
+    pane.redraw()
+
+def drawPasses(pane: MplPane, nozzle) -> None:
+
+    '''Each pass's coolant and hot wall: the chamber jacket's two families and the extension circuit.'''
+
+    circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+    extension = getattr(nozzle, 'extensionCircuitSolution', None)
+    if circuit is None and extension is None:
+        pane.message('This run has a single pass and no extension circuit.')
+        return
+    coolantAxes, wallAxes = _panels(pane, 2)
+    if circuit is not None:
+        for passSolution, color in ((circuit.down, theme.blue), (circuit.up, theme.accent)):
+            x = np.asarray(passSolution.results['xHotWall3D'])
+            coolantAxes.plot(x, passSolution.results['temperature'], color = color, linewidth = 1.8,
+                             label = f'{passSolution.name} pass')
+            wallAxes.plot(x, passSolution.results['wallTemperature'], color = color, linewidth = 1.6,
+                          label = f'{passSolution.name} family')
+    if extension is not None:
+        x = np.asarray(nozzle.xExtension)[extension.stations]
+        coolantAxes.plot(x, extension.sizing.channelThermalResults['temperature'], color = theme.orange,
+                         linewidth = 1.8, label = 'extension circuit')
+        wallAxes.plot(x, extension.wallTemperature, color = theme.orange, linewidth = 1.6,
+                      label = 'extension circuit')
+    limit = getattr(nozzle, 'maxWallTemperature', None)
+    if limit:
+        wallAxes.axhline(float(limit), color = theme.red, linewidth = 1.0, linestyle = '--')
+    coolantAxes.set_ylabel('Coolant temperature [K]')
+    wallAxes.set_ylabel('Hot wall temperature [K]')
+    wallAxes.set_xlabel('Nozzle axis [m]')
+    coolantAxes.set_title('Coolant and hot wall of each pass', color = theme.text)
+    _legend(coolantAxes)
+    _legend(wallAxes)
+    _throat(nozzle, (coolantAxes, wallAxes))
+    pane.redraw()

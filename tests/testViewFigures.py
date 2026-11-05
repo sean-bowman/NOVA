@@ -197,3 +197,57 @@ def testTheFieldViewDraws(tkRoot, quantity):
     pane.render(drawField, _syntheticNozzle(), quantity)
     pane.figure.canvas.draw()
     assert pane.figure.get_axes()
+
+def _multiPassNozzle():
+
+    '''A jacketed run whose coolant goes down one family and back up the other.'''
+
+    nozzle = _cooledNozzle()
+    results = nozzle.channelThermalResults
+    stations = len(results['xHotWall3D'])
+    down = np.arange(12, stations)
+
+    def passOf(name, picked, count):
+        passResults = {'xHotWall3D': np.asarray(results['xHotWall3D'])[picked],
+                       'temperature': np.linspace(40.0, 160.0, len(picked)),
+                       'wallTemperature': np.linspace(500.0, 700.0, len(picked))}
+        return types.SimpleNamespace(name = name, stations = picked, channelCount = count, results = passResults)
+
+    nozzle.coolantCircuit = 'oneAndHalfPass'
+    nozzle.coolantCircuitSolution = types.SimpleNamespace(
+        circuit = 'oneAndHalfPass', down = passOf('down', down, 30), up = passOf('up', np.arange(stations), 30))
+    return nozzle
+
+@pytest.mark.parametrize('build', [_cooledNozzle, _multiPassNozzle])
+def testTheCircuitViewDrawsInBothModes(tkRoot, build):
+    from novaGui import theme, thermalPlots
+    from novaGui.plotting import MplPane
+
+    theme.applyTheme(tkRoot, 'dark')
+    pane = MplPane(tkRoot)
+    nozzle = build()
+    for mode in ('dark', 'light'):
+        theme.setMode(tkRoot, mode, matplotlib = False)
+        pane.render(thermalPlots.drawCircuit, nozzle)
+        pane.figure.canvas.draw()
+        assert len(pane.figure.get_axes()) == 1
+
+def testThePassesViewDrawsBothFamilies(tkRoot):
+    from novaGui import theme, thermalPlots
+    from novaGui.plotting import MplPane
+
+    theme.applyTheme(tkRoot, 'dark')
+    pane = MplPane(tkRoot)
+    pane.render(thermalPlots.drawPasses, _multiPassNozzle())
+    pane.figure.canvas.draw()
+    coolantAxes = pane.figure.get_axes()[0]
+    # The two families; the throat marker carries no label
+    assert len([line for line in coolantAxes.get_lines() if not line.get_label().startswith('_')]) == 2
+
+def testThePassesViewIsOfferedOnlyForAMultiPassOrExtensionCircuit():
+    from novaGui.tabs.viewTab import availableViews
+
+    assert 'passes' not in availableViews(_cooledNozzle(), {})
+    assert 'passes' in availableViews(_multiPassNozzle(), {})
+    assert 'circuit' in availableViews(_cooledNozzle(), {})
+

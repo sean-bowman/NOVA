@@ -67,6 +67,17 @@ def _voluteStages() -> list:
         Stage(r'Generating Outlet Volute',                0.96, 0.97, 'outlet volute'),
     ]
 
+def _extensionStages() -> list:
+
+    # The gas generator, the films over the extension, the extension's own circuit and the
+    # radiation-cooled shell, in the order the pipeline reaches them after the jacket
+    return [
+        Stage(r'Gas generator',                           0.962, 0.963, 'gas generator'),
+        Stage(r'Extension film',                          0.963, 0.964, 'films over the extension'),
+        Stage(r'Extension circuit',                       0.964, 0.968, 'extension circuit'),
+        Stage(r'Radiative extension',                     0.968, 0.969, 'radiation-cooled extension'),
+    ]
+
 def _plumeStages(cooling: bool) -> list:
 
     # The march takes seconds against a jacket solve of minutes, but a large share of a
@@ -100,12 +111,18 @@ class StageTracker:
                    or config.get('makeOutletVolute') in (True, 'on'))
 
         plume = config.get('plumeAmbientPressure') is not None and config.get('plumeFieldReach') is not None
+        extension = (config.get('makeRadiativeExtension') in (True, 'on')
+                     or config.get('extensionCircuit') in (True, 'on')
+                     or config.get('gasGeneratorMixtureRatio') not in (None, '')
+                     or config.get('extensionFilmSlots') not in (None, '', [], '[]'))
 
         self.stages = _contourStages()
         if cooling:
             self.stages += _coolingStages()
             if volutes:
                 self.stages += _voluteStages()
+        if extension:
+            self.stages += _extensionStages()
         if plume:
             self.stages += _plumeStages(cooling)
         self.stages += _outputStages()

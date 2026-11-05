@@ -25,6 +25,7 @@ Date:   08/28/2026
 
 '''
 
+import json
 import tkinter as tk
 from tkinter import font as tkfont
 from tkinter import ttk
@@ -33,7 +34,7 @@ from . import theme
 from . import units
 from . import backend
 
-def fieldHelpText(fieldSpec, maximumOptions: int = 12) -> str:
+def fieldHelpText(fieldSpec, maximumOptions: int = 12, value = None) -> str:
 
     '''
 
@@ -45,6 +46,8 @@ def fieldHelpText(fieldSpec, maximumOptions: int = 12) -> str:
         The field.
     maximumOptions : int
         Options listed before the rest are counted rather than named.
+    value : Any
+        The value selected, whose own account is added where the choice carries one.
 
     Returns:
     --------
@@ -53,6 +56,10 @@ def fieldHelpText(fieldSpec, maximumOptions: int = 12) -> str:
     '''
 
     parts = [fieldSpec.help.strip()] if fieldSpec.help else []
+    # The selected option's own account, where the choice carries one
+    if value is not None and value in getattr(fieldSpec, 'optionHelp', {}):
+        from .configSchema import optionHelpText
+        parts.append(optionHelpText(fieldSpec.optionHelp[value]))
     if fieldSpec.kind == 'choice' and fieldSpec.choices:
         labels = fieldSpec.choiceLabels()
         listed = labels[:maximumOptions]
@@ -400,7 +407,10 @@ class FieldRow:
         if helpText:
             self._info = ttk.Label(self._labelCell, style = 'Info.Card.TLabel', cursor = 'question_arrow')
             self._info.pack(side = 'left')
-            self.tooltip = Tooltip(self._info, helpText, delayMs = 250)
+            # A choice whose options carry their own account shows the selected one's
+            provider = ((lambda: fieldHelpText(fieldSpec, value = self.get())) if fieldSpec.optionHelp
+                        else helpText)
+            self.tooltip = Tooltip(self._info, provider, delayMs = 250)
 
         if fieldSpec.kind == 'bool':
             self._var = tk.BooleanVar(value = self._asBool(fieldSpec.default))
@@ -560,6 +570,9 @@ class FieldRow:
             return
         if isinstance(value, float) and value.is_integer():
             self._var.set(str(int(value)))
+        elif isinstance(value, (list, dict)):
+            # A structured value, the film slots, round-trips as JSON text
+            self._var.set(json.dumps(value) if value else '')
         else:
             self._var.set(str(value))
 

@@ -186,10 +186,22 @@ def build() -> list:
         app.notebook.select(app.viewTab)
         app.viewTab.select('plume')
 
+    def circuitSection():
+        # The coolant circuit choice and the description of the circuit selected, at the top of the form
+        app.notebook.select(app.configTab)
+        section = app.configTab._sections['Coolant Circuit']
+        section.setOpen(True)
+        app.update()
+        body = app.configTab._scrollBody
+        body.master.yview_moveto(max(section.winfo_y() - 12, 0) / max(body.winfo_height(), 1))
+
     photographer.step(tab(app.configTab), 'designDark')
     photographer.step(tooltip, 'designHelp', pause = 900)
-    photographer.step(lambda: (closeTooltip(), view('mach')()), 'viewMach', pause = 2500)
+    photographer.step(lambda: (closeTooltip(), circuitSection()), 'designCircuit', pause = 1500)
+    photographer.step(view('mach'), 'viewMach', pause = 2500)
     photographer.step(view('plume'), 'viewPlume', pause = 2500)
+    photographer.step(view('circuit'), 'viewCircuit', pause = 2000)
+    photographer.step(view('passes'), 'viewPasses', pause = 2000)
     photographer.step(view('wallMap'), 'viewJacket', pause = 2000)
     photographer.step(view('film'), 'viewFilm', pause = 2500)
     photographer.step(view('channelMesh'), 'viewChannelMesh', pause = 6000)
@@ -198,6 +210,7 @@ def build() -> list:
     photographer.step(tab(app.exportTab), 'export')
     photographer.step(light, 'designLight', pause = 2000)
     photographer.step(lightView, 'viewPlumeLight', pause = 3000)
+    photographer.step(circuitSection, 'designCircuitLight', pause = 1500)
 
     return photographer.run()
 

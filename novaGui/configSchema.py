@@ -83,6 +83,9 @@ class Field:
     fold: str = None
     hidden: bool = False
     dimension: object = None      # set in __post_init__ from `unit`; drives the unit dropdown
+    # For a choice, what each option is for: a dict keyed by the option's backend value, each a
+    # dict of 'name', 'circuit', 'viable' and 'heritage' text, shown for the option selected
+    optionHelp: dict = field(default_factory = dict)
 
     def __post_init__(self):
 
@@ -241,6 +244,66 @@ class Group:
 # and the form has no row for them.
 forcedFlags = ('export', 'plotsEnabled')
 
+# -- What each coolant circuit is for -- #
+
+# Architecture A to D: the path the coolant takes, where the circuit is the usual choice, and the
+# engines that flew it. The GUI shows the selected option's entry under the circuit choice and in
+# its help; docs/regenCoolingArchitectures.md carries the same table with its sources.
+coolantCircuitHelp = {
+    'singlePass': {
+        'name': 'A. Single pass',
+        'circuit': 'In at the aft end of the jacket, up every channel to the injector, counterflow '
+                   'to the gas. Carried to the exit, the inlet manifold sits at the exit.',
+        'viable': 'Small chambers, and any engine whose aft manifold mass and envelope are '
+                  'acceptable. The coldest coolant meets the bell and reaches the throat warmed.',
+        'heritage': 'SSME nozzle tubes, inlet at the exit; NERVA.'},
+    'oneAndHalfPass': {
+        'name': 'B. One and a half pass',
+        'circuit': 'In at a manifold partway down the bell, down one family of alternating channels '
+                   'to a turnaround ring at the aft end, then up the other family to the injector. '
+                   'Forward of the manifold every channel runs up.',
+        'viable': 'Hydrogen, which wants warming before it reaches the throat; upper stages with '
+                  'long bells, where the manifold sits where the bell is narrow.',
+        'heritage': 'J-2: 180 tubes down from the manifold, 360 up. RL10.'},
+    'twoPass': {
+        'name': 'C. Two pass',
+        'circuit': 'In at the injector end, down one family of alternating channels to a turnaround '
+                   'ring at the aft end, and back up the other.',
+        'viable': 'Large tube-wall boosters with dense coolant. Both manifolds sit forward of the '
+                  'gimbal, which keeps the moving mass and the natural frequency in hand. It costs '
+                  'throat room: both families pass the throat.',
+        'heritage': 'F-1: alternating down and up tubes carrying 70 percent of the fuel.'},
+}
+
+extensionOutletHelp = {
+    'return': {
+        'name': 'Returned to the feed',
+        'circuit': 'The extension circuit\'s coolant goes back to the cycle with the chamber jacket\'s.',
+        'viable': 'Where the coolant is too valuable to dump: staged combustion and expander '
+                  'cycles. It is held with the chamber jacket to the chamber\'s flow of the propellant.',
+        'heritage': 'SSME nozzle circuit, in parallel with the main chamber circuit.'},
+    'film': {
+        'name': 'Dumped as a film',
+        'circuit': 'The coolant leaves the circuit through a slot at its outlet and films the shell '
+                   'beyond. Slot it with an extensionCircuitOutlet entry in the film slots.',
+        'viable': 'Gas generator engines with a long extension: the dumped coolant cools the rest of '
+                  'the bell before it leaves.',
+        'heritage': 'Vulcain 2: upper nozzle hydrogen dumped over the lower nozzle with the turbine '
+                    'exhaust.'},
+    'overboard': {
+        'name': 'Dumped overboard',
+        'circuit': 'The coolant leaves the engine at the circuit\'s outlet with no thrust counted.',
+        'viable': 'The simplest plumbing, and the costliest in specific impulse.',
+        'heritage': 'Development hardware and heat sink tests.'},
+}
+
+def optionHelpText(entry: dict) -> str:
+
+    '''One option's help as text: its name, the circuit, where it fits and what flew it.'''
+
+    return (f"{entry['name']}. {entry['circuit']}\n\nViable: {entry['viable']}\n\n"
+            f"Heritage: {entry['heritage']}")
+
 # -- Dependency predicates -- #
 
 def _coolingOn(config: dict) -> bool:
@@ -270,6 +333,27 @@ def _outletVoluteOn(config: dict) -> bool:
 
 def _radiativeExtensionOn(config: dict) -> bool:
     return config.get('makeRadiativeExtension') in (True, 'on')
+
+def _multiPass(config: dict) -> bool:
+    return _coolingOn(config) and config.get('coolantCircuit') in ('oneAndHalfPass', 'twoPass')
+
+def _oneAndHalfPass(config: dict) -> bool:
+    return _coolingOn(config) and config.get('coolantCircuit') == 'oneAndHalfPass'
+
+def _channelSplitOn(config: dict) -> bool:
+    return _coolingOn(config) and config.get('channelSplitAreaRatio') not in (None, '')
+
+def _circuitOrSplit(config: dict) -> bool:
+    return _multiPass(config) or _channelSplitOn(config)
+
+def _extensionCircuitOn(config: dict) -> bool:
+    return config.get('extensionCircuit') in (True, 'on')
+
+def _gasGeneratorOn(config: dict) -> bool:
+    return config.get('gasGeneratorMixtureRatio') not in (None, '')
+
+def _extensionFilmOn(config: dict) -> bool:
+    return config.get('extensionFilmSlots') not in (None, '', [], '[]')
 
 def _filmCoolingOn(config: dict) -> bool:
     return config.get('filmCooling') in (True, 'on')
@@ -681,6 +765,117 @@ groups = [
                      'no solver: no search over the channel count is implemented.'),
     ], collapsed = True, expandWhen = _coolingOn),
 
+    Group('Coolant Circuit', [
+        Field('coolantCircuit', 'Coolant circuit', 'choice',
+              choices = [('A. Single pass', 'singlePass'), ('B. One and a half pass', 'oneAndHalfPass'),
+                         ('C. Two pass', 'twoPass')],
+              default = 'singlePass', showWhen = _coolingOn, optionHelp = coolantCircuitHelp,
+              help = 'The path the jacket\'s coolant takes. A multi-pass jacket is built of '
+                     'circular channels, counterflow in its up family, and takes its coolant in '
+                     'through a ring manifold, so it has no inlet scroll. The channel count is the '
+                     'up channels, the ones that reach the injector.'),
+        Field('passChannelRatio', 'Down channels per up channel', 'choice',
+              choices = [('One to one (F-1)', 1.0), ('One to two (J-2)', 0.5)],
+              default = None, showWhen = _multiPass,
+              help = 'How the two families alternate. One to one puts a down channel between every '
+                     'pair of up channels; one to two is the J-2\'s 180 down to 360 up. Blank is one '
+                     'to one.'),
+        Field('coolantInletAreaRatio', 'Inlet manifold area ratio', 'float', default = None,
+              showWhen = _oneAndHalfPass,
+              help = 'Where a one-and-a-half-pass jacket takes its coolant in, on the diverging wall. '
+                     'Forward of it every channel runs up; aft of it the families alternate.'),
+        Field('turnaroundVelocityRatio', 'Turnaround velocity ratio', 'float', default = None,
+              showWhen = _multiPass, advanced = True,
+              help = 'Turning velocity in the turnaround ring over the down channel\'s. The ring '
+                     'loses one velocity head of the down channel and half of the up whatever its '
+                     'size; a slower ring is a larger one. Blank is 0.5.'),
+        Field('channelSplitAreaRatio', 'Channel split area ratio', 'float', default = None,
+              showWhen = _coolingOn,
+              help = 'Circular channels only: where on the diverging wall each channel forks into '
+                     'two, so a bell growing several times in circumference keeps channels near the '
+                     'size the flux wants. Blank is no split. Wadel\'s bifurcated designs, SSME, RL10.'),
+        Field('channelSplitLength', 'Split transition length', 'float', default = None,
+              showWhen = _channelSplitOn, advanced = True,
+              help = 'Length of the fork in parent pitches at its start. The daughters part on a '
+                     'cosine blend and the section through it is two circles\' union. Blank is 4.'),
+    ], collapsed = True, expandWhen = _circuitOrSplit, showWhen = _coolingOn),
+
+    Group('Extension Circuit', [
+        Field('extensionCircuit', 'Extension circuit (D)', 'bool', default = False,
+              help = 'Cool the extension with a circuit of its own, from the jacket joint to an area '
+                     'ratio, with the shell radiation cooled beyond. The chamber jacket keeps its '
+                     'coolant for the chamber and the throat. Viable on first stages and long bells '
+                     'where the throat must see cold coolant. Heritage: Vulcain 2 (dump-cooled upper '
+                     'nozzle), SSME (parallel nozzle circuit), Agena (two-pass aft cone).'),
+        Field('extensionCircuitEndAreaRatio', 'Circuit far end area ratio', 'float', default = None,
+              showWhen = _extensionCircuitOn,
+              help = 'Where the extension circuit ends, on the extension.'),
+        Field('extensionCoolant', 'Circuit coolant species', 'text', default = None,
+              showWhen = _extensionCircuitOn, help = 'REFPROP or CoolProp fluid name.'),
+        Field('extensionCoolantMassFlow', 'Circuit coolant flow', 'float', default = None,
+              unit = 'kg/s', showWhen = _extensionCircuitOn, help = 'Coolant through the circuit.'),
+        Field('extensionCoolantInitialTemperature', 'Circuit inlet temperature', 'float', default = None,
+              unit = 'K', showWhen = _extensionCircuitOn, help = 'Coolant entering the circuit.'),
+        Field('extensionCoolantInitialPressure', 'Circuit inlet pressure', 'float', default = None,
+              unit = 'Pa', showWhen = _extensionCircuitOn, help = 'Coolant pressure entering the circuit.'),
+        Field('extensionChannelCount', 'Circuit channels', 'int', default = None,
+              showWhen = _extensionCircuitOn,
+              help = 'Circular channels of the circuit, sized against the hot wall limit as the '
+                     'chamber jacket is.'),
+        Field('extensionCircuitPasses', 'Circuit passes', 'choice', choices = [('One', 1), ('Two', 2)],
+              default = None, showWhen = _extensionCircuitOn,
+              help = 'One pass, or two down to the far end and back to the joint (the Agena aft '
+                     'cone). Blank is one.'),
+        Field('extensionCircuitDirection', 'Circuit direction', 'choice',
+              choices = [('Coflow, from the joint', 'coflow'), ('Counterflow, from the far end', 'counterflow')],
+              default = 'coflow', showWhen = _extensionCircuitOn,
+              help = 'Which way a one-pass circuit runs. Coflow puts the cold coolant at the joint, '
+                     'where the extension\'s flux is highest.'),
+        Field('extensionCircuitOutlet', 'Circuit outlet', 'choice',
+              choices = [('Returned to the feed', 'return'), ('Dumped as a film', 'film'),
+                         ('Dumped overboard', 'overboard')],
+              default = 'return', showWhen = _extensionCircuitOn, optionHelp = extensionOutletHelp,
+              help = 'What happens to the circuit\'s coolant where it leaves.'),
+    ], collapsed = True, expandWhen = _extensionCircuitOn),
+
+    Group('Gas Generator and Turbine', [
+        Field('gasGeneratorMixtureRatio', 'Gas generator mixture ratio', 'float', default = None,
+              help = 'Oxidizer to fuel of a gas generator, which exists when this is given. It is '
+                     'specified, not solved: no power balance with the pumps is carried. A fuel-rich '
+                     'hydrocarbon gas generator forms graphite at CEA\'s equilibrium and runs hot: '
+                     '1252 K against the F-1\'s 1063 K at 0.416.'),
+        Field('gasGeneratorPressure', 'Gas generator pressure', 'float', default = None, unit = 'Pa',
+              showWhen = _gasGeneratorOn, help = 'Gas generator chamber pressure, the turbine inlet.'),
+        Field('turbinePressureRatio', 'Turbine pressure ratio', 'float', default = None,
+              showWhen = _gasGeneratorOn,
+              help = 'Turbine inlet over exhaust static pressure, at least the gas\'s sonic ratio. Gas '
+                     'generator turbines run 5 to 30. The exhaust must exceed the wall pressure '
+                     'where it is slotted.'),
+        Field('turbineEfficiency', 'Turbine efficiency', 'float', default = None,
+              showWhen = _gasGeneratorOn, help = 'Actual over isentropic enthalpy drop, 0 to 1.'),
+        Field('turbineExhaustMassFlow', 'Turbine exhaust flow', 'float', default = None, unit = 'kg/s',
+              showWhen = _gasGeneratorOn,
+              help = 'Turbine flow. Exhaust not slotted onto the extension is counted as dumped with '
+                     'no thrust.'),
+    ], collapsed = True, expandWhen = _gasGeneratorOn),
+
+    Group('Extension Film', [
+        Field('extensionFilmSlots', 'Film slots', 'text', default = None,
+              help = 'Slots injecting films onto the extension, as a JSON list. Each is '
+                     '{"areaRatio": 10, "slotHeight": 0.004, "source": ...} with source '
+                     '"turbineExhaust" (optional "massFlow", default the whole exhaust), "species" '
+                     '("species", "massFlow", "temperature") or "extensionCircuitOutlet" (the '
+                     'extension circuit supplies the rest). The chamber film carries past the '
+                     'joint and every film stacks by Sellers superposition. Blank is no slot.'),
+        Field('extensionFilmModel', 'Extension film closure', 'choice',
+              choices = [('Same as the chamber film', None), ('Hatch and Papell (TN D-130)', 'hatchPapell'),
+                         ('SP-8124 entrainment', 'sp8124Entrainment')],
+              default = None,
+              help = 'The closure that drives the extension; the other is solved beside it and '
+                     'reported. On an extension the two disagree by more than a thousand kelvin a '
+                     'meter from the slot, so treat them as a bracket.'),
+    ], collapsed = True, expandWhen = _extensionFilmOn),
+
     Group('Radiative Extension', [
         Field('makeRadiativeExtension', 'Radiation-cooled extension', 'bool', default = False,
               help = 'Solve the wall temperature of the uncooled extension beyond the jacket. '
@@ -930,6 +1125,33 @@ def _applyShippedDefaults() -> None:
             spec.default = shipped[spec.key]
 
 _applyShippedDefaults()
+
+# Complete configurations of other engines, shipped beside the reference nozzle
+examplesFolder = os.path.join(os.path.dirname(shippedConfigPath), 'examples')
+
+def exampleConfigs() -> list:
+
+    '''
+
+    The shipped example engines, as (title, path) pairs in title order. A file's title is its
+    `_title` key, or its name where it has none; an unreadable file is left out.
+
+    '''
+
+    examples = []
+    if not os.path.isdir(examplesFolder):
+        return examples
+    for name in sorted(os.listdir(examplesFolder)):
+        if not name.endswith('.json'):
+            continue
+        path = os.path.join(examplesFolder, name)
+        try:
+            with open(path, encoding = 'utf-8') as handle:
+                title = json.load(handle).get('_title') or os.path.splitext(name)[0]
+        except (OSError, ValueError):
+            continue
+        examples.append((title, path))
+    return sorted(examples)
 
 def defaultConfig() -> dict:
 

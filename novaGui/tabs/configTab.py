@@ -23,6 +23,7 @@ Date:   08/28/2026
 
 import json
 import re
+import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from .. import backend
@@ -124,6 +125,7 @@ class ConfigTab(ttk.Frame):
         self._folds = []                      # [holder, fold, grid, rows] for every fold
         self._hidden = {}                     # key -> value of each field with no row
         self._extensionNote = None            # what the store holds for the extension material
+        self._circuitNote = None              # what the selected coolant circuit is for
         self._sections = {}                   # group title -> CollapsibleSection
         self._orderedSections = []            # [(Group, CollapsibleSection)] in form order
         self._groupVisible = {}               # group title -> bool
@@ -142,6 +144,18 @@ class ConfigTab(ttk.Frame):
         resetButton.pack(side = 'right')
         Tooltip(resetButton, 'Replace the form with the shipped nozzle, the design NOVA builds '
                              'when it is given no configuration.')
+
+        # The shipped example engines, each a complete configuration
+        examples = configSchema.exampleConfigs()
+        if examples:
+            exampleButton = ttk.Menubutton(strip, text = 'Load example')
+            exampleMenu = tk.Menu(exampleButton, tearoff = False)
+            for title, path in examples:
+                exampleMenu.add_command(label = title, command = lambda chosen = path: self._loadExample(chosen))
+            exampleButton['menu'] = exampleMenu
+            exampleButton.pack(side = 'right', padx = (0, theme.scaled(8)))
+            Tooltip(exampleButton, 'Replace the form with one of the example engines shipped with NOVA, '
+                                   'each a showcase of a cooling circuit and the films that go with it.')
 
         self._warning = ttk.Label(self, text = '', style = 'Warn.TLabel', wraplength = theme.scaled(900),
                                   padding = (theme.scaled(12), 0, theme.scaled(12), theme.scaled(4)))
@@ -187,6 +201,13 @@ class ConfigTab(ttk.Frame):
                     self._materialPanel = MaterialInfoPanel(section.body)
                     self._materialPanel.pack(fill = 'x', pady = (theme.scaled(4), theme.scaled(6)))
                     self._materialAnchor = grid
+                    grid = None
+                elif key == 'coolantCircuit':
+                    # The selected circuit's path, where it fits and what flew it, under the choice
+                    self._circuitNote = ttk.Label(section.body, style = 'Muted.Card.TLabel',
+                                                  wraplength = theme.scaled(760), justify = 'left')
+                    self._circuitNote.pack(fill = 'x', pady = (0, theme.scaled(6)))
+                    self._circuitAnchor = grid
                     grid = None
                 elif key == 'extensionMaterial':
                     self._extensionNote = ttk.Label(section.body, style = 'Muted.Card.TLabel',
@@ -328,6 +349,15 @@ class ConfigTab(ttk.Frame):
                 self._materialPanel.setMaterial(config.get('material') or 'GRCop-42')
             elif self._materialPanel.winfo_manager():
                 self._materialPanel.pack_forget()
+
+        if self._circuitNote is not None:
+            circuit = config.get('coolantCircuit') or 'singlePass'
+            if configSchema._coolingOn(config) and circuit in configSchema.coolantCircuitHelp:
+                if not self._circuitNote.winfo_manager():
+                    self._circuitNote.pack(fill = 'x', pady = (0, theme.scaled(6)), after = self._circuitAnchor)
+                self._circuitNote.configure(text = configSchema.optionHelpText(configSchema.coolantCircuitHelp[circuit]))
+            elif self._circuitNote.winfo_manager():
+                self._circuitNote.pack_forget()
 
         if self._extensionNote is not None:
             if configSchema._radiativeExtensionOn(config) and config.get('extensionMaterial'):
@@ -608,6 +638,18 @@ class ConfigTab(ttk.Frame):
             return
         with open(path, 'w') as handle:
             json.dump(config, handle, indent = 4)
+
+    def _loadExample(self, path: str) -> None:
+
+        '''Replace the form with a shipped example engine.'''
+
+        try:
+            with open(path, encoding = 'utf-8') as handle:
+                config = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            messagebox.showerror('Load failed', f'Could not read {path}\n\n{exc}')
+            return
+        self.setConfig(config)
 
     def _resetToExample(self) -> None:
 
