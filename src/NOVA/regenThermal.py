@@ -220,8 +220,9 @@ def taylorPropertyFactor(surfaceTemperature, bulkTemperature, diametersFromInlet
     measured throat wall temperatures with it on puts 0 of 13 inside the band the unknowns span,
     against 13 of 13 without it, and moves the mean signed error from +18.8 K to +479.5 K.
     Replacing Gnielinski with Taylor's complete correlation rather than multiplying the ratio term
-    onto it is worse still, at 0 of 13 and +704.7 K. On the shipped jacket at fixed geometry the
-    peak wall goes from 800 K to 1727 K, past the melting point of the alloy it is built from.
+    onto it is worse still, at 0 of 13 and +704.7 K. On the single-pass reference jacket
+    (assets/examples/novaSinglePass.json) at fixed geometry the peak wall goes from 800 K to
+    1727 K, past the melting point of the alloy it is built from.
 
     The likely reason is what Taylor's surface temperature means. The fit is on **symmetrically
     heated straight tubes**, where the surface is at one temperature all the way around. A rocket
@@ -297,15 +298,26 @@ def dippreySaberskyNusselt(frictionFactor, reynoldsNumber, prandtlNumber, relati
 
         St = (f/8) / (1 + sqrt(f/8) [5.19 (e+)^0.2 Pr^0.44 - 8.48]),    e+ = (e/D) Re sqrt(f/8)
 
-    which rises with roughness more slowly than the friction does, and reduces to the smooth-wall
-    result as the roughness Reynolds number falls. Below a roughness Reynolds number of about 5
-    the wall is hydraulically smooth and the smooth-tube form is returned instead, so there is no
-    step between the two.
+    which rises with roughness more slowly than the friction does.
 
-    The fit was taken on water at Prandtl numbers of 1.2 to 5.94 in close-packed sand-grain
-    roughness. Hydrogen in a printed channel is below that Prandtl range and is rough in a
-    different way, so this is an extrapolation in both, bounded by measurement rather than
-    validated by it.
+    The value returned is that Stanton number held between two Gnielinski results: on the
+    smooth-wall friction factor below, because roughness does not lower the heat transfer, and on
+    the wall's own friction factor above, because Dipprey and Sabersky's finding is that roughness
+    buys less heat transfer than the friction it costs. The fit was taken on water at Prandtl
+    numbers of 1.2 to 5.94, and outside that range and at small roughness Reynolds numbers the
+    expression leaves both bounds. It does not reduce to the smooth-tube result as e+ falls: it
+    reads 1.28 times smooth Gnielinski at e+ 0.02 and Pr 0.7, and 5.4 times at Pr 25. The
+    bounds meet as the roughness vanishes, so the result is continuous in e+ and a smooth wall is
+    exactly Gnielinski. A switch to the smooth form below e+ = 5 instead steps by 25 percent at
+    Pr 0.7 and by 230 percent at the Prandtl number of a liquid hydrocarbon, which a channel-size
+    search cannot converge across.
+
+    Hydrogen in a printed channel at a roughness Reynolds number above about 15 sits inside the
+    bounds, so the bounds change nothing there. A liquid hydrocarbon at Prandtl numbers of 20 to
+    30 sits on the upper bound up to roughness Reynolds numbers of several thousand. Hydrogen is
+    below the fitted Prandtl range, the hydrocarbons are above it, and a printed wall is rough in
+    a different way from sand grain, so this is an extrapolation in all three, bounded by
+    measurement rather than validated by it.
 
     Parameters:
     -----------
@@ -326,15 +338,20 @@ def dippreySaberskyNusselt(frictionFactor, reynoldsNumber, prandtlNumber, relati
     frictionGroup = np.sqrt(np.asarray(frictionFactor, dtype = float) / 8)
     roughnessReynolds = np.asarray(relativeRoughness, dtype = float) * reynoldsNumber * frictionGroup
 
-    # The correlation is written for a wall the roughness has already tripped
-    roughWall = roughnessReynolds > 5.0
     heatTransferFunction = 5.19 * np.maximum(roughnessReynolds, 1e-12)**0.2 * prandtlNumber**0.44
+    denominator = 1 + frictionGroup*(heatTransferFunction - 8.48)
 
-    stanton = frictionGroup**2 / (1 + frictionGroup*(heatTransferFunction - 8.48))
+    # A denominator at or below zero is the expression far outside its fit, at a friction factor
+    # of laminar flow; it is read as unbounded and the upper bound takes over
+    with np.errstate(divide = 'ignore'):
+        measured = np.where(denominator > 0.0,
+                            frictionGroup**2 / np.where(denominator > 0.0, denominator, 1.0)
+                            * reynoldsNumber * prandtlNumber, np.inf)
 
-    return np.where(roughWall, stanton * reynoldsNumber * prandtlNumber,
-                    gnielinskiNusselt(swameeJainFriction(reynoldsNumber, 0.0),
-                                      reynoldsNumber, prandtlNumber))
+    smoothWall = gnielinskiNusselt(swameeJainFriction(reynoldsNumber, 0.0), reynoldsNumber, prandtlNumber)
+    fullCredit = gnielinskiNusselt(frictionFactor, reynoldsNumber, prandtlNumber)
+
+    return np.maximum(smoothWall, np.minimum(measured, fullCredit))
 
 def coolantFrictionAndNusselt(reynoldsNumber, prandtlNumber, hydraulicDiameter,
                               surfaceRoughness: float = printedSurfaceRoughness,
@@ -1750,6 +1767,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
             'radiativeHeatTransfer'             : radiativeHeatTransfer,
             'drivingTemperature'                : drivingTemperature,
             'coldWallTemperature'               : coldWallTemperature,
+            'metalWallTemperature'              : metalWallTemperature,
             'ribHeatTransfer'                   : ribHeatTransfer
         }
 

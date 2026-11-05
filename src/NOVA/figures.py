@@ -76,7 +76,7 @@ from plotly.express.colors import sample_colorscale
 from plotly.offline import plot as _writePlotlyFigure
 
 from . import palette as figurePalette
-from .geometryTools import DCM, revolveContour
+from .geometryTools import DCM, revolveContour, sizedThroatRadius
 
 def showFigure(figure) -> None:
 
@@ -341,10 +341,13 @@ def contourFigure(nozzle):
         # A regen split spanning the whole contour is not a split worth drawing.
         xRegen = rRegen = np.array([])
 
+    # The label carries the throat the contour was sized to: a resampled wall has no station
+    # exactly at the throat, and its smallest radius reads about half a percent high
     throatIndex = int(np.argmin(r))
     return ContourFigure(
         x = x, r = r, xRegen = xRegen, rRegen = rRegen,
-        throatX = float(x[throatIndex]), throatRadius = float(r[throatIndex]),
+        throatX = float(x[throatIndex]),
+        throatRadius = sizedThroatRadius(r, getattr(nozzle, 'nozzleScalingFactor', None)),
         exitRadius = float(r[-1]), length = float(x[-1] - x[0]),
     )
 

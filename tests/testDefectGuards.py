@@ -9,6 +9,11 @@ wall sized on one alloy whatever the jacket was made of, a CEA lock that held on
 process. The pipeline tests at the end run the solve itself, because the failures they guard
 against only appeared in a full run.
 
+The runs start from the single-pass NOVA reference in assets/examples/novaSinglePass.json, the
+jacket these guards were written against, rather than the shipped configuration, so a change to
+the shipped engine's cooling architecture does not change what any of them tests. Other test
+modules build their full runs on the same helper.
+
 Author: Sean Bowman
 
 '''
@@ -31,11 +36,13 @@ from NOVA.nozzleVolutes import solveRegenVolutes, voluteYieldStrength
 from NOVA.radiativeCooling import RadiativeShell, radiativeNozzleExtension
 
 repositoryRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-shippedPath = os.path.join(repositoryRoot, 'src', 'NOVA', 'assets', 'NOVANozzle.json')
+referencePath = os.path.join(repositoryRoot, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json')
 
-def shipped() -> dict:
+def reference() -> dict:
 
-    with open(shippedPath, encoding = 'utf-8') as handle:
+    '''The single-pass NOVA reference configuration, read fresh.'''
+
+    with open(referencePath, encoding = 'utf-8') as handle:
         return json.load(handle)
 
 class TestTheThroatOfASampledWall:
@@ -175,6 +182,37 @@ class TestTheExtensionDrive:
                 exhaustGasConstant = 520.0, exhaustMolecularWeight = 16.0, throatRadius = 0.05,
                 throatRadiusOfCurvature = 0.04)
 
+class TestACoatedWallsMargin:
+
+    '''The limit is on the metal; a barrier coating's surface runs hotter by design.'''
+
+    @staticmethod
+    def report(capsys, metal, surface):
+
+        from types import SimpleNamespace
+        from NOVA.channelSizing import reportSizingResult
+
+        state = SimpleNamespace(channelRadius = np.full(4, 2.0e-3), maxWallTemperature = 900.0,
+                                coolantInitialPressure = 13.8e6, coolantExitPressure = 13.0e6,
+                                coolantExitTemperature = 330.0, channelSizingMode = 'manual',
+                                channelSplitBlend = None, numCrossSections = 4, nChannel = 90)
+        reportSizingResult(state, {'wallTemperature': surface, 'metalWallTemperature': metal})
+        return capsys.readouterr().out
+
+    def testTheMarginIsReadOffTheMetal(self, capsys):
+
+        metal = np.array([600.0, 725.0, 700.0, 650.0])
+        out = self.report(capsys, metal, metal + 1500.0)
+
+        assert 'peak hot wall 725.0 K at station 1, -175.0 K against the 900.0 K limit' in out
+        assert 'coating surface peaks at 2225.0 K' in out
+
+    def testAnUncoatedWallPrintsNoCoatingLine(self, capsys):
+
+        wall = np.array([600.0, 725.0, 700.0, 650.0])
+
+        assert 'coating' not in self.report(capsys, wall, wall.copy())
+
 class TestNullConfigurationValues:
 
     def testANullReadsAsUnsetAndTakesTheDefault(self, tmp_path, monkeypatch):
@@ -182,7 +220,7 @@ class TestNullConfigurationValues:
         from NOVA import Nozzle
         monkeypatch.setattr(Nozzle, '_getOutputRoot', lambda self: str(tmp_path))
 
-        config = shipped()
+        config = reference()
         for key in ('filmCoolingModel', 'filmCoolantMixtureRatio', 'filmEntrainmentMultiplier',
                     'extensionSinkTemperature', 'extensionOuterViewFactor', 'extensionAtmosphere',
                     'gasSideAxialModel', 'coolantRoughnessModel', 'maxVoluteBore', 'gammaModel'):
@@ -206,11 +244,11 @@ class TestNullConfigurationValues:
 
 def runConfiguration(directory, **overrides):
 
-    '''Run the shipped nozzle with overrides into a directory and return the solved Nozzle.'''
+    '''Run the single-pass reference nozzle with overrides into a directory and return the solved Nozzle.'''
 
     from NOVA import Nozzle
 
-    config = shipped()
+    config = reference()
     config.update({'plotsEnabled': False, 'export': False, 'filename': 'guard',
                    'plumeAmbientPressure': None, 'plumeFieldReach': None,
                    'numCrossSections': 24, 'numCSPointsChannel': 24, 'numCSVolute': 24,
@@ -279,3 +317,11 @@ def testAConeRunsTheWholeContourWithoutAnExtension(tmp_path):
     assert len(nozzle.xRegenNozzle) == nozzle.numCrossSections
     assert nozzle.xExtension is None or len(nozzle.xExtension) == 0
     assert nozzle.performance is not None
+
+def testAChamberTooNarrowForItsConvergingArcsIsRefused(tmp_path):
+
+    # The chamber fillet and the throat arc would overlap and fold the wall back on itself
+    with pytest.raises(InvalidInputError, match = 'too narrow'):
+        runConfiguration(tmp_path, chamberDiameter = 0.105, makeCoolingChannels = False,
+                         makeInletVolute = False, makeOutletVolute = False, makeRadiativeExtension = False,
+                         filmCooling = False)

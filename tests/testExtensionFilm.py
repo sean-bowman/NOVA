@@ -112,7 +112,7 @@ def seededState(nozzle) -> ExtensionFilmState:
         setattr(state, name, copy.deepcopy(getattr(nozzle, name, None)))
     return state
 
-class TestTheShippedNozzleFilmed:
+class TestTheReferenceNozzleFilmed:
 
     def testTheChamberFilmReproducesTheJacketSectionsFilm(self, filmedNozzle):
 

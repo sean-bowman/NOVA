@@ -2,7 +2,10 @@
 
 '''
 
-The shipped configuration built four ways, once per diverging section family, with everything on.
+The single-pass reference configuration built four ways, once per diverging section family, with
+everything on. The reference (assets/examples/novaSinglePass.json) is the shipped engine with its
+jacket cut at an area ratio of three and a radiation-cooled extension beyond, which exercises the
+extension on every family; the circuit is not what this compares.
 
 The point is coverage rather than comparison. NOVA's example case is a truncated ideal contour, so
 the truncated ideal path is the one that is exercised end to end; this runs the same configuration
@@ -50,7 +53,7 @@ from NOVA.contour import divergingSectionFamily, quasiOneDimensionalField
 from NOVA.plume import plumeCharacteristicSeed
 
 FAMILIES = ('tic', 'top', 'toc', 'cone')
-AMBIENT = 5000.0           # [Pa], the ambient the shipped configuration names
+AMBIENT = 5000.0           # [Pa], the ambient the reference configuration names
 REACH = 2.0                # [-], lip radii of plume drawn, the solver default
 MILLIMETRES = 1e3
 
@@ -72,9 +75,9 @@ plt.rcParams.update({
 })
 def buildFamily(name):
 
-    '''Run the shipped configuration with one diverging section family, or report why not.'''
+    '''Run the single-pass reference configuration with one diverging section family, or report why not.'''
 
-    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json')))
+    config = json.load(open(os.path.join(root, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json')))
     config.update({'divergingSectionType': name, 'Lstar': 1.0, 'material': 'GRCop-42',
                    'plumeAmbientPressure': AMBIENT, 'plotsEnabled': False, 'export': False,
                    'filename': f'family_{name}'})
@@ -432,7 +435,7 @@ def writeReport(rows, figures, path):
     lines.append('# Diverging section families: what a worked example reaches')
     lines.append('')
     lines.append(f'Generated {today} by `featureShowcase/buildFamilyShowcase.py`, running the '
-                 f'shipped `NOVANozzle.json` configuration once per diverging section family with '
+                 f'single-pass reference `examples/novaSinglePass.json` once per diverging section family with '
                  f'every feature enabled: chamber, cooling jacket, film, radiative extension, '
                  f'volutes and plume. Ambient pressure {AMBIENT/1000.0:.1f} kPa, plume drawn to '
                  f'{REACH:.0f} lip radii.')

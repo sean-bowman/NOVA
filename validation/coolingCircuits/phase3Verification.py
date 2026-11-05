@@ -5,10 +5,10 @@
 Figures that show a channel split behaving as intended, thermally and in three dimensions.
 
 1. **The fork.** The parent channel and its two daughters through the transition, with the
-   neighboring forks either side, drawn on the jacket of the shipped nozzle.
+   neighboring forks either side, drawn on the jacket of the reference nozzle.
 2. **The section through the split.** The union outline at stations through the transition, from
    one circle to two, at the channel size the sizing march chose.
-3. **The split along the jacket.** The shipped LOX/LH2 jacket carried to the exit, sized with sixty
+3. **The split along the jacket.** The reference LOX/LH2 jacket carried to the exit, sized with sixty
    channels throughout and with the sixty splitting to 120 at an area ratio of 3: channel
    half-extent, flow area per parent channel, coolant velocity, coolant-side coefficient, hot wall
    temperature and coolant pressure.
@@ -53,14 +53,14 @@ SPLIT = {**JACKETTOEXIT, 'channelSplitAreaRatio': 3.0, 'channelSplitLength': 6.0
 
 def solve(name: str, overrides: dict):
 
-    '''Run the shipped configuration with overrides, or load the pickle a previous run left.'''
+    '''Run the single-pass reference configuration with overrides, or load the pickle a previous run left.'''
 
     picklePath = os.path.join(outputFolder, f'{name}.pkl')
     if '--reuse' in sys.argv and os.path.isfile(picklePath):
         with open(picklePath, 'rb') as handle:
             return pickle.load(handle)
 
-    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json'), encoding = 'utf-8') as handle:
+    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json'), encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update({'plotsEnabled': False, 'export': False, 'filename': name})
     config.update(overrides)
@@ -191,7 +191,7 @@ def transitionFigure(single, split) -> str:
     for axis in axes:
         axis.axvspan(xSplit[0], xSplit[1], color = colors['blue'], alpha = 0.15)
     axes[0].legend(fontsize = 8)
-    figure.suptitle('Shipped LOX/LH2 jacket carried to the exit: one channel count against a split at '
+    figure.suptitle('Reference LOX/LH2 jacket carried to the exit: one channel count against a split at '
                     'area ratio 3 (shaded)')
     path = os.path.join(outputFolder, 'splitAlongJacket.png')
     figure.savefig(path, dpi = 150)

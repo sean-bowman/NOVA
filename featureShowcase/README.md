@@ -23,10 +23,11 @@ python featureShowcase/buildContourValidation.py  # sweeps against the Rao chart
 python featureShowcase/buildContourFamilies.py    # the three families compared, about 40 minutes
 python featureShowcase/buildSubfamilyStudy.py     # searched quadratic against cubic, about 2 hours
 python featureShowcase/buildReferenceOverlays.py  # contours on their references, about 5 minutes
-python featureShowcase/buildFamilyShowcase.py     # the shipped nozzle once per diverging family
+python featureShowcase/buildFamilyShowcase.py     # the single-pass reference once per diverging family
 python featureShowcase/buildStitchedField.py      # chamber to exit in one frame
 python featureShowcase/buildChamberField.py       # chamber and converging section, one dimensional
 python featureShowcase/buildModelComparisons.py    # the selectable thermal and gas models, about 4 minutes
+python featureShowcase/buildCoolingShowcase.py     # the shipped engine and the example engines, about 35 minutes
 python featureShowcase/buildFamiliesReportFigures.py  # figures for the contour families report
 python featureShowcase/buildCalorimeter40k.py figures # figures for the 40k calorimeter report
 python featureShowcase/buildReport.py             # renders the effort report and the design overview to HTML
@@ -34,7 +35,7 @@ python featureShowcase/buildGuiGraphic.py         # the GUI's plume graphic, ban
 python featureShowcase/buildGuiScreenshots.py     # the GUI walkthrough screenshots in docs/images/gui
 ```
 
-The five slow studies cache what they solve (`contourValidation.npz`, `contourFamilies.npz`, `subfamilyStudy.npz`, `referenceOverlays.npz`, `family_*.pkl`) and take `--draw` to redraw their figures from the cache in seconds.
+The six slow studies cache what they solve (`contourValidation.npz`, `contourFamilies.npz`, `subfamilyStudy.npz`, `referenceOverlays.npz`, `family_*.pkl`, `coolingRuns/`) and take `--draw` to redraw their figures from the cache in seconds. `buildCoolingShowcase.py --engine <name>` solves one engine, so several can run side by side.
 
 ## Palette
 
@@ -48,6 +49,9 @@ Every figure here draws from `showcasePalette.py`: the Engineering Flat Metal pa
 | `modelComparisonsModels.png` | What each selectable model does: the gas-side constant along the wall against Bartz's single value, what roughness buys on the coolant side, Prandtl-Meyer turning under local properties against two constant exponents, and the entrance and curvature corrections |
 | `modelComparisonsJacket.png` | The reference jacket solved under each model: hot wall temperature, coolant temperature and the channel the sizing march picked |
 | `jacket.png` | One cooling channel and its two neighbors swept against the cold wall, centerline and cross-sections called out on the middle one |
+| `coolingShowcase_*.png` | One engine per cooling architecture, the shipped one and each in `assets/examples/`: the coolant circuit on the half section, each pass's coolant and hot wall, the hot wall along the whole nozzle against each section's limit, and the extension under its films |
+| `coolingShowcase_*3D.png` | The channel split, or the alternating families and their turnaround ring, in three dimensions |
+| `coolingCapabilities.png` | Which cooling features each of those engines uses |
 | `nearWallState.png` | Near-wall static temperature, static pressure and Mach number along the axis |
 | `fieldMach.png` | Mach number over the characteristics mesh |
 | `fieldPressure.png` | Static pressure over the characteristics mesh |
@@ -60,7 +64,7 @@ Every figure here draws from `showcasePalette.py`: the Engineering Flat Metal pa
 | `contourVerification.png` | The worked case against its references: length, area ratio, near-wall consistency, exit plane |
 | `contourFamilies.png` | The three diverging families compared on one engine: truncated ideal, thrust-optimized parabola and searched thrust-optimized contour |
 | `subfamilyStudy.png` | The searched thrust-optimized contour, quadratic against cubic wall |
-| `familyShowcase_*.png` | The shipped nozzle built once per diverging family: chamber and contour, flow field, jacket and plume |
+| `familyShowcase_*.png` | The single-pass reference built once per diverging family: chamber and contour, flow field, jacket and plume |
 | `contourValidation.png` | Sweeps over area ratio, percent bell and mesh resolution, against the Rao chart |
 | `chamberFieldMach.png`, `chamberFieldPressure.png`, `chamberFieldTemperature.png` | Chamber and converging section, ONE DIMENSIONAL |
 | `oneDimensionalAgainstMesh.png` | What the characteristics mesh buys over a one-dimensional solve |

@@ -10,10 +10,10 @@ accounting that bounds a jacket's flow.
    about the barrel's midpoint. The coflow solution is drawn over the counterflow one reflected;
    the two must agree to round-off. This is the closed-form check on `coolantMarchOrder`: any part of
    the march that still reads the wall in wall order rather than coolant order breaks the mirror.
-2. **The shipped jacket run both ways.** The LOX/LH2 nozzle sized counterflow, its shipped
-   direction, and coflow. The coolant temperature, hot wall temperature and pressure are drawn
+2. **The reference jacket run both ways.** The single-pass LOX/LH2 reference sized counterflow,
+   its own direction, and coflow. The coolant temperature, hot wall temperature and pressure are drawn
    along the wall, with the inlet and outlet volutes marked where each direction places them.
-3. **The propellant accounting.** The chamber flow of each propellant for the shipped engine and
+3. **The propellant accounting.** The chamber flow of each propellant for the reference engine and
    for the F-1 operating point (2578 kg/s at a mixture ratio of 2.27, 70 percent of the fuel
    through the tubes), split into the jacket's share and the bypass, with the chamber film drawn
    at the injector marked against the fuel it comes out of.
@@ -27,7 +27,7 @@ Run from the NOVA root:
 
     python validation/coolingCircuits/phase1Verification.py [--reuse]
 
-The two shipped runs are solved in sequence because RocketCEA cannot run two solves at once.
+The two reference runs are solved in sequence because RocketCEA cannot run two solves at once.
 Figures are written beside this script, under phase1/.
 
 Author: Sean Bowman
@@ -60,14 +60,14 @@ plt.rcParams.update({'font.size': 9, 'axes.grid': True, 'grid.alpha': 0.4})
 
 def solve(name: str, overrides: dict):
 
-    '''Run the shipped configuration with overrides, or load the pickle a previous run left.'''
+    '''Run the single-pass reference configuration with overrides, or load the pickle a previous run left.'''
 
     picklePath = os.path.join(outputFolder, f'{name}.pkl')
     if '--reuse' in sys.argv and os.path.isfile(picklePath):
         with open(picklePath, 'rb') as handle:
             return pickle.load(handle)
 
-    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json'), encoding = 'utf-8') as handle:
+    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json'), encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update({'plotsEnabled': False, 'export': False, 'filename': name,
                    'plumeAmbientPressure': None, 'plumeFieldReach': None})
@@ -123,7 +123,7 @@ def reflectionFigure() -> str:
 
 def directionFigure(counterflow, coflow) -> str:
 
-    '''Figure 2: the shipped jacket sized counterflow and coflow.'''
+    '''Figure 2: the reference jacket sized counterflow and coflow.'''
 
     panels = (('temperature', 'Coolant temperature [K]', 1.0),
               ('wallTemperature', 'Hot wall temperature [K]', 1.0),
@@ -151,7 +151,7 @@ def directionFigure(counterflow, coflow) -> str:
                f'{1e-6 * (counterflow.coolantInitialPressure - counterflow.coolantExitPressure):.2f} MPa.  '
                f'Coflow: exit {coflow.coolantExitTemperature:.0f} K, drop '
                f'{1e-6 * (coflow.coolantInitialPressure - coflow.coolantExitPressure):.2f} MPa')
-    figure.suptitle(f'Shipped LOX/LH2 jacket, 3.4 kg/s hydrogen from 30 K, throat at 0 mm.  {summary}')
+    figure.suptitle(f'Reference LOX/LH2 jacket, 3.4 kg/s hydrogen from 30 K, throat at 0 mm.  {summary}')
     path = os.path.join(outputFolder, 'shippedJacketBothDirections.png')
     figure.savefig(path, dpi = 150)
     plt.close(figure)
@@ -162,7 +162,7 @@ def accountingFigure(shipped) -> str:
     '''Figure 3: each engine's propellant flows, the jacket's share and the film drawn.'''
 
     engines = (
-        ('Shipped LOX/LH2', accountForFlows(shipped.engineMassFlow, shipped.OFRatio, 'fuel',
+        ('Reference LOX/LH2', accountForFlows(shipped.engineMassFlow, shipped.OFRatio, 'fuel',
                                             coolantMassFlow = shipped.coolantMassFlow,
                                             filmMassFlow = shipped.filmMassFlow), shipped.filmMassFlow),
         ('F-1 operating point', accountForFlows(2578.0, 2.27, 'fuel', coolantBypassFraction = 0.30), None))

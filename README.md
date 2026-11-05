@@ -101,7 +101,7 @@ from NOVA import gasDynamics, materials, fluidProps
 
 `generateNozzle()` runs the full pipeline: diverging contour, converging section, regen truncation, cooling channels and volutes when enabled, heat transfer, then plotting and export. Output is written to `runs/<filename>Outputs/` at the repository root, where `<filename>` can be specified in the config.
 
-`assets/NOVANozzle.json` is the example configuration the repository ships. It is runnable as it stands, and it is what `generateNozzle()` reads when no path is given. Users can copy it as a starting point for a case of their own.
+`assets/NOVANozzle.json` is the example configuration the repository ships. It is runnable as it stands, and it is what `generateNozzle()` reads when no path is given. Users can copy it as a starting point for a case of their own. `assets/examples/` holds five more complete configurations, one engine for each cooling architecture and the extension films: the same engine on a single pass with a radiation-cooled extension, a methalox first stage, and engines in the arrangement of the F-1, the Vulcain 2 and the SSME. [Regen Cooling Architectures](docs/regenCoolingArchitectures.md) lists what each one shows, and [featureShowcase/buildCoolingShowcase.py](featureShowcase/buildCoolingShowcase.py) solves and draws them all.
 
 ## Quickstart: GUI
 
@@ -116,9 +116,13 @@ On Windows, `novaGui.bat` launches it with no console window. Run `python -m nov
 
 ### Design
 
-The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, and **Reset to example** returns to the shipped nozzle.
+The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, **Reset to example** returns to the shipped nozzle, and **Load example** beside it offers the engines in `assets/examples/`.
 
 ![Design tab](docs/images/gui/designDark.png)
+
+The Coolant Circuit section picks the architecture, and a panel beneath the choice says what that circuit does, where it is viable and which engines flew it; the extension circuit's outlet carries the same.
+
+![Coolant circuit choice](docs/images/gui/designCircuit.png)
 
 Every field carries an (i) icon. Hovering it gives the field's meaning and, for a choice field, its options.
 
@@ -126,7 +130,7 @@ Every field carries an (i) icon. Hovering it gives the field's meaning and, for 
 
 ### Generate
 
-**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`. The bar follows the pipeline's own stages, and the run log beside it carries the full output. The shipped nozzle builds a full cooling jacket, both volutes and the marched plume, and takes about two minutes.
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`. The bar follows the pipeline's own stages, and the run log beside it carries the full output. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
 
 ### View
 
@@ -147,6 +151,10 @@ The cooling views draw everything the jacket solve computes along the channel: t
 With film cooling on, the film view maps the film along the wall against the core gas, with its effectiveness and the temperature it holds the wall to; with a radiative extension, the extension view draws the whole wall on one temperature scale against the shell's limit, with the heat balance that sets it.
 
 ![Film cooling](docs/images/gui/viewFilm.png)
+
+The circuit view draws the coolant's paths on the half section: each family of the chamber jacket with the way it runs, its manifolds, the turnaround ring and any split, the extension's own circuit and its outlet, the film slots and the radiation-cooled shell. With two passes or an extension circuit, the passes view draws each one's coolant and hot wall; on the shipped engine those are the down family from its inlet at an area ratio of three to the exit, and the up family back to the injector.
+
+![Coolant circuit](docs/images/gui/viewCircuit.png)
 
 The channel mesh and the revolved contour are 3D panes that rotate with the mouse.
 
@@ -412,7 +420,7 @@ Generated `*Outputs/` directories are gitignored. The curated figures above are 
 
 ## Worked example: LOX/LH2 upper-stage nozzle
 
-`src/NOVA/assets/NOVANozzle.json` defines a 100 kN hydrolox upper stage which is the case every table and figure below is drawn from. It is the same operating point used as the CEA validation case in `tests/testCeaInterface.py`, so the thermochemistry can be checked directly against the [NASA CEARun web tool](https://cearun.grc.nasa.gov/). The build scripts behind the figures live in [featureShowcase/](featureShowcase/), and [featureShowcase/README.md](featureShowcase/README.md) catalogues all thirty-one of them with a line on how to read each one.
+`src/NOVA/assets/NOVANozzle.json` defines a 100 kN hydrolox upper stage which is the case every table and figure below is drawn from. It is the same operating point used as the CEA validation case in `tests/testCeaInterface.py`, so the thermochemistry can be checked directly against the [NASA CEARun web tool](https://cearun.grc.nasa.gov/). The build scripts behind the figures live in [featureShowcase/](featureShowcase/), and [featureShowcase/README.md](featureShowcase/README.md) catalogues the figures with a line on how to read each one.
 
 ### Inputs
 
@@ -426,6 +434,9 @@ Generated `*Outputs/` directories are gitignored. The curated figures above are 
 | Oxidizer / fuel inlet temperature | 90.17 K / 20.27 K                    | normal boiling points         |
 | Contour                           | truncated ideal, length fraction 0.8 | method of characteristics     |
 | Chamber diameter                  | 180 mm                               | contraction ratio ~3.2        |
+| Cooling circuit                   | one and a half pass (B), to the exit | inlet manifold at area ratio 3 |
+| Jacket                            | 60 down and 60 up GRCop-42 channels  | circular, 800 K wall limit    |
+| Coolant                           | hydrogen, 3.4 kg/s, 12 MPa, 30 K     | 0.3 kg/s film at the chamber  |
 
 In the config, a field left `null` means *not specified*. A literal `0.0` means *specified as zero*, which is not the same thing: `thrust` and `engineMassFlow` are mutually exclusive, so one of them must be `null`.
 
@@ -463,16 +474,16 @@ The engine is sized before any contour exists, from a one-dimensional estimate: 
 | Exit pressure [kPa]                         | 13.99          | 17.70          | 18.61     |                           |
 | Exit temperature [K]                        | 1275           | 1578           | 1583      |                           |
 | Exit velocity [m/s]                         | 4260           | 4312           | 4282      |                           |
-| Thrust coefficient, vacuum                  | 1.902          | 1.945          | 1.907     | 1.876                     |
-| Thrust coefficient, design back pressure    | 1.821          | 1.863          | 1.826     | 1.795                     |
-| Thrust coefficient, sea level               | 1.314          | 1.357          | 1.319     | 1.288                     |
-| Specific impulse, vacuum [s]                | 453.8          | 464.2          | 461.5     | 453.9                     |
-| Specific impulse, design back pressure [s]  | 434.4          | 444.8          | 441.8     | 434.2                     |
-| Thrust, design back pressure [kN]           | 100.0          |                | 101.7     | 100.0                     |
+| Thrust coefficient, vacuum                  | 1.902          | 1.945          | 1.907     | 1.868                     |
+| Thrust coefficient, design back pressure    | 1.821          | 1.863          | 1.826     | 1.787                     |
+| Thrust coefficient, sea level               | 1.314          | 1.357          | 1.319     | 1.281                     |
+| Specific impulse, vacuum [s]                | 453.8          | 464.2          | 461.5     | 452.1                     |
+| Specific impulse, design back pressure [s]  | 434.4          | 444.8          | 441.8     | 432.4                     |
+| Thrust, design back pressure [kN]           | 100.0          |                | 101.7     | 99.5                      |
 
 The delivered vacuum coefficient is 0.981 of the chamber-gas estimate: that is the contour's own divergence and exit non-uniformity, with the gas held the same. The delivered plane's exit pressure runs from 25.5 kPa at the wall to 10.7 kPa on the axis, with an area average of 17.6 kPa.
 
-The chamber-gas column delivers more than the equilibrium column because the frozen gas, with the chamber's ratio of specific heats, expands to a lower Mach number and a higher temperature at the same area ratio. Wall friction costs 0.031 of thrust coefficient.
+The chamber-gas column delivers more than the equilibrium column because the frozen gas, with the chamber's ratio of specific heats, expands to a lower Mach number and a higher temperature at the same area ratio. Wall friction costs 0.039 of thrust coefficient: the jacket holds the bell's wall at 200 to 300 K, and a cold wall carries more skin friction than the 2780 K radiation-cooled shell of the single-pass reference, which costs 0.031.
 
 ### Generated geometry
 
@@ -617,7 +628,7 @@ Baselines are written to `tests/baselines/` and are carried in the repository, s
 - [arcSpline Overshoot at a Corner](docs/reports/arcSplineOvershoot_2026-09-08.md) -- why the arc-length resampler used to invent geometry outside its own input, what replaced it, and how far the contour moved.
 - [Contour Verification and Assessment](docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](docs/reports/nozzleContourEffort_2026-09-06.html).
 - [Nozzle Cooling](docs/NozzleCooling.md) -- regenerative cooling architecture and a worked example.
-- [Regen Cooling Architectures](docs/regenCoolingArchitectures.md) -- cooling circuit topology: pass count, flow direction, channel count along the nozzle, independent and multi-fluid circuits, what reference practice does, and the staged path for adding each.
+- [Regen Cooling Architectures](docs/regenCoolingArchitectures.md) -- cooling circuit topology: architectures A to D, flow direction and accounting, the channel split, the extension circuit and films, what reference practice does, how NOVA solves each, and the example engines.
 - [Regen Cooling Topology References](docs/references_regenCoolingTopologies_2026-10-02.md) -- annotated sources behind that document, from SP-8087 to current channel wall nozzle manufacturing.
 - [CEA Interface](docs/ceaInterface.md) -- combustion thermochemistry, result keys and units, propellant naming, thread safety.
 - [Plume Development State](experimental/plumeDevelopmentState.md) -- where the plume solver stands: what is validated, what is open, and the findings behind both.

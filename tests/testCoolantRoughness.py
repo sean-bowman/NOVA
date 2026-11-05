@@ -83,15 +83,60 @@ class TestDippreySabersky:
 
     '''The measured rough-wall heat transfer, bounded below the friction it costs.'''
 
-    def testItReducesToSmoothWhenTheWallIsHydraulicallySmooth(self):
+    def testASmoothWallIsGnielinskiExactly(self):
 
-        # A roughness Reynolds number under about 5 leaves the sublayer intact
+        friction = swameeJainFriction(reynolds, 0.0)
+        nusselt = dippreySaberskyNusselt(friction, reynolds, prandtl, 0.0)
+
+        assert float(nusselt) == gnielinskiNusselt(friction, reynolds, prandtl)
+
+    def testItApproachesSmoothAsTheRoughnessVanishes(self):
+
+        # At e+ 0.13 the bounds are 0.7 percent apart, which is Colebrook's own friction excess
         fine = 1.0e-8
         friction = swameeJainFriction(reynolds, fine/diameter)
         nusselt = dippreySaberskyNusselt(friction, reynolds, prandtl, fine/diameter)
         smooth = gnielinskiNusselt(swameeJainFriction(reynolds, 0.0), reynolds, prandtl)
 
-        assert float(nusselt) == pytest.approx(smooth, rel = 1e-9)
+        assert float(nusselt) == pytest.approx(smooth, rel = 0.01)
+
+    @pytest.mark.parametrize('prandtlNumber', [0.7, 2.5, 25.0])
+    def testItIsContinuousAcrossTheOnsetOfRoughness(self, prandtlNumber):
+
+        # A roughness that puts e+ at 5 at Re 1e5, stepped 0.1 percent either side of it. The
+        # expression alone reads 1.25 to 3.3 times the smooth wall there, which a switch to the
+        # smooth form below e+ = 5 turns into a step of that size.
+        reynoldsNumber = 1.0e5
+        nusselt = []
+        for roughness in (2.8496e-6 * 0.999, 2.8496e-6 * 1.001):
+            friction = swameeJainFriction(reynoldsNumber, roughness/diameter)
+            nusselt.append(float(dippreySaberskyNusselt(friction, reynoldsNumber, prandtlNumber,
+                                                        roughness/diameter)))
+        onset = 2.8496e-6/diameter * reynoldsNumber * np.sqrt(swameeJainFriction(reynoldsNumber, 2.8496e-6/diameter)/8)
+
+        assert onset == pytest.approx(5.0, rel = 1e-4)
+        assert nusselt[1] == pytest.approx(nusselt[0], rel = 2e-3)
+
+    @pytest.mark.parametrize('prandtlNumber', [0.7, 2.5, 25.0])
+    @pytest.mark.parametrize('roughness', [1e-7, 1e-6, 1e-5, 35e-6, 1e-4])
+    def testItStaysBetweenTheSmoothWallAndFullCredit(self, prandtlNumber, roughness):
+
+        reynoldsNumber = 1.0e5
+        friction = swameeJainFriction(reynoldsNumber, roughness/diameter)
+        nusselt = float(dippreySaberskyNusselt(friction, reynoldsNumber, prandtlNumber, roughness/diameter))
+        smooth = gnielinskiNusselt(swameeJainFriction(reynoldsNumber, 0.0), reynoldsNumber, prandtlNumber)
+
+        assert smooth <= nusselt <= gnielinskiNusselt(friction, reynoldsNumber, prandtlNumber)
+
+    def testHydrogenOnAPrintedWallIsTheMeasuredExpression(self):
+
+        # Pr 0.7 at e+ of several hundred is inside both bounds, so they change nothing
+        friction = swameeJainFriction(reynolds, 35e-6/diameter)
+        groupRoot = np.sqrt(friction/8)
+        roughnessReynolds = 35e-6/diameter * reynolds * groupRoot
+        expression = groupRoot**2 / (1 + groupRoot*(5.19*roughnessReynolds**0.2*0.7**0.44 - 8.48)) * reynolds * 0.7
+
+        assert float(dippreySaberskyNusselt(friction, reynolds, 0.7, 35e-6/diameter)) == expression
 
     def testItBuysLessThanTheFrictionItCosts(self):
 

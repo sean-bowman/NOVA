@@ -172,6 +172,24 @@ class ExtensionCircuitSolution:
                           np.asarray(self.circuit.up.results['wallTemperature']))
 
     @property
+    def metalWallTemperature(self) -> np.ndarray:
+
+        '''
+
+        The wall the temperature limit applies to over the circuit's stations [K]: the metal behind
+        a barrier coating where there is one, the hotter family's for two passes. The gas-side
+        surface, which the friction march reads, is wallTemperature.
+
+        '''
+
+        def metal(results):
+            return np.asarray(results.get('metalWallTemperature', results['wallTemperature']))
+
+        if self.circuit is None:
+            return metal(self.sizing.channelThermalResults)
+        return np.maximum(metal(self.circuit.down.results), metal(self.circuit.up.results))
+
+    @property
     def dumpedMassFlow(self) -> float:
 
         '''Flow that leaves the engine rather than returning to the feed [kg/s].'''
@@ -189,7 +207,7 @@ class ExtensionCircuitSolution:
                 f'({self.direction}) over {len(self.stations)} stations, {self.massFlow:.3g} kg/s of '
                 f'{self.coolant} from {inlet:.0f} to {self.outletTemperature:.0f} K, '
                 f'{1e-6*drop:.3f} MPa, outlet {self.outlet} at area ratio {self.outletAreaRatio:.3g}; '
-                f'peak hot wall {self.wallTemperature.max():.0f} K')
+                f'peak hot wall {self.metalWallTemperature.max():.0f} K')
 
 def extensionCircuitSpan(xExtension, rExtension, nozzleScalingFactor, endAreaRatio: float) -> np.ndarray:
 

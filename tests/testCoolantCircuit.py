@@ -78,7 +78,7 @@ class TestTheRibConductance:
         assert ribExchangeConductance(0.0, 3.0e4, 1.0e-4, 1.0e-4, 1.0e-3, 300.0) == 0.0
         assert ribExchangeConductance(2.0e4, 3.0e4, 0.0, 1.0e-4, 1.0e-3, 300.0) == 0.0
 
-# -- Solved circuits on the shipped jacket -- #
+# -- Solved circuits on the reference jacket -- #
 
 @pytest.fixture(scope = 'module')
 def jacket(tmp_path_factory):

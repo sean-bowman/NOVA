@@ -340,8 +340,11 @@ def _multiPass(config: dict) -> bool:
 def _oneAndHalfPass(config: dict) -> bool:
     return _coolingOn(config) and config.get('coolantCircuit') == 'oneAndHalfPass'
 
+def _singlePassCooling(config: dict) -> bool:
+    return _coolingOn(config) and not _multiPass(config)
+
 def _channelSplitOn(config: dict) -> bool:
-    return _coolingOn(config) and config.get('channelSplitAreaRatio') not in (None, '')
+    return _singlePassCooling(config) and config.get('channelSplitAreaRatio') not in (None, '')
 
 def _circuitOrSplit(config: dict) -> bool:
     return _multiPass(config) or _channelSplitOn(config)
@@ -790,10 +793,12 @@ groups = [
                      'loses one velocity head of the down channel and half of the up whatever its '
                      'size; a slower ring is a larger one. Blank is 0.5.'),
         Field('channelSplitAreaRatio', 'Channel split area ratio', 'float', default = None,
-              showWhen = _coolingOn,
-              help = 'Circular channels only: where on the diverging wall each channel forks into '
-                     'two, so a bell growing several times in circumference keeps channels near the '
-                     'size the flux wants. Blank is no split. Wadel\'s bifurcated designs, SSME, RL10.'),
+              showWhen = _singlePassCooling,
+              help = 'Circular channels on a single pass only: where on the diverging wall each '
+                     'channel forks into two, so a bell growing several times in circumference keeps '
+                     'channels near the size the flux wants. Blank is no split. A multi-pass jacket '
+                     'doubles its count with its down family instead. Wadel\'s bifurcated designs, '
+                     'SSME, RL10.'),
         Field('channelSplitLength', 'Split transition length', 'float', default = None,
               showWhen = _channelSplitOn, advanced = True,
               help = 'Length of the fork in parent pitches at its start. The daughters part on a '

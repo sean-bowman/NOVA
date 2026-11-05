@@ -132,7 +132,7 @@ class TestTheCoolantCeilings:
         assert hotWall.max() < 800.0
 
 @pytest.fixture(scope = 'module')
-def shippedBothWays(tmp_path_factory):
+def referenceBothWays(tmp_path_factory):
 
     from testDefectGuards import runConfiguration
 
@@ -140,11 +140,11 @@ def shippedBothWays(tmp_path_factory):
     return (runConfiguration(tmp_path_factory.mktemp('counterflow'), **common),
             runConfiguration(tmp_path_factory.mktemp('coflow'), jacketFlowDirection = 'coflow', **common))
 
-class TestTheShippedJacketRunCoflow:
+class TestTheReferenceJacketRunCoflow:
 
-    def testTheCoolantWarmsTowardTheExit(self, shippedBothWays):
+    def testTheCoolantWarmsTowardTheExit(self, referenceBothWays):
 
-        _, coflow = shippedBothWays
+        _, coflow = referenceBothWays
         temperature = np.asarray(coflow.channelThermalResults['temperature'])
 
         # Each station holds the coolant leaving it, so the injector station already reads a few
@@ -154,9 +154,9 @@ class TestTheShippedJacketRunCoflow:
         assert int(np.argmax(temperature)) == len(temperature) - 1
         assert coflow.coolantExitTemperature == temperature[-1]
 
-    def testTheVolutesSwapEnds(self, shippedBothWays):
+    def testTheVolutesSwapEnds(self, referenceBothWays):
 
-        counterflow, coflow = shippedBothWays
+        counterflow, coflow = referenceBothWays
 
         # The inlet scroll sits at the aft end of a counterflow jacket and at the injector end of
         # a coflow one; the outlet takes the other end in each
@@ -164,17 +164,17 @@ class TestTheShippedJacketRunCoflow:
         assert coflow.inletVolute.axialOffset < coflow.outletVolute.axialOffset
         assert coflow.inletVolute.axialOffset == pytest.approx(counterflow.outletVolute.axialOffset, abs = 0.01)
 
-    def testTheInletScrollHoldsTheInletPressure(self, shippedBothWays):
+    def testTheInletScrollHoldsTheInletPressure(self, referenceBothWays):
 
-        _, coflow = shippedBothWays
+        _, coflow = referenceBothWays
 
         assert coflow.inletVolute.pressureDifferential == coflow.coolantInitialPressure
 
-    def testTheInterfacedWallIsTheSameWallEitherWay(self, shippedBothWays):
+    def testTheInterfacedWallIsTheSameWallEitherWay(self, referenceBothWays):
 
-        # The shipped inlet and outlet flares match, so swapping which end carries which role
+        # The reference inlet and outlet flares match, so swapping which end carries which role
         # leaves the interfaced wall where it was, forward end first
-        counterflow, coflow = shippedBothWays
+        counterflow, coflow = referenceBothWays
 
         assert coflow.xRegenNozzleInterfaced == pytest.approx(counterflow.xRegenNozzleInterfaced, abs = 1.0e-9)
         assert coflow.rRegenNozzleInterfaced == pytest.approx(counterflow.rRegenNozzleInterfaced, abs = 1.0e-9)

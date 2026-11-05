@@ -5,9 +5,11 @@
 
 The reference nozzle, run through every part of the tool.
 
-`assets/NOVANozzle.json` reaches most of NOVA on its own: contour, chamber, cooling jacket, film,
-volutes, keep-out, printability, radiation-cooled extension and the correlated plume all run from
-`generateNozzle()`. Four capabilities have no configuration key and are driven here against the
+`assets/NOVANozzle.json` reaches most of NOVA on its own: contour, chamber, a one-and-a-half-pass
+cooling jacket to the exit with its turnaround ring, film, the outlet volute, keep-out,
+printability and the correlated plume all run from `generateNozzle()`. The same engine with a
+single pass and a radiation-cooled extension is `assets/examples/novaSinglePass.json`, and the
+other examples there cover the remaining cooling architectures. Four capabilities have no configuration key and are driven here against the
 geometry that run produced: the characteristics plume march, the compressible boundary layer, an
 ablative liner as the alternative to a cooled wall, and the materials store the wall alloys come
 from.
@@ -30,17 +32,15 @@ Nothing here is validated by being run. Each solver carries its own validation s
 module docstring, and this script inherits every one of them without adding evidence. What it
 demonstrates is coverage: that each path runs, on one engine, and reports a number.
 
-Two of the numbers printed below rest on inputs chosen for this example rather than measured. The
-C103 thermal conductivity is a nominal handbook figure for Nb-10Hf-1Ti, and the ablative liner's
-char removal efficiency is a calibration fitted to nothing. Both are called out where they print.
+One of the numbers printed below rests on an input chosen for this example rather than measured:
+the ablative liner's char removal efficiency is a calibration fitted to nothing. It is called out
+where it prints.
 
-Three results come out negative on this engine, and each is the solver reporting rather than
-failing. The C103 extension exceeds its temperature limit, because Bartz scales with chamber
-pressure to the 0.8 and a 6.9 MPa hydrogen engine puts a coated columbium shell over its limit at
-any area ratio. The plume march reaches only the near-lip region and says so, because a truncated
-ideal contour leaves a 9 degree divergent exit and the march degrades with that angle. The
-ablative liner recedes the throat by a centimeter in eight seconds, which is what an uncooled
-liner does on a hydrogen engine and is the reason this one is regeneratively cooled.
+Two results come out negative on this engine, and each is the solver reporting rather than
+failing. The plume march reaches only the near-lip region and says so, because a truncated ideal
+contour leaves a 9 degree divergent exit and the march degrades with that angle. The ablative
+liner recedes the throat by a centimeter in eight seconds, which is what an uncooled liner does on
+a hydrogen engine and is the reason this one is regeneratively cooled.
 
 All units are mass base SI.
 
@@ -121,6 +121,11 @@ def reportConfiguredFeatures(nozzle):
         print('  wall alloy                   %s' % nozzle.material)
         print('  channel radius               %8.3f to %.3f mm'
               % (1000.0 * np.nanmin(radius), 1000.0 * np.nanmax(radius)))
+        print('  circuit                      %s' % nozzle.coolantCircuit)
+        circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+        if circuit is not None:
+            print('
+'.join('  ' + line for line in circuit.report().splitlines()))
     else:
         print('  not built on this run')
 

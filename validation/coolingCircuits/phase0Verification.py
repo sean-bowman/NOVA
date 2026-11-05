@@ -10,11 +10,11 @@ Figures that show three corrections behaving as intended on real nozzles.
    below absolute zero at the slot; written at the film layer's own velocity it starts at the
    coolant's temperature. Both are drawn, with the extension wall temperature the corrected drive
    produces.
-2. **The friction wall temperature.** The boundary layer march on the shipped nozzle is handed a
+2. **The friction wall temperature.** The boundary layer march on the reference nozzle is handed a
    wall temperature at every wall station. Matched by index fraction, a jacket ending at an area
    ratio of 3 is stretched over the whole bell; placed by axial position, the jacket covers its own
    section and the extension carries its solved shell temperature.
-3. **Estimated against delivered performance.** The thrust coefficient of the shipped nozzle
+3. **Estimated against delivered performance.** The thrust coefficient of the reference nozzle
    against back pressure, as the one-dimensional equilibrium and chamber-gas estimates and as the
    solved exit plane delivers it, with the named back pressures marked; and the exit plane's
    static pressure against the one-dimensional values.
@@ -27,7 +27,7 @@ Run from the NOVA root:
 
     python validation/coolingCircuits/phase0Verification.py
 
-Two nozzles are solved, the shipped one and the first stage, in sequence because RocketCEA cannot
+Two nozzles are solved, the single-pass reference and the first stage, in sequence because RocketCEA cannot
 run two solves at once. Figures are written beside this script, under phase0/.
 
 Author: Sean Bowman
@@ -69,14 +69,14 @@ METHANESTAGE = {'Fuel': 'LCH4', 'Oxidizer': 'LOX', 'OFRatio': 3.5, 'fuelInitialT
 
 def solve(name: str, overrides: dict):
 
-    '''Run the shipped configuration with overrides, or load the pickle a previous run left.'''
+    '''Run the single-pass reference configuration with overrides, or load the pickle a previous run left.'''
 
     picklePath = os.path.join(outputFolder, f'{name}.pkl')
     if '--reuse' in sys.argv and os.path.isfile(picklePath):
         with open(picklePath, 'rb') as handle:
             return pickle.load(handle)
 
-    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json'), encoding = 'utf-8') as handle:
+    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json'), encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update({'plotsEnabled': False, 'export': False, 'filename': name})
     config.update(overrides)
@@ -205,7 +205,7 @@ def frictionFigure(nozzle) -> str:
               color = colors['textMuted'], fontsize = 8)
     axes.set_xlabel('Axial station [mm]')
     axes.set_ylabel('Wall temperature [K]')
-    axes.set_title('Wall temperature handed to the boundary layer march, shipped nozzle')
+    axes.set_title('Wall temperature handed to the boundary layer march, reference nozzle')
     axes.legend(fontsize = 8)
     figure.tight_layout()
     path = os.path.join(outputFolder, 'frictionWallTemperature.png')
@@ -252,7 +252,7 @@ def performanceFigure(nozzle) -> str:
     right.set_title('Exit plane static pressure, wall to axis')
     right.legend(fontsize = 8)
 
-    figure.suptitle(f'Shipped nozzle: delivered vacuum C_F {summary.thrustCoefDelivered["vacuum"]:.3f} '
+    figure.suptitle(f'Reference nozzle: delivered vacuum C_F {summary.thrustCoefDelivered["vacuum"]:.3f} '
                     f'against {summary.thrustCoefChamberGas["vacuum"]:.3f} one-dimensional, '
                     f'efficiency {summary.nozzleEfficiency:.4f}')
     figure.tight_layout()

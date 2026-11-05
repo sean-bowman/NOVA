@@ -177,6 +177,21 @@ def testEveryCoolingViewDrawsInBothModes(tkRoot, name):
         pane.figure.canvas.draw()
         assert len(pane.figure.get_axes()) >= 2
 
+def testUnderABarrierTheMetalIsDrawnAgainstTheLimit(tkRoot):
+    from novaGui import theme, thermalPlots
+    from novaGui.plotting import MplPane
+
+    theme.applyTheme(tkRoot, 'dark')
+    pane = MplPane(tkRoot)
+    nozzle = _cooledNozzle()
+    results = nozzle.channelThermalResults
+    results['metalWallTemperature'] = np.asarray(results['wallTemperature']) - 300.0
+    pane.render(thermalPlots.drawJacketTemperatures, nozzle)
+    lines = {line.get_label(): line for line in pane.figure.get_axes()[0].get_lines()}
+
+    assert np.array_equal(lines['Hot wall'].get_ydata(), results['metalWallTemperature'])
+    assert np.array_equal(lines['Coating surface'].get_ydata(), results['wallTemperature'])
+
 @pytest.mark.parametrize('name', ['drawWallMap', 'drawFilm', 'drawExtension'])
 def testACoolingViewWithNothingToDrawSaysSo(tkRoot, name):
     from novaGui import theme, thermalPlots

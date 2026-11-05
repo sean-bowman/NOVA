@@ -43,7 +43,7 @@ package-dir = { '' = 'src' }
 where = ['src']
 
 [tool.setuptools.package-data]
-NOVA = ['assets/*.json', 'assets/*.csv', 'assets/*.npz']
+NOVA = ['assets/*.json', 'assets/*.csv', 'assets/*.npz', 'assets/examples/*.json']
 
 [tool.pytest.ini_options]
 testpaths = ['tests']

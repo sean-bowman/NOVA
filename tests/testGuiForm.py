@@ -160,13 +160,19 @@ def testChoosingAnOptionWritesItsKeyAndClearsTheOther(form):
 
 def testTheTruncationModeTravelsWithItsValue(form):
     truncation = _selector(form, 'Regen truncation')
-    assert truncation.selectedLabel == 'Truncate at area ratio'
+    # The shipped engine jackets the whole contour
+    assert truncation.selectedLabel == 'No truncation (full contour)'
 
     _choose(truncation, 'Truncate at recovery temperature')
     assert "'Truncate at recovery temperature' needs a value." in form.validate()
     truncation._var.set('3000')
     config = form.getConfig()
     assert (config['regenTruncationType'], config['regenTruncationValue']) == ('temp', pytest.approx(3000.0))
+
+    _choose(truncation, 'Truncate at area ratio')
+    truncation._var.set('3')
+    config = form.getConfig()
+    assert (config['regenTruncationType'], config['regenTruncationValue']) == ('er', pytest.approx(3.0))
 
     _choose(truncation, 'No truncation (full contour)')
     config = form.getConfig()

@@ -4,7 +4,7 @@
 
 Figures that show a separately cooled extension behaving as intended.
 
-**The wall along the whole nozzle.** The shipped LOX/LH2 nozzle with its chamber jacket cut at an
+**The wall along the whole nozzle.** The reference LOX/LH2 nozzle with its chamber jacket cut at an
 area ratio of 3 and carrying 3.1 kg/s of hydrogen, cooled beyond three ways:
 
 1. a radiation-cooled C103 shell from the joint to the exit;
@@ -68,14 +68,14 @@ CASES = {
 
 def solve(name: str, overrides: dict):
 
-    '''Run the shipped configuration with overrides, or load the pickle a previous run left.'''
+    '''Run the single-pass reference configuration with overrides, or load the pickle a previous run left.'''
 
     picklePath = os.path.join(outputFolder, f'{name}.pkl')
     if '--reuse' in sys.argv and os.path.isfile(picklePath):
         with open(picklePath, 'rb') as handle:
             return pickle.load(handle)
 
-    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json'), encoding = 'utf-8') as handle:
+    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json'), encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update({'plotsEnabled': False, 'export': False, 'filename': name})
     config.update(overrides)
@@ -127,7 +127,7 @@ def wallFigure(solved: dict) -> str:
     for axis in (wallAxis, coolantAxis, driveAxis):
         axis.set_xlabel('Axial position [mm]')
         axis.legend(fontsize = 7)
-    figure.suptitle('Shipped LOX/LH2 nozzle, chamber jacket to area ratio 3 (grey): the extension radiation '
+    figure.suptitle('Reference LOX/LH2 nozzle, chamber jacket to area ratio 3 (grey): the extension radiation '
                     'cooled, on a circuit of its own to 12, and on that circuit dumped as a film')
     path = os.path.join(outputFolder, 'extensionCircuitWall.png')
     figure.savefig(path, dpi = 150)

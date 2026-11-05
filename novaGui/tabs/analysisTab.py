@@ -15,6 +15,8 @@ Date:   08/28/2026
 import math
 from tkinter import ttk
 
+import numpy as np
+
 from .. import theme
 from ..widgets import card
 
@@ -175,13 +177,26 @@ class AnalysisTab(ttk.Frame):
         row(throat, 'Pressure', ceaGet('throatPressure'), '{:.0f}', 'Pa')
         row(throat, 'Gamma', ceaGet('throatGamma') or getattr(nozzle, 'throatGamma', None))
 
-
         if str(getattr(nozzle, 'makeCoolingChannels', 'off')) not in ('off', 'False', ''):
             cooling = section('Cooling')
             row(cooling, 'Number of channels', getattr(nozzle, 'nChannel', None), '{:.0f}')
-            wallTemperature = getattr(nozzle, 'channelWallTemperature', None)
+            # The limit is on the metal; under a barrier coating the gas-side surface runs hotter.
+            # A multi-pass jacket's peak is the hotter of its two families.
+            circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+            if circuit is not None:
+                passes = [passSolution.results for passSolution in (circuit.down, circuit.up)]
+                surface = np.concatenate([np.asarray(results['wallTemperature']) for results in passes])
+                metal = np.concatenate([np.asarray(results.get('metalWallTemperature', results['wallTemperature']))
+                                        for results in passes])
+            else:
+                surface = getattr(nozzle, 'channelWallTemperature', None)
+                results = getattr(nozzle, 'channelThermalResults', None)
+                metal = results.get('metalWallTemperature') if isinstance(results, dict) else None
+            wallTemperature = metal if metal is not None else surface
             row(cooling, 'Peak hot wall temperature',
                 None if wallTemperature is None else float(max(wallTemperature)), '{:.1f}', 'K')
+            if metal is not None and surface is not None and not np.array_equal(np.asarray(metal), np.asarray(surface)):
+                row(cooling, 'Peak coating surface temperature', float(max(surface)), '{:.1f}', 'K')
             row(cooling, 'Hot wall temperature limit', getattr(nozzle, 'maxWallTemperature', None),
                 '{:.1f}', 'K')
             row(cooling, 'Coolant exit temperature',
@@ -208,7 +223,8 @@ class AnalysisTab(ttk.Frame):
                                               f'{float(state.coolantExitTemperature):.1f} K')
                     row(passes, f'  pressure drop', float(state.coolantInitialPressure) - float(state.coolantExitPressure),
                         '{:.0f}', 'Pa')
-                    row(passes, f'  peak hot wall', float(max(passSolution.results['wallTemperature'])), '{:.1f}', 'K')
+                    row(passes, f'  peak hot wall', float(max(passSolution.results.get(
+                        'metalWallTemperature', passSolution.results['wallTemperature']))), '{:.1f}', 'K')
                 row(passes, 'Turnaround loss', circuit.turnaround.pressureDrop, '{:.0f}', 'Pa')
                 row(passes, 'Turnaround section radius', self._mm(circuit.turnaround.sectionRadius), '{:.1f}', 'mm')
                 downRib, upRib = circuit.ribHeatBalance()
@@ -224,7 +240,7 @@ class AnalysisTab(ttk.Frame):
             row(extensionSection, 'Coolant', f'{extensionCircuit.massFlow:.3g} kg/s of {extensionCircuit.coolant}')
             row(extensionSection, 'Outlet', f'{extensionCircuit.outlet} at area ratio {extensionCircuit.outletAreaRatio:.3g}')
             row(extensionSection, 'Outlet temperature', extensionCircuit.outletTemperature, '{:.1f}', 'K')
-            row(extensionSection, 'Peak hot wall', float(max(extensionCircuit.wallTemperature)), '{:.1f}', 'K')
+            row(extensionSection, 'Peak hot wall', float(max(extensionCircuit.metalWallTemperature)), '{:.1f}', 'K')
 
         exhaust = getattr(nozzle, 'turbineExhaust', None)
         if exhaust is not None:

@@ -181,7 +181,7 @@ THERMALPLOTKEYS = ('temperature', 'pressure', 'wallTemperature', 'velocity', 'ma
                    'heatTransfer', 'density', 'viscosity', 'specificHeat', 'nusseltNumber',
                    'exhaustConvectiveHeatTransferCoef', 'coolantConvectiveHeatTransferCoef',
                    'reynoldsNumber', 'radiativeHeatTransfer', 'drivingTemperature',
-                   'coldWallTemperature', 'ribHeatTransfer')
+                   'coldWallTemperature', 'metalWallTemperature', 'ribHeatTransfer')
 
 @dataclass
 class ChannelSizingState:
@@ -721,7 +721,11 @@ def reportSizingResult(state, results: dict) -> None:
 
     '''
 
-    wallTemperature = np.asarray(results['wallTemperature'], dtype = float)
+    # The limit is on the metal. Under a barrier coating the gas-side surface is the coating's,
+    # which runs hotter by design, so the margin is read off the metal behind it and the coating
+    # surface is reported beside it.
+    surfaceTemperature = np.asarray(results['wallTemperature'], dtype = float)
+    wallTemperature = np.asarray(results.get('metalWallTemperature', surfaceTemperature), dtype = float)
     halfExtent      = np.asarray(state.channelRadius, dtype = float)
     limit           = float(np.max(state.maxWallTemperature))
     hottest         = int(np.argmax(wallTemperature))
@@ -736,6 +740,9 @@ def reportSizingResult(state, results: dict) -> None:
           f'{state.numCrossSections} stations, {state.nChannel} channels{splitNote}')
     print(f'  peak hot wall {wallTemperature[hottest]:.1f} K at station {hottest}, '
           f'{wallTemperature[hottest] - limit:+.1f} K against the {limit:.1f} K limit')
+    if not np.array_equal(surfaceTemperature, wallTemperature):
+        print(f'  coating surface peaks at {surfaceTemperature.max():.1f} K, at station '
+              f'{int(np.argmax(surfaceTemperature))}')
     print(f'  coolant exit {float(state.coolantExitTemperature):.1f} K at '
           f'{1e-6*float(state.coolantExitPressure):.3f} MPa, jacket drop '
           f'{1e-6*pressureDrop:.3f} MPa')

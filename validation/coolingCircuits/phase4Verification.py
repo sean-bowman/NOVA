@@ -11,7 +11,7 @@ their passes.
    channel centers), against the slab conductance the march uses with each channel's half
    perimeter as its face. Over channel radii of 2 to 4 mm and coolant coefficients of 1e4 to
    1e5 W/m^2 K.
-2. **Coolant along the jacket, per pass.** The shipped LOX/LH2 jacket cut at an area ratio of 10:
+2. **Coolant along the jacket, per pass.** The reference LOX/LH2 jacket cut at an area ratio of 10:
    a single pass of 60 channels, a two-pass jacket of 30 down and 30 up, and a one-and-a-half-pass
    jacket of the same with its inlet at an area ratio of 3. Coolant temperature and pressure of
    each pass, the turnaround marked.
@@ -67,14 +67,14 @@ CASES = {
 
 def solve(name: str, overrides: dict):
 
-    '''Run the shipped configuration with overrides, or load the pickle a previous run left.'''
+    '''Run the single-pass reference configuration with overrides, or load the pickle a previous run left.'''
 
     picklePath = os.path.join(outputFolder, f'{name}.pkl')
     if '--reuse' in sys.argv and os.path.isfile(picklePath):
         with open(picklePath, 'rb') as handle:
             return pickle.load(handle)
 
-    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'NOVANozzle.json'), encoding = 'utf-8') as handle:
+    with open(os.path.join(root, 'src', 'NOVA', 'assets', 'examples', 'novaSinglePass.json'), encoding = 'utf-8') as handle:
         config = json.load(handle)
     config.update({'plotsEnabled': False, 'export': False, 'filename': name})
     config.update(overrides)
@@ -207,7 +207,7 @@ def passFigure(single, twoPass, oneAndHalf) -> str:
     for axis in (temperatureAxis, pressureAxis):
         axis.set_xlabel('Axial position [mm]')
         axis.legend(fontsize = 7)
-    figure.suptitle('Shipped LOX/LH2 jacket to area ratio 10, 3.4 kg/s hydrogen from 30 K: single pass against '
+    figure.suptitle('Reference LOX/LH2 jacket to area ratio 10, 3.4 kg/s hydrogen from 30 K: single pass against '
                     'two pass (C) and one and a half pass from area ratio 3 (B)')
     path = os.path.join(outputFolder, 'passesAlongJacket.png')
     figure.savefig(path, dpi = 150)

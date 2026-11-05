@@ -494,6 +494,20 @@ def solveConvergingSection(state, convergingSectionAngle: float = 'default', cha
 
     interfaceCircleCenterR     = chamberDiameter/2 - interfaceRadiusOfCurvature * np.sin(chamberInterfaceAngle)
     rStraightStep              = interfaceCircleCenterR + interfaceRadiusOfCurvature * np.cos(np.pi/2 - convergingSectionAngle) - rConvergingThroat[0]
+
+    # The chamber fillet and the throat arc meet along a straight run at the converging angle. A
+    # chamber too narrow for both arcs leaves that run a negative length, the arcs overlap, and the
+    # wall folds back on itself.
+    if rStraightStep < 0.0:
+        minimumDiameter = chamberDiameter - 2.0*rStraightStep
+        raise InvalidInputError(
+            message = (f'A {chamberDiameter:.3f} m chamber is too narrow for its converging section: '
+                       f'the chamber fillet and the throat arc, each {state.throatInletCurvatureNonDimensional:g} '
+                       f'throat radii, overlap at this converging angle. The chamber needs a diameter of at '
+                       f'least {minimumDiameter:.3f} m, a contraction ratio of '
+                       f'{(minimumDiameter/2/state.rNozzleWall[0])**2:.2f}, or a gentler converging angle.'),
+            parameterName = 'chamberDiameter', value = chamberDiameter,
+            validRange = f'at least {minimumDiameter:.3f} m')
     xStraightStep              = rStraightStep / np.tan(np.pi/2 - convergingSectionAngle)
     xFilletStep                = interfaceRadiusOfCurvature * np.cos(convergingSectionAngle)
     interfaceCircleCenterX     = xConvergingThroat[0] - xStraightStep - xFilletStep
