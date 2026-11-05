@@ -27,6 +27,8 @@ import showcasePalette
 documents = [
     (os.path.join('docs', 'reports', 'nozzleContourEffort_2026-09-06.md'), 'NOVA',
      'Contour verification and assessment', ['Sean Bowman', '06 September 2026']),
+    (os.path.join('docs', 'reports', 'coolingCircuitsEffort_2026-11-05.md'), 'NOVA',
+     'Cooling circuits and example engines', ['Sean Bowman', '05 November 2026']),
     (os.path.join('docs', 'NozzleDesignOverview.md'), 'NOVA', 'Rocket Propulsion · Nozzle Design',
      ['Sean Bowman', 'Isabella Duprey-Churn', 'Compiled 07/20/2026']),
 ]
