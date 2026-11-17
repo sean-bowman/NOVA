@@ -16,6 +16,10 @@ progress and removes the session's staging folder. In --browser and --api mode, 
 Run results go to multiprocessing workers started with 'spawn', which re-import this module in
 each child; the `__main__` guard keeps a child from starting a server of its own.
 
+In the window, the page reaches one native call through pywebview's JavaScript bridge,
+`window.pywebview.api.browseFolder`, which opens the folder picker the Export tab's Browse button
+uses. A browser has no such bridge, and the Export tab then takes a typed folder alone.
+
 Under pythonw (novaWeb.bat) there is no console: sys.stdout and sys.stderr are None, and
 uvicorn's log setup fails on them. The launcher then writes both to `<temp>/NOVA/novaWeb.log`,
 replaced at each launch, which also keeps the traceback of a failed start.
@@ -72,6 +76,33 @@ def _waitUntilStarted(server, timeoutSec: float = 20.0) -> bool:
     while not server.started and time.monotonic() < deadline:
         time.sleep(0.05)
     return server.started
+
+class WindowApi:
+
+    '''
+
+    The calls the page can make into the window through pywebview's bridge. pywebview exposes the
+    public methods; the window is held privately so the bridge does not walk into it.
+
+    '''
+
+    def __init__(self):
+
+        self._window = None
+
+    def browseFolder(self, initial: str = '') -> str:
+
+        '''The folder the user picks in the native dialog, or '' when they cancel.'''
+
+        import webview
+
+        if self._window is None:
+            return ''
+        directory = initial if initial and os.path.isdir(initial) else ''
+        chosen = self._window.create_file_dialog(webview.FileDialog.FOLDER, directory = directory)
+        if not chosen:
+            return ''
+        return str(chosen[0] if isinstance(chosen, (list, tuple)) else chosen)
 
 def main(argv: list | None = None) -> int:
 
@@ -136,8 +167,9 @@ def main(argv: list | None = None) -> int:
     # The window opens on the palette's background, so it does not flash white before the page paints
     mode = guiSettings.load()['themeMode']
     background = '#E8E9EA' if mode == 'light' else '#1C1E22'
-    webview.create_window('NOVA', url, width = 1480, height = 940, min_size = (1040, 680),
-                          background_color = background, text_select = True)
+    bridge = WindowApi()
+    bridge._window = webview.create_window('NOVA', url, width = 1480, height = 940, min_size = (1040, 680),
+                                           background_color = background, text_select = True, js_api = bridge)
     # Downloads carry saved configs out of the window
     webview.settings['ALLOW_DOWNLOADS'] = True
     webview.start()

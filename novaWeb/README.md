@@ -45,7 +45,7 @@ Three processes take part in a run:
 | Process | Role |
 | --- | --- |
 | Window | WebView2 (or a browser) running the React app. Holds the form state and the config in backend values (SI). |
-| Server | `novaWeb/server.py`, on 127.0.0.1 at a free port. Serves the app, evaluates the form's dependency predicates, starts and cancels runs, streams run events, and draws the views. |
+| Server | `novaWeb/server.py`, on 127.0.0.1 at a free port. Serves the app, evaluates the form's dependency predicates, starts and cancels runs, streams run events, draws the views, builds the result table and copies the outputs chosen for export. |
 | Worker | `novaWeb/worker.py`, one per run, started with `spawn`. Runs `novaGui.runner.PipelineRunner` exactly as the Tkinter front end does, then pickles the finished `Nozzle` into the run's staging folder. |
 
 A run is a separate process so it can be cancelled: the server terminates it. RocketCEA's machine-wide `nova.lock` is an `msvcrt` byte lock, which Windows releases when the process ends, so a cancelled run does not hold up the next. Each run writes into its own folder under `%TEMP%\NOVA\web<pid>\`, removed when the window closes; `novaGui.runner.clearStaging` removes one a crashed server left behind after twelve hours.
@@ -62,8 +62,12 @@ The server imports these modules from `novaGui/` and does not copy them, so both
 | `units` | The unit table, reduced to `si = scale * shown + offset` per display unit |
 | `runner`, `progress` | The run itself and its stage tracking |
 | `tabs.viewTab` | The view list and the test of which views a run produced |
+| `tabs.analysisTab` | The result table: its `refresh` runs on a stand-in that records the rows (`novaWeb/analysis.py`) |
+| `tabs.exportTab` | The output categories and the rule that files an output by its name |
 | `plotting`, `thermalPlots` | The plotly builder for each view, and the Matplotlib drawers |
 | `settings` | The saved theme mode (`%APPDATA%\NOVA\guiSettings.json`), so a mode chosen in either front end opens the other in it |
+
+The Analyze table is the Tkinter table's code run without Tk. `AnalysisTab.refresh` fills a ttk.Treeview and a summary label; `novaWeb/analysis.py` calls it on a plain object carrying the class's methods, a tree that records each insert and a label that records its text, so both front ends list the same quantities with the same formatting. The Tkinter table packs the three performance columns into one cell; the web table splits them into columns, and splits a single value from its unit so the numbers align.
 
 The schema's `showWhen` and `expandWhen` predicates are Python functions. The browser receives each row's static description with a `conditional` flag and posts its config to `/api/schema/state`, which returns the rows and sections to hide and the sections to open.
 
@@ -88,8 +92,8 @@ The Engineering Flat Metal palette lives in `novaGui.theme.palettes`. `src/style
 | --- | --- |
 | Design | Every field of the config schema in its sections, with the main fields first and the rest folded into Advanced settings or a named fold. Selector rows choose between alternative keys (L* or barrel length, thrust or mass flow, area ratio or exit pressure, the regen truncation). Every dimensioned field has a unit dropdown that converts in place. A search box filters by label, key, help and option text; Changed only shows the fields that differ from the shipped nozzle, each marked with a copper dot that restores the shipped value when clicked. An entry that does not parse is flagged on its row and its section, and blocks Generate. Reset to example, Load example and Save config sit in the toolbar. |
 | View | Every view a run can produce, grouped in a sidebar; views the last run did not produce are greyed. A view with both renderings offers an Interactive and Static switch. |
-| Analyze | Not in the web front end; the Tkinter front end carries it. |
-| Export | Not in the web front end; the Tkinter front end carries it. |
+| Analyze | The last good run's scalar results in sections: sizing, the combustion chamber, delivered performance beside the two 1D estimates, chamber and throat thermochemistry, the cooling summary and each coolant pass, the extension circuit, the gas generator, the films and the plume. A filter narrows the rows by name; Copy puts the table, as filtered, on the clipboard as tab-separated text, and Save CSV writes it as `<run name>Results.csv`. |
+| Export | The last good run's outputs by category (figures, interactive figures, contour coordinates, 3D geometry, channel size profile, the pickled Nozzle, the run config, other files), each category and file with a check. Every output is checked after a run, except the categories unchecked before it. Export copies the checked files into `<output folder>/<run name>Outputs/`; the output folder defaults to `runs/` at the repository root. A double click opens a file in its desktop application, and Open folder opens the target. In the desktop window Browse opens the native folder picker; in a browser the folder is typed. |
 
 The run bar holds Generate (Cancel while running), the current stage, a progress bar that eases toward the stage's ceiling between NOVA's banners, the elapsed time, the latest output line and the run log.
 
@@ -101,15 +105,16 @@ The run bar holds Generate (Cancel while running), the current stage, a progress
 
 ### Tkinter features not carried over
 
-- The Analyze table and the Export tab.
 - The wall material panel (sampled conductivity, density, modulus, yield and CTE under the material field).
 - The radiative extension's material fill (choosing a hot-structure material sets its conductivity and emissivities).
 - The cross-field checks the Tkinter form runs before a run, beyond entries that do not parse and required selector values.
 
 ## Tests
 
-`tests/testWebServer.py` covers the serialized schema against `configSchema`, the dependency predicates, the unit table against `NOVA.units` to a relative 1e-12, the routes that read files, the palette stylesheet, and a run session's error and cancel paths with real worker processes. It takes about 20 s.
+`tests/testWebServer.py` covers the serialized schema against `configSchema`, the dependency predicates, the unit table against `NOVA.units` to a relative 1e-12, the routes that read files, the result table (performance columns, value and unit split, the Tkinter rows and summary), the export routes (listing by category, a copy compared byte for byte, refusal of names outside the run's listing, open), the palette stylesheet, and a run session's error and cancel paths with real worker processes. It takes about 25 s.
 
 ## Security
 
-The server binds to 127.0.0.1 only. It runs NOVA on any config it is sent and unpickles its own run results from its staging folder; it is not meant to face a network.
+The server binds to 127.0.0.1 only. It runs NOVA on any config it is sent, unpickles its own run results from its staging folder, copies a run's outputs into any folder it is given and opens a run's files in the desktop's applications; it is not meant to face a network. Export and open requests name files by base name, and the server acts only on names in the finished run's own listing, so neither reaches a file outside the run's staging folder.
+
+The desktop window exposes one native call to the page through pywebview's bridge, `browseFolder` (`WindowApi` in `novaWeb/__main__.py`), which opens the folder picker and returns the path chosen.

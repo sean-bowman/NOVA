@@ -8,9 +8,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { AnalyzeTab } from './analyze/AnalyzeTab';
 import { api } from './api';
 import { MoonIcon, SunIcon } from './components/Icons';
 import { DesignTab } from './design/DesignTab';
+import { ExportTab } from './export/ExportTab';
 import { LogDrawer, RunBar } from './run/RunBar';
 import { useRunEvents } from './run/useRunEvents';
 import type { Config, FormState, Mode, RunSummary, Schema, ViewIndex } from './types';
@@ -267,17 +269,14 @@ export function App() {
                         <ViewTab index={viewIndex} mode={mode} />
                     </div>
                 )}
-                {(tab === 'analyze' || tab === 'export') && (
-                    <div className="tab-panel">
-                        <div className="card placeholder">
-                            <h2>{tab === 'analyze' ? 'Analyze' : 'Export'}</h2>
-                            <p className="muted">
-                                {tab === 'analyze'
-                                    ? 'The performance and sizing table is not yet in the web front end.'
-                                    : 'Exporting run outputs is not yet in the web front end.'}
-                                {' '}The Tkinter front end (<code>python -m novaGui</code>) carries it.
-                            </p>
-                        </div>
+                {schema && (
+                    <div className="tab-panel" hidden={tab !== 'analyze'}>
+                        <AnalyzeTab runId={viewIndex?.runId ?? null} visible={tab === 'analyze'} onNotify={notify} />
+                    </div>
+                )}
+                {schema && (
+                    <div className="tab-panel" hidden={tab !== 'export'}>
+                        <ExportTab runId={viewIndex?.runId ?? null} formName={String(config.filename || '')} onNotify={notify} />
                     </div>
                 )}
             </main>
@@ -305,8 +304,8 @@ export function App() {
                         <h2>NOVA -- Nozzle Optimization for Variable Applications</h2>
                         <p>
                             Web front end for the NOVA suite. Design a nozzle on the Design tab, run the contour,
-                            cooling, heat transfer and plume pipeline in a worker process, and inspect the result on the
-                            View tab.
+                            cooling, heat transfer and plume pipeline in a worker process, inspect the result on the
+                            View and Analyze tabs, and copy the outputs to keep from the Export tab.
                         </p>
                         <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one.</p>
                         <div className="modal-actions">

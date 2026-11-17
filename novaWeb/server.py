@@ -21,6 +21,11 @@ Routes, all under /api:
     GET  /views                     the view list, and the keys the last good run produced
     GET  /views/{key}/interactive   a view's plotly figure JSON, ?mode=
     GET  /views/{key}/static        a view's Matplotlib PNG, ?mode=&width=&height=&ratio=
+    GET  /analysis                  the last good run's result table (novaWeb.analysis)
+    GET  /export                    the output categories, the default output folder, the run's files
+    GET  /export/target             the folder an export writes to, ?base=&name=
+    POST /export                    copy files: {'baseDir': str, 'files': [base names]}
+    POST /export/open               open {'what': 'file', 'name'} or {'what': 'folder', 'baseDir'}
 
 Everything else is the built front end (novaWeb/frontend/dist), with index.html for any path
 that is not a file, so a reload on a client route still opens the app. index.html goes out with
@@ -29,8 +34,9 @@ the saved theme mode already on its root element, so the first paint is in the r
 Preferences are the Tkinter front end's own file (`%APPDATA%/NOVA/guiSettings.json`), so a mode
 chosen in either front end opens the other in it.
 
-The server binds to 127.0.0.1 only. It runs NOVA on whatever config it is sent and unpickles its
-own run results; it is not meant to face a network.
+The server binds to 127.0.0.1 only. It runs NOVA on whatever config it is sent, unpickles its
+own run results, copies a run's outputs into whatever folder it is given and opens a run's files
+in the desktop's applications; it is not meant to face a network.
 
 Author: Sean Bowman
 Date:   11/16/2026
@@ -50,6 +56,8 @@ from fastapi.staticfiles import StaticFiles
 
 # Local imports
 from novaGui import settings as guiSettings
+from . import analysis
+from . import outputs
 from . import schemaJson
 from . import views
 from .session import RunSession
@@ -243,6 +251,89 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         if 'message' in drawn:
             return JSONResponse({'message': drawn['message']})
         return Response(drawn['png'], media_type = 'image/png', headers = {'Cache-Control': 'no-store'})
+
+    # -- Analyze -- #
+    analysisCache = {}
+
+    @app.get('/api/analysis')
+    def analysisTable() -> dict:
+
+        record = app.state.session.result
+        if record is None or not record.ok:
+            return {'runId': None, 'runName': '', 'summary': '', 'sections': []}
+        if analysisCache.get('runId') != record.runId:
+            try:
+                table = analysis.resultTable(_nozzle())
+            except HTTPException:
+                raise
+            except Exception as exc:                       # noqa: BLE001 -- report the table's failure
+                raise HTTPException(500, f'the result table failed: {type(exc).__name__}: {exc}') from exc
+            analysisCache.clear()
+            analysisCache.update(runId = record.runId, table = table)
+        return {'runId': record.runId, 'runName': record.runName, **analysisCache['table']}
+
+    # -- Export -- #
+    def _finishedRun():
+
+        record = app.state.session.result
+        if record is None or not record.ok:
+            raise HTTPException(404, 'no finished run to export')
+        return record
+
+    @app.get('/api/export')
+    def exportIndex() -> dict:
+
+        record = app.state.session.result
+        finished = record is not None and record.ok
+        return {'categories': outputs.categories(), 'defaultBaseDir': outputs.defaultBaseDir(),
+                'runId': record.runId if finished else None, 'runName': record.runName if finished else '',
+                'files': outputs.listing(record) if finished else []}
+
+    @app.get('/api/export/target')
+    def exportTarget(base: str = '', name: str = '') -> dict:
+
+        target = outputs.targetFolder(base, name)
+        return {'target': target, 'exists': os.path.isdir(target)}
+
+    @app.post('/api/export')
+    async def exportFiles(request: Request) -> dict:
+
+        body = await request.json()
+        if not isinstance(body, dict) or not isinstance(body.get('files'), list):
+            raise HTTPException(400, 'the body must carry a list of files')
+        record = _finishedRun()
+        names = [str(name) for name in body['files']]
+        try:
+            return await asyncio.get_running_loop().run_in_executor(
+                None, outputs.export, record, str(body.get('baseDir') or ''), names)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            target = outputs.targetFolder(body.get('baseDir') or '', record.runName)
+            raise HTTPException(400, f'could not write to {target}: {exc}') from exc
+
+    @app.post('/api/export/open')
+    async def exportOpen(request: Request) -> dict:
+
+        body = await request.json()
+        what = body.get('what') if isinstance(body, dict) else None
+        if what == 'file':
+            path = outputs.runFiles(_finishedRun()).get(str(body.get('name', '')))
+        elif what == 'folder':
+            record = app.state.session.result
+            name = record.runName if record is not None and record.ok else str(body.get('name', ''))
+            path = outputs.targetFolder(str(body.get('baseDir') or ''), name)
+            if not os.path.isdir(path):
+                path = None
+        else:
+            raise HTTPException(400, "what must be 'file' or 'folder'")
+        if path is None or not os.path.exists(path):
+            raise HTTPException(404, 'nothing there to open')
+        try:
+            outputs.openPath(path)
+        except OSError as exc:
+            raise HTTPException(400, f'could not open {path}: {exc}') from exc
+        return {'opened': path}
 
     # -- Front end -- #
     if os.path.isdir(frontendDist):

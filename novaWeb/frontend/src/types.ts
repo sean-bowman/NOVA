@@ -1,7 +1,8 @@
 /* ========================================
    API TYPES
-   The shapes the NOVA server sends: the Design form schema, run events and the view list.
-   They mirror novaWeb/schemaJson.py, novaWeb/session.py and novaWeb/views.py.
+   The shapes the NOVA server sends: the Design form schema, run events, the view list, the
+   result table and the export listing. They mirror novaWeb/schemaJson.py, session.py, views.py,
+   analysis.py and outputs.py.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -133,4 +134,55 @@ export interface ViewIndex {
     views: ViewSpec[];
     available: string[];
     runId: number | null;
+}
+
+export interface ResultRow {
+    label: string;
+    cells: string[];
+    unit: string;
+    indent: boolean;
+}
+
+export interface ResultSection {
+    title: string;
+    columns: string[] | null;
+    rows: ResultRow[];
+}
+
+export interface ResultTable {
+    runId: number | null;
+    runName: string;
+    summary: string;
+    sections: ResultSection[];
+}
+
+export interface OutputCategory {
+    key: string;
+    name: string;
+    description: string;
+}
+
+export interface OutputFile {
+    name: string;
+    category: string;
+    bytes: number;
+}
+
+export interface ExportIndex {
+    categories: OutputCategory[];
+    defaultBaseDir: string;
+    runId: number | null;
+    runName: string;
+    files: OutputFile[];
+}
+
+export interface ExportTarget {
+    target: string;
+    exists: boolean;
+}
+
+export interface ExportResult {
+    target: string;
+    written: number;
+    bytes: number;
 }

@@ -99,3 +99,29 @@ export function ResetIcon({ className }: IconProps) {
         </svg>
     );
 }
+
+export function CopyIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+            <rect x="8.5" y="8.5" width="11" height="11" rx="1.8" />
+            <path d="M15.5 8.5V6.3a1.8 1.8 0 0 0-1.8-1.8H6.3a1.8 1.8 0 0 0-1.8 1.8v7.4a1.8 1.8 0 0 0 1.8 1.8h2.2" />
+        </svg>
+    );
+}
+
+export function DownloadIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" />
+            <path d="M5 19.5h14" />
+        </svg>
+    );
+}
+
+export function FolderIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+            <path d="M3.5 7.2a1.7 1.7 0 0 1 1.7-1.7h4.1l2 2.2h7.5a1.7 1.7 0 0 1 1.7 1.7v8.4a1.7 1.7 0 0 1-1.7 1.7H5.2a1.7 1.7 0 0 1-1.7-1.7z" />
+        </svg>
+    );
+}

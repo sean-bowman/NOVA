@@ -186,16 +186,6 @@ h2 {
     color: var(--text-muted);
 }
 
-.placeholder {
-    max-width: 640px;
-    margin: 32px auto;
-    padding: 22px 24px;
-}
-
-.placeholder p {
-    margin: 10px 0 0;
-}
-
 /* -- Controls -- */
 .button {
     display: inline-flex;
@@ -814,6 +804,280 @@ select.input option {
 .js-plotly-plot .plotly .modebar-btn:hover path,
 .js-plotly-plot .plotly .modebar-btn.active path {
     fill: var(--accent) !important;
+}
+
+.eyebrow-inline {
+    padding: 0;
+}
+
+.button-small {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 12px;
+}
+
+/* -- Analyze tab -- */
+.analyze-tab {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.result-summary {
+    color: var(--accent);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.result-column {
+    max-width: 980px;
+}
+
+.section-count {
+    color: var(--text-dim);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.result-body {
+    padding: 4px 16px 12px;
+}
+
+.result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-variant-numeric: tabular-nums;
+}
+
+.result-label-col {
+    width: auto;
+}
+
+.result-value-col {
+    width: 128px;
+}
+
+.result-unit-col {
+    width: 150px;
+}
+
+.result-table th {
+    padding: 8px 8px 4px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+}
+
+.result-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.result-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.result-table tbody tr:hover td {
+    background: var(--surface-2);
+}
+
+.result-label {
+    color: var(--text);
+}
+
+.is-indented .result-label {
+    padding-left: 26px;
+    color: var(--text-muted);
+}
+
+.result-value {
+    text-align: right;
+    white-space: nowrap;
+    font-family: Consolas, 'Cascadia Mono', ui-monospace, monospace;
+}
+
+.result-value.is-blank {
+    color: var(--text-dim);
+}
+
+.result-unit {
+    padding-left: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* -- Export tab -- */
+.export-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    height: 100%;
+    padding: 10px;
+}
+
+.export-folder {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    column-gap: 10px;
+    row-gap: 6px;
+    align-items: center;
+    padding: 12px 14px;
+}
+
+.export-folder-label {
+    font-weight: 600;
+}
+
+.export-target {
+    grid-column: 2 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 12px;
+}
+
+.export-target .mono {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.export-list {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    padding: 10px 14px 6px;
+}
+
+.export-list-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-bottom: 8px;
+}
+
+.output-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+.output-row {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr) 96px 90px;
+    column-gap: 10px;
+    align-items: center;
+    min-height: 32px;
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+
+.output-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    min-height: 28px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.output-category-row,
+.output-file-row {
+    cursor: pointer;
+    user-select: none;
+}
+
+.output-category-row:hover,
+.output-file-row:hover {
+    background: var(--surface-2);
+}
+
+.output-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.output-file-check {
+    padding-left: 22px;
+}
+
+.output-chevron {
+    flex: none;
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform 0.12s;
+}
+
+.output-chevron.is-open {
+    transform: rotate(90deg);
+}
+
+.output-toggle > input:first-child {
+    margin-left: 22px;
+}
+
+.output-check {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.output-name {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.output-name .muted {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.output-file-row .output-name {
+    display: block;
+    padding-left: 22px;
+    font-size: 12px;
+}
+
+.output-size {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.export-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 4px 2px;
+}
+
+.export-status {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* -- Run bar and log -- */

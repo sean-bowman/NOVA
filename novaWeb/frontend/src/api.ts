@@ -5,7 +5,9 @@
    Sean Bowman [11/16/2026]
    ======================================== */
 
-import type { Config, FormState, Mode, RunEvent, Schema, ViewIndex } from './types';
+import type {
+    Config, ExportIndex, ExportResult, ExportTarget, FormState, Mode, ResultTable, RunEvent, Schema, ViewIndex,
+} from './types';
 
 export class ApiError extends Error {
     status: number;
@@ -48,7 +50,28 @@ export const api = {
     views: () => request<ViewIndex>('/api/views'),
     interactiveFigure: (key: string, mode: Mode) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(`/api/views/${key}/interactive?mode=${mode}`),
+    analysis: () => request<ResultTable>('/api/analysis'),
+    exportIndex: () => request<ExportIndex>('/api/export'),
+    exportTarget: (base: string, name: string) =>
+        request<ExportTarget>(`/api/export/target?base=${encodeURIComponent(base)}&name=${encodeURIComponent(name)}`),
+    exportFiles: (baseDir: string, files: string[]) => request<ExportResult>('/api/export', jsonBody('POST', { baseDir, files })),
+    openOutput: (name: string) => request<{ opened: string }>('/api/export/open', jsonBody('POST', { what: 'file', name })),
+    openFolder: (baseDir: string, name: string) =>
+        request<{ opened: string }>('/api/export/open', jsonBody('POST', { what: 'folder', baseDir, name })),
 };
+
+interface WindowBridge {
+    browseFolder: (initial: string) => Promise<string>;
+}
+
+/**
+ * The desktop window's native calls (pywebview's bridge, novaWeb/__main__.py WindowApi), or null
+ * in a browser. pywebview attaches the bridge after the page loads and fires pywebviewready.
+ */
+export function windowBridge(): WindowBridge | null {
+    const bridge = (window as unknown as { pywebview?: { api?: Partial<WindowBridge> } }).pywebview?.api;
+    return bridge && typeof bridge.browseFolder === 'function' ? (bridge as WindowBridge) : null;
+}
 
 /**
  * A static view: the PNG's URL, or the drawer's message when the run lacks the view's data.
