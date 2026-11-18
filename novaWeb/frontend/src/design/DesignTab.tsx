@@ -5,14 +5,22 @@
    into Advanced settings or a named fold. Rows the config makes irrelevant are hidden by the
    schema's own predicates, evaluated on the server. A search box and a changed-only filter
    narrow the form; a copper dot marks a value that differs from the shipped nozzle.
+
+   The server's cross-field checks (the Tkinter form's) show in a strip above the form, and
+   the rows they name are marked in amber; they warn rather than block. The wall material row
+   carries a panel of the alloy's sampled properties, and the extension material row a note of
+   what the material store holds. Choosing an extension material fills the shell properties
+   the store carries.
    Sean Bowman [11/16/2026]
    ======================================== */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
+import { api } from '../api';
 import { NozzleGlyph, ResetIcon, SearchIcon } from '../components/Icons';
-import type { Config, FormState, GroupSpec, ItemSpec, Schema } from '../types';
+import type { Config, ConfigValue, FormState, GroupSpec, ItemSpec, Schema } from '../types';
 import { FieldRow } from './FieldRow';
+import { ExtensionNote, MaterialPanel } from './MaterialInfo';
 import { SelectorRow } from './SelectorRow';
 import { blocksOf, isChanged, matchesSearch } from './formModel';
 
@@ -48,6 +56,7 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
     }, [formState.expand]);
 
     const hidden = useMemo(() => new Set(formState.hidden), [formState.hidden]);
+    const flagged = useMemo(() => new Set(formState.flagged), [formState.flagged]);
     const search = query.trim().toLowerCase();
     const filtering = search !== '' || changedOnly;
 
@@ -58,16 +67,48 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
         count + group.items.filter((item) => !(item.type === 'field' && item.hidden)
             && isChanged(item, config, schema.defaults)).length, 0), [schema, config]);
 
+    // Choosing an extension material fills the shell properties the store carries for it
+    const fillExtension = (value: ConfigValue) => {
+        if (typeof value !== 'string' || !value) {
+            return;
+        }
+        api.extensionMaterial(value)
+            .then((entry) => Object.keys(entry.fill).length > 0 && onPatch(entry.fill))
+            .catch(() => undefined);
+    };
+
     const renderItem = (item: ItemSpec) => {
         const visible = rowVisible(item);
         const changed = isChanged(item, config, schema.defaults);
         if (item.type === 'selector') {
             return <SelectorRow key={item.id} selector={item} config={config} units={schema.units} visible={visible}
-                                changed={changed} error={errors[item.id] ?? null} onChange={onPatch} onError={onError} />;
+                                changed={changed} error={errors[item.id] ?? null} flagged={flagged.has(item.id)}
+                                onChange={onPatch} onError={onError} />;
         }
-        return <FieldRow key={item.id} spec={item} value={config[item.key] ?? null} defaultValue={schema.defaults[item.key] ?? null}
-                         units={schema.units} visible={visible} changed={changed} error={errors[item.id] ?? null}
-                         onChange={onPatch} onError={onError} />;
+        const row = (
+            <FieldRow spec={item} value={config[item.key] ?? null} defaultValue={schema.defaults[item.key] ?? null}
+                      units={schema.units} visible={visible} changed={changed} error={errors[item.id] ?? null}
+                      flagged={flagged.has(item.id)} onChange={onPatch} onError={onError}
+                      onChoose={item.key === 'extensionMaterial' ? fillExtension : undefined} />
+        );
+        if (item.key === 'material') {
+            return (
+                <Fragment key={item.id}>
+                    {row}
+                    <MaterialPanel material={String(config.material ?? '')} units={schema.units} visible={visible} />
+                </Fragment>
+            );
+        }
+        if (item.key === 'extensionMaterial') {
+            const material = typeof config.extensionMaterial === 'string' ? config.extensionMaterial : null;
+            return (
+                <Fragment key={item.id}>
+                    {row}
+                    <ExtensionNote material={material} visible={visible} />
+                </Fragment>
+            );
+        }
+        return <Fragment key={item.id}>{row}</Fragment>;
     };
 
     const renderSection = (group: GroupSpec) => {
@@ -79,6 +120,7 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
         const sectionChanges = group.items.filter((item) => !(item.type === 'field' && item.hidden)
             && isChanged(item, config, schema.defaults)).length;
         const sectionErrors = group.items.filter((item) => errors[item.id]).length;
+        const sectionFlags = group.items.filter((item) => flagged.has(item.id) && !errors[item.id]).length;
 
         return (
             <section key={group.id} className={`card section ${open ? 'is-open' : ''}`} hidden={sectionHidden}>
@@ -87,6 +129,7 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
                     <NozzleGlyph className="section-glyph" />
                     <span className="section-title">{group.title}</span>
                     {sectionErrors > 0 && <span className="badge badge-error">{sectionErrors} to fix</span>}
+                    {sectionFlags > 0 && <span className="badge badge-warn">{sectionFlags} to check</span>}
                     {sectionChanges > 0 && <span className="badge">{sectionChanges} changed</span>}
                 </button>
                 <div className="section-body" hidden={!open}>
@@ -144,6 +187,14 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
                     Save config
                 </button>
             </div>
+            {formState.problems.length > 0 && (
+                <div className="form-warnings" role="status">
+                    <span className="eyebrow eyebrow-inline">Check before running</span>
+                    <ul>
+                        {formState.problems.map((problem) => <li key={problem}>{problem}</li>)}
+                    </ul>
+                </div>
+            )}
             <div className="design-scroll">
                 <div className="design-column" key={formVersion}>
                     {schema.groups.map(renderSection)}

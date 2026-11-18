@@ -89,6 +89,31 @@ export interface Schema {
 export interface FormState {
     hidden: string[];
     expand: string[];
+    /** Cross-field problems: warnings, a run with them asks before it starts */
+    problems: string[];
+    /** Row ids the problems name */
+    flagged: string[];
+}
+
+/** A wall alloy's properties at one temperature (novaWeb.design.wallSample), SI */
+export interface WallSample {
+    material: string;
+    temperatureK: number;
+    thermalConductivity: number;
+    density: number;
+    elasticModulus: number;
+    yieldStrength: number;
+    cte: number;
+    elongation: number;
+    source: string;
+    fallback: boolean;
+    measured: Record<string, boolean>;
+}
+
+/** What the material store holds for an extension material: the note, and the fields it fills */
+export interface ExtensionEntry {
+    note: string;
+    fill: Record<string, number>;
 }
 
 export type RunStateName = 'idle' | 'running' | 'done' | 'error' | 'cancelled';

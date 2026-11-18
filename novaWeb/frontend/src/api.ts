@@ -6,7 +6,8 @@
    ======================================== */
 
 import type {
-    Config, ExportIndex, ExportResult, ExportTarget, FormState, Mode, ResultTable, RunEvent, Schema, ViewIndex,
+    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, Mode, ResultTable, RunEvent, Schema,
+    ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -43,6 +44,9 @@ export const api = {
     schema: () => request<Schema>('/api/schema'),
     formState: (config: Config) => request<FormState>('/api/schema/state', jsonBody('POST', config)),
     example: (name: string) => request<Config>(`/api/examples/${encodeURIComponent(name)}`),
+    wallMaterial: (name: string, temperatureK: number) =>
+        request<WallSample>(`/api/materials/wall?name=${encodeURIComponent(name)}&temperatureK=${temperatureK}`),
+    extensionMaterial: (name: string) => request<ExtensionEntry>(`/api/materials/extension?name=${encodeURIComponent(name)}`),
     settings: () => request<{ themeMode: Mode }>('/api/settings'),
     saveSettings: (settings: { themeMode: Mode }) => request<{ themeMode: Mode }>('/api/settings', jsonBody('PUT', settings)),
     startRun: (config: Config, mode: Mode) => request<{ runId: number }>('/api/runs', jsonBody('POST', { config, mode })),

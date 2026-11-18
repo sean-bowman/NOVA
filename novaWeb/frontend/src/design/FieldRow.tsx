@@ -2,7 +2,8 @@
    FIELD ROW
    One config key on the Design form: the label with its help and changed marker, an editor
    chosen by the field's kind, and a unit dropdown for a dimensioned value. The config holds
-   SI; the row shows the unit its dropdown names and converts in place when that changes.
+   SI; the row shows the unit its dropdown names and converts in place when that changes. A
+   label in amber is one a cross-field problem names.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -21,11 +22,15 @@ interface FieldRowProps {
     visible: boolean;
     changed: boolean;
     error: string | null;
+    flagged?: boolean;
     onChange: (patch: Config) => void;
     onError: (id: string, message: string | null) => void;
+    /** Called when the user picks from a fixed choice list, and not when the value changes otherwise */
+    onChoose?: (value: ConfigValue) => void;
 }
 
-export function FieldRow({ spec, value, defaultValue, units, visible, changed, error, onChange, onError }: FieldRowProps) {
+export function FieldRow({ spec, value, defaultValue, units, visible, changed, error, flagged = false, onChange, onError,
+                           onChoose }: FieldRowProps) {
     const inputId = useId();
     const focused = useRef(false);
     const [unit, setUnit] = useState<string | null>(spec.dimension ? siUnit(units, spec.dimension) : null);
@@ -73,7 +78,11 @@ export function FieldRow({ spec, value, defaultValue, units, visible, changed, e
         const offList = shown !== '' && !spec.choices.some((choice) => choice.label === shown);
         editor = (
             <select id={inputId} className="input" value={shown}
-                    onChange={(event) => onChange({ [spec.key]: choiceValue(spec, event.target.value) })}>
+                    onChange={(event) => {
+                        const chosen = choiceValue(spec, event.target.value);
+                        onChange({ [spec.key]: chosen });
+                        onChoose?.(chosen);
+                    }}>
                 {value === null && <option value="" />}
                 {offList && <option value={shown}>{shown}</option>}
                 {spec.choices.map((choice) => <option key={choice.label} value={choice.label}>{choice.label}</option>)}
@@ -114,7 +123,7 @@ export function FieldRow({ spec, value, defaultValue, units, visible, changed, e
     return (
         <div className="form-row" hidden={!visible}>
             <div className="form-label">
-                <label htmlFor={inputId} className={error ? 'label-error' : undefined}>{spec.label}</label>
+                <label htmlFor={inputId} className={error ? 'label-error' : (flagged ? 'label-warn' : undefined)}>{spec.label}</label>
                 <HelpMarker text={spec.help} />
                 {changed && (
                     <button type="button" className="changed-dot" aria-label={`Restore ${spec.label} to the shipped value`}

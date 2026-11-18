@@ -4,7 +4,7 @@
    pressure): an option dropdown in the label column, the value, and its unit. Each option
    keeps its own text and unit while another is chosen. Choosing an option writes its value,
    the constants it fixes, and null to every other key the row holds, as
-   novaGui.widgets.SelectorRow does.
+   novaGui.widgets.SelectorRow does. An option in amber is one a cross-field problem names.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -22,13 +22,15 @@ interface SelectorRowProps {
     visible: boolean;
     changed: boolean;
     error: string | null;
+    flagged?: boolean;
     onChange: (patch: Config) => void;
     onError: (id: string, message: string | null) => void;
 }
 
 type Parsed = { ok: true; value: number | null } | { ok: false; message: string };
 
-export function SelectorRow({ selector, config, units, visible, changed, error, onChange, onError }: SelectorRowProps) {
+export function SelectorRow({ selector, config, units, visible, changed, error, flagged = false, onChange,
+                              onError }: SelectorRowProps) {
     const [chosen, setChosen] = useState(() => chooseOption(selector, config).label);
     const [optionUnits, setOptionUnits] = useState<Record<string, string | null>>(() => Object.fromEntries(
         selector.options.map((option) => [option.label, option.dimension ? siUnit(units, option.dimension) : null])));
@@ -109,7 +111,7 @@ export function SelectorRow({ selector, config, units, visible, changed, error, 
     return (
         <div className="form-row" hidden={!visible}>
             <div className="form-label form-label-selector">
-                <select className={`input input-selector ${error ? 'input-error' : ''}`} value={chosen}
+                <select className={`input input-selector ${error ? 'input-error' : (flagged ? 'input-warn' : '')}`} value={chosen}
                         aria-label={selector.name} onChange={(event) => choose(event.target.value)}>
                     {selector.options.map((candidate) => <option key={candidate.label}>{candidate.label}</option>)}
                 </select>

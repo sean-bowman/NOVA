@@ -400,6 +400,11 @@ select.input option {
     color: var(--red);
 }
 
+.badge-warn {
+    background: color-mix(in srgb, var(--yellow) 20%, transparent);
+    color: var(--yellow);
+}
+
 .segmented {
     display: inline-flex;
     padding: 2px;
@@ -633,6 +638,111 @@ select.input option {
 
 .form-note-error {
     color: var(--red);
+}
+
+.label-warn {
+    color: var(--yellow);
+}
+
+.input-warn {
+    border-color: var(--yellow);
+}
+
+.form-warnings {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 8px 18px;
+    background: color-mix(in srgb, var(--yellow) 10%, var(--bg));
+    border-bottom: 1px solid color-mix(in srgb, var(--yellow) 40%, var(--border));
+    color: var(--yellow);
+}
+
+.form-warnings .eyebrow {
+    color: var(--yellow);
+}
+
+.form-warnings ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 22px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.form-warnings li::before {
+    content: '\2022';
+    margin-right: 7px;
+}
+
+.material-panel {
+    grid-column: 1 / -1;
+    margin: 2px 0 6px;
+    padding: 10px 14px 11px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.material-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.material-heading .eyebrow {
+    white-space: nowrap;
+}
+
+.material-temperature {
+    width: 76px;
+    height: 28px;
+}
+
+.material-heading .input-unit {
+    width: 92px;
+}
+
+.material-values {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px 18px;
+    margin: 10px 0 0;
+}
+
+.material-values div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 3px;
+    border-bottom: 1px dashed var(--border);
+}
+
+.material-values dt {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.material-values dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+}
+
+.material-values dd span {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.material-note {
+    margin-top: 7px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.material-note.label-warn {
+    color: var(--yellow);
 }
 
 .changed-dot {
@@ -1230,5 +1340,15 @@ select.input option {
 .modal-actions {
     display: flex;
     justify-content: flex-end;
+    gap: 8px;
     margin-top: 16px;
+}
+
+.modal-list {
+    margin: 8px 0 0;
+    padding-left: 20px;
+}
+
+.modal-list li + li {
+    margin-top: 4px;
 }

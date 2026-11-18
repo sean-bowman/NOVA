@@ -9,13 +9,17 @@ The list of views and the test of which ones a run produced are the Tkinter fron
 (novaGui.tabs.viewTab.views and availableViews), so the two front ends offer the same views for
 the same run. Each view renders one or both of two ways:
 
-    interactive   a plotly figure as JSON, from the builder novaGui.plotting.interactiveBuilders
-                  names for it, drawn in the browser by plotly.js at full resolution
+    interactive   a plotly figure as JSON, drawn in the browser by plotly.js at full resolution,
+                  from the builder novaGui.plotting.interactiveBuilders names for the view, or for
+                  the nine cooling views from novaWeb.coolingFigures
     static        the Matplotlib drawing the Tkinter pane shows, rendered headless to PNG at the
                   browser pane's size and pixel ratio
 
-The cooling views have no plotly builder yet and render static only. The 3D assemblies render
-interactive only: their Matplotlib form is a decimated stand-in for the WebGL view.
+The 3D assemblies render interactive only: their Matplotlib form is a decimated stand-in for the
+WebGL view.
+
+The Matplotlib plume title tells a Tkinter user that its "Open interactive" button shows the
+correlated structure beyond the march. Here the same figure says the Interactive rendering does.
 
 Figures are drawn in one palette mode at a time, and the mode lives in module globals
 (NOVA.palette for both renderers, novaGui.theme and Matplotlib's rcParams for the static one), so
@@ -43,6 +47,11 @@ sourceOverrides = {
     'volute':      '3D assembly, full mesh',
 }
 
+# Text in the shared Matplotlib drawers that names a Tkinter control, and what it reads here
+staticTextOverrides = {
+    'Open interactive shows them': 'the Interactive rendering shows them',
+}
+
 def warmUp() -> None:
 
     '''
@@ -60,8 +69,9 @@ def warmUp() -> None:
         matplotlib.use('Agg', force = True)
         from novaGui import plotting, runner, theme, thermalPlots, backend
         from novaGui.tabs import viewTab
+        from . import coolingFigures
         _modules.update(plotting = plotting, runner = runner, theme = theme, thermalPlots = thermalPlots,
-                        backend = backend, viewTab = viewTab)
+                        backend = backend, viewTab = viewTab, coolingFigures = coolingFigures)
         _ready.set()
 
 def ready() -> bool:
@@ -104,6 +114,16 @@ def _staticDrawers() -> dict:
         'revolved':           (plotting.drawRevolvedContour,),
     }
 
+def _interactiveBuilder(spec):
+
+    '''The plotly builder for a view, `(figuresModule, nozzle) -> Figure or None`, or None.'''
+
+    builders = _module('plotting').interactiveBuilders
+    if spec.builderKey is not None and spec.builderKey in builders:
+        return builders[spec.builderKey]
+
+    return _module('coolingFigures').builders.get(spec.key)
+
 def viewList() -> list:
 
     '''
@@ -117,12 +137,11 @@ def viewList() -> list:
     '''
 
     viewTab = _module('viewTab')
-    builders = _module('plotting').interactiveBuilders
     drawers = _staticDrawers()
 
     return [{'key': spec.key, 'group': spec.group, 'label': spec.label,
              'source': sourceOverrides.get(spec.key, spec.source),
-             'interactive': spec.builderKey is not None and spec.builderKey in builders,
+             'interactive': _interactiveBuilder(spec) is not None,
              'static': spec.key in drawers}
             for spec in viewTab.views]
 
@@ -163,15 +182,16 @@ def interactiveFigure(nozzle, key: str, mode: str) -> str | None:
 
     '''
 
-    viewTab, plotting, backend = _module('viewTab'), _module('plotting'), _module('backend')
+    viewTab, backend = _module('viewTab'), _module('backend')
     spec = next((spec for spec in viewTab.views if spec.key == key), None)
-    if spec is None or spec.builderKey not in plotting.interactiveBuilders:
+    builder = _interactiveBuilder(spec) if spec is not None else None
+    if builder is None:
         return None
 
     with renderLock:
         figures = backend.figuresModule()
         figures.figurePalette.setFigureMode(mode)
-        figure = plotting.interactiveBuilders[spec.builderKey](figures, nozzle)
+        figure = builder(figures, nozzle)
         if figure is None:
             return None
         # The pane sizes the figure; a fixed size from the builder would stop it filling the pane
@@ -234,6 +254,23 @@ class HeadlessPane:
 
         pass
 
+def _overrideText(figure) -> None:
+
+    '''
+
+    Reword the drawer text that names a Tkinter control (staticTextOverrides) in every axes title.
+    The title's Text is edited in place, so it keeps the size and color the drawer gave it.
+
+    '''
+
+    for ax in figure.axes:
+        title = ax.title.get_text()
+        reworded = title
+        for old, new in staticTextOverrides.items():
+            reworded = reworded.replace(old, new)
+        if reworded != title:
+            ax.title.set_text(reworded)
+
 def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixelRatio: float) -> dict:
 
     '''
@@ -278,6 +315,7 @@ def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixel
         function(pane, nozzle, *arguments)
         if pane.messageText is not None:
             return {'message': pane.messageText}
+        _overrideText(pane.figure)
 
         FigureCanvasAgg(pane.figure)
         buffer = io.BytesIO()

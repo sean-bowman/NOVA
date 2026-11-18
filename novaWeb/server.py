@@ -12,8 +12,11 @@ Routes, all under /api:
     GET  /settings                  saved preferences (novaGui.settings: the theme mode)
     PUT  /settings                  save preferences
     GET  /schema                    the Design form (novaWeb.schemaJson.serializeSchema)
-    POST /schema/state              rows and sections a config hides, sections it opens
+    POST /schema/state              rows and sections a config hides, sections it opens, and its
+                                    cross-field problems and the rows they name (novaWeb.design)
     GET  /examples/{name}           a shipped example engine's config, merged over the defaults
+    GET  /materials/wall            a wall alloy's sampled properties, ?name=&temperatureK=
+    GET  /materials/extension       an extension material's store entry: the note and the fill, ?name=
     POST /runs                      start a run: {'config': {...}, 'mode': 'dark'|'light'}
     POST /runs/cancel               terminate the running worker
     GET  /runs/state                the session snapshot
@@ -57,6 +60,7 @@ from fastapi.staticfiles import StaticFiles
 # Local imports
 from novaGui import settings as guiSettings
 from . import analysis
+from . import design
 from . import outputs
 from . import schemaJson
 from . import views
@@ -156,7 +160,9 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         config = await request.json()
         if not isinstance(config, dict):
             raise HTTPException(400, 'the body must be a config object')
-        return schemaJson.formState(config)
+        # The checks read the material store, a file read the first time, so they run off the loop
+        checks = await asyncio.get_running_loop().run_in_executor(None, design.checks, config)
+        return {**schemaJson.formState(config), **checks}
 
     @app.get('/api/examples/{name}')
     def example(name: str) -> dict:
@@ -167,6 +173,20 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         with open(path, encoding = 'utf-8') as handle:
             loaded = json.load(handle)
         return {**schema()['defaults'], **loaded}
+
+    # -- Materials -- #
+    @app.get('/api/materials/wall')
+    def wallMaterial(name: str = 'GRCop-42', temperatureK: float = Query(300.0, gt = 0.0, le = 5000.0)) -> dict:
+
+        try:
+            return design.wallSample(name, temperatureK)
+        except Exception as exc:                           # noqa: BLE001 -- the panel shows the reason
+            raise HTTPException(500, f'material data unavailable: {exc}') from exc
+
+    @app.get('/api/materials/extension')
+    def extensionMaterial(name: str) -> dict:
+
+        return design.extensionEntry(name)
 
     # -- Runs -- #
     @app.post('/api/runs')

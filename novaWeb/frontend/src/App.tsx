@@ -2,7 +2,8 @@
    NOVA APP
    The window: header (plume mark, wordmark, Load config, theme switch, About), the Design,
    View, Analyze and Export tabs, and the run bar. The config lives here in backend values
-   (SI), so the Design tab edits it and the run bar sends it as it stands.
+   (SI), so the Design tab edits it and the run bar sends it as it stands. An entry that does
+   not parse blocks a run; a cross-field problem asks first, as the Tkinter form does.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -42,13 +43,14 @@ export function App() {
     const [schema, setSchema] = useState<Schema | null>(null);
     const [config, setConfig] = useState<Config>({});
     const [formVersion, setFormVersion] = useState(0);
-    const [formState, setFormState] = useState<FormState>({ hidden: [], expand: [] });
+    const [formState, setFormState] = useState<FormState>({ hidden: [], expand: [], problems: [], flagged: [] });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [mode, setMode] = useState<Mode>(initialMode);
     const [tab, setTab] = useState<TabName>('design');
     const [viewIndex, setViewIndex] = useState<ViewIndex | null>(null);
     const [logOpen, setLogOpen] = useState(false);
     const [aboutOpen, setAboutOpen] = useState(false);
+    const [confirmProblems, setConfirmProblems] = useState<string[] | null>(null);
     const [toasts, setToasts] = useState<Toast[]>([]);
     const [loadError, setLoadError] = useState('');
     const fileInput = useRef<HTMLInputElement>(null);
@@ -134,6 +136,11 @@ export function App() {
     const canGenerate = schema !== null && !running && errorList.length === 0 && run.connected;
     const blockReason = errorList.length > 0 ? `Fix first: ${errorList[0]}` : (!run.connected ? 'The NOVA server is not answering' : '');
 
+    const startRun = useCallback(() => {
+        setConfirmProblems(null);
+        api.startRun(config, mode).catch((error: Error) => notify('error', 'Run did not start', error.message));
+    }, [config, mode, notify]);
+
     const generate = useCallback(() => {
         if (!canGenerate) {
             if (errorList.length > 0) {
@@ -142,8 +149,13 @@ export function App() {
             }
             return;
         }
-        api.startRun(config, mode).catch((error: Error) => notify('error', 'Run did not start', error.message));
-    }, [canGenerate, config, errorList, mode, notify]);
+        // Cross-field problems warn: the run starts once they are seen and accepted
+        if (formState.problems.length > 0) {
+            setConfirmProblems(formState.problems);
+            return;
+        }
+        startRun();
+    }, [canGenerate, errorList, formState.problems, notify, startRun]);
 
     const cancel = useCallback(() => {
         api.cancelRun().catch((error: Error) => notify('error', 'Cancel failed', error.message));
@@ -297,6 +309,27 @@ export function App() {
                     </div>
                 ))}
             </div>
+
+            {confirmProblems && (
+                <div className="modal-scrim" onClick={() => setConfirmProblems(null)}>
+                    <div className="card modal" role="alertdialog" aria-label="Configuration warnings"
+                         onClick={(event) => event.stopPropagation()}>
+                        <h2>Configuration warnings</h2>
+                        <p>The form has unresolved issues:</p>
+                        <ul className="modal-list">
+                            {confirmProblems.map((problem) => <li key={problem}>{problem}</li>)}
+                        </ul>
+                        <div className="modal-actions">
+                            <button type="button" className="button" onClick={() => { setConfirmProblems(null); setTab('design'); }}>
+                                Back to the form
+                            </button>
+                            <button type="button" className="button button-primary" onClick={startRun} autoFocus>
+                                Run anyway
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {aboutOpen && (
                 <div className="modal-scrim" onClick={() => setAboutOpen(false)}>
