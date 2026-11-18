@@ -7,7 +7,7 @@ Folds the progress events a NOVA run sends (`NOVA.progress`) into what a front e
 0-1 fraction and a ceiling for the run bar, a short label naming where the run is, a longer
 detail line, and the run's top-level stages with their state and times.
 
-Both front ends use it. The Tkinter window folds the runner's events on its main thread; the
+Both front ends use it. The legacy Tkinter window folds the runner's events on its main thread; the
 web server folds the same events in its run session and sends the result to the browser.
 
 Each top-level stage spans a share of the bar in proportion to the time it is expected to take:

@@ -31,7 +31,8 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if root not in sys.path:
     sys.path.insert(0, root)
 
-from novaGui import configSchema, theme
+from novaGui import configSchema
+from legacy.novaTk import theme
 
 def _group(title: str):
     return next(group for group in configSchema.groups if group.title == title)
@@ -123,7 +124,7 @@ def testEverySelectorWritesOnlyTheKeysItHolds():
 
 @pytest.fixture
 def form(tkRoot):
-    from novaGui.tabs.configTab import ConfigTab
+    from legacy.novaTk.tabs.configTab import ConfigTab
     theme.applyTheme(tkRoot, 'dark')
     tab = ConfigTab(tkRoot, None)
     tab.pack()
@@ -278,7 +279,7 @@ class _Wheel:
 
 @pytest.fixture
 def scroller(tkRoot):
-    from novaGui.widgets import ScrollableFrame
+    from legacy.novaTk.widgets import ScrollableFrame
     theme.applyTheme(tkRoot, 'dark')
     frame = ScrollableFrame(tkRoot)
     frame.pack()
@@ -323,7 +324,7 @@ def testAnOldSessionsStagingIsClearedAndThisOnesIsKept(tmp_path, monkeypatch):
 def testExportCopiesOnlyTheCheckedOutputs(tkRoot, tmp_path):
     import os
     import types
-    from novaGui.tabs.exportTab import ExportTab
+    from legacy.novaTk.tabs.exportTab import ExportTab
     theme.applyTheme(tkRoot, 'dark')
     tab = ExportTab(tkRoot, types.SimpleNamespace(configTab = None))
     tab.pack()

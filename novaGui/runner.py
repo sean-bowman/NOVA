@@ -3,15 +3,16 @@
 
 '''
 
-Runs Nozzle.generateNozzle() on a background thread so the Tk event loop stays
-responsive during a multi-minute solve. NOVA's printed output and its progress events
-(NOVA.progress) are forwarded to a queue the GUI drains on its main thread; the GUI folds
-the events into its run bar with novaGui.progress.RunProgress.
+Runs Nozzle.generateNozzle() on a background thread so the caller stays responsive during
+a multi-minute solve. NOVA's printed output and its progress events (NOVA.progress) are
+forwarded to a queue the caller drains; the front end folds the events into its run bar
+with novaGui.progress.RunProgress. The web front end runs it inside a worker process
+(novaGui.worker), the legacy Tkinter front end on a thread of its window.
 
 Before the first run the loader:
 
-  - forces the Matplotlib Agg backend and applies the GUI palette so NOVA's
-    saved figures match the rest of the window,
+  - forces the Matplotlib Agg backend and applies the GUI palette (themeColors) so
+    NOVA's saved figures match the rest of the window,
   - stops plotly.offline.plot from opening a browser tab,
   - sends the outputs to the session's staging folder rather than to wherever NOVA
     would put them.
@@ -19,10 +20,9 @@ Before the first run the loader:
 While a run reports its progress as events, NOVA draws no tqdm bars, so none reach the log.
 
 Every run writes all of NOVA's outputs, figures and data files alike, into the
-staging folder (`stagingFolder`), where the View tab reads them. The Export tab
-copies the ones chosen to the output folder. The staging folder belongs to one
-session of the window and is removed when the window closes; `clearStaging`
-removes any a crashed session left behind.
+staging folder, where the View tab reads them. The Export tab copies the ones chosen
+to the output folder. A staging folder belongs to one session of a front end and is
+removed when it closes; `clearStaging` removes any a crashed session left behind.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -45,7 +45,7 @@ import traceback
 # Exporting NOVA_HEADLESS=0 before launching puts the windows back.
 os.environ.setdefault('NOVA_HEADLESS', '1')
 
-from . import theme
+from . import themeColors
 from . import configSchema
 
 # NOVA is installed as a package, so no path handling is needed here.
@@ -296,7 +296,7 @@ class PipelineRunner:
         import matplotlib
         matplotlib.use('Agg', force = True)
         import matplotlib.pyplot as plt
-        plt.rcParams.update(theme.matplotlibRcParams())
+        plt.rcParams.update(themeColors.matplotlibRcParams())
 
         # NOVA.Nozzle names both the module and the class it exports, and the
         # package binds the class. The patches below need the module, so it is
@@ -306,7 +306,7 @@ class PipelineRunner:
 
         # The figures the run writes, saved and interactive, in the mode the window is showing
         from NOVA import palette as figurePalette
-        figurePalette.setFigureMode(theme.mode)
+        figurePalette.setFigureMode(themeColors.mode)
 
         # Send outputs to the staging folder rather than to wherever the nearest .git
         # happens to be.
