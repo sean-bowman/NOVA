@@ -63,6 +63,6 @@ docs/scaling-techniques-for-design-development-and-test-2004.pdf
 validation/coolingCircuits/**/*.pkl
 validation/coolingCircuits/**/*.json
 
-# Web front end: npm packages and the Vite build, which `npm run build` recreates
-novaWeb/frontend/node_modules/
-novaWeb/frontend/dist/
+# The GUI's React app: npm packages and the Vite build, which `npm run build` recreates
+novaGui/frontend/node_modules/
+novaGui/frontend/dist/

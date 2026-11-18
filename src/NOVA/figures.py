@@ -13,10 +13,10 @@ far better than a static image can. Both are required dependencies.
 
 Rather than write each figure twice, the extractors pull the arrays and labels off a Nozzle into
 a plain dataclass that neither library appears in, and each backend's renderers draw from that
-one description. A figure is described once, and the two renderings cannot drift. The GUI is the
-one exception: its panes are embedded in a live Tk canvas rather than saved or exported, which
-`novaGui.plotting` draws with its own renderers against these same descriptions, styled from the
-GUI's own theme rather than this module's.
+one description. A figure is described once, and the two renderings cannot drift. The GUI's
+static views are the one exception: `novaGui.plotting` draws them with its own Matplotlib
+renderers against these same descriptions, styled from the GUI's palette (`novaGui.themeColors`)
+rather than this module's.
 
 Every figure a run can produce is built here, including the 3D assembly views that have no
 Matplotlib counterpart: the volute assembly, the channel mesh and jacket, and the regen heat

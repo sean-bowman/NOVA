@@ -242,3 +242,27 @@ def testASplitInAMultiPassJacketIsRefused(tmp_path):
 
     with pytest.raises(InvalidInputError, match = 'split is not built'):
         runConfiguration(tmp_path, **{**ONEANDAHALF, 'channelSplitAreaRatio': 5.0})
+
+def testEachOuterPassIsReportedAndTheReportChangesNothing(jacket, twoPassApart):
+
+    '''Under a progress reporter the down and up passes are stages and each outer pass an iteration.'''
+
+    from NOVA import progress
+
+    _, base, geometry, thermal = jacket
+    events = []
+    with progress.reporting(events.append):
+        circuit = solveCoolantCircuit(copy.deepcopy(base), geometry, thermal, 'twoPass', material = 'GRCop-42',
+                                      ribExchange = False)
+
+    stages = [(event['type'], event['path']) for event in events if event['type'] in ('stageStart', 'stageEnd')]
+    iterations = [event for event in events if event['type'] == 'iteration']
+    assert stages == [('stageStart', 'down'), ('stageEnd', 'down'), ('stageStart', 'up'), ('stageEnd', 'up')]
+    assert [event['index'] for event in iterations] == [1] and iterations[0]['name'] == 'pass'
+
+    metrics = iterations[0]['metrics']
+    assert metrics['change'] is None
+    assert metrics['upOutletTemperature'] == circuit.coolantExitTemperature
+    assert metrics['downOutletTemperature'] == float(circuit.down.state.coolantExitTemperature)
+    assert circuit.coolantExitTemperature == twoPassApart.coolantExitTemperature
+    assert circuit.coolantExitPressure == twoPassApart.coolantExitPressure

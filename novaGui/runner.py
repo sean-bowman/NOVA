@@ -3,24 +3,26 @@
 
 '''
 
-Runs Nozzle.generateNozzle() on a background thread so the Tk event loop stays
-responsive during a multi-minute solve. Progress printed by NOVA is captured and
-forwarded to a queue the GUI drains on its main thread.
+Runs Nozzle.generateNozzle() on a background thread so the caller stays responsive during
+a multi-minute solve. NOVA's printed output and its progress events (NOVA.progress) are
+forwarded to a queue the caller drains; the front end folds the events into its run bar
+with novaGui.progress.RunProgress. The web front end runs it inside a worker process
+(novaGui.worker), the legacy Tkinter front end on a thread of its window.
 
 Before the first run the loader:
 
-  - forces the Matplotlib Agg backend and applies the GUI palette so NOVA's
-    saved figures match the rest of the window,
+  - forces the Matplotlib Agg backend and applies the GUI palette (themeColors) so
+    NOVA's saved figures match the rest of the window,
   - stops plotly.offline.plot from opening a browser tab,
-  - silences the tqdm progress bars (tqdm 4.65 predates TQDM_DISABLE),
   - sends the outputs to the session's staging folder rather than to wherever NOVA
     would put them.
 
+While a run reports its progress as events, NOVA draws no tqdm bars, so none reach the log.
+
 Every run writes all of NOVA's outputs, figures and data files alike, into the
-staging folder (`stagingFolder`), where the View tab reads them. The Export tab
-copies the ones chosen to the output folder. The staging folder belongs to one
-session of the window and is removed when the window closes; `clearStaging`
-removes any a crashed session left behind.
+staging folder, where the View tab reads them. The Export tab copies the ones chosen
+to the output folder. A staging folder belongs to one session of a front end and is
+removed when it closes; `clearStaging` removes any a crashed session left behind.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -33,7 +35,6 @@ import json
 import time
 import shutil
 import tempfile
-import functools
 import importlib
 import threading
 import traceback
@@ -44,9 +45,8 @@ import traceback
 # Exporting NOVA_HEADLESS=0 before launching puts the windows back.
 os.environ.setdefault('NOVA_HEADLESS', '1')
 
-from . import theme
+from . import themeColors
 from . import configSchema
-from .progress import StageTracker
 
 # NOVA is installed as a package, so no path handling is needed here.
 
@@ -127,7 +127,7 @@ class _StreamToQueue:
     '''
 
     Minimal write-only text sink that splits input into lines and pushes them to
-    a queue. Carriage returns from progress bars are treated as line breaks.
+    a queue. Carriage returns are treated as line breaks.
     Deliberately not an io.TextIOBase subclass: print() needs only write() and
     flush(), and the extra attributes below satisfy libraries that probe stdout.
 
@@ -136,19 +136,14 @@ class _StreamToQueue:
     encoding = 'utf-8'
     errors = 'replace'
 
-    def __init__(self, messageQueue, tracker = None):
+    def __init__(self, messageQueue):
 
         self._queue = messageQueue
-        self._tracker = tracker
         self._buffer = ''
 
     def _emit(self, line: str) -> None:
 
         self._queue.put(('log', line))
-        if self._tracker is not None:
-            advance = self._tracker.match(line)
-            if advance is not None:
-                self._queue.put(('progress', advance))
 
     def write(self, chunk: str) -> int:
 
@@ -189,7 +184,7 @@ class PipelineRunner:
 
         ('log', str)                        a line of run output
         ('status', (state, detail))         state in {'running','done','error'}
-        ('progress', (fraction, ceiling, label))  0-1 run progress and its stage
+        ('stage', dict)                     a NOVA.progress event
         ('result', RunResult)               terminal, always the last message
 
     '''
@@ -233,10 +228,9 @@ class PipelineRunner:
         savedStdout, savedStderr = sys.stdout, sys.stderr
 
         try:
-            tracker = StageTracker(configDict)
-            self._queue.put(('progress', (0.0, 0.02, 'loading NOVA')))
             self._queue.put(('status', ('running', 'loading NOVA')))
             nozzleModule, nozzleClass = self._loadNova(outputBaseDir)
+            from NOVA import progress as novaProgress
 
             forced = self._applyForcedFlags(configDict)
             os.makedirs(outputBaseDir, exist_ok = True)
@@ -251,18 +245,16 @@ class PipelineRunner:
             result.configPath = configPath
 
             self._queue.put(('log', f'run config written to {configPath}'))
-            advance = tracker.match('run config written')
-            if advance is not None:
-                self._queue.put(('progress', advance))
             if forced:
                 self._queue.put(('log', 'program flags forced on for the GUI: ' + ', '.join(forced)))
             self._queue.put(('status', ('running', 'generating nozzle')))
 
-            sys.stdout = _StreamToQueue(self._queue, tracker)
-            sys.stderr = _StreamToQueue(self._queue, tracker)
+            sys.stdout = _StreamToQueue(self._queue)
+            sys.stderr = _StreamToQueue(self._queue)
 
             nozzle = nozzleClass()
-            nozzle.generateNozzle(configPath = configPath)
+            with novaProgress.reporting(lambda event: self._queue.put(('stage', event))):
+                nozzle.generateNozzle(configPath = configPath)
 
             sys.stdout.flush()
             sys.stderr.flush()
@@ -304,7 +296,7 @@ class PipelineRunner:
         import matplotlib
         matplotlib.use('Agg', force = True)
         import matplotlib.pyplot as plt
-        plt.rcParams.update(theme.matplotlibRcParams())
+        plt.rcParams.update(themeColors.matplotlibRcParams())
 
         # NOVA.Nozzle names both the module and the class it exports, and the
         # package binds the class. The patches below need the module, so it is
@@ -314,17 +306,7 @@ class PipelineRunner:
 
         # The figures the run writes, saved and interactive, in the mode the window is showing
         from NOVA import palette as figurePalette
-        figurePalette.setFigureMode(theme.mode)
-
-        # Silence progress bars in every NOVA module that binds tqdm by name.
-        for moduleName in ('NOVA.Nozzle', 'NOVA.Volute'):
-            module = sys.modules.get(moduleName)
-            if module is None or not hasattr(module, 'tqdm'):
-                continue
-            if not getattr(module, '_novaGuiTqdmPatched', False):
-                realTqdm = module.tqdm
-                module.tqdm = functools.partial(realTqdm, disable = True)
-                module._novaGuiTqdmPatched = True
+        figurePalette.setFigureMode(themeColors.mode)
 
         # Send outputs to the staging folder rather than to wherever the nearest .git
         # happens to be.

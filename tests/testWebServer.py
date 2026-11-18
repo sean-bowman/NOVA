@@ -1,8 +1,8 @@
-# -- NOVA: Web Front End Server Tests -- #
+# -- NOVA: GUI Server Tests -- #
 
 '''
 
-The web front end's server: the Design form schema it serializes, the dependency predicates it
+The GUI's server: the Design form schema it serializes, the dependency predicates it
 evaluates, the unit table it hands the browser, the routes that read files, the cross-field checks
 and the material routes, the result table, the export routes, the cooling figures, the palette
 stylesheet, and a run session's error and cancel paths.
@@ -37,9 +37,9 @@ from fastapi.testclient import TestClient
 
 from NOVA import units as novaUnits
 from novaGui import configSchema
-from novaWeb import analysis, outputs, paletteCss, schemaJson
-from novaWeb.server import createApp
-from novaWeb.session import RunRecord, RunSession
+from novaGui import analysis, outputs, paletteCss, schemaJson
+from novaGui.server import createApp
+from novaGui.session import RunRecord, RunSession
 
 @pytest.fixture(scope = 'module')
 def client():
@@ -146,10 +146,10 @@ def testViewsBeforeAnyRunAreAllUnavailable(client):
     '''
     With no finished run, the view list is complete and nothing in it is available.
     '''
-    from novaGui.tabs import viewTab
+    from novaGui import viewCatalog
 
     index = client.get('/api/views').json()
-    assert [view['key'] for view in index['views']] == [spec.key for spec in viewTab.views]
+    assert [view['key'] for view in index['views']] == [spec.key for spec in viewCatalog.views]
     assert index['available'] == []
     assert index['runId'] is None
     assert client.get('/api/views/contour/interactive').status_code == 404
@@ -393,17 +393,17 @@ def _showcase(name: str):
         return pickle.load(handle)
 
 def testEveryCoolingViewDrawsInteractive():
-    from novaWeb import views
+    from novaGui import views
     cooling = [spec for spec in views.viewList() if spec['group'] == 'Cooling']
     assert all(spec['interactive'] for spec in cooling)
     assert {spec['key'] for spec in cooling if spec['static']} == set(views._module('coolingFigures').builders)
 
 def _matplotlibSeries(key: str, nozzle) -> list:
     '''The labelled lines of a view's Matplotlib drawing: [(label, x, y)], single points and levels left out.'''
-    from novaWeb import views
+    from novaGui import views
     function, *arguments = views._staticDrawers()[key]
     with views.renderLock:
-        views._module('theme')._bindPalette('dark')
+        views._module('themeColors').bindPalette('dark')
         pane = views.HeadlessPane(900, 600, 1.0)
         function(pane, nozzle, *arguments)
     series = []
@@ -424,7 +424,7 @@ def testTheCoolingFiguresDrawTheMatplotlibSeries(run, key):
     A cross-check of the plotly builders against the Matplotlib drawers they port: every labelled
     series the drawer plots appears in the plotly figure under the same name with the same values.
     '''
-    from novaWeb import views
+    from novaGui import views
     nozzle = _showcase(run)
     series = _matplotlibSeries(key, nozzle)
     assert series
@@ -440,7 +440,7 @@ def testTheCoolingFiguresDrawTheMatplotlibSeries(run, key):
 def testTheUnlabelledPanelsDrawTheJacketArrays():
     '''The panels Matplotlib leaves unlabelled: coolant flow and properties, and the wall map's hover values.'''
     from novaGui import thermalPlots
-    from novaWeb import views
+    from novaGui import views
     nozzle = _showcase('keroloxF1')
     results = thermalPlots.thermalResults(nozzle)
     figures, builders = views._module('backend').figuresModule(), views._module('coolingFigures').builders
@@ -467,7 +467,7 @@ def testThePlumeTitleNamesTheInteractiveRendering():
     '''The reworded drawer text is still in the drawers, and rewording keeps the title's style.'''
     import inspect
     from matplotlib.figure import Figure
-    from novaWeb import views
+    from novaGui import views
     plotting = views._module('plotting')
     source = inspect.getsource(plotting._drawPlumeScene) + inspect.getsource(plotting._drawCorrelatedPlume)
     for old in views.staticTextOverrides:
@@ -486,7 +486,7 @@ def testThePlumeTitleNamesTheInteractiveRendering():
 def testThePaletteStylesheetMatchesThePythonPalette():
     '''
     The front end reads the palette from a committed stylesheet. It must be what
-    `python -m novaWeb.paletteCss` writes from novaGui.theme.palettes today.
+    `python -m novaGui.paletteCss` writes from novaGui.themeColors.palettes today.
     '''
     with open(paletteCss.cssPath, encoding = 'utf-8') as handle:
         assert handle.read() == paletteCss.cssText()
@@ -518,6 +518,10 @@ def testARejectedConfigEndsTheRunWithItsError():
     finally:
         session.shutdown()
 
+def _contourRunning(session) -> bool:
+    '''Whether the session's run has reported its contour stage open.'''
+    return any(stage['key'] == 'contour' and stage['state'] == 'running' for stage in session.state['stages'])
+
 def testACancelledRunEndsCancelledAndFreesTheSession():
     '''
     Cancel terminates the worker mid-solve; the session reports it cancelled and takes another run.
@@ -526,9 +530,9 @@ def testACancelledRunEndsCancelledAndFreesTheSession():
     try:
         session.start(configSchema.defaultConfig(), 'dark')
         deadline = time.time() + 90.0
-        while session.state['fraction'] < 0.08 and time.time() < deadline:
+        while not _contourRunning(session) and time.time() < deadline:
             time.sleep(0.25)
-        assert session.state['fraction'] >= 0.08, 'the run never reached the contour solve'
+        assert _contourRunning(session), 'the run never reached the contour solve'
         with pytest.raises(RuntimeError):
             session.start(configSchema.defaultConfig(), 'dark')
         assert session.cancel()

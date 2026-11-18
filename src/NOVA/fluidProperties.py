@@ -646,7 +646,7 @@ class fluidView():
 
         '''
 
-        from tqdm import tqdm
+        from . import progress
         try:
             # Parallel processing module
             from joblib import Parallel, delayed
@@ -703,7 +703,7 @@ class fluidView():
             #   - A positive integer representing the number of cores allocated to this user
             #   - -1 to use all available cores (fallback if resource manager unavailable)
             output = Parallel(n_jobs = allocatedCores)(delayed(fluidProps)(self.fluid, self.inputTypes, self.outputTypes, self.inputArray1[i], self.inputArray2[j], self.mixtureRatio) \
-                                        for i in tqdm(range(numRows)) for j in range(numCols))
+                                        for i in progress.track(range(numRows)) for j in range(numCols))
             holdOutputs = np.array(output).T.reshape(numOutputs, numRows, numCols)
 
             # Release session from resource manager after computation completes
@@ -714,7 +714,7 @@ class fluidView():
                     pass  # Ignore cleanup errors
         else:
             # Loop over the ranges manually and call fluidProps individually for each input pair
-            for col, input2 in tqdm(enumerate(self.inputArray2)):
+            for col, input2 in progress.track(enumerate(self.inputArray2), total = len(self.inputArray2)):
                 for row, input1 in enumerate(self.inputArray1):
                     outputs = fluidProps(self.fluid, self.inputTypes, self.outputTypes, input1, input2, mixtureRatio = self.mixtureRatio)
                     for outputNumber in range(numOutputs):
@@ -753,7 +753,7 @@ class fluidView():
 
         '''
 
-        from tqdm import tqdm
+        from . import progress
         try:
             # Parallel processing module
             from joblib import Parallel, delayed
@@ -778,11 +778,11 @@ class fluidView():
         if self.parallelBool:
             # Run fluidProps in parallel using all of the CPU resources available
             output = Parallel(n_jobs = -1)(delayed(fluidProps)(self.fluid, 'TP', outputTypes, temperatureArray[i], pressureArray[j], self.mixtureRatio) \
-                                        for i in tqdm(range(numRows)) for j in range(numCols))
+                                        for i in progress.track(range(numRows)) for j in range(numCols))
             holdOutputs = np.array(output).T.reshape(numOutputs, numRows, numCols)
         else:
             # Loop over the ranges manually and call fluidProps individually for each (T, P) pair (SLOW AF)
-            for col, pressure in tqdm(enumerate(pressureArray)):
+            for col, pressure in progress.track(enumerate(pressureArray), total = len(pressureArray)):
                 for row , temperature in enumerate(temperatureArray):
                     outputs = fluidProps(self.fluid, 'TP', outputTypes, temperature, pressure, mixtureRatio = self.mixtureRatio)
                     for outputNumber in range(numOutputs):
@@ -929,7 +929,7 @@ class fluidView():
         import os
         import shutil
         import decimal
-        from tqdm import tqdm
+        from . import progress
 
         # This is the current working directory
         cwd = os.getcwd()
@@ -994,7 +994,7 @@ class fluidView():
                 df.to_csv(csvFilePath)
 
         # Now we loop over each output property and generate a CSV for each and output in form of T, P, propertyValue irregardless of isobaric toggle
-        for property in tqdm(outputproperties):
+        for property in progress.track(outputproperties):
             # Prepare an empty array to hold output property values
             propertyValues = np.zeros((numTemperatures, numPressures))
 

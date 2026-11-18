@@ -54,6 +54,7 @@ from .gasDynamics import (prandtlMeyerAngle, radiusMachRelation, conicalLength,
                           isentropicValues)
 from .wallGeometry import bezierBellWall, thrustOptimizedParabolaWall
 from .geometryTools import arcSpline, lineIntersection
+from . import progress
 from . import units
 
 def throatScalingFactor(engineMassFlow: float, chamberPressure: float, throatGamma: float,
@@ -2280,10 +2281,25 @@ def solveDesignPoint(nozzle, lengthFraction: float | str, lowerBound: float = 0.
 
         '''
 
+        # Each residual is a full characteristics solve of a few seconds, so each is reported as
+        # an evaluation: a front end shows the solve moving rather than tens of silent seconds.
+        # The wrapper returns the residual untouched, so the iterates are the ones fsolve takes
+        # on the bare function.
+        evaluations = 0
+
+        def residual(designMach, *args):
+            nonlocal evaluations
+            value = nozzle.truncatedIdealContour(designMach, *args)
+            evaluations += 1
+            progress.iteration(evaluations, {'designMach': np.atleast_1d(designMach)[0],
+                                             'residual': np.atleast_1d(value)[0]},
+                               name = 'evaluation')
+            return value
+
         # A loose tolerance here is not free: the residual passes through a characteristics
         # solve, so a step that ends one iterate early leaves the delivered geometry sensitive
         # to changes as small as a unit in the last place of a Prandtl-Meyer evaluation.
-        optimizedTargetMach = fsolve(nozzle.truncatedIdealContour,
+        optimizedTargetMach = fsolve(residual,
                                      x0 = nozzle.idealMachNumber,
                                      args = (lengthFraction, True, False),
                                      xtol = 1e-8)[0]

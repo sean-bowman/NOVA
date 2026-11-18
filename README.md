@@ -105,84 +105,46 @@ from NOVA import gasDynamics, materials, fluidProps
 
 ## Quickstart: GUI
 
-[novaGui/](novaGui/) is a Tkinter front end over the same pipeline. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` on a background thread, and presents the result across four tabs. The main window opens without loading the scientific stack; NumPy, SciPy, Matplotlib and rocketcea are imported on the first run.
+[novaGui/](novaGui/) is the front end: a React app served by a FastAPI layer over the same pipeline, in a desktop window. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` in a worker process that Cancel can stop, and presents the result across four tabs. It needs the `web` extra and a one-time build of the app, which takes Node:
 
 ```bash
-python -m novaGui          # from the repository root
-python novaGui/run.py      # the same thing
+pip install -e .[web]
+cd novaGui/frontend && npm install && npm run build && cd ../..
+python -m novaGui               # desktop window
+python -m novaGui --browser     # the system browser instead
 ```
 
-On Windows, `novaGui.bat` launches it with no console window. Run `python -m novaGui` from a terminal when a startup traceback needs to be visible.
+On Windows, `novaGui.bat` launches it with no console window and writes startup output to `%TEMP%\NOVA\novaGui.log`.
 
 ### Design
 
-The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. **Load config** in the header opens a JSON file, **Save config** at the foot of the form writes one, **Reset to example** returns to the shipped nozzle, and **Load example** beside it offers the engines in `assets/examples/`.
-
-![Design tab](docs/images/gui/designDark.png)
-
-The Coolant Circuit section picks the architecture, and a panel beneath the choice says what that circuit does, where it is viable and which engines flew it; the extension circuit's outlet carries the same.
-
-![Coolant circuit choice](docs/images/gui/designCircuit.png)
-
-Every field carries an (i) icon. Hovering it gives the field's meaning and, for a choice field, its options.
-
-![Field help](docs/images/gui/designHelp.png)
+The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. A search box finds a field by its label, key, help or options, and **Changed only** shows the fields that differ from the shipped nozzle. Problems across fields list above the form and mark the rows they name. **Load config** in the header opens a JSON file, **Save config** writes one, **Reset to example** returns to the shipped nozzle, and **Load example** offers the engines in `assets/examples/`.
 
 ### Generate
 
-**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`. The bar follows the pipeline's own stages, and the run log beside it carries the full output. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The bar follows the run's progress events: each stage as it opens, the passes of the coolant circuit and the solves of the contour, with the run log beside it carrying the full output. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
 
 ### View
 
-When the run finishes the window turns to View: one figure at a time, picked from a sidebar of contour, flow, plume, cooling and 3D views. Each is drawn from the `Nozzle` object in the window's theme, and **Open interactive** opens its plotly companion in the browser.
+When the run finishes the window turns to View: one figure at a time, picked from a sidebar of contour, flow, plume, cooling and 3D views. Each draws interactive (plotly, to zoom, rotate and read values off) or static (the Matplotlib drawing), behind a switch.
 
-The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked.
+The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked. The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary.
 
-![Mach field](docs/images/gui/viewMach.png)
-
-The plume view draws the nozzle and its plume as one Mach field, the picture the GUI's icon is made from: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary.
-
-![Plume](docs/images/gui/viewPlume.png)
-
-The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers.
-
-![Jacket on the wall](docs/images/gui/viewJacket.png)
-
-With film cooling on, the film view maps the film along the wall against the core gas, with its effectiveness and the temperature it holds the wall to; with a radiative extension, the extension view draws the whole wall on one temperature scale against the shell's limit, with the heat balance that sets it.
-
-![Film cooling](docs/images/gui/viewFilm.png)
-
-The circuit view draws the coolant's paths on the half section: each family of the chamber jacket with the way it runs, its manifolds, the turnaround ring and any split, the extension's own circuit and its outlet, the film slots and the radiation-cooled shell. With two passes or an extension circuit, the passes view draws each one's coolant and hot wall; on the shipped engine those are the down family from its inlet at an area ratio of three to the exit, and the up family back to the injector.
-
-![Coolant circuit](docs/images/gui/viewCircuit.png)
-
-The channel mesh and the revolved contour are 3D panes that rotate with the mouse.
-
-| Channel mesh | Revolved contour |
-| --- | --- |
-| ![Channel mesh](docs/images/gui/viewChannelMesh.png) | ![Revolved contour](docs/images/gui/viewRevolved.png) |
+The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers. With film cooling on, the film view maps the film along the wall; with a radiative extension, the extension view draws the whole wall on one temperature scale against the shell's limit. The circuit view draws the coolant's paths on the half section, and with two passes or an extension circuit, the passes view draws each one's coolant and hot wall. The channel mesh, the revolved contour and the volutes are 3D views at full resolution.
 
 ### Analyze
 
-The numbers behind the figures in one table: sizing, the combustion chamber, delivered performance, CEA thermochemistry at the chamber, throat and exit, the cooling summary, and the plume's lip pressure ratio, march reach and mass continuity error.
-
-![Analyze tab](docs/images/gui/analyze.png)
+The numbers behind the figures in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. It filters by name, copies as tab-separated text and saves as CSV.
 
 ### Export
 
 A run writes its outputs to a staging folder, not to the output folder. The Export tab lists them by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
 
-![Export tab](docs/images/gui/export.png)
-
 ### Light mode
 
-The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette. The window restyles in place, a run in progress keeps going, and the choice persists between sessions.
+The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette, and the choice persists between sessions.
 
-| Design | Plume |
-| --- | --- |
-| ![Design tab, light](docs/images/gui/designLight.png) | ![Plume, light](docs/images/gui/viewPlumeLight.png) |
-
-[novaGui/README.md](novaGui/README.md) covers the run pipeline, the theme engine, the plotting split between Matplotlib and plotly, display scaling and the progress model.
+[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
 
 ## Configuration reference
 
@@ -581,8 +543,10 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 | `exports.py`                                              | Contours, STL geometry, exhaust properties and the pickled run                                                                                                                                                                                                 |
 | `validation.py`                                           | Input validation as rule tables rather than branches, with one checker behind them                                                                                                                                                                             |
 | `errors.py`                                               | The exception hierarchy every deliberate NOVA failure raises, and the context dictionary a raise site attaches to it                                                                                                                                            |
+| `progress.py`                                             | The progress events a run sends to a front end that listens: the stage plan, the stages as they open and close, the steps of long loops and the iterations of iterative solves. With no listener, loops draw tqdm bars on the terminal |
 | `materials.py`, `units.py`, `geometryTools.py`, `Volute.py` | Wall alloys, unit conversion, geometry helpers, volute construction                                                                                                                                                                                          |
-| `novaGui/`                                                | Tkinter front end over the same pipeline                                                                                                                                                                                                                       |
+| `novaGui/`                                                | The front end: a React app served by a FastAPI layer over the pipeline, and every non-visual piece of a front end (config schema, form checks, runner, progress model, view list, drawers, result table, palette) |
+| `legacy/novaTk/`                                          | The Tkinter front end novaGui replaced, drawn over the same modules |
 | `featureShowcase/`                                        | Build scripts for the figures above, and the curated gallery                                                                                                                                                                                                   |
 | `examples/`                                               | `novaNozzle.py` runs the reference nozzle through every solver; the others drive one feature each                                                                                                                                                            |
 

@@ -6,7 +6,7 @@
 The View tab's cooling views: the regenerative jacket, the film and the radiative extension.
 
 Each draws from what the run kept on the Nozzle, never from a saved figure, so it follows the
-window's theme:
+active palette mode (themeColors). A drawer draws into a pane, as novaGui.plotting describes:
 
     drawWallMap            the jacket on the nozzle wall: hot wall and coolant temperature along it
     drawJacketTemperatures hot wall against its limit and the gas driving it, and the coolant warming
@@ -33,8 +33,8 @@ Author: Sean Bowman
 
 import numpy as np
 
-from . import theme
-from .plotting import MplPane, _palette
+from . import themeColors
+from .plotting import _palette
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Shared -- #
@@ -83,7 +83,7 @@ def extensionSolved(nozzle) -> bool:
     return getattr(nozzle, 'radiativeExtensionSolution', None) is not None \
         and _array(nozzle, 'extensionWallTemperature').size >= 2
 
-def _panels(pane: MplPane, rows: int, cols: int = 1, heightRatios = None, sharex: bool = True) -> list:
+def _panels(pane, rows: int, cols: int = 1, heightRatios = None, sharex: bool = True) -> list:
 
     '''
 
@@ -102,7 +102,7 @@ def _panels(pane: MplPane, rows: int, cols: int = 1, heightRatios = None, sharex
         for col in range(cols):
             share = axes[col] if sharex and row > 0 else None
             ax = figure.add_subplot(grid[row, col], sharex = share)
-            theme.styleAxes(ax)
+            themeColors.styleAxes(ax)
             if sharex and row < rows - 1:
                 ax.tick_params(labelbottom = False)
             axes.append(ax)
@@ -119,11 +119,11 @@ def _throat(nozzle, axes) -> None:
         return
     throatX = float(wallX[int(np.argmin(wallR))])
     for ax in axes:
-        ax.axvline(throatX, color = theme.textDim, linewidth = 0.8, linestyle = ':', zorder = 0)
+        ax.axvline(throatX, color = themeColors.textDim, linewidth = 0.8, linestyle = ':', zorder = 0)
 
 def _legend(ax, **options) -> None:
 
-    ax.legend(facecolor = theme.surface2, edgecolor = theme.border, labelcolor = theme.text, fontsize = 8,
+    ax.legend(facecolor = themeColors.surface2, edgecolor = themeColors.border, labelcolor = themeColors.text, fontsize = 8,
               framealpha = 0.95, **options)
 
 def _twin(ax, color: str):
@@ -134,16 +134,16 @@ def _twin(ax, color: str):
     twin.tick_params(colors = color)
     twin.grid(False)
     for spine in twin.spines.values():
-        spine.set_color(theme.border)
+        spine.set_color(themeColors.border)
 
     return twin
 
-def _colorbar(pane: MplPane, mappable, axes, label: str, orientation: str = 'horizontal'):
+def _colorbar(pane, mappable, axes, label: str, orientation: str = 'horizontal'):
 
     bar = pane.figure.colorbar(mappable, ax = axes, orientation = orientation, fraction = 0.05, pad = 0.08)
-    bar.set_label(label, color = theme.text)
-    bar.outline.set_edgecolor(theme.border)
-    bar.ax.tick_params(colors = theme.textMuted)
+    bar.set_label(label, color = themeColors.text)
+    bar.outline.set_edgecolor(themeColors.border)
+    bar.ax.tick_params(colors = themeColors.textMuted)
 
     return bar
 
@@ -181,7 +181,7 @@ def _flowDirection(ax, x, pressure, color: str) -> None:
 # -- The jacket -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-def drawWallMap(pane: MplPane, nozzle) -> None:
+def drawWallMap(pane, nozzle) -> None:
 
     '''
 
@@ -213,27 +213,27 @@ def drawWallMap(pane: MplPane, nozzle) -> None:
     grid = figure.add_gridspec(2, 2, height_ratios = (1.0, 0.045))
     ax = figure.add_subplot(grid[0, :])
     wallScale, coolantScale = figure.add_subplot(grid[1, 0]), figure.add_subplot(grid[1, 1])
-    theme.styleAxes(ax)
+    themeColors.styleAxes(ax)
     pane.axes = ax
     ax.grid(False)
 
     # The whole contour for context, the jacketed part of it banded
     wallX, wallR = _array(nozzle, 'xNozzleWall'), _array(nozzle, 'rNozzleWall')
     if wallX.size == wallR.size and wallX.size:
-        ax.plot(wallX, wallR, color = theme.textDim, linewidth = 1.0)
-        ax.fill_between(wallX, 0.0, wallR, color = theme.surface2, alpha = 0.35, linewidth = 0)
+        ax.plot(wallX, wallR, color = themeColors.textDim, linewidth = 1.0)
+        ax.fill_between(wallX, 0.0, wallR, color = themeColors.surface2, alpha = 0.35, linewidth = 0)
 
     top = max(float(np.max(wall)), float(limit) if limit else 0.0)
     wallNorm = Normalize(vmin = float(np.min(wall)), vmax = top)
     coolantNorm = Normalize(vmin = float(np.min(coolant)), vmax = float(np.max(coolant)))
-    wallBand = _band(ax, x, r, wall, _palette().colormap('temperature', theme.mode), wallNorm, 7.0, zorder = 4)
-    coolantBand = _band(ax, x, r + offset, coolant, _palette().colormap('mach', theme.mode), coolantNorm, 5.0)
+    wallBand = _band(ax, x, r, wall, _palette().colormap('temperature', themeColors.mode), wallNorm, 7.0, zorder = 4)
+    coolantBand = _band(ax, x, r + offset, coolant, _palette().colormap('mach', themeColors.mode), coolantNorm, 5.0)
 
-    ax.text(float(np.mean(x)), 0.45 * float(np.min(r)), 'exhaust', color = theme.textMuted, fontsize = 9,
+    ax.text(float(np.mean(x)), 0.45 * float(np.min(r)), 'exhaust', color = themeColors.textMuted, fontsize = 9,
             ha = 'center', style = 'italic')
-    _flowDirection(ax, x, np.asarray(results['pressure']), theme.textMuted)
+    _flowDirection(ax, x, np.asarray(results['pressure']), themeColors.textMuted)
     ax.text(0.995, 0.03, 'coolant band drawn outside the wall, not to scale', transform = ax.transAxes, ha = 'right',
-            va = 'bottom', color = theme.textMuted, fontsize = 7, style = 'italic')
+            va = 'bottom', color = themeColors.textMuted, fontsize = 7, style = 'italic')
 
     span = float(np.max(x) - np.min(x))
     ax.set_xlim(float(np.min(x)) - 0.04 * span, float(np.max(x)) + 0.04 * span)
@@ -243,19 +243,19 @@ def drawWallMap(pane: MplPane, nozzle) -> None:
     ax.set_ylabel('Radius [m]')
     total = float(np.sum(results['heatTransfer'])) * float(getattr(nozzle, 'nChannel', 1) or 1)
     ax.set_title(f'The jacket on the wall: {int(getattr(nozzle, "nChannel", 0) or 0)} channels, '
-                 f'{total / 1e6:.2f} MW into the coolant', color = theme.text)
+                 f'{total / 1e6:.2f} MW into the coolant', color = themeColors.text)
 
     for scale, mappable, label in ((wallScale, wallBand, 'Hot wall temperature [K]'),
                                    (coolantScale, coolantBand, 'Coolant temperature [K]')):
         bar = figure.colorbar(mappable, cax = scale, orientation = 'horizontal')
-        bar.set_label(label, color = theme.text)
-        bar.outline.set_edgecolor(theme.border)
-        bar.ax.tick_params(colors = theme.textMuted)
+        bar.set_label(label, color = themeColors.text)
+        bar.outline.set_edgecolor(themeColors.border)
+        bar.ax.tick_params(colors = themeColors.textMuted)
         if scale is wallScale and limit:
-            bar.ax.axvline(float(limit), color = theme.red, linewidth = 2.0)
+            bar.ax.axvline(float(limit), color = themeColors.red, linewidth = 2.0)
     pane.redraw()
 
-def drawJacketTemperatures(pane: MplPane, nozzle) -> None:
+def drawJacketTemperatures(pane, nozzle) -> None:
 
     '''
 
@@ -273,36 +273,36 @@ def drawJacketTemperatures(pane: MplPane, nozzle) -> None:
     wallAxes, coolantAxes = _panels(pane, 2, heightRatios = (1.4, 1.0))
 
     metal, surface = _metalWall(results), np.asarray(results['wallTemperature'], dtype = float)
-    wallAxes.plot(x, metal, color = theme.accent, linewidth = 1.8, label = 'Hot wall')
+    wallAxes.plot(x, metal, color = themeColors.accent, linewidth = 1.8, label = 'Hot wall')
     if not np.array_equal(metal, surface):
-        wallAxes.plot(x, surface, color = theme.accent, linewidth = 1.2, linestyle = ':', label = 'Coating surface')
+        wallAxes.plot(x, surface, color = themeColors.accent, linewidth = 1.2, linestyle = ':', label = 'Coating surface')
     limit = getattr(nozzle, 'maxWallTemperature', None)
     if limit:
-        wallAxes.axhline(float(limit), color = theme.red, linewidth = 1.0, linestyle = '--',
+        wallAxes.axhline(float(limit), color = themeColors.red, linewidth = 1.0, linestyle = '--',
                          label = f'Wall limit {float(limit):.0f} K')
-    gasAxes = _twin(wallAxes, theme.blue)
-    gasAxes.plot(x, results['drivingTemperature'], color = theme.blue, linewidth = 1.2, label = 'Gas driving the wall')
-    gasAxes.set_ylabel('Gas driving temperature [K]', color = theme.blue)
+    gasAxes = _twin(wallAxes, themeColors.blue)
+    gasAxes.plot(x, results['drivingTemperature'], color = themeColors.blue, linewidth = 1.2, label = 'Gas driving the wall')
+    gasAxes.set_ylabel('Gas driving temperature [K]', color = themeColors.blue)
     wallAxes.set_ylabel('Hot wall temperature [K]')
-    wallAxes.set_title('Wall and coolant temperatures', color = theme.text)
+    wallAxes.set_title('Wall and coolant temperatures', color = themeColors.text)
     handles, labels = wallAxes.get_legend_handles_labels()
     gasHandles, gasLabels = gasAxes.get_legend_handles_labels()
-    gasAxes.legend(handles + gasHandles, labels + gasLabels, facecolor = theme.surface2, edgecolor = theme.border,
-                   labelcolor = theme.text, fontsize = 8, loc = 'lower center', framealpha = 0.95)
+    gasAxes.legend(handles + gasHandles, labels + gasLabels, facecolor = themeColors.surface2, edgecolor = themeColors.border,
+                   labelcolor = themeColors.text, fontsize = 8, loc = 'lower center', framealpha = 0.95)
 
     coolant = np.asarray(results['temperature'])
-    coolantAxes.plot(x, coolant, color = theme.cyan, linewidth = 1.8)
-    coolantAxes.fill_between(x, float(np.min(coolant)), coolant, color = theme.cyan, alpha = 0.15, linewidth = 0)
+    coolantAxes.plot(x, coolant, color = themeColors.cyan, linewidth = 1.8)
+    coolantAxes.fill_between(x, float(np.min(coolant)), coolant, color = themeColors.cyan, alpha = 0.15, linewidth = 0)
     coolantAxes.set_ylabel('Coolant temperature [K]')
     coolantAxes.set_xlabel('Nozzle axis [m]')
-    _flowDirection(coolantAxes, x, np.asarray(results['pressure']), theme.textMuted)
+    _flowDirection(coolantAxes, x, np.asarray(results['pressure']), themeColors.textMuted)
     rise = float(np.max(coolant) - np.min(coolant))
     coolantAxes.set_title(f'Coolant warms {rise:.0f} K, from {float(np.min(coolant)):.0f} to '
-                          f'{float(np.max(coolant)):.0f} K', color = theme.textMuted, fontsize = 9)
+                          f'{float(np.max(coolant)):.0f} K', color = themeColors.textMuted, fontsize = 9)
     _throat(nozzle, (wallAxes, coolantAxes))
     pane.redraw()
 
-def drawCoolantFlow(pane: MplPane, nozzle) -> None:
+def drawCoolantFlow(pane, nozzle) -> None:
 
     '''Coolant pressure, velocity and Mach number along the channel.'''
 
@@ -314,20 +314,20 @@ def drawCoolantFlow(pane: MplPane, nozzle) -> None:
     x = np.asarray(results['xHotWall3D'])
     pressure = np.asarray(results['pressure'])
     axes = _panels(pane, 3)
-    series = ((pressure / 1e6, 'Pressure [MPa]', theme.accent), (results['velocity'], 'Velocity [m/s]', theme.blue),
-              (results['machNumber'], 'Mach number [-]', theme.cyan))
+    series = ((pressure / 1e6, 'Pressure [MPa]', themeColors.accent), (results['velocity'], 'Velocity [m/s]', themeColors.blue),
+              (results['machNumber'], 'Mach number [-]', themeColors.cyan))
     for ax, (values, label, color) in zip(axes, series):
         ax.plot(x, values, color = color, linewidth = 1.7)
         ax.set_ylabel(label)
     drop = float(np.max(pressure) - np.min(pressure))
     axes[0].set_title(f'Coolant flow: {drop / 1e3:.0f} kPa pressure drop, exit at {float(np.min(pressure)) / 1e6:.2f} MPa',
-                      color = theme.text)
-    _flowDirection(axes[0], x, pressure, theme.textMuted)
+                      color = themeColors.text)
+    _flowDirection(axes[0], x, pressure, themeColors.textMuted)
     axes[-1].set_xlabel('Nozzle axis [m]')
     _throat(nozzle, axes)
     pane.redraw()
 
-def drawCoolantProperties(pane: MplPane, nozzle) -> None:
+def drawCoolantProperties(pane, nozzle) -> None:
 
     '''The coolant's density, viscosity and specific heat along the channel, from its equation of state.'''
 
@@ -338,20 +338,20 @@ def drawCoolantProperties(pane: MplPane, nozzle) -> None:
 
     x = np.asarray(results['xHotWall3D'])
     axes = _panels(pane, 3)
-    series = ((results['density'], 'Density [kg/m³]', theme.accent),
-              (np.asarray(results['viscosity']) * 1e6, 'Viscosity [µPa·s]', theme.purple),
-              (np.asarray(results['specificHeat']) * 1e-3, 'Specific heat [kJ/kg·K]', theme.green))
+    series = ((results['density'], 'Density [kg/m³]', themeColors.accent),
+              (np.asarray(results['viscosity']) * 1e6, 'Viscosity [µPa·s]', themeColors.purple),
+              (np.asarray(results['specificHeat']) * 1e-3, 'Specific heat [kJ/kg·K]', themeColors.green))
     for ax, (values, label, color) in zip(axes, series):
         ax.plot(x, values, color = color, linewidth = 1.7)
         ax.set_ylabel(label)
     coolant = getattr(nozzle, 'coolant', None) or 'coolant'
-    axes[0].set_title(f'Thermophysical properties of the {coolant} along the channel', color = theme.text)
-    _flowDirection(axes[0], x, np.asarray(results['pressure']), theme.textMuted)
+    axes[0].set_title(f'Thermophysical properties of the {coolant} along the channel', color = themeColors.text)
+    _flowDirection(axes[0], x, np.asarray(results['pressure']), themeColors.textMuted)
     axes[-1].set_xlabel('Nozzle axis [m]')
     _throat(nozzle, axes)
     pane.redraw()
 
-def drawHeatFlux(pane: MplPane, nozzle) -> None:
+def drawHeatFlux(pane, nozzle) -> None:
 
     '''
 
@@ -369,29 +369,29 @@ def drawHeatFlux(pane: MplPane, nozzle) -> None:
     fluxAxes, coefficientAxes, groupAxes = _panels(pane, 3)
 
     flux = np.asarray(results['heatFlux']) / 1e6
-    fluxAxes.fill_between(x, 0.0, flux, color = theme.accent, alpha = 0.25, linewidth = 0)
-    fluxAxes.plot(x, flux, color = theme.accent, linewidth = 1.7, label = 'Total')
+    fluxAxes.fill_between(x, 0.0, flux, color = themeColors.accent, alpha = 0.25, linewidth = 0)
+    fluxAxes.plot(x, flux, color = themeColors.accent, linewidth = 1.7, label = 'Total')
     heat = np.asarray(results['heatTransfer'])
     radiative = np.asarray(results.get('radiativeHeatTransfer', np.zeros_like(heat)))
     if np.any(radiative):
         share = np.divide(radiative, heat, out = np.zeros_like(heat), where = heat != 0.0)
-        fluxAxes.plot(x, flux * share, color = theme.purple, linewidth = 1.2, label = 'Radiative share')
+        fluxAxes.plot(x, flux * share, color = themeColors.purple, linewidth = 1.2, label = 'Radiative share')
         _legend(fluxAxes, loc = 'upper left')
     fluxAxes.set_ylabel('Heat flux [MW/m²]')
-    fluxAxes.set_title(f'Heat flux peaks at {float(np.max(flux)):.1f} MW/m²', color = theme.text)
+    fluxAxes.set_title(f'Heat flux peaks at {float(np.max(flux)):.1f} MW/m²', color = themeColors.text)
 
-    coefficientAxes.plot(x, np.asarray(results['exhaustConvectiveHeatTransferCoef']) / 1e3, color = theme.red,
+    coefficientAxes.plot(x, np.asarray(results['exhaustConvectiveHeatTransferCoef']) / 1e3, color = themeColors.red,
                          linewidth = 1.6, label = 'Gas side')
-    coefficientAxes.plot(x, np.asarray(results['coolantConvectiveHeatTransferCoef']) / 1e3, color = theme.cyan,
+    coefficientAxes.plot(x, np.asarray(results['coolantConvectiveHeatTransferCoef']) / 1e3, color = themeColors.cyan,
                          linewidth = 1.6, label = 'Coolant side')
     coefficientAxes.set_ylabel('Film coefficient [kW/m²·K]')
     _legend(coefficientAxes, loc = 'upper left')
 
-    groupAxes.plot(x, np.asarray(results['reynoldsNumber']) / 1e6, color = theme.blue, linewidth = 1.6)
-    groupAxes.set_ylabel('Reynolds number [10⁶]', color = theme.blue)
-    nusseltAxes = _twin(groupAxes, theme.green)
-    nusseltAxes.plot(x, results['nusseltNumber'], color = theme.green, linewidth = 1.4)
-    nusseltAxes.set_ylabel('Nusselt number [-]', color = theme.green)
+    groupAxes.plot(x, np.asarray(results['reynoldsNumber']) / 1e6, color = themeColors.blue, linewidth = 1.6)
+    groupAxes.set_ylabel('Reynolds number [10⁶]', color = themeColors.blue)
+    nusseltAxes = _twin(groupAxes, themeColors.green)
+    nusseltAxes.plot(x, results['nusseltNumber'], color = themeColors.green, linewidth = 1.4)
+    nusseltAxes.set_ylabel('Nusselt number [-]', color = themeColors.green)
     groupAxes.set_xlabel('Nozzle axis [m]')
     _throat(nozzle, (fluxAxes, coefficientAxes, groupAxes))
     pane.redraw()
@@ -400,7 +400,7 @@ def drawHeatFlux(pane: MplPane, nozzle) -> None:
 # -- The film -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-def drawFilm(pane: MplPane, nozzle) -> None:
+def drawFilm(pane, nozzle) -> None:
 
     '''
 
@@ -436,11 +436,11 @@ def drawFilm(pane: MplPane, nozzle) -> None:
     lower = [figure.add_subplot(grid[1, 0])]
     lower += [figure.add_subplot(grid[1, index], sharex = lower[0]) for index in range(1, columns)]
     for ax in [mapAxes] + lower:
-        theme.styleAxes(ax)
+        themeColors.styleAxes(ax)
     pane.axes = lower[-1]
 
     # -- The map: the core at its recovery temperature, the film as a band on the wall -- #
-    cmap = _palette().colormap('temperature', theme.mode)
+    cmap = _palette().colormap('temperature', themeColors.mode)
     norm = Normalize(vmin = float(np.min(driving)), vmax = float(np.max(recovery)))
     thickness = 0.07 * float(np.max(r))
     span = np.linspace(0.0, 1.0, 24)
@@ -452,17 +452,17 @@ def drawFilm(pane: MplPane, nozzle) -> None:
     film = mapAxes.pcolormesh(np.repeat(x[:, None], span.size, axis = 1), bandR,
                               np.repeat(driving[:, None], span.size, axis = 1), cmap = cmap, norm = norm,
                               shading = 'gouraud')
-    mapAxes.plot(x, r, color = theme.accent, linewidth = 2.0)
+    mapAxes.plot(x, r, color = themeColors.accent, linewidth = 2.0)
     mapAxes.annotate('slot', xy = (x[slot], r[slot]), xytext = (x[slot], 1.18 * float(np.max(r))),
-                     color = theme.text, fontsize = 8, ha = 'center',
-                     arrowprops = dict(arrowstyle = '->', color = theme.textMuted, linewidth = 0.8))
+                     color = themeColors.text, fontsize = 8, ha = 'center',
+                     arrowprops = dict(arrowstyle = '->', color = themeColors.textMuted, linewidth = 0.8))
     if survival > 0.0:
         end = float(x[slot]) + survival
-        mapAxes.axvline(end, color = theme.textMuted, linewidth = 0.8, linestyle = '--')
-        mapAxes.text(end, 1.08 * float(np.max(r)), ' effectiveness 0.3', color = theme.textMuted, fontsize = 8)
+        mapAxes.axvline(end, color = themeColors.textMuted, linewidth = 0.8, linestyle = '--')
+        mapAxes.text(end, 1.08 * float(np.max(r)), ' effectiveness 0.3', color = themeColors.textMuted, fontsize = 8)
     mapAxes.text(0.995, 0.03, 'film band drawn at a fixed thickness: the film model resolves the film along '
                  'the wall, not across it', transform = mapAxes.transAxes, ha = 'right', va = 'bottom',
-                 color = theme.textMuted, fontsize = 7, style = 'italic')
+                 color = themeColors.textMuted, fontsize = 7, style = 'italic')
     mapAxes.set_xlim(float(np.min(x)), float(np.max(x)))
     mapAxes.set_ylim(0.0, 1.3 * float(np.max(r)))
     mapAxes.set_aspect('equal', adjustable = 'box')
@@ -473,25 +473,25 @@ def drawFilm(pane: MplPane, nozzle) -> None:
     coolant = getattr(nozzle, 'filmCoolant', None) or 'coolant'
     flow = float(getattr(nozzle, 'filmMassFlow', 0.0) or 0.0)
     mapAxes.set_title(f'{coolant} film, {flow:.3f} kg/s through a {1e3 * float(nozzle.filmSlotHeight or 0.0):.1f} mm '
-                      f'slot ({model}): useful for {1e3 * survival:.0f} mm', color = theme.text)
+                      f'slot ({model}): useful for {1e3 * survival:.0f} mm', color = themeColors.text)
     _colorbar(pane, film, mapAxes, 'Gas temperature at the wall [K]', 'vertical')
 
     # -- Effectiveness -- #
     effectivenessAxes = lower[0]
-    effectivenessAxes.fill_between(x, 0.0, effectiveness, color = theme.cyan, alpha = 0.25, linewidth = 0)
-    effectivenessAxes.plot(x, effectiveness, color = theme.cyan, linewidth = 1.7)
-    effectivenessAxes.axhline(0.3, color = theme.textMuted, linewidth = 0.8, linestyle = '--')
+    effectivenessAxes.fill_between(x, 0.0, effectiveness, color = themeColors.cyan, alpha = 0.25, linewidth = 0)
+    effectivenessAxes.plot(x, effectiveness, color = themeColors.cyan, linewidth = 1.7)
+    effectivenessAxes.axhline(0.3, color = themeColors.textMuted, linewidth = 0.8, linestyle = '--')
     effectivenessAxes.set_ylim(0.0, 1.05)
     effectivenessAxes.set_ylabel('Film effectiveness [-]')
     effectivenessAxes.set_xlabel('Nozzle axis [m]')
 
     # -- What the wall is driven by, with and without the film -- #
     temperatureAxes = lower[1]
-    temperatureAxes.plot(x, recovery, color = theme.red, linewidth = 1.4, label = 'Without the film')
-    temperatureAxes.plot(x, driving, color = theme.cyan, linewidth = 1.7, label = 'Under the film')
+    temperatureAxes.plot(x, recovery, color = themeColors.red, linewidth = 1.4, label = 'Without the film')
+    temperatureAxes.plot(x, driving, color = themeColors.cyan, linewidth = 1.7, label = 'Under the film')
     results = thermalResults(nozzle)
     if results is not None:
-        temperatureAxes.plot(results['xHotWall3D'], results['wallTemperature'], color = theme.accent, linewidth = 1.4,
+        temperatureAxes.plot(results['xHotWall3D'], results['wallTemperature'], color = themeColors.accent, linewidth = 1.4,
                              label = 'Hot wall')
     temperatureAxes.set_ylabel('Temperature [K]')
     temperatureAxes.set_xlabel('Nozzle axis [m]')
@@ -499,11 +499,11 @@ def drawFilm(pane: MplPane, nozzle) -> None:
 
     if hasEntrainment:
         entrainmentAxes = lower[2]
-        entrainmentAxes.plot(x, entrained, color = theme.purple, linewidth = 1.6)
-        entrainmentAxes.set_ylabel('Entrained over film flow [-]', color = theme.purple)
-        mixtureAxes = _twin(entrainmentAxes, theme.green)
-        mixtureAxes.plot(x, mixture, color = theme.green, linewidth = 1.4)
-        mixtureAxes.set_ylabel('Wall mixture ratio [-]', color = theme.green)
+        entrainmentAxes.plot(x, entrained, color = themeColors.purple, linewidth = 1.6)
+        entrainmentAxes.set_ylabel('Entrained over film flow [-]', color = themeColors.purple)
+        mixtureAxes = _twin(entrainmentAxes, themeColors.green)
+        mixtureAxes.plot(x, mixture, color = themeColors.green, linewidth = 1.4)
+        mixtureAxes.set_ylabel('Wall mixture ratio [-]', color = themeColors.green)
         entrainmentAxes.set_xlabel('Nozzle axis [m]')
     _throat(nozzle, [mapAxes] + lower)
     pane.redraw()
@@ -512,7 +512,7 @@ def drawFilm(pane: MplPane, nozzle) -> None:
 # -- The radiative extension -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-def drawExtension(pane: MplPane, nozzle) -> None:
+def drawExtension(pane, nozzle) -> None:
 
     '''
 
@@ -542,7 +542,7 @@ def drawExtension(pane: MplPane, nozzle) -> None:
     temperatureAxes = figure.add_subplot(grid[1, 0])
     fluxAxes = figure.add_subplot(grid[1, 1], sharex = temperatureAxes)
     for ax in (mapAxes, temperatureAxes, fluxAxes):
-        theme.styleAxes(ax)
+        themeColors.styleAxes(ax)
     pane.axes = fluxAxes
 
     # -- The whole wall on one temperature scale -- #
@@ -554,11 +554,11 @@ def drawExtension(pane: MplPane, nozzle) -> None:
     if limit:
         top = max(top, float(limit))
     norm = Normalize(vmin = min(float(np.min(piece)) for piece in values), vmax = top)
-    cmap = _palette().colormap('temperature', theme.mode)
+    cmap = _palette().colormap('temperature', themeColors.mode)
     wallX, wallR = _array(nozzle, 'xNozzleWall'), _array(nozzle, 'rNozzleWall')
     if wallX.size == wallR.size and wallX.size:
-        mapAxes.plot(wallX, wallR, color = theme.textDim, linewidth = 1.0)
-        mapAxes.fill_between(wallX, 0.0, wallR, color = theme.surface2, alpha = 0.35, linewidth = 0)
+        mapAxes.plot(wallX, wallR, color = themeColors.textDim, linewidth = 1.0)
+        mapAxes.fill_between(wallX, 0.0, wallR, color = themeColors.surface2, alpha = 0.35, linewidth = 0)
     band = _band(mapAxes, x, r, wall, cmap, norm, 7.0, zorder = 4)
     if results is not None:
         _band(mapAxes, results['xHotWall3D'], results['rHotWall3D'], _metalWall(results), cmap, norm, 7.0,
@@ -575,35 +575,35 @@ def drawExtension(pane: MplPane, nozzle) -> None:
     if limit:
         margin = float(solution.extensionTemperatureMargin)
         heading += f', {abs(margin):.0f} K {"under" if margin >= 0 else "over"} its {float(limit):.0f} K limit'
-    mapAxes.set_title(heading, color = theme.text)
+    mapAxes.set_title(heading, color = themeColors.text)
     bar = _colorbar(pane, band, mapAxes, 'Wall temperature [K]: jacket and extension', 'vertical')
     if limit:
-        bar.ax.axhline(float(limit), color = theme.red, linewidth = 2.0)
+        bar.ax.axhline(float(limit), color = themeColors.red, linewidth = 2.0)
 
     # -- The extension's wall against its equilibrium and its limit -- #
-    temperatureAxes.plot(x, wall, color = theme.accent, linewidth = 1.8, label = 'Wall')
-    temperatureAxes.plot(x, solution.extensionEquilibriumTemperature, color = theme.blue, linewidth = 1.2,
+    temperatureAxes.plot(x, wall, color = themeColors.accent, linewidth = 1.8, label = 'Wall')
+    temperatureAxes.plot(x, solution.extensionEquilibriumTemperature, color = themeColors.blue, linewidth = 1.2,
                          linestyle = '--', label = 'Radiative equilibrium')
     if limit:
-        temperatureAxes.axhline(float(limit), color = theme.red, linewidth = 1.0, linestyle = '--',
+        temperatureAxes.axhline(float(limit), color = themeColors.red, linewidth = 1.0, linestyle = '--',
                                 label = f'{material} limit')
     temperatureAxes.set_ylabel('Temperature [K]')
     temperatureAxes.set_xlabel('Nozzle axis [m]')
     _legend(temperatureAxes, loc = 'upper right')
 
     # -- The heat balance: what the gas puts in, what the shell radiates and conducts away -- #
-    for name, label, color, sign in (('extensionConvectiveFlux', 'Convection in', theme.red, 1.0),
-                                     ('extensionGasRadiativeFlux', 'Gas radiation in', theme.purple, 1.0),
-                                     ('extensionEmittedFlux', 'Emitted out', theme.cyan, -1.0),
-                                     ('extensionConductionFlux', 'Conducted along', theme.purple, 1.0)):
+    for name, label, color, sign in (('extensionConvectiveFlux', 'Convection in', themeColors.red, 1.0),
+                                     ('extensionGasRadiativeFlux', 'Gas radiation in', themeColors.purple, 1.0),
+                                     ('extensionEmittedFlux', 'Emitted out', themeColors.cyan, -1.0),
+                                     ('extensionConductionFlux', 'Conducted along', themeColors.purple, 1.0)):
         values = np.asarray(getattr(solution, name), dtype = float)
         if values.size == x.size and np.any(values):
             fluxAxes.plot(x, sign * values / 1e3, color = color, linewidth = 1.4, label = label)
-    fluxAxes.axhline(0.0, color = theme.textDim, linewidth = 0.8)
+    fluxAxes.axhline(0.0, color = themeColors.textDim, linewidth = 0.8)
     fluxAxes.set_ylabel('Heat flux [kW/m²]')
     fluxAxes.set_xlabel('Nozzle axis [m]')
     residual = float(solution.extensionEnergyBalanceResidual)
-    fluxAxes.set_title(f'Energy balance closes to {residual:.1e}', color = theme.textMuted, fontsize = 9)
+    fluxAxes.set_title(f'Energy balance closes to {residual:.1e}', color = themeColors.textMuted, fontsize = 9)
     _legend(fluxAxes, loc = 'upper right')
     pane.redraw()
 
@@ -624,7 +624,7 @@ def _arrows(ax, x, r, color: str, forward: bool, count: int = 4) -> None:
         ax.annotate('', xy = (x[end], r[end]), xytext = (x[start], r[start]),
                     arrowprops = dict(arrowstyle = '-|>', color = color, lw = 1.4))
 
-def drawCircuit(pane: MplPane, nozzle) -> None:
+def drawCircuit(pane, nozzle) -> None:
 
     '''
 
@@ -640,34 +640,34 @@ def drawCircuit(pane: MplPane, nozzle) -> None:
         return
     (ax,) = _panels(pane, 1)
     xWall, rWall = np.asarray(nozzle.xNozzleWall), np.asarray(nozzle.rNozzleWall)
-    ax.plot(xWall, rWall, color = theme.textDim, linewidth = 1.2, label = 'Hot wall')
+    ax.plot(xWall, rWall, color = themeColors.textDim, linewidth = 1.2, label = 'Hot wall')
     step = 0.03 * float(np.max(rWall))
 
     x, r = np.asarray(results['xHotWall3D']), np.asarray(results['rHotWall3D'])
     circuit = getattr(nozzle, 'coolantCircuitSolution', None)
     if circuit is None:
         coflow = getattr(nozzle, 'jacketFlowDirection', 'counterflow') == 'coflow'
-        ax.plot(x, r + step, color = theme.accent, linewidth = 2.2, label = 'Chamber jacket')
-        _arrows(ax, x, r + step, theme.accent, forward = coflow)
+        ax.plot(x, r + step, color = themeColors.accent, linewidth = 2.2, label = 'Chamber jacket')
+        _arrows(ax, x, r + step, themeColors.accent, forward = coflow)
         inlet, outlet = (0, -1) if coflow else (-1, 0)
-        ax.plot(x[inlet], r[inlet] + step, marker = 'v', color = theme.accent, markersize = 9,
+        ax.plot(x[inlet], r[inlet] + step, marker = 'v', color = themeColors.accent, markersize = 9,
                 linestyle = 'none', label = 'Inlet manifold')
-        ax.plot(x[outlet], r[outlet] + step, marker = '^', color = theme.accent, markersize = 9,
+        ax.plot(x[outlet], r[outlet] + step, marker = '^', color = themeColors.accent, markersize = 9,
                 linestyle = 'none', label = 'Outlet manifold')
     else:
         down = circuit.down.stations
-        ax.plot(x, r + step, color = theme.accent, linewidth = 2.2,
+        ax.plot(x, r + step, color = themeColors.accent, linewidth = 2.2,
                 label = f'Up family, {circuit.up.channelCount} channels')
-        _arrows(ax, x, r + step, theme.accent, forward = False)
-        ax.plot(x[down], r[down] + 2 * step, color = theme.blue, linewidth = 2.2,
+        _arrows(ax, x, r + step, themeColors.accent, forward = False)
+        ax.plot(x[down], r[down] + 2 * step, color = themeColors.blue, linewidth = 2.2,
                 label = f'Down family, {circuit.down.channelCount} channels')
-        _arrows(ax, x[down], r[down] + 2 * step, theme.blue, forward = True)
-        ax.plot(x[down[0]], r[down[0]] + 2 * step, marker = 'v', color = theme.blue, markersize = 9,
+        _arrows(ax, x[down], r[down] + 2 * step, themeColors.blue, forward = True)
+        ax.plot(x[down[0]], r[down[0]] + 2 * step, marker = 'v', color = themeColors.blue, markersize = 9,
                 linestyle = 'none', label = 'Inlet manifold')
         ax.plot(x[-1], r[-1] + 1.5 * step, marker = 'o', markersize = 12, markerfacecolor = 'none',
-                markeredgecolor = theme.purple, markeredgewidth = 2.0, linestyle = 'none',
+                markeredgecolor = themeColors.purple, markeredgewidth = 2.0, linestyle = 'none',
                 label = 'Turnaround ring')
-        ax.plot(x[0], r[0] + step, marker = '^', color = theme.accent, markersize = 9, linestyle = 'none',
+        ax.plot(x[0], r[0] + step, marker = '^', color = themeColors.accent, markersize = 9, linestyle = 'none',
                 label = 'Outlet manifold')
 
     blend = getattr(nozzle, 'channelSplitBlend', None)
@@ -676,20 +676,20 @@ def drawCircuit(pane: MplPane, nozzle) -> None:
         inside = np.flatnonzero((np.asarray(blend) > 0.0) & (np.asarray(blend) < 1.0))
         if inside.size:
             ax.axvspan(float(np.asarray(xInterfaced)[inside[0]]), float(np.asarray(xInterfaced)[inside[-1]]),
-                       color = theme.purple, alpha = 0.18, label = 'Channel split')
+                       color = themeColors.purple, alpha = 0.18, label = 'Channel split')
 
     extension = getattr(nozzle, 'extensionCircuitSolution', None)
     xExtension = getattr(nozzle, 'xExtension', None)
     if extension is not None and xExtension is not None:
         xe = np.asarray(xExtension)[extension.stations]
         re = np.asarray(nozzle.rExtension)[extension.stations]
-        ax.plot(xe, re + step, color = theme.purple, linewidth = 2.2,
+        ax.plot(xe, re + step, color = themeColors.purple, linewidth = 2.2,
                 label = f'Extension circuit, outlet {extension.outlet}')
-        _arrows(ax, xe, re + step, theme.purple, forward = extension.direction == 'coflow')
+        _arrows(ax, xe, re + step, themeColors.purple, forward = extension.direction == 'coflow')
     shell = getattr(nozzle, 'extensionWallTemperature', None)
     if shell is not None and xExtension is not None:
         start = len(xExtension) - len(shell)
-        ax.plot(np.asarray(xExtension)[start:], np.asarray(nozzle.rExtension)[start:] + step, color = theme.textMuted,
+        ax.plot(np.asarray(xExtension)[start:], np.asarray(nozzle.rExtension)[start:] + step, color = themeColors.textMuted,
                 linewidth = 1.6, linestyle = '--', label = 'Radiation-cooled shell')
 
     # Slots a few stations apart would print their names over each other, so each sits a line
@@ -702,9 +702,9 @@ def drawCircuit(pane: MplPane, nozzle) -> None:
             xf = float(film.x[layer.injectionIndex])
             rf = float(np.interp(xf, xWall, rWall))
             source = layer.name.split(' slot')[0]
-            ax.plot(xf, rf - step, marker = '>', color = theme.cyan, markersize = 9, linestyle = 'none')
+            ax.plot(xf, rf - step, marker = '>', color = themeColors.cyan, markersize = 9, linestyle = 'none')
             ax.annotate(names.get(source, source), (xf, rf - step), xytext = (4, -12 - 11 * number),
-                        textcoords = 'offset points', color = theme.cyan, fontsize = 7)
+                        textcoords = 'offset points', color = themeColors.cyan, fontsize = 7)
 
     ax.set_xlabel('Nozzle axis [m]')
     ax.set_ylabel('Radius [m]')
@@ -712,11 +712,11 @@ def drawCircuit(pane: MplPane, nozzle) -> None:
     title = 'Coolant circuit: ' + circuitNames.get(getattr(nozzle, 'coolantCircuit', None), 'A, single pass')
     if extension is not None:
         title += ', with an extension circuit (D)'
-    ax.set_title(title, color = theme.text)
+    ax.set_title(title, color = themeColors.text)
     _legend(ax, loc = 'upper left')
     pane.redraw()
 
-def drawPasses(pane: MplPane, nozzle) -> None:
+def drawPasses(pane, nozzle) -> None:
 
     '''Each pass's coolant and hot wall: the chamber jacket's two families and the extension circuit.'''
 
@@ -727,7 +727,7 @@ def drawPasses(pane: MplPane, nozzle) -> None:
         return
     coolantAxes, wallAxes = _panels(pane, 2)
     if circuit is not None:
-        for passSolution, color in ((circuit.down, theme.blue), (circuit.up, theme.accent)):
+        for passSolution, color in ((circuit.down, themeColors.blue), (circuit.up, themeColors.accent)):
             x = np.asarray(passSolution.results['xHotWall3D'])
             coolantAxes.plot(x, passSolution.results['temperature'], color = color, linewidth = 1.8,
                              label = f'{passSolution.name} pass')
@@ -735,25 +735,25 @@ def drawPasses(pane: MplPane, nozzle) -> None:
                           label = f'{passSolution.name} family')
     if extension is not None and extension.circuit is None:
         x = np.asarray(nozzle.xExtension)[extension.stations]
-        coolantAxes.plot(x, extension.sizing.channelThermalResults['temperature'], color = theme.purple,
+        coolantAxes.plot(x, extension.sizing.channelThermalResults['temperature'], color = themeColors.purple,
                          linewidth = 1.8, label = 'extension circuit')
-        wallAxes.plot(x, extension.metalWallTemperature, color = theme.purple, linewidth = 1.6,
+        wallAxes.plot(x, extension.metalWallTemperature, color = themeColors.purple, linewidth = 1.6,
                       label = 'extension circuit')
     elif extension is not None:
         # Two passes on the extension: the down pass dashed, the up pass solid
         for passSolution, style in ((extension.circuit.down, '--'), (extension.circuit.up, '-')):
             x = np.asarray(passSolution.results['xHotWall3D'])
-            coolantAxes.plot(x, passSolution.results['temperature'], color = theme.purple, linewidth = 1.8,
+            coolantAxes.plot(x, passSolution.results['temperature'], color = themeColors.purple, linewidth = 1.8,
                              linestyle = style, label = f'extension {passSolution.name} pass')
-            wallAxes.plot(x, _metalWall(passSolution.results), color = theme.purple, linewidth = 1.6,
+            wallAxes.plot(x, _metalWall(passSolution.results), color = themeColors.purple, linewidth = 1.6,
                           linestyle = style, label = f'extension {passSolution.name} family')
     limit = getattr(nozzle, 'maxWallTemperature', None)
     if limit:
-        wallAxes.axhline(float(limit), color = theme.red, linewidth = 1.0, linestyle = '--')
+        wallAxes.axhline(float(limit), color = themeColors.red, linewidth = 1.0, linestyle = '--')
     coolantAxes.set_ylabel('Coolant temperature [K]')
     wallAxes.set_ylabel('Hot wall temperature [K]')
     wallAxes.set_xlabel('Nozzle axis [m]')
-    coolantAxes.set_title('Coolant and hot wall of each pass', color = theme.text)
+    coolantAxes.set_title('Coolant and hot wall of each pass', color = themeColors.text)
     _legend(coolantAxes)
     _legend(wallAxes)
     _throat(nozzle, (coolantAxes, wallAxes))

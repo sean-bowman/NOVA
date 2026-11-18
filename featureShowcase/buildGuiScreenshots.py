@@ -1,8 +1,8 @@
-# -- Screenshots of the GUI for the README -- #
+# -- Screenshots of the Legacy Tkinter GUI -- #
 
 '''
 
-Run the shipped nozzle through the GUI and photograph each tab, for the README's walkthrough.
+Run the shipped nozzle through the legacy Tkinter GUI (legacy.novaTk) and photograph each tab.
 
 The window opens at a fixed size, runs Generate on the form it starts with, which is the shipped
 nozzle, and then steps through the tabs and views, capturing the window from the screen after
@@ -35,8 +35,8 @@ sys.path.insert(0, root)
 import numpy as np
 from PIL import ImageGrab
 
-from novaGui import theme
-from novaGui.app import NovaApp
+from legacy.novaTk import theme
+from legacy.novaTk.app import NovaApp
 
 outputFolder = os.path.join(root, 'docs', 'images', 'gui')
 windowGeometry = '1440x920+30+30'

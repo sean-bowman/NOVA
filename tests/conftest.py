@@ -83,6 +83,6 @@ def tkRoot():
     window.withdraw()
     yield window
 
-    from novaGui import theme
+    from legacy.novaTk import theme
     theme._bindPalette('dark')
     window.destroy()

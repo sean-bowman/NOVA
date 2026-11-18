@@ -105,8 +105,8 @@ import math
 
 import numpy as np
 from scipy.interpolate import interp1d
-from tqdm import tqdm
 
+from . import progress
 from .geometryTools import DCM, parallelOffset, sizedThroatRadius
 from .errors import (ConvergenceFailureError, createErrorContext, GeometricConstraintError,
                      InvalidInputError, PressureDropError, ThermalConstraintError)
@@ -1797,7 +1797,7 @@ def solveChannelRadii(state, geometry, thermal):
         heatTransferDict_i, baseHeatTransferDict, heatTransferPlots = initialStationInputs()
 
         # find max channel radius at each station
-        for i in tqdm(range(state.numCrossSections), desc="Solving for channel radii", colour="#ABD038"):
+        for i in progress.track(range(state.numCrossSections), label = 'Solving for channel radii', colour = '#ABD038'):
 
             maxChannelRadius = kineosAlgorithm_oneStation(xNozzle, rNozzle, channelRadius, nChannel, helixPath, xChannelCenterline2D, rChannelCenterline2D, i, findMaxRadius=True)
 
@@ -1911,7 +1911,7 @@ def solveChannelRadii(state, geometry, thermal):
                 value = float(requested),
                 limit = float(bound))
 
-        for i in tqdm(range(state.numCrossSections), desc = 'Building channel radii', colour = '#ABD038'):
+        for i in progress.track(range(state.numCrossSections), label = 'Building channel radii', colour = '#ABD038'):
 
             # The station the march is on, in wall order
             station   = marchOrder[i]

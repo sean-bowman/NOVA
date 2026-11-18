@@ -64,6 +64,7 @@ from typing import Any
 
 import numpy as np
 
+from . import progress
 from .channelSizing import solveChannelRadii
 from .errors import ConvergenceFailureError, InvalidInputError, createErrorContext
 from .fluidProperties import fluidProps
@@ -430,7 +431,8 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
             neighbor = (upMid[downStations],
                         np.asarray(upResults['coolantConvectiveHeatTransferCoef'])[downStations],
                         np.asarray(upState.channelRadius)[downStations])
-        downState = _solvePass(downTemplate, geometry, thermal, *neighbor, downFaces, downRise)
+        with progress.stage('down', 'Down pass'):
+            downState = _solvePass(downTemplate, geometry, thermal, *neighbor, downFaces, downRise)
         downResults = downState.channelThermalResults
         downMid, downRise = stationTemperatures(downResults['temperature'], 'coflow',
                                                 float(downState.coolantInitialTemperature))
@@ -472,14 +474,23 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         neighborCoefficient[downStations] = np.asarray(downResults['coolantConvectiveHeatTransferCoef'])
         neighborRadius[downStations] = np.asarray(downState.channelRadius)
         previous = None if upResults is None else np.asarray(upResults['temperature']).copy()
-        upState = _solvePass(upTemplate, geometry, thermal,
-                             neighborTemperature if ribExchange else None, neighborCoefficient,
-                             neighborRadius, upFaces, upRise)
+        with progress.stage('up', 'Up pass'):
+            upState = _solvePass(upTemplate, geometry, thermal,
+                                 neighborTemperature if ribExchange else None, neighborCoefficient,
+                                 neighborRadius, upFaces, upRise)
         upResults = upState.channelThermalResults
 
         change = (np.inf if previous is None
                   else float(np.max(np.abs(np.asarray(upResults['temperature']) - previous))))
         history.append(change)
+
+        # The first pass has no previous profile to compare against, so it reports no change
+        progress.iteration(iteration, {
+            'change':                None if previous is None else change,                 # [K]
+            'tolerance':             tolerance,                                            # [K]
+            'downOutletTemperature': float(downState.coolantExitTemperature),              # [K]
+            'upOutletTemperature':   float(upState.coolantExitTemperature),                # [K]
+        }, name = 'pass')
         if not ribExchange or change < tolerance:
             break
     else:

@@ -26,8 +26,9 @@ if root not in sys.path:
     sys.path.insert(0, root)
 
 from NOVA import palette as novaPalette
-from novaGui import configSchema, settings, theme, themeImages
-from novaGui.widgets import fieldHelpText
+from novaGui import configSchema, settings
+from legacy.novaTk import theme, themeImages
+from legacy.novaTk.widgets import fieldHelpText
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- The palette -- #
@@ -215,7 +216,7 @@ def testALongOptionListIsCountedRatherThanNamed():
     assert 'option 4' in text and 'option 5' not in text and 'and 15 more' in text
 
 def testTheViewTabOffersOnlyWhatARunProduced():
-    from novaGui.tabs.viewTab import availableViews
+    from novaGui.viewCatalog import availableViews
 
     assert availableViews(None, {}) == set()
     contourOnly = types.SimpleNamespace(xNozzleWall = np.linspace(0, 1, 10), nozzleNearWallMachNumber = np.ones(10),
@@ -239,7 +240,7 @@ def testTheViewTabOffersOnlyWhatARunProduced():
 
 def testACircuitChoiceExplainsTheOptionSelected():
     from novaGui import configSchema
-    from novaGui.widgets import fieldHelpText
+    from legacy.novaTk.widgets import fieldHelpText
 
     spec = next(field for field in configSchema.allFields() if field.key == 'coolantCircuit')
     assert set(spec.optionHelp) == {value for _, value in spec.choices}

@@ -114,8 +114,8 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from scipy.interpolate import interp1d
-from tqdm import tqdm
 
+from . import progress
 from .fluidProperties import fluidProps
 from .errors import ConvergenceFailureError, NumericalInstabilityError, PressureDropError
 from .ablative import blowingCorrection
@@ -1725,7 +1725,7 @@ def regenHeatTransferModel(context, inputsDict: dict, constantColdWallTemperatur
         # -- Loop -- #
 
         # Loop backwards in X corresponding to regen inlet --> regen outlet (nozzle outlet --> nozzle inlet)
-        for i in tqdm(range(numCrossSections-1, 0, -1), desc="Running Regen Jacket Heat Transfer Model", colour="#ABD038"):
+        for i in progress.track(range(numCrossSections-1, 0, -1), label = 'Running Regen Jacket Heat Transfer Model', colour = '#ABD038'):
 
             heatTransferModel(i)
 

@@ -276,7 +276,7 @@ def py2cad(filename: str, xData: np.ndarray | list, yData: np.ndarray | list, zD
 
     '''
 
-    from tqdm import tqdm
+    from . import progress
 
     # Helper function to find the facet normal and write the current facet data to the file
     def writeFacet(fileID, point1, point2, point3):
@@ -339,7 +339,7 @@ def py2cad(filename: str, xData: np.ndarray | list, yData: np.ndarray | list, zD
     fileID.write(np.int32(nFacets))
 
     # Loop over all vertices of the mesh and call write_facet() to write mesh data to the .stl file
-    for i in tqdm(range(len(z[:,0]) - 1)):
+    for i in progress.track(range(len(z[:,0]) - 1), label = 'Writing STL facets'):
         for j in range(len(z[0,:]) - 1):
 
             # Draw a triangle to make a facet

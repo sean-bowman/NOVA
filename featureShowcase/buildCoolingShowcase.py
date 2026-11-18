@@ -59,7 +59,7 @@ for path in (root, os.path.join(root, 'src')):
         sys.path.insert(0, path)
 
 from NOVA import Nozzle                                     # noqa: E402
-from novaGui import theme, thermalPlots                     # noqa: E402
+from novaGui import themeColors, thermalPlots               # noqa: E402
 
 assets = os.path.join(root, 'src', 'NOVA', 'assets')
 runFolder = os.path.join(here, 'coolingRuns')
@@ -127,7 +127,7 @@ class HeadlessPane:
     def __init__(self):
 
         self.figure = Figure(figsize = PANEL, dpi = DPI)
-        self.figure.patch.set_facecolor(theme.surface)
+        self.figure.patch.set_facecolor(themeColors.surface)
         self.axes = None
         self._projection = None
 
@@ -135,9 +135,9 @@ class HeadlessPane:
 
         self.figure.clear()
         axis = self.figure.add_subplot(111)
-        theme.styleAxes(axis)
+        themeColors.styleAxes(axis)
         axis.set_axis_off()
-        axis.text(0.5, 0.5, text, ha = 'center', va = 'center', color = theme.textMuted, transform = axis.transAxes)
+        axis.text(0.5, 0.5, text, ha = 'center', va = 'center', color = themeColors.textMuted, transform = axis.transAxes)
 
     def redraw(self) -> None:
 
@@ -169,61 +169,61 @@ def wallAlongTheNozzle(nozzle) -> np.ndarray:
     figure.set_layout_engine('constrained')
     wallAxes, coolantAxes = figure.subplots(2, 1, sharex = True)
     for axis in (wallAxes, coolantAxes):
-        theme.styleAxes(axis)
+        themeColors.styleAxes(axis)
 
     results = nozzle.channelThermalResults
     x = np.asarray(results['xHotWall3D'])
     circuit = getattr(nozzle, 'coolantCircuitSolution', None)
     if circuit is None:
-        wallAxes.plot(x, _metal(results), color = theme.accent, linewidth = 1.8, label = 'Chamber jacket')
-        coolantAxes.plot(x, results['temperature'], color = theme.accent, linewidth = 1.8, label = 'Chamber jacket')
+        wallAxes.plot(x, _metal(results), color = themeColors.accent, linewidth = 1.8, label = 'Chamber jacket')
+        coolantAxes.plot(x, results['temperature'], color = themeColors.accent, linewidth = 1.8, label = 'Chamber jacket')
     else:
-        for passSolution, color in ((circuit.down, theme.blue), (circuit.up, theme.accent)):
+        for passSolution, color in ((circuit.down, themeColors.blue), (circuit.up, themeColors.accent)):
             xPass = np.asarray(passSolution.results['xHotWall3D'])
             wallAxes.plot(xPass, _metal(passSolution.results), color = color, linewidth = 1.8,
                           label = f'{passSolution.name.capitalize()} family')
             coolantAxes.plot(xPass, passSolution.results['temperature'], color = color, linewidth = 1.8,
                              label = f'{passSolution.name.capitalize()} pass')
-    wallAxes.axhline(float(nozzle.maxWallTemperature), color = theme.red, linewidth = 1.0, linestyle = '--',
+    wallAxes.axhline(float(nozzle.maxWallTemperature), color = themeColors.red, linewidth = 1.0, linestyle = '--',
                      label = f'Jacket limit {float(nozzle.maxWallTemperature):.0f} K')
     ceiling = getattr(nozzle, 'maxColdWallTemperature', None)
     if ceiling is not None and np.isfinite(float(ceiling)):
-        wallAxes.plot(x, results['coldWallTemperature'], color = theme.accent, linewidth = 1.0, linestyle = ':',
+        wallAxes.plot(x, results['coldWallTemperature'], color = themeColors.accent, linewidth = 1.0, linestyle = ':',
                       label = 'Coolant-side wall')
-        wallAxes.axhline(float(ceiling), color = theme.textMuted, linewidth = 1.0, linestyle = '--',
+        wallAxes.axhline(float(ceiling), color = themeColors.textMuted, linewidth = 1.0, linestyle = '--',
                          label = f'Coking ceiling {float(ceiling):.0f} K')
 
     extension = getattr(nozzle, 'extensionCircuitSolution', None)
     xExtension = getattr(nozzle, 'xExtension', None)
     if extension is not None:
         xCircuit = np.asarray(xExtension)[extension.stations]
-        wallAxes.plot(xCircuit, extension.metalWallTemperature, color = theme.purple, linewidth = 1.8,
+        wallAxes.plot(xCircuit, extension.metalWallTemperature, color = themeColors.purple, linewidth = 1.8,
                       label = 'Extension circuit')
         if extension.circuit is None:
-            coolantAxes.plot(xCircuit, extension.sizing.channelThermalResults['temperature'], color = theme.purple,
+            coolantAxes.plot(xCircuit, extension.sizing.channelThermalResults['temperature'], color = themeColors.purple,
                              linewidth = 1.8, label = 'Extension circuit')
         else:
             for passSolution, style in ((extension.circuit.down, '--'), (extension.circuit.up, '-')):
                 coolantAxes.plot(passSolution.results['xHotWall3D'], passSolution.results['temperature'],
-                                 color = theme.purple, linewidth = 1.8, linestyle = style,
+                                 color = themeColors.purple, linewidth = 1.8, linestyle = style,
                                  label = f'Extension {passSolution.name} pass')
     shell = getattr(nozzle, 'extensionWallTemperature', None)
     if shell is not None and xExtension is not None:
         start = len(xExtension) - len(shell)
-        wallAxes.plot(np.asarray(xExtension)[start:], shell, color = theme.cyan, linewidth = 1.8,
+        wallAxes.plot(np.asarray(xExtension)[start:], shell, color = themeColors.cyan, linewidth = 1.8,
                       label = f'Radiation-cooled shell, peak {float(np.max(shell)):.0f} K')
         limit = getattr(nozzle, 'extensionTemperatureLimit', None)
         if limit is not None:
-            wallAxes.axhline(float(limit), color = theme.cyan, linewidth = 1.0, linestyle = '--',
+            wallAxes.axhline(float(limit), color = themeColors.cyan, linewidth = 1.0, linestyle = '--',
                              label = f'Shell limit {float(limit):.0f} K')
 
     wallAxes.set_ylabel('Hot wall [K]')
     coolantAxes.set_ylabel('Coolant [K]')
     coolantAxes.set_xlabel('Nozzle axis [m]')
-    wallAxes.set_title('Hot wall along the whole nozzle; metal behind any coating', color = theme.text)
+    wallAxes.set_title('Hot wall along the whole nozzle; metal behind any coating', color = themeColors.text)
     for axis in (wallAxes, coolantAxes):
-        axis.axvline(0.0, color = theme.textDim, linewidth = 0.8, linestyle = ':')
-        axis.legend(facecolor = theme.surface2, edgecolor = theme.border, labelcolor = theme.text, fontsize = 7,
+        axis.axvline(0.0, color = themeColors.textDim, linewidth = 0.8, linestyle = ':')
+        axis.legend(facecolor = themeColors.surface2, edgecolor = themeColors.border, labelcolor = themeColors.text, fontsize = 7,
                     framealpha = 0.95)
     return pane.image()
 
@@ -238,8 +238,8 @@ def lastPanel(nozzle) -> np.ndarray:
 def titleStrip(text: str, width: int) -> np.ndarray:
 
     figure = Figure(figsize = (width / DPI, 0.5), dpi = DPI)
-    figure.patch.set_facecolor(theme.surface)
-    figure.text(0.01, 0.5, text, color = theme.text, fontsize = 12, va = 'center', ha = 'left')
+    figure.patch.set_facecolor(themeColors.surface)
+    figure.text(0.01, 0.5, text, color = themeColors.text, fontsize = 12, va = 'center', ha = 'left')
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     canvas = FigureCanvasAgg(figure)
     canvas.draw()
@@ -269,9 +269,9 @@ def renderFigure(name: str, nozzle) -> str:
         return None
 
     figure = plt.figure(figsize = (10.0, 6.0), constrained_layout = True)
-    figure.patch.set_facecolor(theme.surface)
+    figure.patch.set_facecolor(themeColors.surface)
     axis = figure.add_subplot(projection = '3d')
-    axis.set_facecolor(theme.surface)
+    axis.set_facecolor(themeColors.surface)
 
     def draw(x, y, z, color, roll, alpha = 0.95):
         cosine, sine = np.cos(roll), np.sin(roll)
@@ -282,12 +282,12 @@ def renderFigure(name: str, nozzle) -> str:
         pitch = 2.0 * np.pi / circuit.up.channelCount
         window = slice(-12, None)
         for k in range(-2, 3):
-            draw(nozzle.xChannel[:, window], nozzle.yChannel[:, window], nozzle.zChannel[:, window], theme.accent, k * pitch)
+            draw(nozzle.xChannel[:, window], nozzle.yChannel[:, window], nozzle.zChannel[:, window], themeColors.accent, k * pitch)
             draw(nozzle.xChannelDown[:, window], nozzle.yChannelDown[:, window], nozzle.zChannelDown[:, window],
-                 theme.blue, k * pitch)
+                 themeColors.blue, k * pitch)
         around = np.abs(np.arctan2(nozzle.zTurnaround, nozzle.yTurnaround)) < 3.0 * pitch
         ring = [np.where(around, value, np.nan) for value in (nozzle.xTurnaround, nozzle.yTurnaround, nozzle.zTurnaround)]
-        draw(*ring, theme.purple, 0.0, alpha = 0.5)
+        draw(*ring, themeColors.purple, 0.0, alpha = 0.5)
         title = (f'Up (copper) and down (blue) channels near the aft end, turning in a ring of '
                  f'{1e3 * circuit.turnaround.sectionRadius:.1f} mm section')
     else:
@@ -297,27 +297,27 @@ def renderFigure(name: str, nozzle) -> str:
         pitch = 2.0 * np.pi / nozzle.nChannel
         for roll in (-pitch, 0.0, pitch):
             parent = slice(max(inside[0] - 10, 0), start + 1)
-            draw(nozzle.xChannel[:, parent], nozzle.yChannel[:, parent], nozzle.zChannel[:, parent], theme.accent, roll)
+            draw(nozzle.xChannel[:, parent], nozzle.yChannel[:, parent], nozzle.zChannel[:, parent], themeColors.accent, roll)
             daughter = slice(0, stop - start)
             draw(nozzle.xChannelSplitA[:, daughter], nozzle.yChannelSplitA[:, daughter],
-                 nozzle.zChannelSplitA[:, daughter], theme.blue, roll)
+                 nozzle.zChannelSplitA[:, daughter], themeColors.blue, roll)
             draw(nozzle.xChannelSplitB[:, daughter], nozzle.yChannelSplitB[:, daughter],
-                 nozzle.zChannelSplitB[:, daughter], theme.purple, roll)
+                 nozzle.zChannelSplitB[:, daughter], themeColors.purple, roll)
         axis.set_box_aspect((2.5, 1.0, 1.0))
         title = (f'Three of the {nozzle.nChannel} parent channels splitting to two at an area ratio of '
                  f'{float(nozzle.channelSplitAreaRatio):.3g}')
 
     for label, setter in (('Axial position [mm]', axis.set_xlabel), ('y [mm]', axis.set_ylabel),
                           ('z [mm]', axis.set_zlabel)):
-        setter(label, color = theme.textMuted)
-    axis.tick_params(colors = theme.textMuted)
+        setter(label, color = themeColors.textMuted)
+    axis.tick_params(colors = themeColors.textMuted)
     for axisLine in (axis.xaxis, axis.yaxis, axis.zaxis):
-        axisLine.set_pane_color(matplotlib.colors.to_rgba(theme.surface2))
-        axisLine._axinfo['grid']['color'] = matplotlib.colors.to_rgba(theme.border)
+        axisLine.set_pane_color(matplotlib.colors.to_rgba(themeColors.surface2))
+        axisLine._axinfo['grid']['color'] = matplotlib.colors.to_rgba(themeColors.border)
     axis.view_init(elev = 35 if circuit is not None else 62, azim = -60 if circuit is not None else -70)
-    axis.set_title(title, color = theme.text, fontsize = 10)
+    axis.set_title(title, color = themeColors.text, fontsize = 10)
     path = os.path.join(here, f'coolingShowcase_{name}3D.png')
-    figure.savefig(path, dpi = 150, facecolor = theme.surface)
+    figure.savefig(path, dpi = 150, facecolor = themeColors.surface)
     plt.close(figure)
     return path
 
@@ -386,7 +386,7 @@ def capabilityFigure(solved: list) -> str:
     table = [[engine[row] for engine in cells] for row in rows]
 
     figure = plt.figure(figsize = (12.0, 0.42 * len(rows) + 1.0))
-    figure.patch.set_facecolor(theme.surface)
+    figure.patch.set_facecolor(themeColors.surface)
     axis = figure.add_subplot(111)
     axis.set_axis_off()
     cellTable = axis.table(cellText = table, rowLabels = rows, colLabels = labels, loc = 'center', cellLoc = 'center')
@@ -394,13 +394,13 @@ def capabilityFigure(solved: list) -> str:
     cellTable.set_fontsize(9)
     cellTable.scale(1.0, 1.5)
     for (row, column), cell in cellTable.get_celld().items():
-        cell.set_edgecolor(theme.border)
+        cell.set_edgecolor(themeColors.border)
         header = row == 0 or column == -1
-        cell.set_facecolor(theme.surface2 if header else theme.surface)
+        cell.set_facecolor(themeColors.surface2 if header else themeColors.surface)
         filled = not header and cell.get_text().get_text() not in ('',)
-        cell.get_text().set_color(theme.text if header else (theme.accent if filled else theme.textMuted))
+        cell.get_text().set_color(themeColors.text if header else (themeColors.accent if filled else themeColors.textMuted))
     path = os.path.join(here, 'coolingCapabilities.png')
-    figure.savefig(path, dpi = 150, facecolor = theme.surface, bbox_inches = 'tight')
+    figure.savefig(path, dpi = 150, facecolor = themeColors.surface, bbox_inches = 'tight')
     plt.close(figure)
 
     print('\n| Feature | ' + ' | '.join(labels) + ' |')
@@ -415,7 +415,7 @@ def capabilityFigure(solved: list) -> str:
 
 def draw(names = None) -> None:
 
-    theme.applyMatplotlib()
+    themeColors.applyMatplotlib()
     solved = []
     for name, label, _ in ENGINES:
         nozzle = cached(name)

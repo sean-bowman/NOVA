@@ -124,6 +124,7 @@ from .errors import InvalidInputError
 from .performance import summarizePerformance
 from .turbineExhaust import turbineExhaustState
 from .validation import specified
+from . import progress
 from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNode,
                     PlumeFlow, PlumePoint, solvePlumeStructure, throttledContour,
                     plumeCharacteristicSeed,
@@ -147,6 +148,14 @@ from .plume import (PlumeContour, PlumeStructure, PlumeField, PlumeGas, PlumeNod
 from .stationMarch import (solveStationField, solveStationMarch, stationFromLine,
                            plumeFieldDefaultReach, plumeFieldDriftTolerance,
                            plumeFieldRadialPoints)
+
+# What a front end following the run calls each diverging section family's stage
+divergingSectionLabels = {
+    'conical':                 'Conical contour',
+    'truncatedIdeal':          'Truncated ideal contour',
+    'thrustOptimizedParabola': 'Thrust-optimized parabola',
+    'thrustOptimizedContour':  'Thrust-optimized contour',
+}
 
 class Nozzle:
 
@@ -1989,6 +1998,72 @@ class Nozzle:
         self.performance = summarizePerformance(self)
         print(self.performance.report())
 
+    # -- Pipeline Gates -- #
+
+    # generateNozzle runs a stage only when its gate is open, and progressPlan announces the
+    # stages from the same gates, so the plan a front end receives is the run it watches.
+
+    def coolingRequested(self) -> bool:
+
+        '''Whether the configuration asks for regenerative cooling channels.'''
+
+        return self.makeCoolingChannels != 'off'
+
+    def volutesRequested(self) -> bool:
+
+        '''Whether it asks for an inlet or an outlet volute. They are built only with the channels.'''
+
+        return self.makeInletVolute == 'on' or self.makeOutletVolute == 'on'
+
+    def extensionRequested(self) -> bool:
+
+        '''
+
+        Whether any solve past the jacket has its inputs: a gas generator, film slots on the
+        extension, an extension circuit or a radiation-cooled extension. Each of those solves
+        still checks its own inputs and returns when they are absent.
+
+        '''
+
+        slotted = isinstance(self.extensionFilmSlots, (list, tuple)) and len(self.extensionFilmSlots) > 0
+        return bool(specified(self, 'gasGeneratorMixtureRatio') or slotted
+                    or self.extensionCircuit == 'on' or self.makeRadiativeExtension == 'on')
+
+    def plumeRequested(self) -> bool:
+
+        '''Whether an ambient pressure is given, which is what asks for the plume.'''
+
+        return not np.isnan(np.float64(self.plumeAmbientPressure if self.plumeAmbientPressure not in ([], None) else np.nan))
+
+    def progressPlan(self) -> list:
+
+        '''
+
+        The top-level stages generateNozzle runs for this configuration, in order.
+
+        Reads the configuration only, so it is known before the first stage starts.
+
+        Returns:
+        --------
+        list : (key, label) pairs, the keys `progress.stage` reports them under.
+
+        '''
+
+        stages = [('contour', 'Contour')]
+        if self.coolingRequested():
+            stages.append(('cooling', 'Cooling channels'))
+            if self.volutesRequested():
+                stages.append(('volutes', 'Volutes'))
+        if self.extensionRequested():
+            stages.append(('extension', 'Extension'))
+        stages.append(('performance', 'Friction and performance'))
+        if self.plumeRequested():
+            stages.append(('plume', 'Plume'))
+        if self.export == 'on':
+            stages.append(('outputs', 'Outputs'))
+
+        return stages
+
     def generateNozzle(self, configPath: str = None):
 
         '''
@@ -2026,104 +2101,127 @@ class Nozzle:
         # Read inputs
         self.setInputs(inputsPath = configPath)
 
+        # A front end following the run (NOVA.progress) learns its stages before the first starts
+        progress.plan(self.progressPlan())
+
         # -- Nozzle Contour -- #
 
-        # Generate the diverging section. One resolver decides which family was asked for, so an
-        # unrecognized value raises rather than quietly building a truncated ideal contour.
-        match divergingSectionFamily(self.divergingSectionType):
-            case 'conical':
-                print(f'Generating a conical nozzle contour to area ratio {self.expansionRatio:.3f}.')
-                self.conicalNozzle()
-            case 'truncatedIdeal':
-                # The contour solve prints its own banner, which names the mode it runs in
-                self.solveTruncatedIdealDesignPoint(self.lengthFraction)
-            case 'thrustOptimizedParabola':
-                print(f'Generating a thrust-optimized parabolic nozzle contour to area ratio '
-                      f'{self.expansionRatio:.3f} at a length fraction of {self.lengthFraction}.')
-                self.thrustOptimizedParabolicContour(self.lengthFraction)
-            case 'thrustOptimizedContour':
-                print(f'Generating a thrust-optimized nozzle contour to area ratio {self.expansionRatio:.3f} '
-                      f'at a length fraction of {self.lengthFraction}.')
-                # A pinned vector skips the search. Absent, this searches as it always has.
-                self.thrustOptimizedContour(
-                    self.lengthFraction,
-                    designVariables = getattr(self, 'divergingSectionDesignVariables', None))
-            case family:
-                raise NotImplementedError(
-                    f'The {family} diverging section is not built yet. The contour families that '
-                    f'run today are the truncated ideal contour and the cone.')
+        with progress.stage('contour', 'Contour'):
 
-        # Generate the converging section
-        self.convergingSection()
+            # Generate the diverging section. One resolver decides which family was asked for, so an
+            # unrecognized value raises rather than quietly building a truncated ideal contour.
+            family = divergingSectionFamily(self.divergingSectionType)
+            with progress.stage('diverging', divergingSectionLabels.get(family, 'Diverging section')):
+                match family:
+                    case 'conical':
+                        print(f'Generating a conical nozzle contour to area ratio {self.expansionRatio:.3f}.')
+                        self.conicalNozzle()
+                    case 'truncatedIdeal':
+                        # The contour solve prints its own banner, which names the mode it runs in
+                        self.solveTruncatedIdealDesignPoint(self.lengthFraction)
+                    case 'thrustOptimizedParabola':
+                        print(f'Generating a thrust-optimized parabolic nozzle contour to area ratio '
+                              f'{self.expansionRatio:.3f} at a length fraction of {self.lengthFraction}.')
+                        self.thrustOptimizedParabolicContour(self.lengthFraction)
+                    case 'thrustOptimizedContour':
+                        print(f'Generating a thrust-optimized nozzle contour to area ratio {self.expansionRatio:.3f} '
+                              f'at a length fraction of {self.lengthFraction}.')
+                        # A pinned vector skips the search. Absent, this searches as it always has.
+                        self.thrustOptimizedContour(
+                            self.lengthFraction,
+                            designVariables = getattr(self, 'divergingSectionDesignVariables', None))
+                    case _:
+                        raise NotImplementedError(
+                            f'The {family} diverging section is not built yet. The contour families that '
+                            f'run today are the truncated ideal contour and the cone.')
 
-        # Truncate the regen section
-        self.truncateForRegen()
+            # Generate the converging section
+            with progress.stage('converging', 'Converging section and chamber'):
+                self.convergingSection()
+
+            # Truncate the regen section
+            with progress.stage('truncation', 'Regen section'):
+                self.truncateForRegen()
 
         # -- Regenerative Cooling Architecture -- #
 
-        if self.makeCoolingChannels != 'off':
+        if self.coolingRequested():
 
             # Generate channel(s)
-            self.generateRegenChannels()
+            with progress.stage('cooling', 'Cooling channels'):
+                self.generateRegenChannels()
 
             # Generate volute(s)
-            if self.makeInletVolute == 'on' or self.makeOutletVolute == 'on':
-                self.generateRegenVolutes()
+            if self.volutesRequested():
+                with progress.stage('volutes', 'Volutes'):
+                    self.generateRegenVolutes()
 
-        # -- Turbine Exhaust and the Films Over the Extension -- #
+        # -- Turbine Exhaust, the Films Over the Extension and the Radiation-Cooled Extension -- #
 
-        self.solveTurbineExhaust()
-        self.solveExtensionFilm()
-        self.solveExtensionCircuit()
+        # Each solve returns at once when its own inputs are absent, so the block always runs; it is
+        # reported as a stage only when one of them has inputs
+        with progress.stage('extension', 'Extension', enabled = self.extensionRequested()):
 
-        # -- Radiation-Cooled Extension -- #
+            self.solveTurbineExhaust()
+            self.solveExtensionFilm()
+            self.solveExtensionCircuit()
 
-        if self.makeRadiativeExtension == 'on':
-            self.generateRadiativeExtension()
+            if self.makeRadiativeExtension == 'on':
+                self.generateRadiativeExtension()
 
-        # -- Boundary Layer and the Friction It Costs -- #
+        with progress.stage('performance', 'Friction and performance'):
 
-        # After the extension, so the wall the layer marches over carries the extension's own
-        # solved temperature rather than the jacket's carried past its end
-        self.solveFrictionLoss()
+            # -- Boundary Layer and the Friction It Costs -- #
 
-        # -- Estimated and Delivered Performance -- #
+            # After the extension, so the wall the layer marches over carries the extension's own
+            # solved temperature rather than the jacket's carried past its end
+            self.solveFrictionLoss()
 
-        self.solvePerformance()
+            # -- Estimated and Delivered Performance -- #
+
+            self.solvePerformance()
 
         # -- Exhaust Plume -- #
 
         # The correlated structure first: it carries the jet scale and the Mach disk, which the
         # march cannot produce, and the march reads it. Then, when a reach is given, the station
         # march solves the boundary and the interior; see plumeField() for its envelope.
-        if not np.isnan(np.float64(self.plumeAmbientPressure if self.plumeAmbientPressure not in ([], None) else np.nan)):
-            self.plumeStructure(float(self.plumeAmbientPressure))
-            if self.plumeFieldReach is not None:
-                print(f'Marching the exhaust plume {self.plumeFieldReach:.1f} lip radii past the exit plane.')
-                field = self.plumeField(float(self.plumeAmbientPressure), reach = float(self.plumeFieldReach))
-                if field.solved:
-                    print(f'  lip pressure ratio {field.lipPressureRatio:.3f}, worst mass continuity error '
-                          f'{field.massDriftWorst:+.2f} %' + ('' if field.trustworthy else ', past the trusted bound'))
-                else:
-                    print(f'  plume march declined: {field.notes[-1] if field.notes else "no reason given"}')
+        if self.plumeRequested():
+            with progress.stage('plume', 'Plume'):
+                with progress.stage('structure', 'Correlated structure'):
+                    self.plumeStructure(float(self.plumeAmbientPressure))
+                if self.plumeFieldReach is not None:
+                    with progress.stage('march', 'Plume march'):
+                        print(f'Marching the exhaust plume {self.plumeFieldReach:.1f} lip radii past the exit plane.')
+                        field = self.plumeField(float(self.plumeAmbientPressure), reach = float(self.plumeFieldReach))
+                        if field.solved:
+                            print(f'  lip pressure ratio {field.lipPressureRatio:.3f}, worst mass continuity error '
+                                  f'{field.massDriftWorst:+.2f} %' + ('' if field.trustworthy else ', past the trusted bound'))
+                        else:
+                            print(f'  plume march declined: {field.notes[-1] if field.notes else "no reason given"}')
 
         # -- Export -- #
 
         if self.export == 'on':
 
-            # Every run of this name writes into one directory under the output root.
-            topLevelDirectory = self._getOutputRoot()
-            self.dataFolder = os.path.join(topLevelDirectory, f'{self.filename}Outputs')
+            with progress.stage('outputs', 'Outputs'):
 
-            os.makedirs(self.dataFolder, exist_ok = True)
+                # Every run of this name writes into one directory under the output root.
+                topLevelDirectory = self._getOutputRoot()
+                self.dataFolder = os.path.join(topLevelDirectory, f'{self.filename}Outputs')
 
-            self.exportData()
+                os.makedirs(self.dataFolder, exist_ok = True)
 
-            # Interactive plotly companions for the figures Matplotlib just wrote as PNGs, plus
-            # the 3D assembly views that have no static twin.
-            exportInteractiveFigures(self, self.dataFolder)
+                with progress.stage('data', 'Data files and geometry'):
+                    self.exportData()
 
-            # Inside the outputs directory, named for the run. Passing the directory itself put the
-            # pickle beside it as '<filename>Outputs.pkl', which escapes the *Outputs/ ignore rule
-            # and leaves a stray several hundred kilobytes in the parent.
-            self.pickleNozzle(os.path.join(self.dataFolder, self.filename))
+                # Interactive plotly companions for the figures Matplotlib just wrote as PNGs, plus
+                # the 3D assembly views that have no static twin.
+                with progress.stage('interactive', 'Interactive figures'):
+                    exportInteractiveFigures(self, self.dataFolder)
+
+                # Inside the outputs directory, named for the run. Passing the directory itself put the
+                # pickle beside it as '<filename>Outputs.pkl', which escapes the *Outputs/ ignore rule
+                # and leaves a stray several hundred kilobytes in the parent.
+                with progress.stage('pickle', 'Nozzle pickle'):
+                    self.pickleNozzle(os.path.join(self.dataFolder, self.filename))

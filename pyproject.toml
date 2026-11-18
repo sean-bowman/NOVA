@@ -28,11 +28,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The Tkinter front end. Tkinter itself ships with CPython; Pillow draws its controls and icons.
+# The legacy Tkinter front end (legacy/novaTk). Tkinter ships with CPython; Pillow draws its
+# controls and icons.
 gui = ['pillow>=9.1']
-# The web front end (novaWeb): its server and the desktop window. It also draws with the Tkinter
-# front end's modules, so it takes Pillow as well. The React app builds with Node (novaWeb/frontend).
-web = ['pillow>=9.1', 'fastapi>=0.110', 'uvicorn>=0.29', 'pywebview>=5.0']
+# The front end (novaGui): its server and the desktop window. The React app builds with Node
+# (novaGui/frontend).
+web = ['fastapi>=0.110', 'uvicorn>=0.29', 'pywebview>=5.0']
 # REFPROP-backed fluid properties, which need a licensed REFPROP installation.
 refprop = ['ctREFPROP>=0.10.5']
 # Static image export of plotly figures, for regenerating the README's screenshots. Needs a

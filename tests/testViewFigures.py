@@ -165,8 +165,9 @@ def _cooledNozzle():
 @pytest.mark.parametrize('name', ['drawWallMap', 'drawJacketTemperatures', 'drawCoolantFlow', 'drawCoolantProperties',
                                   'drawHeatFlux', 'drawFilm', 'drawExtension'])
 def testEveryCoolingViewDrawsInBothModes(tkRoot, name):
-    from novaGui import theme, thermalPlots
-    from novaGui.plotting import MplPane
+    from novaGui import thermalPlots
+    from legacy.novaTk import theme
+    from legacy.novaTk.plotting import MplPane
 
     theme.applyTheme(tkRoot, 'dark')
     pane = MplPane(tkRoot)
@@ -178,8 +179,9 @@ def testEveryCoolingViewDrawsInBothModes(tkRoot, name):
         assert len(pane.figure.get_axes()) >= 2
 
 def testUnderABarrierTheMetalIsDrawnAgainstTheLimit(tkRoot):
-    from novaGui import theme, thermalPlots
-    from novaGui.plotting import MplPane
+    from novaGui import thermalPlots
+    from legacy.novaTk import theme
+    from legacy.novaTk.plotting import MplPane
 
     theme.applyTheme(tkRoot, 'dark')
     pane = MplPane(tkRoot)
@@ -194,8 +196,9 @@ def testUnderABarrierTheMetalIsDrawnAgainstTheLimit(tkRoot):
 
 @pytest.mark.parametrize('name', ['drawWallMap', 'drawFilm', 'drawExtension'])
 def testACoolingViewWithNothingToDrawSaysSo(tkRoot, name):
-    from novaGui import theme, thermalPlots
-    from novaGui.plotting import MplPane
+    from novaGui import thermalPlots
+    from legacy.novaTk import theme
+    from legacy.novaTk.plotting import MplPane
 
     theme.applyTheme(tkRoot, 'dark')
     pane = MplPane(tkRoot)
@@ -204,8 +207,8 @@ def testACoolingViewWithNothingToDrawSaysSo(tkRoot, name):
 
 @pytest.mark.parametrize('quantity', ['mach', 'pressure', 'temperature'])
 def testTheFieldViewDraws(tkRoot, quantity):
-    from novaGui import theme
-    from novaGui.plotting import MplPane, drawField
+    from legacy.novaTk import theme
+    from legacy.novaTk.plotting import MplPane, drawField
 
     theme.applyTheme(tkRoot, 'dark')
     pane = MplPane(tkRoot)
@@ -235,8 +238,9 @@ def _multiPassNozzle():
 
 @pytest.mark.parametrize('build', [_cooledNozzle, _multiPassNozzle])
 def testTheCircuitViewDrawsInBothModes(tkRoot, build):
-    from novaGui import theme, thermalPlots
-    from novaGui.plotting import MplPane
+    from novaGui import thermalPlots
+    from legacy.novaTk import theme
+    from legacy.novaTk.plotting import MplPane
 
     theme.applyTheme(tkRoot, 'dark')
     pane = MplPane(tkRoot)
@@ -248,8 +252,9 @@ def testTheCircuitViewDrawsInBothModes(tkRoot, build):
         assert len(pane.figure.get_axes()) == 1
 
 def testThePassesViewDrawsBothFamilies(tkRoot):
-    from novaGui import theme, thermalPlots
-    from novaGui.plotting import MplPane
+    from novaGui import thermalPlots
+    from legacy.novaTk import theme
+    from legacy.novaTk.plotting import MplPane
 
     theme.applyTheme(tkRoot, 'dark')
     pane = MplPane(tkRoot)
@@ -260,7 +265,7 @@ def testThePassesViewDrawsBothFamilies(tkRoot):
     assert len([line for line in coolantAxes.get_lines() if not line.get_label().startswith('_')]) == 2
 
 def testThePassesViewIsOfferedOnlyForAMultiPassOrExtensionCircuit():
-    from novaGui.tabs.viewTab import availableViews
+    from novaGui.viewCatalog import availableViews
 
     assert 'passes' not in availableViews(_cooledNozzle(), {})
     assert 'passes' in availableViews(_multiPassNozzle(), {})

@@ -51,8 +51,8 @@ Author: Sean Bowman
 '''
 
 import numpy as np
-from tqdm import tqdm
 
+from . import progress
 from .exports import py2cad
 from .geometryTools import DCM, intersection, parallelOffset
 from .voluteSections import (SCROLLTYPES, VOLUTEPRINTABILITY, VOLUTESECTIONS, anchorOffset,
@@ -861,7 +861,7 @@ class Volute:
         # loop
         if str(self.progressbar).lower() == 'on':
             print('Generating Volute Cross Sections:')
-        for i in tqdm(range(self.numCrossSections), disable = str(self.progressbar).lower() != 'on'):
+        for i in progress.track(range(self.numCrossSections), disable = str(self.progressbar).lower() != 'on'):
 
             R = radiusDistribution[i]
             yCS[i,:] = R*np.cos(thetaCirc)
@@ -1410,7 +1410,7 @@ class Volute:
         # loop
         if str(self.progressbar).lower() == 'on':
             print('Generating Volute Cross Sections:')
-        for i in tqdm(range(self.numCrossSections), disable = str(self.progressbar).lower() != 'on'):
+        for i in progress.track(range(self.numCrossSections), disable = str(self.progressbar).lower() != 'on'):
 
             L = charLenDistribution[i]
             yCirc = L*np.sin(thetaCirc) - L*(np.cos(tiltAngle) - np.sin(tiltAngle))
