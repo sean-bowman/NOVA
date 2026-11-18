@@ -518,6 +518,10 @@ def testARejectedConfigEndsTheRunWithItsError():
     finally:
         session.shutdown()
 
+def _contourRunning(session) -> bool:
+    '''Whether the session's run has reported its contour stage open.'''
+    return any(stage['key'] == 'contour' and stage['state'] == 'running' for stage in session.state['stages'])
+
 def testACancelledRunEndsCancelledAndFreesTheSession():
     '''
     Cancel terminates the worker mid-solve; the session reports it cancelled and takes another run.
@@ -526,9 +530,9 @@ def testACancelledRunEndsCancelledAndFreesTheSession():
     try:
         session.start(configSchema.defaultConfig(), 'dark')
         deadline = time.time() + 90.0
-        while session.state['fraction'] < 0.08 and time.time() < deadline:
+        while not _contourRunning(session) and time.time() < deadline:
             time.sleep(0.25)
-        assert session.state['fraction'] >= 0.08, 'the run never reached the contour solve'
+        assert _contourRunning(session), 'the run never reached the contour solve'
         with pytest.raises(RuntimeError):
             session.start(configSchema.defaultConfig(), 'dark')
         assert session.cancel()

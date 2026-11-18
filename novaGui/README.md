@@ -46,13 +46,13 @@ The run bar hands the form contents to a `PipelineRunner`, which:
 
 - imports `Nozzle` from the installed `NOVA` package,
 - forces the Matplotlib `Agg` backend and sets NOVA's figure mode (`NOVA.palette.setFigureMode`) to the window's, so the figures the run writes match the theme it started in,
-- sets `NOVA_HEADLESS` so no figure opens a window or a browser tab, and silences the tqdm progress bars,
+- sets `NOVA_HEADLESS` so no figure opens a window or a browser tab,
 - sends the outputs to the session's staging folder (`runner.stagingFolder`), under the system's temporary directory,
-- writes the config to `<name>RunConfig.json` and calls `generateNozzle()`.
+- writes the config to `<name>RunConfig.json` and calls `generateNozzle()` with a `NOVA.progress` reporter installed, which forwards the run's progress events to the window.
 
 The program flags `export` and `plotsEnabled` have no row on the Design tab. Every run writes every figure and data file into the staging folder, where the View tab reads them, and the Export tab copies the chosen ones to the output folder; nothing else is written there. A loaded config's values for the two flags pass through to a saved one unchanged. The staging folder is deleted when the window closes, and one a crashed session left behind is deleted after twelve hours.
 
-Progress printed by NOVA drives the run bar and is mirrored into the collapsible run log.
+NOVA's printed output is mirrored into the collapsible run log. Its progress events drive the run bar; see Run progress below.
 
 ## Theme
 
@@ -76,7 +76,9 @@ Matplotlib draws every pane in the View tab, because it is the only backend that
 
 ## Run progress
 
-`progress.py` maps the pipeline's own banners and tqdm bars onto a 0-1 fraction. The stage table is built per run, so cooling, volute and plume stages only count when those are enabled. The run bar shows the current stage, a determinate progress bar, and the latest output line, so a run is legible without opening the log. Between banners the bar eases toward the current stage's ceiling: the method-of-characteristics solve is silent for tens of seconds and a motionless bar reads as a hang.
+NOVA reports a run's progress as structured events (`NOVA.progress`): the plan of top-level stages the configuration will run, each stage opening and closing (nested, so the coolant circuit's down and up passes sit inside the cooling stage), the steps of its long loops, and the iterations of its iterative solves with the scalars that show them converging (the contour's design Mach and residual per characteristics solve, the circuit's coolant outlet temperatures and change per pass). The printed output is the human log and is not read for progress.
+
+`progress.py` folds those events into the run bar (`RunProgress`). Each top-level stage spans a share of the bar in proportion to its time on the last finished run in the same window, or a nominal time on the window's first run. The label names the running stage and its iteration or loop: `Contour, evaluation 6`, `Cooling channels, pass 4`. Between events the bar eases toward the running stage's end, so a stage that reports only every few seconds still reads as working. The web front end folds the same events with the same class.
 
 ## Units and materials
 

@@ -65,7 +65,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from tqdm import tqdm
 
 from .geometryTools import DCM, arcSpline, chunkInterpolate, intersection, parallelOffset
 from .channelProfile import CHANNELSIZINGMODES, PROFILEKEYS
@@ -79,6 +78,7 @@ from .channelSplit import daughterCenterlines, splitSeparation
 from .coolantCircuit import COOLANTCIRCUITS, passStations, solveCoolantCircuit
 from .turnaround import turnaroundSurface
 from .errors import InvalidInputError
+from . import progress
 from .validation import (applyRules, arrayRule, choiceRule, integerRule, numericRule,
                          presentRule, read, textRule)
 
@@ -791,6 +791,7 @@ def generateChannelRadiiIevlev(state, generateChannelRadii) -> None:
         solved = np.asarray(state.channelWallTemperature, dtype = float)
         changes.append(float(np.max(np.abs(solved - wall))))
         wall = solved
+        progress.iteration(len(changes), {'change': changes[-1], 'tolerance': ievlevWallTolerance}, name = 'pass')  # [K]
         if changes[-1] < ievlevWallTolerance:
             break
 
@@ -1012,7 +1013,8 @@ def solveRegenChannels(state, thermal):
         state.xRegenNozzleInterfaced = np.concatenate([xForward, state.xRegenNozzleTrimmed, xAft])
         state.rRegenNozzleInterfaced = np.concatenate([rForward, state.rRegenNozzleTrimmed, rAft])
 
-    generateVoluteInterfaces()
+    with progress.stage('interfaces', 'Volute interfaces'):
+        generateVoluteInterfaces()
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Generate channel radius distribution -- #
@@ -1028,16 +1030,18 @@ def solveRegenChannels(state, thermal):
         # rest of the build draws.
         circuit = state.coolantCircuit if isinstance(state.coolantCircuit, str) else 'singlePass'
         if circuit == 'singlePass':
-            sizingSolution = solveChannelRadii(_sizingState(state), _geometryInputs(state), thermal)
+            with progress.stage('sizing', 'Channel sizing'):
+                sizingSolution = solveChannelRadii(_sizingState(state), _geometryInputs(state), thermal)
         else:
-            state.coolantCircuitSolution = solveCoolantCircuit(
-                _sizingState(state), _geometryInputs(state), thermal, circuit,
-                passChannelRatio        = valueOrDefault(state.passChannelRatio, 1.0),
-                inletAreaRatio          = state.coolantInletAreaRatio,
-                material                = state.material,
-                factorOfSafety          = valueOrDefault(state.voluteFOS, 1.5),
-                minWallThickness        = valueOrDefault(state.minVoluteWallThickness, 0.0),
-                turnaroundVelocityRatio = valueOrDefault(state.turnaroundVelocityRatio, 0.5))
+            with progress.stage('circuit', 'Coolant circuit'):
+                state.coolantCircuitSolution = solveCoolantCircuit(
+                    _sizingState(state), _geometryInputs(state), thermal, circuit,
+                    passChannelRatio        = valueOrDefault(state.passChannelRatio, 1.0),
+                    inletAreaRatio          = state.coolantInletAreaRatio,
+                    material                = state.material,
+                    factorOfSafety          = valueOrDefault(state.voluteFOS, 1.5),
+                    minWallThickness        = valueOrDefault(state.minVoluteWallThickness, 0.0),
+                    turnaroundVelocityRatio = valueOrDefault(state.turnaroundVelocityRatio, 0.5))
             print(state.coolantCircuitSolution.report())
             sizingSolution = state.coolantCircuitSolution.up.state
 
@@ -1051,7 +1055,8 @@ def solveRegenChannels(state, thermal):
         state.channelSizingSolution = sizingSolution
 
     if state.gasSideAxialModel == 'ievlev':
-        generateChannelRadiiIevlev(state, generateChannelRadii)
+        with progress.stage('ievlev', 'Ievlev gas side'):
+            generateChannelRadiiIevlev(state, generateChannelRadii)
     else:
         generateChannelRadii()
 
@@ -1290,7 +1295,8 @@ def solveRegenChannels(state, thermal):
         state.zChannelCenterline3D = state.rChannelCenterline2D * np.sin(state.wrapAngles)
         state.rChannelCenterline3D = np.sqrt(state.yChannelCenterline3D**2 + state.zChannelCenterline3D**2)
 
-    generateChannelCenterline()
+    with progress.stage('centerline', 'Channel centerline'):
+        generateChannelCenterline()
 
     # ------------------------------------------------------------------------------------------------------------------------------------ #
     # -- Generate channel cross sections and 3D geometry -- #
@@ -1350,6 +1356,7 @@ def solveRegenChannels(state, thermal):
                 downGeometry, xCenter, rCenter*np.cos(slot), rCenter*np.sin(slot), radius, 'circle')
             state.xTurnaround, state.yTurnaround, state.zTurnaround = turnaroundSurface(circuit.turnaround)
 
-    generate3DChannels()
+    with progress.stage('geometry', 'Channel geometry'):
+        generate3DChannels()
 
     return state

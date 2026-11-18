@@ -126,6 +126,16 @@ export interface RunSummary {
     error: string;
 }
 
+/** A top-level stage of a run, from the progress events NOVA sends (NOVA.progress). */
+export interface RunStage {
+    key: string;
+    label: string;
+    state: 'pending' | 'running' | 'done' | 'failed';
+    started: number | null;       // [s] on the run's own clock
+    elapsed: number | null;       // [s] once finished
+    expected: number | null;      // [s] on the last finished run
+}
+
 export interface RunSnapshot {
     type: 'snapshot';
     state: RunStateName;
@@ -133,6 +143,8 @@ export interface RunSnapshot {
     fraction: number;
     ceiling: number;
     label: string;
+    stageDetail: string;
+    stages: RunStage[];
     runId: number | null;
     startedAt: number | null;
     log: string[];
@@ -143,7 +155,7 @@ export type RunEvent =
     | RunSnapshot
     | { type: 'log'; line: string }
     | { type: 'status'; state: RunStateName; detail: string }
-    | { type: 'progress'; fraction: number; ceiling: number; label: string }
+    | { type: 'progress'; fraction: number; ceiling: number; label: string; stageDetail: string; stages: RunStage[] }
     | ({ type: 'result' } & RunSummary);
 
 export interface ViewSpec {

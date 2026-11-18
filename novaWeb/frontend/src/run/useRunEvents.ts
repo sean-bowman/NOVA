@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { subscribeRunEvents } from '../api';
-import type { RunEvent, RunStateName, RunSummary } from '../types';
+import type { RunEvent, RunStage, RunStateName, RunSummary } from '../types';
 
 const maxLogLines = 4000;
 
@@ -18,6 +18,8 @@ export interface RunView {
     fraction: number;
     ceiling: number;
     label: string;
+    stageDetail: string;          // every open stage, with its iteration or loop
+    stages: RunStage[];
     progressAt: number;           // [ms] client clock at the last progress event
     startedAt: number | null;     // [s] server clock, epoch
     log: string[];
@@ -26,7 +28,7 @@ export interface RunView {
 }
 
 const initial: RunView = {
-    state: 'idle', detail: '', fraction: 0, ceiling: 0, label: '', progressAt: 0, startedAt: null,
+    state: 'idle', detail: '', fraction: 0, ceiling: 0, label: '', stageDetail: '', stages: [], progressAt: 0, startedAt: null,
     log: [], result: null, connected: false,
 };
 
@@ -35,7 +37,8 @@ function reduce(previous: RunView, event: RunEvent): RunView {
         case 'snapshot':
             return {
                 ...previous, state: event.state, detail: event.detail, fraction: event.fraction, ceiling: event.ceiling,
-                label: event.label, progressAt: performance.now(), startedAt: event.startedAt, log: event.log.slice(-maxLogLines),
+                label: event.label, stageDetail: event.stageDetail ?? '', stages: event.stages ?? [],
+                progressAt: performance.now(), startedAt: event.startedAt, log: event.log.slice(-maxLogLines),
                 result: event.result,
             };
         case 'log': {
@@ -50,7 +53,10 @@ function reduce(previous: RunView, event: RunEvent): RunView {
                     ? { startedAt: Date.now() / 1000, fraction: 0, ceiling: 0, label: '', log: [] } : {}),
             };
         case 'progress':
-            return { ...previous, fraction: event.fraction, ceiling: event.ceiling, label: event.label, progressAt: performance.now() };
+            return {
+                ...previous, fraction: event.fraction, ceiling: event.ceiling, label: event.label,
+                stageDetail: event.stageDetail ?? '', stages: event.stages ?? [], progressAt: performance.now(),
+            };
         case 'result': {
             const { type: _type, ...summary } = event;
             return { ...previous, result: summary };

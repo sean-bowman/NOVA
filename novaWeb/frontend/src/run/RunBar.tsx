@@ -3,9 +3,10 @@
    Generate and Cancel, the current stage, a determinate progress bar, elapsed time, the
    latest output line, and the run log drawer above it.
 
-   NOVA reports progress at its stage banners, and the method-of-characteristics solve is
-   silent for tens of seconds between them. Between banners the bar eases toward the current
-   stage's ceiling, so a long stage reads as working rather than hung.
+   NOVA reports its progress as events (NOVA.progress), which the server folds into a fraction,
+   the running stage's ceiling and a label. The contour solve reports every few seconds and some
+   stages only at their start and end, so between events the bar eases toward the ceiling and a
+   long stage reads as working rather than hung.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -78,7 +79,7 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, onGenerate, onC
                     <PlayIcon /> Generate
                 </button>
             )}
-            <div className="run-stage">{stage}</div>
+            <div className="run-stage" title={running && run.stageDetail ? run.stageDetail : undefined}>{stage}</div>
             <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100}
                  aria-valuenow={Math.round(shown * 100)}>
                 <div className="progress-fill" style={{ width: `${(shown * 100).toFixed(1)}%` }} />

@@ -62,7 +62,7 @@ The server imports these modules from `novaGui/` and does not copy them, so both
 | `tabs.configTab` | The cross-field checks (`validate`) and the extension material's store note and fill, run on a stand-in that holds the browser's config (`novaWeb/design.py`) |
 | `backend` | NOVA's material store: the wall alloy's sampled properties for the panel under the material row |
 | `units` | The unit table, reduced to `si = scale * shown + offset` per display unit |
-| `runner`, `progress` | The run itself and its stage tracking |
+| `runner`, `progress` | The run itself, and the model that folds the run's `NOVA.progress` events into the run bar and the stage list |
 | `tabs.viewTab` | The view list and the test of which views a run produced |
 | `tabs.analysisTab` | The result table: its `refresh` runs on a stand-in that records the rows (`novaWeb/analysis.py`) |
 | `tabs.exportTab` | The output categories and the rule that files an output by its name |
@@ -101,7 +101,7 @@ The Engineering Flat Metal palette lives in `novaGui.theme.palettes`. `src/style
 | Analyze | The last good run's scalar results in sections: sizing, the combustion chamber, delivered performance beside the two 1D estimates, chamber and throat thermochemistry, the cooling summary and each coolant pass, the extension circuit, the gas generator, the films and the plume. A filter narrows the rows by name; Copy puts the table, as filtered, on the clipboard as tab-separated text, and Save CSV writes it as `<run name>Results.csv`. |
 | Export | The last good run's outputs by category (figures, interactive figures, contour coordinates, 3D geometry, channel size profile, the pickled Nozzle, the run config, other files), each category and file with a check. Every output is checked after a run, except the categories unchecked before it. Export copies the checked files into `<output folder>/<run name>Outputs/`; the output folder defaults to `runs/` at the repository root. A double click opens a file in its desktop application, and Open folder opens the target. In the desktop window Browse opens the native folder picker; in a browser the folder is typed. |
 
-The run bar holds Generate (Cancel while running), the current stage, a progress bar that eases toward the stage's ceiling between NOVA's banners, the elapsed time, the latest output line and the run log.
+The run bar holds Generate (Cancel while running), the current stage, a progress bar that eases toward the stage's ceiling between progress events, the elapsed time, the latest output line and the run log. Hovering the stage shows every open stage with its iteration or loop, for example `Cooling channels / Coolant circuit (pass 4) / Up pass 45%`. The progress events also carry the run's top-level stages with their state and times.
 
 | Shortcut | Action |
 | --- | --- |

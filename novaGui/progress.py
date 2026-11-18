@@ -1,166 +1,232 @@
 
-# -- NOVA GUI Run Progress Tracking -- #
+# -- NOVA GUI Run Progress -- #
 
 '''
 
-Turns the pipeline's own console output into a progress fraction for the run bar.
+Folds the progress events a NOVA run sends (`NOVA.progress`) into what a front end shows: a
+0-1 fraction and a ceiling for the run bar, a short label naming where the run is, a longer
+detail line, and the run's top-level stages with their state and times.
 
-NOVA prints a short banner as it enters each stage and drives tqdm bars inside the long ones.
-Neither is a progress API, so this module matches those lines against an ordered stage table
-and converts them to a 0-1 fraction. The table is built per run, because which stages exist
-depends on whether cooling channels and volutes were requested.
+Both front ends use it. The Tkinter window folds the runner's events on its main thread; the
+web server folds the same events in its run session and sends the result to the browser.
 
-Each stage carries the fraction it starts at and the fraction it may creep to while it runs.
-The method-of-characteristics solve is silent for tens of seconds, so the run bar eases toward
-the ceiling rather than sitting still; a matched marker snaps it to the true value.
+Each top-level stage spans a share of the bar in proportion to the time it is expected to take:
+its time on the last finished run of the same window or server process when there is one, else
+the nominal time in `nominalStageTimes`. The bar sits at the start of the running stage and its
+ceiling is the stage's end. A loop that reports its steps directly in a top-level stage moves the
+bar inside that stage; elsewhere the front end eases the bar toward the ceiling between events,
+as a stage like the contour solve reports only every few seconds.
+
+The module imports nothing from NOVA, so the window opens without the scientific stack.
 
 Author: Sean Bowman
 Date:   08/28/2026
 
 '''
 
-import re
+# Nominal top-level stage times [s]: the median over the shipped nozzle and the five example
+# configurations, each run with every output written, on one desktop (Ryzen 7 2700X, 11/18/2026).
+# They set the shares of a window's first run only; later runs use the last run's own times. The
+# spread behind a median can be wide: a multi-pass circuit's cooling stage ran 255 to 345 s against
+# 20 to 34 s single pass, and the methalox booster's extension 729 s against a 9 s median.
+nominalStageTimes = {
+    'contour':     55.0,
+    'cooling':     30.0,
+    'volutes':     0.06,
+    'extension':   9.4,
+    'performance': 0.1,
+    'plume':       6.2,
+    'outputs':     2.2,
+}
+defaultStageTime = 5.0      # [s] a stage the table does not name
+shortestShare = 0.3         # [s] the least time a stage is weighted with, so each shows on the bar
+loadingCeiling = 0.02       # [-] the share of the bar the run spends before its plan arrives
 
-class Stage:
+class RunProgress:
 
     '''
 
-    One recognizable step of the pipeline.
+    The progress of one run, folded from its events.
+
+    Parameters:
+    -----------
+    history : dict
+        Top-level stage times of the last finished run [s], by stage key. Stages it names are
+        weighted by those times instead of the nominal ones.
+    label : str
+        What the bar says until the first stage starts.
 
     '''
 
-    def __init__(self, pattern: str, start: float, ceiling: float, label: str):
+    # -- Constructor -- #
+    def __init__(self, history: dict = None, label: str = 'loading NOVA'):
 
-        self.pattern = re.compile(pattern, re.IGNORECASE)
-        self.start = start
-        self.ceiling = ceiling
+        self.history = dict(history or {})
+        self.stages = []          # top-level stages: dicts of key, label, state, started, elapsed
+        self.t = 0.0              # [s] time of the latest event, from the run's own clock
+        self.fraction = 0.0       # [-] where the bar sits
+        self.ceiling = loadingCeiling
         self.label = label
+        self.detail = ''
+        self._open = []           # open stages, outermost first: dicts of path, label
+        self._iterations = {}     # the latest iteration event, by the path it was sent in
+        self._steps = {}          # the latest step event, by the path it was sent in
 
-# Fractions are cumulative over the whole run and were set from observed timings on the
-# LOX/LH2 worked example: the MOC contour dominates a contour-only run, and the channel
-# radius solve dominates a cooling run.
+    # -- Private Helper Methods -- #
+    def _stage(self, key: str, label: str) -> dict:
 
-def _contourStages() -> list:
+        '''The top-level stage of this key, appended when the plan did not name it.'''
 
-    return [
-        Stage(r'run config written',                      0.02, 0.06, 'writing run config'),
-        Stage(r'Generating a (truncated ideal|conical|thrust-optimized)|Optimizing the length fraction',
-              0.08, 0.62, 'solving nozzle contour'),
-        Stage(r'Generating Traditional Converging Section', 0.64, 0.68, 'converging section'),
-        Stage(r'Generating Combustion Chamber',           0.70, 0.72, 'combustion chamber'),
-        Stage(r'Truncating Nozzle Regen Section',         0.74, 0.78, 'regen truncation'),
-    ]
+        for stage in self.stages:
+            if stage['key'] == key:
+                return stage
+        stage = {'key': key, 'label': label, 'state': 'pending', 'started': None, 'elapsed': None}
+        self.stages.append(stage)
+        return stage
 
-def _coolingStages() -> list:
+    def _forget(self, path: str) -> None:
 
-    return [
-        Stage(r'Solving for channel radii',               0.80, 0.88, 'solving channel radii'),
-        Stage(r'Scanning Nozzle Wall',                    0.88, 0.90, 'scanning nozzle wall'),
-        Stage(r'Scanning Cross Sections',                 0.90, 0.92, 'scanning cross sections'),
-        Stage(r'Generating Jacket Geometry',              0.92, 0.95, 'building jacket geometry'),
-    ]
+        '''Drop the iterations and steps sent inside a stage that has closed.'''
 
-def _voluteStages() -> list:
+        prefix = path + '.'
+        for store in (self._iterations, self._steps):
+            for key in [key for key in store if key == path or key.startswith(prefix)]:
+                del store[key]
 
-    return [
-        Stage(r'Generating Inlet Volute',                 0.95, 0.96, 'inlet volute'),
-        Stage(r'Generating Outlet Volute',                0.96, 0.97, 'outlet volute'),
-    ]
+    def _weight(self, key: str) -> float:
 
-def _extensionStages() -> list:
+        seconds = self.history.get(key, nominalStageTimes.get(key, defaultStageTime))
+        return max(float(seconds), shortestShare)
 
-    # The gas generator, the films over the extension, the extension's own circuit and the
-    # radiation-cooled shell, in the order the pipeline reaches them after the jacket
-    return [
-        Stage(r'Gas generator',                           0.962, 0.963, 'gas generator'),
-        Stage(r'Extension film',                          0.963, 0.964, 'films over the extension'),
-        Stage(r'Extension circuit',                       0.964, 0.968, 'extension circuit'),
-        Stage(r'Radiative extension',                     0.968, 0.969, 'radiation-cooled extension'),
-    ]
+    def _recompute(self) -> None:
 
-def _plumeStages(cooling: bool) -> list:
+        if not self.stages:
+            return
 
-    # The march takes seconds against a jacket solve of minutes, but a large share of a
-    # contour-only run, so its slice depends on which run it sits in
-    start, ceiling = (0.970, 0.975) if cooling else (0.80, 0.95)
+        weights = [self._weight(stage['key']) for stage in self.stages]
+        total = sum(weights)
+        span = 1.0 - loadingCeiling
 
-    return [
-        Stage(r'Marching the exhaust plume',              start, ceiling, 'marching the plume'),
-    ]
+        start = loadingCeiling
+        fraction, ceiling = None, None
+        for stage, weight in zip(self.stages, weights):
+            share = span * weight / total
+            if stage['state'] == 'running':
+                inner = 0.0
+                step = self._steps.get(stage['key'])
+                if step is not None and step.get('total'):
+                    inner = min(1.0, step['done'] / step['total'])
+                fraction, ceiling = start + share * inner, start + share
+                break
+            if stage['state'] == 'pending':
+                fraction = ceiling = start
+                break
+            start += share
+        if fraction is None:
+            fraction = ceiling = 1.0
 
-def _outputStages() -> list:
+        # The bar never runs backward: a stage that finishes sooner than its share closes the gap
+        self.fraction = max(self.fraction, min(1.0, fraction))
+        self.ceiling = max(self.fraction, min(1.0, ceiling))
 
-    return [
-        Stage(r'Saving .* to \.html',                     0.975, 0.985, 'writing interactive views'),
-        Stage(r'Exporting .* to \.stl|Pickling|Writing',  0.985, 0.99, 'exporting geometry'),
-    ]
+        running = next((stage for stage in self.stages if stage['state'] == 'running'), None)
+        if running is None:
+            return
 
-class StageTracker:
+        # Short label: the top-level stage, and the deepest iteration or loop inside it
+        suffix = ''
+        for opened in reversed(self._open):
+            iteration = self._iterations.get(opened['path'])
+            if iteration is not None:
+                suffix = f', {iteration["name"]} {iteration["index"] + 1}'
+                break
+        if not suffix and self._open:
+            step = self._steps.get(self._open[-1]['path'])
+            if step is not None and step.get('total'):
+                suffix = f', {100 * step["done"] // step["total"]}%'
+        self.label = running['label'] + suffix
 
-    '''
+        # Detail: every open stage, each with its own iteration, the innermost with its loop
+        parts = []
+        for position, opened in enumerate(self._open):
+            part = opened['label']
+            iteration = self._iterations.get(opened['path'])
+            if iteration is not None:
+                part += f' ({iteration["name"]} {iteration["index"] + 1})'
+            step = self._steps.get(opened['path'])
+            if position == len(self._open) - 1 and step is not None and step.get('total'):
+                part += f' {100 * step["done"] // step["total"]}%'
+            parts.append(part)
+        self.detail = ' / '.join(parts)
 
-    Matches run output against the stage table and reports the resulting progress.
-
-    '''
-
-    def __init__(self, config: dict = None):
-
-        config = config or {}
-        cooling = config.get('makeCoolingChannels') in (True, 'on')
-        volutes = (config.get('makeInletVolute') in (True, 'on')
-                   or config.get('makeOutletVolute') in (True, 'on'))
-
-        plume = config.get('plumeAmbientPressure') is not None and config.get('plumeFieldReach') is not None
-        extension = (config.get('makeRadiativeExtension') in (True, 'on')
-                     or config.get('extensionCircuit') in (True, 'on')
-                     or config.get('gasGeneratorMixtureRatio') not in (None, '')
-                     or config.get('extensionFilmSlots') not in (None, '', [], '[]'))
-
-        self.stages = _contourStages()
-        if cooling:
-            self.stages += _coolingStages()
-            if volutes:
-                self.stages += _voluteStages()
-        if extension:
-            self.stages += _extensionStages()
-        if plume:
-            self.stages += _plumeStages(cooling)
-        self.stages += _outputStages()
-
-        self._index = -1
-        self.fraction = 0.0
-        self.ceiling = 0.06
-        self.label = 'starting'
-
-    def match(self, line: str):
+    # -- Public Methods -- #
+    def apply(self, event: dict) -> bool:
 
         '''
 
-        Advance on a stage banner or a tqdm percentage.
+        Fold one event in.
 
-        Returns (fraction, ceiling, label) when the run moved forward, otherwise None. Only
-        forward matches count, so a stage banner printed twice inside a loop cannot rewind
-        the bar.
+        Returns:
+        --------
+        bool : True when the fraction, ceiling, label or detail changed.
 
         '''
 
-        # tqdm renders as ' 47%|#####     | ...'; interpolate inside the current stage.
-        percent = re.match(r'\s*(\d{1,3})%\|', line)
-        if percent and self._index >= 0:
-            stage = self.stages[self._index]
-            span = stage.ceiling - stage.start
-            candidate = stage.start + span * min(100, int(percent.group(1))) / 100.0
-            if candidate > self.fraction:
-                self.fraction = candidate
-                return self.fraction, stage.ceiling, stage.label
-            return None
+        before = (self.fraction, self.ceiling, self.label, self.detail)
+        kind = event.get('type')
+        self.t = max(self.t, float(event.get('t', self.t)))
 
-        for index in range(self._index + 1, len(self.stages)):
-            stage = self.stages[index]
-            if stage.pattern.search(line):
-                self._index = index
-                self.fraction = stage.start
-                self.ceiling = stage.ceiling
-                self.label = stage.label
-                return self.fraction, self.ceiling, self.label
-        return None
+        if kind == 'plan':
+            for entry in event.get('stages', []):
+                self._stage(entry['key'], entry['label'])
+
+        elif kind == 'stageStart':
+            if event['depth'] == 0:
+                stage = self._stage(event['key'], event['label'])
+                stage.update(state = 'running', started = event['t'], elapsed = None)
+                self._open = []
+            self._open.append({'path': event['path'], 'label': event['label']})
+
+        elif kind == 'stageEnd':
+            self._open = [opened for opened in self._open
+                          if opened['path'] != event['path'] and not opened['path'].startswith(event['path'] + '.')]
+            self._forget(event['path'])
+            if event['depth'] == 0:
+                stage = self._stage(event['key'], event['key'])
+                stage.update(state = 'done' if event['ok'] else 'failed', elapsed = event['elapsed'])
+                if not self._open:
+                    self.detail = ''
+
+        elif kind == 'step':
+            self._steps[event['path']] = event
+
+        elif kind == 'iteration':
+            self._iterations[event['path']] = event
+
+        self._recompute()
+        return (self.fraction, self.ceiling, self.label, self.detail) != before
+
+    def summary(self) -> tuple:
+
+        '''(fraction, ceiling, label) for a run bar.'''
+
+        return self.fraction, self.ceiling, self.label
+
+    def stageList(self) -> list:
+
+        '''
+
+        The top-level stages as plain dicts: key, label, state ('pending', 'running', 'done',
+        'failed'), started [s], elapsed [s] once finished, and expected [s] from the last
+        finished run, or None.
+
+        '''
+
+        return [dict(stage, expected = self.history.get(stage['key'])) for stage in self.stages]
+
+    def durations(self) -> dict:
+
+        '''Top-level stage times of this run [s], by key, for the stages that finished.'''
+
+        return {stage['key']: float(stage['elapsed']) for stage in self.stages
+                if stage['state'] == 'done' and stage['elapsed'] is not None}

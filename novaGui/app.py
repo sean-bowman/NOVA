@@ -22,6 +22,7 @@ from tkinter import ttk, messagebox
 from . import branding, settings, theme
 from .widgets import ConsolePane, Tooltip
 from .runner import PipelineRunner, clearStaging, stagingFolder
+from .progress import RunProgress
 from .tabs import ConfigTab, ViewTab, AnalysisTab, ExportTab
 
 class NovaApp(tk.Tk):
@@ -65,6 +66,8 @@ class NovaApp(tk.Tk):
         self._consoleVisible = False
         self._progressCeiling = 0.0
         self._creepJob = None
+        self._runProgress = RunProgress()   # the current run's stages, folded from its events
+        self._stageHistory = {}             # [s] top-level stage times of the last finished run
 
         self._buildHeader()
         self._buildBottom()
@@ -230,6 +233,8 @@ class NovaApp(tk.Tk):
             self._progress.configure(value = 0)
             self._progressCeiling = 0.0
             self._status.configure(text = 'Running...', style = 'Warn.TLabel')
+            self._runProgress = RunProgress(self._stageHistory)
+            self._applyProgress(*self._runProgress.summary())
             self._scheduleCreep()
         else:
             self._runButton.configure(state = 'normal')
@@ -244,8 +249,9 @@ class NovaApp(tk.Tk):
                     tag = 'err' if self._looksLikeError(payload) else None
                     self._console.append(payload, tag)
                     self._showActivity(payload, tag == 'err')
-                elif kind == 'progress':
-                    self._applyProgress(*payload)
+                elif kind == 'stage':
+                    if self._runProgress.apply(payload):
+                        self._applyProgress(*self._runProgress.summary())
                 elif kind == 'status':
                     self._applyStatus(*payload)
                 elif kind == 'result':
@@ -277,7 +283,7 @@ class NovaApp(tk.Tk):
 
         '''
 
-        Snap the run bar to a stage boundary reported by the tracker.
+        Move the run bar to where the run's progress events put it, and name the stage.
 
         '''
 
@@ -291,9 +297,9 @@ class NovaApp(tk.Tk):
 
         '''
 
-        Ease the bar toward the current stage ceiling while the stage is silent. The
-        method-of-characteristics solve prints nothing for tens of seconds, and a bar that
-        does not move reads as a hang.
+        Ease the bar toward the current stage ceiling between progress events. The contour
+        solve reports once per characteristics solve, a few seconds apart, and a stage with no
+        loop inside reports only its start and end; a bar that does not move reads as a hang.
 
         '''
 
@@ -345,6 +351,8 @@ class NovaApp(tk.Tk):
             messagebox.showerror('Run failed', f'{result.error}\n\nSee the run log for the full traceback.')
             return
 
+        # The next run's bar is shared out by this run's stage times
+        self._stageHistory = self._runProgress.durations()
         self._console.append(f'run complete in {result.elapsedSec:.1f} s; the Export tab writes its outputs', 'ok')
         for tab in self._tabs:
             try:
