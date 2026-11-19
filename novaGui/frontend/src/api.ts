@@ -1,13 +1,14 @@
 /* ========================================
    API CLIENT
    Typed calls to the NOVA server under /api. Every route is same-origin: the NOVA server
-   serves the built app, and the Vite dev server proxies /api to it.
+   serves the built app, and the Vite dev server proxies /api to it. A run argument names one of
+   the runs the server keeps; without it a route answers for the latest good run.
    Sean Bowman [11/16/2026]
    ======================================== */
 
 import type {
-    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, Mode, ResultTable, RunEvent, Schema,
-    Settings, ViewIndex, WallSample,
+    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, MeshPreview, Mode, ResultTable, RunEvent,
+    RunList, Schema, Settings, ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -40,32 +41,52 @@ function jsonBody(method: string, body: unknown): RequestInit {
     return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
 
+/** A query string from the values that are set: '?run=3&mode=dark', or ''. */
+export function query(values: Record<string, string | number | null | undefined>): string {
+    const parts = Object.entries(values)
+        .filter(([, value]) => value !== null && value !== undefined && value !== '')
+        .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`);
+    return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
 export const api = {
     schema: () => request<Schema>('/api/schema'),
     formState: (config: Config) => request<FormState>('/api/schema/state', jsonBody('POST', config)),
     example: (name: string) => request<Config>(`/api/examples/${encodeURIComponent(name)}`),
     wallMaterial: (name: string, temperatureK: number) =>
-        request<WallSample>(`/api/materials/wall?name=${encodeURIComponent(name)}&temperatureK=${temperatureK}`),
-    extensionMaterial: (name: string) => request<ExtensionEntry>(`/api/materials/extension?name=${encodeURIComponent(name)}`),
+        request<WallSample>(`/api/materials/wall${query({ name, temperatureK })}`),
+    extensionMaterial: (name: string) => request<ExtensionEntry>(`/api/materials/extension${query({ name })}`),
     settings: () => request<Settings>('/api/settings'),
     saveSettings: (settings: Partial<Settings>) => request<Settings>('/api/settings', jsonBody('PUT', settings)),
+    runs: () => request<RunList>('/api/runs'),
+    setBaseline: (runId: number | null) => request<{ baseline: number | null }>('/api/runs/baseline', jsonBody('PUT', { runId })),
     startRun: (config: Config, mode: Mode) => request<{ runId: number }>('/api/runs', jsonBody('POST', { config, mode })),
     cancelRun: () => request<{ cancelled: boolean }>('/api/runs/cancel', { method: 'POST' }),
-    views: () => request<ViewIndex>('/api/views'),
-    interactiveFigure: (key: string, mode: Mode) =>
-        request<{ data: object[]; layout: Record<string, unknown> }>(`/api/views/${key}/interactive?mode=${mode}`),
-    analysis: () => request<ResultTable>('/api/analysis'),
-    exportIndex: () => request<ExportIndex>('/api/export'),
-    exportTarget: (base: string, name: string) =>
-        request<ExportTarget>(`/api/export/target?base=${encodeURIComponent(base)}&name=${encodeURIComponent(name)}`),
-    exportFiles: (baseDir: string, files: string[]) => request<ExportResult>('/api/export', jsonBody('POST', { baseDir, files })),
-    openOutput: (name: string) => request<{ opened: string }>('/api/export/open', jsonBody('POST', { what: 'file', name })),
-    openFolder: (baseDir: string, name: string) =>
-        request<{ opened: string }>('/api/export/open', jsonBody('POST', { what: 'folder', baseDir, name })),
+    views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),
+    interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null) =>
+        request<{ data: object[]; layout: Record<string, unknown> }>(`/api/views/${key}/interactive${query({ mode, run, compare })}`),
+    analysis: (run: number | null, baseline: number | null) => request<ResultTable>(`/api/analysis${query({ run, baseline })}`),
+    exportIndex: (run: number | null) => request<ExportIndex>(`/api/export${query({ run })}`),
+    exportTarget: (base: string, name: string) => request<ExportTarget>(`/api/export/target${query({ base, name })}`),
+    exportText: (run: number | null, name: string) =>
+        request<{ text: string; bytes: number; cut: boolean }>(`/api/export/file${query({ run, name })}`),
+    exportMesh: (run: number | null, name: string) => request<MeshPreview>(`/api/export/mesh${query({ run, name })}`),
+    exportFiles: (run: number | null, baseDir: string, files: string[]) =>
+        request<ExportResult>('/api/export', jsonBody('POST', { runId: run, baseDir, files })),
+    openOutput: (run: number | null, name: string) =>
+        request<{ opened: string }>('/api/export/open', jsonBody('POST', { what: 'file', runId: run, name })),
+    openFolder: (run: number | null, baseDir: string, name: string) =>
+        request<{ opened: string }>('/api/export/open', jsonBody('POST', { what: 'folder', runId: run, baseDir, name })),
 };
+
+/** The URL an image file of a run is previewed from. */
+export function exportFileUrl(run: number | null, name: string): string {
+    return `/api/export/file${query({ run, name })}`;
+}
 
 interface WindowBridge {
     browseFolder: (initial: string) => Promise<string>;
+    openWindow?: (path: string, title: string) => Promise<boolean>;
 }
 
 /**
@@ -78,19 +99,51 @@ export function windowBridge(): WindowBridge | null {
 }
 
 /**
- * A static view: the PNG's URL, or the drawer's message when the run lacks the view's data.
+ * Open a page of the app in a window of its own: a desktop window beside the main one, or in a
+ * browser a popup window.
  */
-export async function staticFigure(key: string, mode: Mode, width: number, height: number, ratio: number,
-                                   signal: AbortSignal): Promise<{ url: string } | { message: string }> {
-    const query = `mode=${mode}&width=${Math.round(width)}&height=${Math.round(height)}&ratio=${ratio.toFixed(2)}`;
-    const response = await fetch(`/api/views/${key}/static?${query}`, { signal });
+export function openWindow(path: string, title: string): void {
+    const bridge = windowBridge();
+    if (bridge?.openWindow) {
+        bridge.openWindow(path, title).catch(() => window.open(path, '_blank', 'popup,width=1100,height=760'));
+        return;
+    }
+    window.open(path, '_blank', 'popup,width=1100,height=760');
+}
+
+/**
+ * A static view: the PNG as a blob, or the drawer's message when the run lacks the view's data.
+ */
+export async function staticFigure(key: string, mode: Mode, run: number | null, width: number, height: number,
+                                   ratio: number, signal?: AbortSignal): Promise<{ blob: Blob } | { message: string }> {
+    const path = `/api/views/${key}/static${query({ mode, run, width: Math.round(width), height: Math.round(height),
+                                                    ratio: ratio.toFixed(2) })}`;
+    const response = await fetch(path, { signal });
     if (!response.ok) {
-        throw new ApiError(response.status, `${response.status} ${response.statusText}`);
+        let message = `${response.status} ${response.statusText}`;
+        try {
+            const body = await response.json();
+            if (body && typeof body.detail === 'string') {
+                message = body.detail;
+            }
+        } catch {
+            // The status line is the message
+        }
+        throw new ApiError(response.status, message);
     }
     if ((response.headers.get('Content-Type') || '').startsWith('application/json')) {
         return response.json();
     }
-    return { url: URL.createObjectURL(await response.blob()) };
+    return { blob: await response.blob() };
+}
+
+/** Save a blob as a download. */
+export function saveBlob(blob: Blob, fileName: string): void {
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = fileName;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
 /**

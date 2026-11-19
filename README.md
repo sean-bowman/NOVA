@@ -118,7 +118,7 @@ On Windows, `novaGui.bat` launches it with no console window and writes startup 
 
 ### Design
 
-The window holds the Design form on the left and the result pane on the right, with a splitter between them that sets the form's width. The form opens on the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. A search box finds a field by its label, key, help or options, and **Changed only** shows the fields that differ from the shipped nozzle. Problems across fields list above the form and mark the rows they name. **Load config** in the header opens a JSON file, **Save config** writes one, **Reset to example** returns to the shipped nozzle, and **Load example** offers the engines in `assets/examples/`.
+The window holds the Design form on the left and the result pane on the right, with a splitter between them that sets the form's width. The form opens on the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. A search box finds a field by its label, key, help or options, and **Changed only** shows the fields that differ from the shipped nozzle. An outline of the sections runs above the form, or down its side when the form is dragged wide: each entry counts its section's changed fields and problems, marks the section in view, and jumps to it. Problems across fields list above the form and are written under the rows they name. **Load config** in the header opens a JSON file, **Save config** writes one, **Reset to example** returns to the shipped nozzle, and **Load example** offers the engines in `assets/examples/`.
 
 ![The window](docs/images/novaGui/designDark.png)
 
@@ -134,19 +134,19 @@ Every field carries an (i) marker. Hovering it gives the field's meaning.
 
 **Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
 
-The result pane keeps the last finished run until the next one finishes, and a strip under its header says which run it shows. Once the form is edited, the strip names each field that differs from the config that run ran, with its value then and now.
+When the contour stage ends, about a minute in, the result pane draws the new run's contour, near-wall state and flow fields while cooling and the plume still run; the rest of its views, its table and its outputs follow when it finishes. A strip under the pane's header says which run the pane shows, and once the form is edited, it names each field that differs from the config that run ran, with its value then and now.
 
 ![Run in progress](docs/images/novaGui/generate.png)
 
 ### View
 
-The result pane draws one figure at a time, picked from a menu of contour, flow, plume, cooling and 3D views. Each draws interactive (plotly, to zoom, rotate and read values off) or static (the Matplotlib drawing), behind a switch.
+The result pane draws a figure picked from a menu of contour, flow, plume, cooling and 3D views, in plotly, to zoom, rotate and read values off. **Save PNG** saves the view's Matplotlib drawing, the picture NOVA's saved figures use, at the pane's size.
 
-The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked.
+The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked. The field is shaded on a grid interpolated from the solved nodes; **Solution nodes** in the legend shows the nodes themselves, and hovering one reads the value the solve produced there.
 
 ![Mach field](docs/images/novaGui/viewMach.png)
 
-The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary.
+The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary. It opens on the nozzle and the marched plume; zooming out shows the correlated shock cells past the march.
 
 ![Plume](docs/images/novaGui/viewPlume.png)
 
@@ -168,15 +168,29 @@ The channel mesh, the revolved contour and the volutes are 3D views at full reso
 | --- | --- |
 | ![Channel mesh](docs/images/novaGui/viewChannelMesh.png) | ![Revolved contour](docs/images/novaGui/viewRevolved.png) |
 
+**Grid** draws four views at once, and the views drawn along the nozzle axis share one cursor and one zoom: the mouse over any of them marks the same station on all, the cooling plots read their values there, and a zoom along the axis on one zooms the rest. The wall temperature, the heat flux and the coolant state at the throat read off in one look. The pop-out button opens the figure or the grid in a window of its own, for a second monitor, which follows the latest run.
+
+![Grid of views along the nozzle axis](docs/images/novaGui/grid.png)
+
+### Runs and the baseline
+
+The server keeps the last eight finished runs. The run menu at the left of the pane's header shows any of them, by number, name, thrust and Isp; it follows the latest run until another is picked, and a new run sets it back to following. **Baseline** picks the run the shown one is compared against, and that run is kept however many follow it. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
+
+![A run over its baseline](docs/images/novaGui/compare.png)
+
 ### Table
 
-**Table** in the result pane's header swaps the figure for the numbers behind it, in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. It filters by name, copies as tab-separated text and saves as CSV.
+**Table** in the result pane's header swaps the figure for the numbers behind it, in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. The numbers a design is judged by first head it: delivered Isp and thrust, contour length, exit diameter, the peak hot wall against its limit, and each pass's pressure drop. A row or a headline number that a figure shows opens that figure. The table filters by name, copies as tab-separated text and saves as CSV.
 
 ![Results table](docs/images/novaGui/table.png)
 
+Beside a baseline, each value carries the baseline's value and the change from it, the shown run minus the baseline, with the percent change; a value that did not move reads blank.
+
+![Results table against the baseline](docs/images/novaGui/tableCompare.png)
+
 ### Export
 
-A run writes its outputs to a staging folder, not to the output folder. **Export** in the result pane's header opens a dialog that lists them by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
+A run writes its outputs to a staging folder, not to the output folder. **Export** in the result pane's header opens a dialog that lists the shown run's outputs by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. The figures carry thumbnails, and the eye on a row previews the file beside the list: an image as itself, an STL surface in the 3D viewer, a text or JSON file as its first lines. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
 
 ![Export dialog](docs/images/novaGui/export.png)
 

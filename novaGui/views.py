@@ -15,10 +15,19 @@ legacy Tkinter front end reads too. Each view renders one or both of two ways:
                   headless to PNG at the browser pane's size and pixel ratio
 
 The 3D assemblies render interactive only: their Matplotlib form is a decimated stand-in for the
-WebGL view.
+WebGL view. The browser draws every view interactive and saves the static drawing as a PNG.
+
+The line plots along the nozzle axis (`comparableViews`) can draw a second run over the first: its
+lines dashed in the same colors, named for their run, and the title saying which run is which. The
+second run's fills, markers, shapes and labels are left out, so the first run's picture reads as it
+does alone.
+
+While a run is going, the views its contour stage settles draw from the figure descriptions the
+worker sent (`partialFigure`), through the same renderers as the finished run's.
 
 The Matplotlib plume title tells a legacy Tkinter user that its "Open interactive" button shows
-the correlated structure beyond the march. Here the same figure says the Interactive rendering does.
+the correlated structure beyond the march. Here the same figure, saved as a PNG, says the interactive
+view does.
 
 Figures are drawn in one palette mode at a time, and the mode lives in module globals
 (NOVA.palette for both renderers, novaGui.themeColors and Matplotlib's rcParams for the static one), so
@@ -46,9 +55,13 @@ sourceOverrides = {
     'volute':      '3D assembly, full mesh',
 }
 
+# Line plots along the nozzle axis, which can draw a second run over the first
+comparableViews = frozenset({'contour', 'nearWall', 'passes', 'jacketTemperatures', 'coolantFlow', 'coolantProperties',
+                             'heatFlux', 'film', 'extension'})
+
 # Text in the shared Matplotlib drawers that names a legacy Tkinter control, and what it reads here
 staticTextOverrides = {
-    'Open interactive shows them': 'the Interactive rendering shows them',
+    'Open interactive shows them': 'the interactive view shows them',
 }
 
 def warmUp() -> None:
@@ -129,7 +142,7 @@ def viewList() -> list:
 
     Returns:
     --------
-    list : [{'key', 'group', 'label', 'source', 'interactive', 'static'}]
+    list : [{'key', 'group', 'label', 'source', 'interactive', 'static', 'comparable'}]
 
     '''
 
@@ -139,7 +152,8 @@ def viewList() -> list:
     return [{'key': spec.key, 'group': spec.group, 'label': spec.label,
              'source': sourceOverrides.get(spec.key, spec.source),
              'interactive': _interactiveBuilder(spec) is not None,
-             'static': spec.key in drawers}
+             'static': spec.key in drawers,
+             'comparable': spec.key in comparableViews}
             for spec in catalog.views]
 
 def availableViews(record) -> list:
@@ -162,7 +176,43 @@ def availableViews(record) -> list:
 
     return [spec.key for spec in catalog.views if spec.key in available]
 
-def interactiveFigure(nozzle, key: str, mode: str) -> str | None:
+def _overlay(figure, other, runLabel: str, otherLabel: str) -> None:
+
+    '''
+
+    Draw a second run's lines over a figure: each line trace of `other` dashed in its own color,
+    named and hovered for its run, on the same axes. The title says which run is which.
+
+    '''
+
+    for trace in other.data:
+        if trace.type not in ('scatter', 'scattergl') or 'lines' not in (trace.mode or 'lines'):
+            continue
+        if trace.fill not in (None, 'none'):
+            continue
+        copy = trace.to_plotly_json()
+        copy.pop('type', None)
+        copy.pop('uid', None)
+        line = dict(copy.get('line') or {})
+        line['dash'] = 'dash'
+        copy.update(line = line, legendgroup = 'compared', opacity = 0.9,
+                    name = f"{copy.get('name') or 'line'}, {otherLabel}")
+        template = copy.get('hovertemplate')
+        if isinstance(template, str) and '<extra>' in template:
+            copy['hovertemplate'] = template[:template.index('<extra>')] + f'<extra>{otherLabel}</extra>'
+        figure.add_trace(type(trace)(copy))
+
+    title = figure.layout.title.text or ''
+    figure.update_layout(title_text = f'{title}<br><sup>solid: {runLabel}, dashed: {otherLabel}</sup>')
+    margin = figure.layout.margin.t
+    figure.update_layout(margin_t = (margin if margin is not None else 80) + 18)
+
+def _render(builder, figures, nozzle, mode: str):
+
+    figures.figurePalette.setFigureMode(mode)
+    return builder(figures, nozzle)
+
+def interactiveFigure(nozzle, key: str, mode: str, compare = None, labels: tuple = ('this run', 'the other run')) -> str | None:
 
     '''
 
@@ -176,6 +226,10 @@ def interactiveFigure(nozzle, key: str, mode: str) -> str | None:
         The view's key.
     mode : str
         'dark' or 'light'.
+    compare : Nozzle, optional
+        A second run to draw over the first; only for `comparableViews`, and ignored otherwise.
+    labels : tuple
+        What the title and the legend call the two runs: (this run, the compared run).
 
     '''
 
@@ -187,11 +241,37 @@ def interactiveFigure(nozzle, key: str, mode: str) -> str | None:
 
     with renderLock:
         figures = backend.figuresModule()
-        figures.figurePalette.setFigureMode(mode)
-        figure = builder(figures, nozzle)
+        figure = _render(builder, figures, nozzle, mode)
         if figure is None:
             return None
+        if compare is not None and key in comparableViews:
+            other = _render(builder, figures, compare, mode)
+            if other is not None:
+                _overlay(figure, other, *labels)
         # The pane sizes the figure; a fixed size from the builder would stop it filling the pane
+        figure.update_layout(width = None, height = None, autosize = True)
+        return figure.to_json()
+
+def partialFigure(description, key: str, mode: str) -> str | None:
+
+    '''
+
+    A view of a run still going, as plotly JSON, drawn from the figure description its contour stage
+    settled (novaGui.plotting.figureDescriptions), or None.
+
+    '''
+
+    plotting, backend = _module('plotting'), _module('backend')
+    if key not in plotting.figureDescriptions or description is None:
+        return None
+    _, render = plotting.figureDescriptions[key]
+
+    with renderLock:
+        figures = backend.figuresModule()
+        figures.figurePalette.setFigureMode(mode)
+        figure = render(figures, description)
+        if figure is None:
+            return None
         figure.update_layout(width = None, height = None, autosize = True)
         return figure.to_json()
 

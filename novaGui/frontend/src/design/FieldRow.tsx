@@ -3,7 +3,7 @@
    One config key on the Design form: the label with its help and changed marker, an editor
    chosen by the field's kind, and a unit dropdown for a dimensioned value. The config holds
    SI; the row shows the unit its dropdown names and converts in place when that changes. A
-   label in amber is one a cross-field problem names.
+   label in amber is one a cross-field problem names, and the problem is written under the row.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -23,14 +23,15 @@ interface FieldRowProps {
     changed: boolean;
     error: string | null;
     flagged?: boolean;
+    notes?: string[];
     onChange: (patch: Config) => void;
     onError: (id: string, message: string | null) => void;
     /** Called when the user picks from a fixed choice list, and not when the value changes otherwise */
     onChoose?: (value: ConfigValue) => void;
 }
 
-export function FieldRow({ spec, value, defaultValue, units, visible, changed, error, flagged = false, onChange, onError,
-                           onChoose }: FieldRowProps) {
+export function FieldRow({ spec, value, defaultValue, units, visible, changed, error, flagged = false, notes = [], onChange,
+                           onError, onChoose }: FieldRowProps) {
     const inputId = useId();
     const focused = useRef(false);
     const [unit, setUnit] = useState<string | null>(spec.dimension ? siUnit(units, spec.dimension) : null);
@@ -142,6 +143,7 @@ export function FieldRow({ spec, value, defaultValue, units, visible, changed, e
                 {!spec.dimension && spec.unit && <span className="unit-static">{spec.unit}</span>}
             </div>
             {error && <div className="form-note form-note-error">{error}</div>}
+            {!error && notes.map((problem) => <div key={problem} className="form-note form-note-warn" role="note">{problem}</div>)}
             {note && <div className="form-note">{note}</div>}
         </div>
     );

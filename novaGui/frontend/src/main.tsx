@@ -1,6 +1,7 @@
 /* ========================================
    ENTRY
-   Mounts the NOVA app. The palette, the wordmark face and the app styles load here.
+   Mounts the NOVA app, or a popped-out figure window when the page is opened as one. The
+   palette, the wordmark face and the app styles load here.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -12,9 +13,12 @@ import './styles/palette.css';
 import './styles/app.css';
 
 import { App } from './App';
+import { Popout, popoutParams } from './Popout';
+
+const popout = popoutParams();
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>
-        <App />
+        {popout ? <Popout initial={popout} /> : <App />}
     </StrictMode>,
 );

@@ -1,38 +1,54 @@
 /* ========================================
    RESULTS TABLE
-   The last good run's scalar results, the result pane's Table: sizing, the chamber, delivered
-   performance against the 1D estimates, station thermochemistry, the cooling summary and passes,
-   the extension, the gas generator, films and the plume. The rows are built on the server
+   A run's scalar results, the result pane's Table: sizing, the chamber, delivered performance
+   against the 1D estimates, station thermochemistry, the cooling summary and passes, the
+   extension, the gas generator, films and the plume. The rows are built on the server
    (novaGui/analysis.py), the same rows the legacy Tkinter Analyze tab lists; the three
    performance columns are drawn as columns. A filter narrows the rows by name, and the table
    copies to the clipboard as tab-separated text or saves as CSV.
+
+   The numbers a design is judged by first head the table: delivered Isp and thrust, length,
+   exit diameter, the peak hot wall against its limit, and each pass's pressure drop. A row or a
+   number that a figure shows opens that figure.
+
+   Beside a baseline run, each value carries the baseline's value and the change from it, the
+   shown run minus the baseline; a value that did not move reads blank. Rows only the baseline
+   has follow at the end of their section.
    Sean Bowman [11/17/2026]
    ======================================== */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { CopyIcon, DownloadIcon, NozzleGlyph, SearchIcon } from '../components/Icons';
-import type { ResultRow, ResultSection, ResultTable } from '../types';
+import { ChartIcon, CopyIcon, DownloadIcon, InfoIcon, NozzleGlyph, SearchIcon } from '../components/Icons';
+import type { HeadlineNumber, ResultRow, ResultSection, ResultTable } from '../types';
 
 interface ResultsTableProps {
     table: ResultTable | null;
     loading: boolean;
     error: string;
+    emptyText: string;
+    available: Set<string>;         // the views the shown run produced
+    onOpenView: (key: string) => void;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
 }
 
 /**
- * The table as rows of cells: a section's title, its column heads, then label, values, unit.
+ * The table as rows of cells: a section's title, its column heads, then label, values, unit;
+ * beside a baseline each value is followed by the baseline's and the change.
  */
-function tableRows(sections: ResultSection[]): string[][] {
+function tableRows(sections: ResultSection[], baselineRun: number | null): string[][] {
     const rows: string[][] = [];
     for (const section of sections) {
         rows.push([section.title]);
-        if (section.columns) {
-            rows.push(['', ...section.columns]);
+        const heads = section.columns ?? ['value'];
+        if (section.columns || baselineRun !== null) {
+            rows.push(['', ...(baselineRun === null ? heads
+                : heads.flatMap((head) => [head, `${head}, run ${baselineRun}`, `${head}, change`]))]);
         }
         for (const row of section.rows) {
-            rows.push([row.label, ...row.cells, ...(row.unit ? [row.unit] : [])]);
+            const cells = baselineRun === null ? row.cells
+                : row.cells.flatMap((cell, at) => [cell, row.baseline?.[at] ?? '', row.change?.[at] ?? '']);
+            rows.push([row.label, ...cells, ...(row.unit ? [row.unit] : [])]);
         }
     }
     return rows;
@@ -86,10 +102,52 @@ async function copyText(text: string): Promise<void> {
     }
 }
 
-export function ResultsTable({ table, loading, error, onNotify }: ResultsTableProps) {
+function Headline({ numbers, baselineRun, available, onOpenView }: {
+    numbers: HeadlineNumber[]; baselineRun: number | null; available: Set<string>; onOpenView: (key: string) => void;
+}) {
+    return (
+        <div className="headline" role="list" aria-label="Headline numbers">
+            {numbers.map((number) => {
+                const opens = number.view !== null && available.has(number.view);
+                const body = (
+                    <>
+                        <span className="headline-label">{number.label}</span>
+                        <span className="headline-value">
+                            {number.value}<span className="headline-unit">{number.unit}</span>
+                        </span>
+                        {number.tone === 'warn' && (
+                            <span className="headline-flag"><InfoIcon /> above its limit</span>
+                        )}
+                        {number.detail && <span className="headline-detail">{number.detail}</span>}
+                        {baselineRun !== null && (
+                            <span className="headline-change">
+                                {number.baseline == null ? `not in run ${baselineRun}`
+                                    : (number.change ? `${number.change} vs run ${baselineRun}` : `same as run ${baselineRun}`)}
+                            </span>
+                        )}
+                    </>
+                );
+                return opens ? (
+                    <button key={number.key} type="button" role="listitem"
+                            className={`headline-number is-link ${number.tone === 'warn' ? 'is-warn' : ''}`}
+                            onClick={() => onOpenView(number.view!)} title="Open the figure that shows it">
+                        {body}
+                    </button>
+                ) : (
+                    <div key={number.key} role="listitem" className={`headline-number ${number.tone === 'warn' ? 'is-warn' : ''}`}>
+                        {body}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+export function ResultsTable({ table, loading, error, emptyText, available, onOpenView, onNotify }: ResultsTableProps) {
     const [query, setQuery] = useState('');
     const [closed, setClosed] = useState<Record<string, boolean>>({});
     const scroller = useRef<HTMLDivElement>(null);
+    const baselineRun = table?.baselineRun ?? null;
 
     const filtered = useMemo(() => {
         const sections = table?.sections ?? [];
@@ -110,21 +168,30 @@ export function ResultsTable({ table, loading, error, onNotify }: ResultsTablePr
     }, [query]);
 
     const copyTable = () => {
-        copyText(tableRows(filtered).map((cells) => cells.join('\t')).join('\n'))
+        copyText(tableRows(filtered, baselineRun).map((cells) => cells.join('\t')).join('\n'))
             .then(() => onNotify('info', 'Table copied', 'Tab-separated, ready to paste into a spreadsheet.'))
             .catch((failure: Error) => onNotify('error', 'Copy failed', failure.message));
     };
 
     const saveCsv = () => {
-        const text = tableRows(filtered).map((cells) => cells.map(csvCell).join(',')).join('\r\n') + '\r\n';
+        const text = tableRows(filtered, baselineRun).map((cells) => cells.map(csvCell).join(',')).join('\r\n') + '\r\n';
         const link = document.createElement('a');
         link.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
-        link.download = `${table?.runName || 'novaRun'}Results.csv`;
+        const against = baselineRun !== null ? `VsRun${baselineRun}` : '';
+        link.download = `${table?.runName || 'novaRun'}Run${table?.runId ?? ''}${against}Results.csv`;
         link.click();
         window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     };
 
     const hasRun = table !== null && table.runId !== null;
+
+    const valueCell = (cell: string, key: number, baseline: string | undefined, change: string | undefined, span = 1) => (
+        <td key={key} colSpan={span} className={`result-value ${cell === '--' ? 'is-blank' : ''}`}
+            title={baseline !== undefined && baselineRun !== null ? `run ${baselineRun}: ${baseline}` : undefined}>
+            {cell}
+            {change !== undefined && change !== '' && <span className="result-change">{change}</span>}
+        </td>
+    );
 
     let body;
     if (error) {
@@ -132,49 +199,78 @@ export function ResultsTable({ table, loading, error, onNotify }: ResultsTablePr
     } else if (table === null || (loading && !hasRun)) {
         body = <div className="empty"><span className="spinner" /> Loading results</div>;
     } else if (!hasRun) {
-        body = <div className="empty">Generate a nozzle to fill this table.</div>;
+        body = <div className="empty">{emptyText}</div>;
     } else if (filtered.length === 0) {
         body = <div className="empty">No quantity matches “{query}”.</div>;
     } else {
         body = filtered.map((section) => {
             const open = query.trim() !== '' || !closed[section.title];
-            const valueColumns = section.columns?.length ?? 1;
+            const columned = section.columns !== null;
+            // Beside a baseline a one-value section reads value, baseline, change in three columns;
+            // a columned section keeps its columns and writes each change under its value
+            const split = baselineRun !== null && !columned;
+            const valueColumns = section.columns?.length ?? (split ? 3 : 1);
             return (
                 <section key={section.title} className={`card section ${open ? 'is-open' : ''}`}>
                     <button type="button" className="section-header" aria-expanded={open}
                             onClick={() => setClosed((previous) => ({ ...previous, [section.title]: !previous[section.title] }))}>
                         <NozzleGlyph className="section-glyph" />
                         <span className="section-title">{section.title}</span>
+                        {section.baselineOnly && <span className="badge">only in run {baselineRun}</span>}
                         <span className="section-count">{section.rows.length}</span>
                     </button>
                     <div className="section-body result-body" hidden={!open}>
-                        <table className="result-table">
+                        <table className={`result-table ${baselineRun !== null ? 'is-compared' : ''}`}>
                             <colgroup>
                                 <col className="result-label-col" />
-                                {Array.from({ length: valueColumns }, (_, index) => <col key={index} className="result-value-col" />)}
+                                {Array.from({ length: valueColumns }, (_, at) => <col key={at} className="result-value-col" />)}
                                 <col className="result-unit-col" />
                             </colgroup>
-                            {section.columns && (
+                            {(columned || split) && (
                                 <thead>
                                     <tr>
                                         <th />
-                                        {section.columns.map((column) => <th key={column} className="result-value">{column}</th>)}
+                                        {split
+                                            ? [`run ${table.runId}`, `run ${baselineRun}`, 'change'].map((head) => (
+                                                <th key={head} className="result-value">{head}</th>
+                                            ))
+                                            : section.columns!.map((column) => <th key={column} className="result-value">{column}</th>)}
                                         <th />
                                     </tr>
                                 </thead>
                             )}
                             <tbody>
-                                {section.rows.map((row, index) => (
-                                    <tr key={`${row.label}-${index}`} className={row.indent ? 'is-indented' : ''}>
-                                        <td className="result-label">{row.label}</td>
-                                        {row.cells.length === valueColumns
-                                            ? row.cells.map((cell, cellIndex) => (
-                                                <td key={cellIndex} className={`result-value ${cell === '--' ? 'is-blank' : ''}`}>{cell}</td>
-                                            ))
-                                            : <td className="result-value" colSpan={valueColumns}>{row.cells.join(' ')}</td>}
-                                        <td className="result-unit">{row.unit}</td>
-                                    </tr>
-                                ))}
+                                {section.rows.map((row, at) => {
+                                    const opens = row.view !== null && available.has(row.view);
+                                    let cells;
+                                    if (split) {
+                                        const cell = row.cells.join(' ');
+                                        const baseline = row.baseline ? row.baseline.join(' ') : '--';
+                                        cells = [
+                                            valueCell(cell, 0, undefined, undefined),
+                                            <td key={1} className={`result-value is-baseline ${baseline === '--' ? 'is-blank' : ''}`}>{baseline}</td>,
+                                            <td key={2} className="result-value result-change-cell">{row.change?.join(' ') ?? ''}</td>,
+                                        ];
+                                    } else if (row.cells.length === valueColumns) {
+                                        cells = row.cells.map((cell, cellAt) => valueCell(cell, cellAt, row.baseline?.[cellAt], row.change?.[cellAt]));
+                                    } else {
+                                        cells = [valueCell(row.cells.join(' '), 0, row.baseline?.join(' '), row.change?.join(' '), valueColumns)];
+                                    }
+                                    return (
+                                        <tr key={`${row.label}-${at}`}
+                                            className={[row.indent ? 'is-indented' : '', opens ? 'is-link' : '',
+                                                        row.baselineOnly ? 'is-baseline-only' : ''].filter(Boolean).join(' ')}
+                                            onClick={opens ? () => onOpenView(row.view!) : undefined}
+                                            title={opens ? 'Open the figure that shows it' : undefined}>
+                                            <td className="result-label">
+                                                {row.label}
+                                                {opens && <ChartIcon className="result-link-icon" />}
+                                            </td>
+                                            {cells}
+                                            <td className="result-unit">{row.unit}</td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -202,7 +298,12 @@ export function ResultsTable({ table, loading, error, onNotify }: ResultsTablePr
                 </button>
             </div>
             <div className="pane-scroll" ref={scroller}>
-                <div className="pane-column">{body}</div>
+                <div className="pane-column">
+                    {hasRun && !error && table.headline.length > 0 && !query.trim() && (
+                        <Headline numbers={table.headline} baselineRun={baselineRun} available={available} onOpenView={onOpenView} />
+                    )}
+                    {body}
+                </div>
             </div>
         </div>
     );

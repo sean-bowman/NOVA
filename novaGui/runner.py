@@ -187,6 +187,11 @@ class PipelineRunner:
         ('stage', dict)                     a NOVA.progress event
         ('result', RunResult)               terminal, always the last message
 
+    `stageHook`, when set, is called as `stageHook(nozzle, event)` with each progress event, on the
+    run's own thread while NOVA waits on it, so it reads the Nozzle in a settled state: the web
+    worker takes the contour figures there when the contour stage ends. A hook that raises is
+    logged and the run goes on.
+
     '''
 
     def __init__(self, messageQueue):
@@ -194,6 +199,7 @@ class PipelineRunner:
         self._queue = messageQueue
         self._thread = None
         self._busy = False
+        self.stageHook = None
 
     @property
     def busy(self) -> bool:
@@ -253,7 +259,16 @@ class PipelineRunner:
             sys.stderr = _StreamToQueue(self._queue)
 
             nozzle = nozzleClass()
-            with novaProgress.reporting(lambda event: self._queue.put(('stage', event))):
+
+            def report(event: dict) -> None:
+                self._queue.put(('stage', event))
+                if self.stageHook is not None:
+                    try:
+                        self.stageHook(nozzle, event)
+                    except Exception as exc:               # noqa: BLE001 -- the run matters more than the hook
+                        self._queue.put(('log', f'stage hook failed: {type(exc).__name__}: {exc}'))
+
+            with novaProgress.reporting(report):
                 nozzle.generateNozzle(configPath = configPath)
 
             sys.stdout.flush()

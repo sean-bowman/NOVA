@@ -171,3 +171,52 @@ export function FolderIcon({ className }: IconProps) {
         </svg>
     );
 }
+
+export function GridIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+            <rect x="4" y="4" width="7" height="7" rx="1.2" />
+            <rect x="13" y="4" width="7" height="7" rx="1.2" />
+            <rect x="4" y="13" width="7" height="7" rx="1.2" />
+            <rect x="13" y="13" width="7" height="7" rx="1.2" />
+        </svg>
+    );
+}
+
+export function ImageIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3.5" y="5" width="17" height="14" rx="1.8" />
+            <path d="m4.5 17 5-5 3.5 3.5 2.5-2.5 4 4" />
+            <circle cx="15.5" cy="9.3" r="1.4" />
+        </svg>
+    );
+}
+
+export function PopOutIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M13.5 4.5h6v6" />
+            <path d="m19.5 4.5-8 8" />
+            <path d="M17.5 13.5v4.2a1.8 1.8 0 0 1-1.8 1.8H6.3a1.8 1.8 0 0 1-1.8-1.8V8.3a1.8 1.8 0 0 1 1.8-1.8h4.2" />
+        </svg>
+    );
+}
+
+export function EyeIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+            <path d="M2.8 12S6.2 5.8 12 5.8 21.2 12 21.2 12 17.8 18.2 12 18.2 2.8 12 2.8 12z" />
+            <circle cx="12" cy="12" r="2.8" />
+        </svg>
+    );
+}
+
+export function ChartIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4.5 4.5v15h15" />
+            <path d="m7.5 15 3.5-4.5 3 2.5 4.5-6" />
+        </svg>
+    );
+}

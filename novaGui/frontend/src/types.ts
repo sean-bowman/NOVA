@@ -93,6 +93,8 @@ export interface FormState {
     problems: string[];
     /** Row ids the problems name */
     flagged: string[];
+    /** The problems naming each flagged row, written under it */
+    notes: Record<string, string[]>;
 }
 
 /** A wall alloy's properties at one temperature (novaGui.design.wallSample), SI */
@@ -170,6 +172,12 @@ export interface RunProgressFields {
     stages: RunStage[];
 }
 
+/** The views a running run's contour stage settled, which draw before the run finishes. */
+export interface PartialRun {
+    runId: number;
+    views: string[];
+}
+
 export interface RunSnapshot extends RunProgressFields {
     type: 'snapshot';
     state: RunStateName;
@@ -177,6 +185,8 @@ export interface RunSnapshot extends RunProgressFields {
     startedAt: number | null;
     log: string[];
     result: RunSummary | null;
+    partial: PartialRun | null;
+    baseline: number | null;
 }
 
 export type RunEvent =
@@ -184,7 +194,27 @@ export type RunEvent =
     | { type: 'log'; line: string }
     | { type: 'status'; state: RunStateName; detail: string; runId?: number | null }
     | ({ type: 'progress' } & RunProgressFields)
-    | ({ type: 'result' } & RunSummary);
+    | ({ type: 'partial' } & PartialRun)
+    | ({ type: 'result' } & RunSummary)
+    | { type: 'runs'; baseline: number | null }
+    | ({ type: 'settings' } & Settings);
+
+/** A kept finished run, as the run list carries it (novaGui.session.RunRecord.entry). */
+export interface RunEntry {
+    runId: number;
+    runName: string;
+    elapsedSec: number;
+    headline: string;             // thrust, delivered Isp, propellants
+    finishedAt: number;           // [s] epoch
+    config: Config | null;
+}
+
+export interface RunList {
+    runs: RunEntry[];             // newest first
+    baseline: number | null;
+    latest: number | null;        // the latest good run
+    running: { runId: number; config: Config | null; views: string[] } | null;
+}
 
 export interface ViewSpec {
     key: string;
@@ -193,9 +223,13 @@ export interface ViewSpec {
     source: string;
     interactive: boolean;
     static: boolean;
+    comparable: boolean;          // a line plot that can draw a second run over the first
 }
 
-/** The views of the last good run, and that run: its id, name, time and the config it ran. */
+/**
+ * The views of a run, and that run: its id, name, time and the config it ran. A run still going
+ * (`partial`) lists the views its contour stage settled.
+ */
 export interface ViewIndex {
     views: ViewSpec[];
     available: string[];
@@ -203,6 +237,7 @@ export interface ViewIndex {
     runName: string;
     elapsedSec: number | null;
     config: Config | null;
+    partial: boolean;
 }
 
 export interface Settings {
@@ -215,19 +250,39 @@ export interface ResultRow {
     cells: string[];
     unit: string;
     indent: boolean;
+    view: string | null;          // the figure that shows the row
+    baseline?: string[] | null;   // the baseline run's cells, beside a baseline
+    change?: string[] | null;     // the change from the baseline, one text per cell
+    baselineOnly?: boolean;       // a row only the baseline has
 }
 
 export interface ResultSection {
     title: string;
     columns: string[] | null;
     rows: ResultRow[];
+    baselineOnly?: boolean;
+}
+
+/** One of the numbers drawn above the table (novaGui.analysis.headline). */
+export interface HeadlineNumber {
+    key: string;
+    label: string;
+    value: string;
+    unit: string;
+    detail: string;
+    tone: '' | 'warn';
+    view: string | null;
+    baseline?: string | null;
+    change?: string | null;
 }
 
 export interface ResultTable {
     runId: number | null;
     runName: string;
     summary: string;
+    headline: HeadlineNumber[];
     sections: ResultSection[];
+    baselineRun: number | null;   // the run set beside it, or null
 }
 
 export interface OutputCategory {
@@ -240,6 +295,19 @@ export interface OutputFile {
     name: string;
     category: string;
     bytes: number;
+    preview: 'image' | 'mesh' | 'text' | null;
+}
+
+/** An STL surface for the mesh viewer (novaGui.outputs.stlMesh). */
+export interface MeshPreview {
+    x: number[];
+    y: number[];
+    z: number[];
+    i: number[];
+    j: number[];
+    k: number[];
+    triangles: number;
+    shown: number;
 }
 
 export interface ExportIndex {

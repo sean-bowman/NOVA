@@ -4,7 +4,8 @@
    pressure): an option dropdown in the label column, the value, and its unit. Each option
    keeps its own text and unit while another is chosen. Choosing an option writes its value,
    the constants it fixes, and null to every other key the row holds, as
-   legacy.novaTk.widgets.SelectorRow does. An option in amber is one a cross-field problem names.
+   legacy.novaTk.widgets.SelectorRow does. An option in amber is one a cross-field problem names,
+   and the problem is written under the row.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -23,13 +24,14 @@ interface SelectorRowProps {
     changed: boolean;
     error: string | null;
     flagged?: boolean;
+    notes?: string[];
     onChange: (patch: Config) => void;
     onError: (id: string, message: string | null) => void;
 }
 
 type Parsed = { ok: true; value: number | null } | { ok: false; message: string };
 
-export function SelectorRow({ selector, config, units, visible, changed, error, flagged = false, onChange,
+export function SelectorRow({ selector, config, units, visible, changed, error, flagged = false, notes = [], onChange,
                               onError }: SelectorRowProps) {
     const [chosen, setChosen] = useState(() => chooseOption(selector, config).label);
     const [optionUnits, setOptionUnits] = useState<Record<string, string | null>>(() => Object.fromEntries(
@@ -133,6 +135,7 @@ export function SelectorRow({ selector, config, units, visible, changed, error, 
                 {!option.dimension && option.unit && <span className="unit-static">{option.unit}</span>}
             </div>
             {error && <div className="form-note form-note-error">{error}</div>}
+            {!error && notes.map((note) => <div key={note} className="form-note form-note-warn" role="note">{note}</div>)}
         </div>
     );
 }

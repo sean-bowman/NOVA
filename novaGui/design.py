@@ -11,7 +11,8 @@ check left to each form is that a required selector option has a value, because 
 selector rows themselves; the browser's selector row blocks the run on it.
 
 The checks are warnings: a run with problems asks before it starts. A row is flagged when a problem
-names its label in quotes.
+names its label in quotes, and each flagged row carries the problems that name it, which the browser
+writes under the row.
 
 The wall alloy's properties come from `NOVA.materials.sampleWallMaterial`, which falls back to
 GRCop-42 for a name it does not carry and says so in the result.
@@ -142,14 +143,15 @@ def crossFieldProblems(config: dict) -> list:
         needed = ['hotWallThickness', 'shellThickness', 'coolantInitialTemperature', 'coolantInitialPressure']
         missing = [k for k in needed if not isSet(k)]
         if missing:
-            problems.append('Cooling channels need: ' + ', '.join(missing) + '.')
+            labels = {spec.key: spec.label for spec in configSchema.allFields()}
+            problems.append('Cooling channels need ' + ', '.join(f"'{labels.get(key, key)}'" for key in missing) + '.')
         # A helix has no default angle; the backend rejects the run without one
         if config.get('channelType') == 'helical' and not isSet('channelHelixAngle'):
             problems.append("Helical channels need a 'Channel helix angle'.")
 
     if config.get('makeInletVolute') in (True, 'on') or config.get('makeOutletVolute') in (True, 'on'):
         if config.get('makeCoolingChannels') not in (True, 'on'):
-            problems.append('Volute generation requires cooling channels to be enabled.')
+            problems.append("Volutes need 'Generate cooling channels' on.")
 
     return problems
 
@@ -189,7 +191,8 @@ def checks(config: dict) -> dict:
 
     Returns:
     --------
-    dict : {'problems': [str], 'flagged': [row ids]}; ids as novaGui.schemaJson gives them
+    dict : {'problems': [str], 'flagged': [row ids], 'notes': {row id: [the problems naming it]}};
+        ids as novaGui.schemaJson gives them
 
     '''
 
@@ -201,18 +204,21 @@ def checks(config: dict) -> dict:
     except Exception as exc:                               # noqa: BLE001 -- report rather than fail the form
         problems = [f'The form checks did not run: {type(exc).__name__}: {exc}']
 
-    # A row is flagged when a problem quotes its label
-    text = ' '.join(problems).lower()
-    flagged = []
+    # A row is flagged when a problem quotes its label, and carries the problems that do
+    notes = {}
     for group in configSchema.groups:
         for item in group.fields:
             if isinstance(item, configSchema.Selector):
-                if f"'{_chosenLabel(item, merged).lower()}'" in text:
-                    flagged.append('selector:' + item.name)
-            elif not item.hidden and f"'{item.label.lower()}'" in text:
-                flagged.append(item.key)
+                rowId, quoted = 'selector:' + item.name, f"'{_chosenLabel(item, merged).lower()}'"
+            elif not item.hidden:
+                rowId, quoted = item.key, f"'{item.label.lower()}'"
+            else:
+                continue
+            naming = [problem for problem in problems if quoted in problem.lower()]
+            if naming:
+                notes[rowId] = naming
 
-    return {'problems': problems, 'flagged': flagged}
+    return {'problems': problems, 'flagged': list(notes), 'notes': notes}
 
 def wallSample(name: str, temperatureK: float) -> dict:
 

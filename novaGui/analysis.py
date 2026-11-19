@@ -15,11 +15,26 @@ text joined by `columnSeparator`, under a row named `Columns`. `resultTable` spl
 so the browser draws them as columns, and returns:
 
     {'summary': str,
+     'headline': [{'key', 'label', 'value', 'unit', 'detail', 'tone', 'view'}],
      'sections': [{'title': str, 'columns': [str] | None,
-                   'rows': [{'label': str, 'cells': [str], 'unit': str, 'indent': bool}]}]}
+                   'rows': [{'label': str, 'cells': [str], 'unit': str, 'indent': bool,
+                             'view': str | None}]}]}
 
 A single-value row whose text reads `<number> <unit>` is split into the two, so the browser can
 align the numbers; any other text stays whole in `cells` with an empty `unit`.
+
+`headline` is the handful of numbers a design is judged by first, drawn above the table: delivered
+Isp and thrust at the design back pressure, contour length, exit diameter, the peak hot wall
+temperature against its limit (`tone` 'warn' above it), and the coolant pressure drop of each pass.
+They repeat rows of the table, in display units.
+
+`view` names the figure that shows a row (novaGui.viewCatalog), so the browser can open it from the
+row: a section's own figure, or for some rows a closer one (`rowViews`). The browser offers it
+only when the run produced that view.
+
+`compareTables` sets two runs' tables side by side for the result pane's baseline: each row and
+headline number of the shown run gains the baseline run's cells and the change from the baseline,
+and the rows only the baseline has follow at the end of their section with blank cells.
 
 Author: Sean Bowman
 Date:   11/17/2026
@@ -109,6 +124,134 @@ def _length(nozzle):
         return (float(axis[-1]) - float(axis[0])) * 1e3
     except (TypeError, IndexError):
         return None
+
+# The figure that shows each section, and the rows a closer figure shows
+sectionViews = {
+    'Sizing': 'contour', 'Combustion Chamber': 'contour',
+    'Cooling': 'jacketTemperatures', 'Coolant passes': 'passes', 'Extension circuit': 'extension',
+    'Films over the extension': 'film', 'Plume': 'plume',
+}
+rowViews = {
+    ('Performance: 1D estimate and delivered', 'Exit Mach number'): 'mach',
+    ('Performance: 1D estimate and delivered', 'Exit Mach number at the wall'): 'nearWall',
+    ('Performance: 1D estimate and delivered', 'Exit pressure [Pa]'): 'pressure',
+    ('Performance: 1D estimate and delivered', 'Exit pressure, area averaged [Pa]'): 'pressure',
+    ('Performance: 1D estimate and delivered', 'Exit pressure at the wall [Pa]'): 'nearWall',
+    ('Performance: 1D estimate and delivered', 'Exit temperature [K]'): 'temperature',
+    ('Performance: 1D estimate and delivered', 'Exit velocity [m/s]'): 'nearWall',
+    ('Chamber', 'Temperature'): 'temperature', ('Chamber', 'Pressure'): 'pressure',
+    ('Throat', 'Temperature'): 'temperature', ('Throat', 'Pressure'): 'pressure',
+    ('Cooling', 'Number of channels'): 'channelMesh', ('Cooling', 'Channels split to'): 'channelMesh',
+    ('Cooling', 'Split area ratio'): 'channelMesh', ('Cooling', 'Coolant exit temperature'): 'coolantFlow',
+    ('Cooling', 'Coolant exit pressure'): 'coolantFlow', ('Cooling', 'Coolant mass flow'): 'coolantFlow',
+    ('Cooling', 'Coolant circuit'): 'circuit', ('Coolant passes', 'Turnaround loss'): 'circuit',
+    ('Coolant passes', 'Turnaround section radius'): 'circuit',
+}
+
+def _rowView(section: str, label: str) -> str | None:
+
+    '''The figure that shows a row: its own from rowViews, else its section's, else None.'''
+
+    return rowViews.get((section, label), sectionViews.get(section))
+
+def _peakWall(nozzle) -> tuple:
+
+    '''
+
+    (peak hot wall temperature, peak coating surface temperature) [K] of the jacket, None where the
+    run has none. The limit is on the metal; under a barrier coating the gas-side surface runs
+    hotter. A multi-pass jacket's peak is the hotter of its two families.
+
+    '''
+
+    circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+    if circuit is not None:
+        passes = [passSolution.results for passSolution in (circuit.down, circuit.up)]
+        surface = np.concatenate([np.asarray(results['wallTemperature']) for results in passes])
+        metal = np.concatenate([np.asarray(results.get('metalWallTemperature', results['wallTemperature']))
+                                for results in passes])
+    else:
+        surface = getattr(nozzle, 'channelWallTemperature', None)
+        results = getattr(nozzle, 'channelThermalResults', None)
+        metal = results.get('metalWallTemperature') if isinstance(results, dict) else None
+    wall = metal if metal is not None else surface
+    peak = None if wall is None or np.size(wall) == 0 else float(np.max(wall))
+    coated = None
+    if metal is not None and surface is not None and not np.array_equal(np.asarray(metal), np.asarray(surface)):
+        coated = float(np.max(surface))
+    return peak, coated
+
+def _pressureText(pascals: float) -> tuple:
+
+    '''
+
+    A pressure drop in MPa to three figures: (number text, unit). One unit for every run, so two
+    runs' drops compare however far apart they are.
+
+    '''
+
+    return f'{pascals / 1e6:.3g}', 'MPa'
+
+def headline(nozzle) -> list:
+
+    '''
+
+    The numbers a design is judged by first, as the result pane draws them above the table. Each
+    is {'key', 'label', 'value', 'unit', 'detail', 'tone', 'view'}; `tone` is 'warn' for a peak wall
+    temperature above its limit and '' otherwise. A number the run did not produce is left out.
+
+    '''
+
+    items = []
+
+    def add(key, label, value, unit, detail = '', tone = '', view = None):
+        if value is not None:
+            items.append({'key': key, 'label': label, 'value': value, 'unit': unit, 'detail': detail,
+                          'tone': tone, 'view': view})
+
+    summary = getattr(nozzle, 'performance', None)
+    if summary is not None:
+        isp = _num(summary.specificImpulseDelivered.get('design'))
+        vacuum = _num(summary.specificImpulseDelivered.get('vacuum'))
+        add('isp', 'Delivered Isp', None if isp is None else f'{isp:.1f}', 's',
+            f'vacuum {vacuum:.1f} s' if vacuum is not None else '', view = 'nearWall')
+        thrust = _num(summary.thrustDelivered.get('design'))
+        add('thrust', 'Delivered thrust', None if thrust is None else f'{thrust / 1e3:.4g}', 'kN', 'design back pressure')
+
+    length = _length(nozzle)
+    add('length', 'Contour length', None if length is None else f'{length:.1f}', 'mm', view = 'contour')
+    exitRadius = _exitRadius(nozzle)
+    ratio = _num(getattr(nozzle, 'exitExpansionRatio', None))
+    add('exitDiameter', 'Exit diameter', None if exitRadius is None else f'{2.0 * exitRadius:.1f}', 'mm',
+        f'area ratio {ratio:.4g}' if ratio is not None else '', view = 'contour')
+
+    if str(getattr(nozzle, 'makeCoolingChannels', 'off')) not in ('off', 'False', ''):
+        peak, _ = _peakWall(nozzle)
+        limit = _num(getattr(nozzle, 'maxWallTemperature', None))
+        detail, tone = '', ''
+        if peak is not None and limit is not None:
+            # Judged as shown: a jacket sized to its limit reads 800.0 K against 800 K, and is not over it
+            margin = round(limit - peak)
+            detail = f'limit {limit:.0f} K, margin {margin + 0:.0f} K'
+            tone = 'warn' if round(peak, 1) > limit else ''
+        add('peakWall', 'Peak hot wall', None if peak is None else f'{peak:.1f}', 'K', detail, tone, 'jacketTemperatures')
+
+        circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+        if circuit is not None:
+            for passSolution in (circuit.down, circuit.up):
+                state = passSolution.state
+                drop = float(state.coolantInitialPressure) - float(state.coolantExitPressure)
+                value, unit = _pressureText(drop)
+                add(f'drop{passSolution.name.capitalize()}', f'{passSolution.name.capitalize()} pass pressure drop',
+                    value, unit, f'{passSolution.channelCount} channels', view = 'passes')
+        else:
+            inlet = _num(getattr(nozzle, 'coolantInitialPressure', None))
+            outlet = _num(getattr(nozzle, 'coolantExitPressure', None))
+            if inlet is not None and outlet is not None:
+                value, unit = _pressureText(inlet - outlet)
+                add('drop', 'Coolant pressure drop', value, unit, 'single pass', view = 'coolantFlow')
+
+    return items
 
 def resultRows(nozzle) -> tuple:
 
@@ -215,23 +358,10 @@ def resultRows(nozzle) -> tuple:
     if str(getattr(nozzle, 'makeCoolingChannels', 'off')) not in ('off', 'False', ''):
         cooling = section('Cooling')
         row(cooling, 'Number of channels', getattr(nozzle, 'nChannel', None), '{:.0f}')
-        # The limit is on the metal; under a barrier coating the gas-side surface runs hotter.
-        # A multi-pass jacket's peak is the hotter of its two families.
-        circuit = getattr(nozzle, 'coolantCircuitSolution', None)
-        if circuit is not None:
-            passes = [passSolution.results for passSolution in (circuit.down, circuit.up)]
-            surface = np.concatenate([np.asarray(results['wallTemperature']) for results in passes])
-            metal = np.concatenate([np.asarray(results.get('metalWallTemperature', results['wallTemperature']))
-                                    for results in passes])
-        else:
-            surface = getattr(nozzle, 'channelWallTemperature', None)
-            results = getattr(nozzle, 'channelThermalResults', None)
-            metal = results.get('metalWallTemperature') if isinstance(results, dict) else None
-        wallTemperature = metal if metal is not None else surface
-        row(cooling, 'Peak hot wall temperature',
-            None if wallTemperature is None else float(max(wallTemperature)), '{:.1f}', 'K')
-        if metal is not None and surface is not None and not np.array_equal(np.asarray(metal), np.asarray(surface)):
-            row(cooling, 'Peak coating surface temperature', float(max(surface)), '{:.1f}', 'K')
+        peak, coated = _peakWall(nozzle)
+        row(cooling, 'Peak hot wall temperature', peak, '{:.1f}', 'K')
+        if coated is not None:
+            row(cooling, 'Peak coating surface temperature', coated, '{:.1f}', 'K')
         row(cooling, 'Hot wall temperature limit', getattr(nozzle, 'maxWallTemperature', None),
             '{:.1f}', 'K')
         row(cooling, 'Coolant exit temperature',
@@ -384,7 +514,7 @@ def resultTable(nozzle) -> dict:
 
     Returns:
     --------
-    dict : {'summary', 'sections'}; see the module docstring
+    dict : {'summary', 'headline', 'sections'}; see the module docstring
 
     '''
 
@@ -401,7 +531,114 @@ def resultTable(nozzle) -> dict:
             unit = ''
             if len(cells) == 1:
                 cells[0], unit = _splitUnit(cells[0])
-            rows.append({'label': label.strip(), 'cells': cells, 'unit': unit, 'indent': label.startswith(' ')})
+            rows.append({'label': label.strip(), 'cells': cells, 'unit': unit, 'indent': label.startswith(' '),
+                         'view': _rowView(title, label.strip())})
         sections.append({'title': title, 'columns': columns, 'rows': rows})
 
-    return {'summary': summary, 'sections': sections}
+    try:
+        numbers = headline(nozzle)
+    except Exception:                                      # noqa: BLE001 -- the table stands without them
+        numbers = []
+
+    return {'summary': summary, 'headline': numbers, 'sections': sections}
+
+def _number(text: str):
+
+    '''The number a cell reads, or None for text.'''
+
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        return None
+    return value if math.isfinite(value) else None
+
+def change(shown: str, baseline: str) -> str:
+
+    '''
+
+    How a cell differs from the baseline's: '+1.8 (+0.41 %)' for numbers, written to the shown
+    cell's own decimals; '' when the two read the same; 'differs' for text that does not.
+
+    '''
+
+    if shown == baseline:
+        return ''
+    a, b = _number(shown), _number(baseline)
+    if a is None or b is None:
+        return 'differs' if shown not in ('', '--') and baseline not in ('', '--') else ''
+    difference = a - b
+    if 'e' in shown.lower():
+        text = f'{difference:+.3g}'
+    else:
+        decimals = len(shown.split('.')[1]) if '.' in shown else 0
+        text = f'{difference:+.{decimals}f}'
+    if b != 0.0:
+        percent = 100.0 * difference / abs(b)
+        digits = 0 if abs(percent) >= 10.0 else (1 if abs(percent) >= 1.0 else 2)
+        text += f' ({percent:+.{digits}f} %)'
+    return text
+
+def _occurrences(rows: list) -> list:
+
+    '''(label, how many rows of that label came before) for each row, to match rows across runs.'''
+
+    seen = {}
+    keys = []
+    for row in rows:
+        count = seen.get(row['label'], 0)
+        seen[row['label']] = count + 1
+        keys.append((row['label'], count))
+    return keys
+
+def compareTables(shown: dict, baseline: dict) -> dict:
+
+    '''
+
+    Two runs' result tables side by side: the shown run's, each row and headline number with the
+    baseline's cells (`baseline`, None where the baseline has no such row) and the change from them
+    (`change`, one text per cell). Rows only the baseline has follow at the end of their section,
+    with blank cells and `baselineOnly`; sections only the baseline has follow at the end.
+
+    Parameters:
+    -----------
+    shown, baseline : dict
+        resultTable of each run.
+
+    Returns:
+    --------
+    dict : the shown table with the comparison added
+
+    '''
+
+    baselineSections = {section['title']: section for section in baseline['sections']}
+    sections = []
+    for section in shown['sections']:
+        other = baselineSections.pop(section['title'], None)
+        otherRows = dict(zip(_occurrences(other['rows']), other['rows'])) if other is not None else {}
+        rows = []
+        for key, row in zip(_occurrences(section['rows']), section['rows']):
+            match = otherRows.pop(key, None)
+            if match is None or len(match['cells']) != len(row['cells']) or match['unit'] != row['unit']:
+                rows.append({**row, 'baseline': None if match is None else match['cells'], 'change': None})
+                continue
+            rows.append({**row, 'baseline': match['cells'],
+                         'change': [change(a, b) for a, b in zip(row['cells'], match['cells'])]})
+        for row in otherRows.values():
+            rows.append({**row, 'cells': ['--'] * len(row['cells']), 'baseline': row['cells'], 'change': None,
+                         'baselineOnly': True})
+        sections.append({**section, 'rows': rows})
+    for section in baselineSections.values():
+        rows = [{**row, 'cells': ['--'] * len(row['cells']), 'baseline': row['cells'], 'change': None,
+                 'baselineOnly': True} for row in section['rows']]
+        sections.append({**section, 'rows': rows, 'baselineOnly': True})
+
+    otherNumbers = {item['key']: item for item in baseline.get('headline', [])}
+    numbers = []
+    for item in shown.get('headline', []):
+        match = otherNumbers.get(item['key'])
+        if match is None or match['unit'] != item['unit']:
+            numbers.append({**item, 'baseline': None, 'change': None})
+        else:
+            numbers.append({**item, 'baseline': match['value'], 'change': change(item['value'], match['value'])})
+
+    return {**shown, 'headline': numbers, 'sections': sections}

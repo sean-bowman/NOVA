@@ -4,7 +4,7 @@
 '''
 
 One window's runs: starting a worker process, relaying its messages to the browser, cancelling
-it, and holding the last finished result.
+it, and keeping the finished runs the result pane can show and compare.
 
 A run is a child process (novaGui.worker). A pump thread drains its queue and turns each message
 into an event dictionary; every event is kept in the session's state (status, progress, recent
@@ -19,7 +19,17 @@ the stage tree with its states, times and iterations. The last finished run's st
 out the next run's bar and stand as its expected times, and its tree lists the sub-stages the
 next run has yet to reach.
 
-Each run keeps the config it ran, so the browser can name the fields edited since the run it shows.
+The session keeps the last `keptRuns` finished runs, each with the config it ran and the headline
+of its result table, so the browser can list them, show any of them, and name the fields that differ
+between two of them or between one and the form. One kept run can be the baseline the others are
+compared against; it stays however many runs follow it. A run that drops out of the list takes its
+staging folder with it. A kept run unpickles its Nozzle on first use, and only the `keptNozzles`
+runs drawn from most recently keep theirs in memory.
+
+When a run's contour stage ends, the worker sends the figure descriptions that stage settles (the
+contour, the near-wall state, the three flow fields and the revolved wall). The session keeps them
+as the running run's partial result, so the browser can draw them while cooling and the plume
+still run. They are dropped when the run ends; a finished run draws from its Nozzle.
 
 Runs write into a staging folder for the server process, `<temp>/NOVA/web<pid>/run<n>`. Each run
 gets its own folder, so a cancelled run's partial files never mix with a finished one. The staging
@@ -35,8 +45,11 @@ Events, as JSON objects:
      'ceiling': float, 'label': str, 'stageDetail': str, 'stages': [...]}
         `t` is the run's own clock [s] at its latest event; `stages` is RunProgress.stageList, whose
         expected times come from run `expectedRun`
+    {'type': 'partial', 'runId': int, 'views': [view keys]}
     {'type': 'result', 'runId': int, 'ok': bool, 'runName': str, 'elapsedSec': float, 'error': str}
-    {'type': 'snapshot', ...}       sent once on connect: the whole state
+    {'type': 'runs', 'baseline': int | None}      the kept runs or the baseline changed
+    {'type': 'settings', ...}                       saved preferences changed (novaGui.settings)
+    {'type': 'snapshot', ...}                       sent once on connect: the whole state
 
 Author: Sean Bowman
 Date:   11/16/2026
@@ -59,6 +72,9 @@ import time
 # Local imports
 from .progress import RunProgress
 from . import worker
+
+keptRuns = 8         # finished runs the session keeps, besides the baseline
+keptNozzles = 3      # kept runs whose unpickled Nozzle stays in memory
 
 def stagingRoot() -> str:
 
@@ -88,8 +104,10 @@ class RunRecord:
         self.outputDir = summary.get('outputDir', '')
         self.picklePath = summary.get('picklePath', '')
         self.elapsedSec = float(summary.get('elapsedSec', 0.0))
+        self.headline = summary.get('headline', '')          # the result table's summary line
         self.error = summary.get('error', '')
         self.traceback = summary.get('traceback', '')
+        self.finishedAt = time.time()                       # [s] epoch
         self._nozzle = None
         self._lock = threading.Lock()
 
@@ -110,10 +128,25 @@ class RunRecord:
                     self._nozzle = pickle.load(handle)
         return self._nozzle
 
+    def release(self) -> None:
+
+        '''Drop the unpickled Nozzle; the next use reads the pickle again.'''
+
+        if self.picklePath and os.path.isfile(self.picklePath):
+            with self._lock:
+                self._nozzle = None
+
     def summary(self) -> dict:
 
         return {'runId': self.runId, 'ok': self.ok, 'runName': self.runName,
                 'elapsedSec': self.elapsedSec, 'error': self.error}
+
+    def entry(self) -> dict:
+
+        '''The run as the run list shows it.'''
+
+        return {'runId': self.runId, 'runName': self.runName, 'elapsedSec': self.elapsedSec,
+                'headline': self.headline, 'finishedAt': self.finishedAt, 'config': self.config}
 
 class RunSession:
 
@@ -143,7 +176,11 @@ class RunSession:
         self._lastRunId = None                # the run both of those come from
         self._runConfig = None                # the config of the run in progress
         self.log = collections.deque(maxlen = logLines)
-        self.result = None                     # the last RunRecord, finished or failed
+        self.result = None                     # the last good RunRecord, else the last that ended
+        self.runs = collections.OrderedDict()  # runId: RunRecord, the kept finished runs, oldest first
+        self.baseline = None                   # the kept run the others are compared against
+        self.partial = None                    # {'runId', 'figures'}: the running run's settled figures
+        self._drawn = []                       # kept runs by last use, whose Nozzles stay loaded
 
         self._subscribers = set()              # (loop, asyncio.Queue) pairs
         self._subscriberLock = threading.Lock()
@@ -220,6 +257,11 @@ class RunSession:
             elif kind == 'stage':
                 if self._progress.apply(payload):
                     self._publishProgress()
+            elif kind == 'partial':
+                figures = dict(payload.get('figures') or {})
+                if figures:
+                    self.partial = {'runId': runId, 'figures': figures}
+                    self._publish({'type': 'partial', 'runId': runId, 'views': list(figures)})
             elif kind == 'result':
                 summary = payload
 
@@ -240,12 +282,15 @@ class RunSession:
             self._stageHistory = self._progress.durations()
             self._lastStages = self._progress.stageList()
             self._lastRunId = runId
+        self.partial = None
         with self._lock:
             # A cancelled or failed run leaves the last good result in place for the views
             if record.ok or self.result is None or not self.result.ok:
                 self.result = record
             self._process = None
             self._queue = None
+        if record.ok:
+            self.adopt(record)
 
         detail = f'{record.elapsedSec:.1f} s' if record.ok else record.error
         self._publish({'type': 'status', 'state': state, 'detail': detail})
@@ -296,6 +341,7 @@ class RunSession:
                                                   args = (dict(config), outputDir, mode, self._queue),
                                                   daemon = True)
             self.log.clear()
+            self.partial = None
             self._runConfig = dict(config)
             self.state.update(runId = runId, startedAt = time.time())
             self._publish({'type': 'status', 'state': 'running', 'detail': 'starting worker'})
@@ -327,6 +373,129 @@ class RunSession:
         process.terminate()
         return True
 
+    def adopt(self, record: RunRecord) -> None:
+
+        '''
+
+        Keep a finished run in the list, as the latest. The oldest runs beyond `keptRuns` drop out,
+        except the baseline, and their staging folders go with them.
+
+        '''
+
+        dropped = []
+        with self._lock:
+            self.runs.pop(record.runId, None)
+            self.runs[record.runId] = record
+            if self.result is None or not self.result.ok or self.result.runId <= record.runId:
+                self.result = record
+            while sum(1 for runId in self.runs if runId != self.baseline) > keptRuns:
+                oldest = next(runId for runId in self.runs if runId != self.baseline)
+                dropped.append(self.runs.pop(oldest))
+            self._drawn = [kept for kept in self._drawn if kept not in dropped]
+        for old in dropped:
+            shutil.rmtree(os.path.join(stagingRoot(), f'run{old.runId}'), ignore_errors = True)
+        self._publish({'type': 'runs', 'baseline': self.baseline})
+
+    def forget(self, runId: int) -> None:
+
+        '''Drop a run from the list without touching its files.'''
+
+        with self._lock:
+            record = self.runs.pop(runId, None)
+            if self.baseline == runId:
+                self.baseline = None
+            if self.result is not None and self.result.runId == runId:
+                self.result = next(reversed(self.runs.values()), None)
+            self._drawn = [kept for kept in self._drawn if kept is not record]
+
+    def record(self, runId: int | None = None) -> RunRecord | None:
+
+        '''
+
+        A kept run by its id, or with no id the latest good run; None when there is no such run.
+
+        '''
+
+        with self._lock:
+            if runId is None:
+                return self.result if self.result is not None and self.result.ok else None
+            return self.runs.get(runId)
+
+    def nozzle(self, record: RunRecord):
+
+        '''
+
+        A kept run's Nozzle. The runs drawn from most recently keep theirs loaded; older ones
+        release theirs and read their pickle again when next asked.
+
+        '''
+
+        nozzle = record.nozzle()
+        with self._lock:
+            self._drawn = [kept for kept in self._drawn if kept is not record] + [record]
+            released, self._drawn = self._drawn[:-keptNozzles], self._drawn[-keptNozzles:]
+        for old in released:
+            old.release()
+        return nozzle
+
+    def setBaseline(self, runId: int | None) -> None:
+
+        '''
+
+        Make a kept run the baseline, or clear it with None.
+
+        Raises:
+        -------
+        KeyError : if the run is not kept
+
+        '''
+
+        with self._lock:
+            if runId is not None and runId not in self.runs:
+                raise KeyError(runId)
+            self.baseline = runId
+        self._publish({'type': 'runs', 'baseline': runId})
+
+    def runList(self) -> dict:
+
+        '''
+
+        The kept runs, newest first, with the baseline and the run in progress.
+
+        Returns:
+        --------
+        dict : {'runs': [RunRecord.entry], 'baseline': int | None, 'latest': int | None,
+            'running': {'runId', 'config', 'views'} | None}
+
+        '''
+
+        with self._lock:
+            runs = [record.entry() for record in reversed(self.runs.values())]
+            latest = self.result.runId if self.result is not None and self.result.ok else None
+            baseline = self.baseline
+        running = None
+        runId = self.state['runId']
+        if self.busy and runId is not None:
+            partial = self.partial
+            views = list(partial['figures']) if partial and partial['runId'] == runId else []
+            running = {'runId': runId, 'config': self._runConfig, 'views': views}
+        return {'runs': runs, 'baseline': baseline, 'latest': latest, 'running': running}
+
+    def partialFigure(self, runId: int, key: str):
+
+        '''The running run's settled figure description for a view, or None.'''
+
+        partial = self.partial
+        if partial is None or partial['runId'] != runId:
+            return None
+        return partial['figures'].get(key)
+
+    def publish(self, event: dict) -> None:
+
+        '''Hand an event to every subscriber: a change a route makes, such as saved preferences.'''
+
+        self._publish(event)
+
     def snapshot(self) -> dict:
 
         '''
@@ -335,8 +504,11 @@ class RunSession:
 
         '''
 
+        partial = self.partial
         return {'type': 'snapshot', **self.state, 'log': list(self.log),
-                'result': self.result.summary() if self.result is not None else None}
+                'result': self.result.summary() if self.result is not None else None,
+                'partial': {'runId': partial['runId'], 'views': list(partial['figures'])} if partial else None,
+                'baseline': self.baseline}
 
     def subscribe(self) -> asyncio.Queue:
 

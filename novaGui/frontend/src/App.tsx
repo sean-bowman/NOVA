@@ -8,7 +8,8 @@
 
    The form's width is dragged on the splitter, or moved with the arrow keys on it, and is kept
    between launches with the theme mode (novaGui.settings). A double click returns it to the
-   default. Below a narrow window width the form and the pane stack instead.
+   default. Below a narrow window width the form and the pane stack instead. A theme mode saved
+   from a popped-out figure window switches this window too.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -24,7 +25,8 @@ import { ExportPanel } from './export/ExportPanel';
 import { ResultPane } from './result/ResultPane';
 import { LogDrawer, RunBar } from './run/RunBar';
 import { useRunEvents } from './run/useRunEvents';
-import type { Config, FormState, Mode, ResultTable, RunSummary, Schema, ViewIndex } from './types';
+import { useRuns } from './result/useRuns';
+import type { Config, FormState, Mode, RunSummary, Schema } from './types';
 
 const defaultFormWidth = 540;   // [px]
 const minFormWidth = 380;       // [px]
@@ -46,13 +48,9 @@ export function App() {
     const [schema, setSchema] = useState<Schema | null>(null);
     const [config, setConfig] = useState<Config>({});
     const [formVersion, setFormVersion] = useState(0);
-    const [formState, setFormState] = useState<FormState>({ hidden: [], expand: [], problems: [], flagged: [] });
+    const [formState, setFormState] = useState<FormState>({ hidden: [], expand: [], problems: [], flagged: [], notes: {} });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [mode, setMode] = useState<Mode>(initialMode);
-    const [viewIndex, setViewIndex] = useState<ViewIndex | null>(null);
-    const [table, setTable] = useState<ResultTable | null>(null);
-    const [tableLoading, setTableLoading] = useState(false);
-    const [tableError, setTableError] = useState('');
     const [formWidth, setFormWidth] = useState(defaultFormWidth);
     const [logOpen, setLogOpen] = useState(false);
     const [stagesOpen, setStagesOpen] = useState(false);
@@ -64,7 +62,6 @@ export function App() {
     const fileInput = useRef<HTMLInputElement>(null);
     const workspace = useRef<HTMLDivElement>(null);
     const toastCount = useRef(0);
-    const tableRun = useRef<number | null | undefined>(undefined);
 
     const notify = useCallback((kind: Toast['kind'], title: string, body = '') => {
         const id = ++toastCount.current;
@@ -74,11 +71,7 @@ export function App() {
         }
     }, []);
 
-    const refreshViews = useCallback(() => {
-        api.views().then(setViewIndex).catch((error: Error) => notify('error', 'Views unavailable', error.message));
-    }, [notify]);
-
-    // -- Startup: the schema, the form's first state, the saved form width, any run the server holds -- //
+    // -- Startup: the schema, the form's first state, the saved form width -- //
     useEffect(() => {
         api.schema()
             .then(async (loaded) => {
@@ -89,8 +82,7 @@ export function App() {
             })
             .catch((error: Error) => setLoadError(error.message));
         api.settings().then((saved) => saved.formWidth && setFormWidth(saved.formWidth)).catch(() => undefined);
-        refreshViews();
-    }, [refreshViews]);
+    }, []);
 
     // -- The schema's predicates decide which rows show; ask the server as the config changes -- //
     useEffect(() => {
@@ -106,37 +98,6 @@ export function App() {
             window.clearTimeout(timer);
         };
     }, [schema, config]);
-
-    // -- The results table of the run the pane shows; its headline also heads the pane -- //
-    const shownRun = viewIndex?.runId ?? null;
-    useEffect(() => {
-        if (viewIndex === null || tableRun.current === shownRun) {
-            return;
-        }
-        tableRun.current = shownRun;
-        if (shownRun === null) {
-            setTable({ runId: null, runName: '', summary: '', sections: [] });
-            return;
-        }
-        // A reply counts only while its run is still the one shown
-        const forRun = shownRun;
-        setTableLoading(true);
-        setTableError('');
-        api.analysis()
-            .then((loaded) => {
-                if (tableRun.current === forRun) {
-                    setTable(loaded);
-                    setTableLoading(false);
-                }
-            })
-            .catch((failure: Error) => {
-                if (tableRun.current === forRun) {
-                    tableRun.current = undefined;
-                    setTableError(failure.message);
-                    setTableLoading(false);
-                }
-            });
-    }, [viewIndex, shownRun]);
 
     const patchConfig = useCallback((patch: Config) => setConfig((previous) => ({ ...previous, ...patch })), []);
 
@@ -163,15 +124,17 @@ export function App() {
 
     // -- Runs -- //
     const onResult = useCallback((result: RunSummary) => {
-        refreshViews();
         if (result.ok) {
             notify('info', 'Nozzle generated', `${result.runName} in ${result.elapsedSec.toFixed(1)} s`);
         } else if (result.error !== 'run cancelled') {
             notify('error', 'Run failed', `${result.error}\nThe run log carries the full traceback.`);
         }
-    }, [notify, refreshViews]);
+    }, [notify]);
 
     const run = useRunEvents(onResult);
+    const runs = useRuns(run, 'latest', (title, message) => notify('error', title, message));
+    // A run still going has nothing to export yet; Export offers the latest finished run instead
+    const exportRun = runs.partial ? (runs.list?.latest ?? null) : runs.shown;
     const running = run.state === 'running';
     const errorList = Object.values(errors);
     const canGenerate = schema !== null && !running && errorList.length === 0 && run.connected;
@@ -252,6 +215,13 @@ export function App() {
     }, [config]);
 
     // -- Theme -- //
+    useEffect(() => {
+        if (run.savedMode && run.savedMode !== document.documentElement.dataset.theme) {
+            document.documentElement.dataset.theme = run.savedMode;
+            setMode(run.savedMode);
+        }
+    }, [run.savedMode]);
+
     const toggleMode = () => {
         const next: Mode = mode === 'dark' ? 'light' : 'dark';
         document.documentElement.dataset.theme = next;
@@ -381,9 +351,8 @@ export function App() {
                      title="Drag to resize the form; double-click for the default width"
                      onPointerDown={onSplitterDown} onPointerMove={onSplitterMove} onPointerUp={onSplitterUp}
                      onPointerCancel={onSplitterUp} onKeyDown={onSplitterKey} onDoubleClick={resetWidth} />
-                <ResultPane index={viewIndex} mode={mode} run={run} schema={schema} config={config} table={table}
-                            tableLoading={tableLoading} tableError={tableError} onExport={() => setExportOpen(true)}
-                            onNotify={notify} />
+                <ResultPane runs={runs} mode={mode} run={run} schema={schema} config={config}
+                            onExport={() => setExportOpen(true)} onNotify={notify} />
             </main>
 
             {logOpen && <LogDrawer lines={run.log} />}
@@ -417,7 +386,7 @@ export function App() {
                                 <CloseIcon />
                             </button>
                         </div>
-                        <ExportPanel runId={shownRun} formName={String(config.filename || '')} onNotify={notify} />
+                        <ExportPanel runId={exportRun} mode={mode} formName={String(config.filename || '')} onNotify={notify} />
                     </div>
                 </div>
             )}
@@ -450,8 +419,9 @@ export function App() {
                         <p>
                             Web front end for the NOVA suite. Design a nozzle in the form on the left and Generate it:
                             the contour, cooling, heat transfer and plume pipeline runs in a worker process, and the
-                            run bar steps through its stages. The pane on the right shows the last finished run, as
-                            figures or as a results table, and Export copies the outputs to keep.
+                            run bar steps through its stages. The pane on the right shows any of the recent runs, as
+                            figures or as a results table, against a baseline run when one is chosen, and Export
+                            copies a run's outputs to keep.
                         </p>
                         <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one, Escape close.</p>
                         <div className="modal-actions">

@@ -840,7 +840,73 @@ def _siText(value: float) -> str:
             return f'{value / scale:g}{prefix}'
     return f'{value:g}'
 
-def plotlyField(data: StitchedFieldFigure):
+filledFieldCells = 160000      # [-] grid cells of a filled field, both halves together
+
+def _filledGrid(data: StitchedFieldFigure, upstream, mesh) -> tuple | None:
+
+    '''
+
+    The field shaded onto a regular grid over the nozzle, mirrored about the axis, for a filled
+    rendering: (x, r, values), values NaN outside the wall.
+
+    Upstream of the throat the one-dimensional answer holds one value per station, so a cell takes
+    its station's value interpolated along the axis. Downstream a cell takes the value interpolated
+    linearly inside the triangles of the characteristic nodes, and the nearest node's value in the
+    sliver between the outermost nodes and the wall. The cells are square, `filledFieldCells` of
+    them, so the grid follows the nozzle's proportions.
+
+    '''
+
+    from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+
+    wallX, wallR = np.asarray(data.wallX, dtype = float), np.abs(np.asarray(data.wallR, dtype = float))
+    if wallX.size < 3:
+        return None
+    start, end = float(np.min(wallX)), float(data.exitX)
+    span = float(np.max(wallR))
+    if not (end > start and span > 0.0):
+        return None
+    cell = np.sqrt((end - start) * 2.0 * span / filledFieldCells)
+    x = np.linspace(start, end, max(int(round((end - start) / cell)), 50))
+    r = np.linspace(-span, span, max(int(round(2.0 * span / cell)), 30))
+    gridX, gridR = np.meshgrid(x, r)
+    radius = np.abs(gridR)
+    values = np.full(gridX.shape, np.nan)
+
+    order = np.argsort(wallX)
+    inside = radius <= np.interp(gridX, wallX[order], wallR[order])
+
+    if upstream is not None:
+        upstreamX, _, upstreamValues = (np.asarray(array, dtype = float) for array in
+                                        (data.upstreamX, data.upstreamR, data.upstreamValues))
+        if upstreamX.ndim == 2 and upstreamX.shape[0] > 1:
+            stations, held = upstreamX[:, 0], upstreamValues[:, 0]
+            keep = np.isfinite(stations) & np.isfinite(held)
+            stations, held = stations[keep], held[keep]
+            if data.logarithmic:
+                held = np.log10(np.maximum(held, 1e-300))
+            ahead = inside & (gridX < data.throatX)
+            if stations.size > 1:
+                ranked = np.argsort(stations)
+                values[ahead] = np.interp(gridX[ahead], stations[ranked], held[ranked])
+
+    if mesh is not None and mesh[0].size > 3:
+        meshX, meshR, meshValues = mesh
+        shaded = np.log10(meshValues) if data.logarithmic else meshValues
+        points = np.column_stack([meshX, meshR])
+        behind = inside & (gridX >= data.throatX)
+        query = np.column_stack([gridX[behind], radius[behind]])
+        linear = LinearNDInterpolator(points, shaded)(query)
+        missing = ~np.isfinite(linear)
+        if missing.any():
+            linear[missing] = NearestNDInterpolator(points, shaded)(query[missing])
+        values[behind] = linear
+
+    if not np.isfinite(values).any():
+        return None
+    return x, r, values
+
+def plotlyField(data: StitchedFieldFigure, filled: bool = False):
 
     '''
 
@@ -849,12 +915,16 @@ def plotlyField(data: StitchedFieldFigure):
 
     It draws the description the static view draws: the quasi one-dimensional answer upstream of
     the throat, the characteristic mesh from the throat to the exit plane of the wall that is
-    built, and the seam between them marked. Both sides are drawn as colored points rather than a
-    filled contour: plotly's contour trace needs a regular grid, which the characteristic mesh is
-    not, and hovering a node reads the value the solve produced there rather than an interpolation.
+    built, and the seam between them marked.
 
-    Pressure falls three orders of magnitude, so its points are colored by the logarithm, the
-    color bar is ticked at decades, and the hover reads the pressure itself.
+    By default both sides are drawn as colored points: plotly's contour trace needs a regular grid,
+    which the characteristic mesh is not, and hovering a node reads the value the solve produced
+    there rather than an interpolation. `filled` shades the field instead, as the static view does,
+    on a regular grid (`_filledGrid`) whose hover reads the interpolated value; the nodes stay as a
+    trace the legend shows, hidden until clicked, which hover to the solved values.
+
+    Pressure falls three orders of magnitude, so it is colored by the logarithm, the color bar is
+    ticked at decades, and the hover reads the pressure itself.
 
     '''
 
@@ -898,8 +968,10 @@ def plotlyField(data: StitchedFieldFigure):
     # One color range across both sides, so the seam reads as a change of method, not of scale
     lowest = min(float(shade(values).min()) for _, _, values in pieces)
     highest = max(float(shade(values).max()) for _, _, values in pieces)
-    colorbar = dict(title = dict(text = data.label, side = 'bottom'), orientation = 'h', y = -0.22,
-                    thickness = 14, outlinecolor = _color('border'))
+    # The bar sits at the foot of the figure, under the axis title, at any figure height: placed on
+    # the plot area instead, it climbs into the axis title as the figure grows shorter
+    colorbar = dict(title = dict(text = data.label, side = 'bottom'), orientation = 'h', yref = 'container', y = 0.0,
+                    yanchor = 'bottom', ypad = 8, thickness = 14, outlinecolor = _color('border'))
     if data.logarithmic:
         # Ticks at 1, 2 and 5 of each decade, written as plotly writes its own SI ticks
         ticks = np.array([mantissa * 10.0 ** decade for decade in range(int(np.floor(lowest)), int(np.ceil(highest)) + 1)
@@ -909,26 +981,55 @@ def plotlyField(data: StitchedFieldFigure):
     colorscale = figurePalette.plotlyColorscale(data.colorscale)
 
     figure = go.Figure()
-    showScale = True
-    for x, r, values in pieces:
-        for sign in (1.0, -1.0):
-            figure.add_trace(go.Scattergl(
-                x = x, y = sign * r, mode = 'markers', customdata = values,
-                marker = dict(size = 3, color = shade(values), colorscale = colorscale, cmin = lowest,
-                              cmax = highest, showscale = showScale, colorbar = colorbar),
-                hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
-                                + ' %{customdata:.4g}<extra></extra>',
-                showlegend = False,
-            ))
-            showScale = False
+    grid = _filledGrid(data, upstream, mesh) if filled else None
+    if grid is not None:
+        gridX, gridR, gridValues = grid
+        hover = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
+        heatmap = dict(x = gridX, y = gridR, z = gridValues.astype(np.float32), colorscale = colorscale,
+                       zmin = lowest, zmax = highest, colorbar = colorbar, zsmooth = False, hoverongaps = False,
+                       name = data.label, showlegend = False)
+        if data.logarithmic:
+            heatmap.update(customdata = (10.0 ** gridValues).astype(np.float32),
+                           hovertemplate = hover + ' %{customdata:.4g}<extra></extra>')
+        else:
+            heatmap.update(hovertemplate = hover + ' %{z:.4g}<extra></extra>')
+        figure.add_trace(go.Heatmap(**heatmap))
 
-    # The wall is a WebGL trace as well: plotly draws WebGL above SVG, so an SVG wall would sit
-    # under the points whatever the trace order
-    if data.wallX.size:
+        # The solved nodes, for reading the solve's own values: hidden until the legend shows them
+        nodeX = np.concatenate([np.concatenate([x, x]) for x, _, _ in pieces])
+        nodeR = np.concatenate([np.concatenate([r, -r]) for _, r, _ in pieces])
+        nodeValues = np.concatenate([np.concatenate([values, values]) for _, _, values in pieces])
+        figure.add_trace(go.Scattergl(
+            x = nodeX, y = nodeR, mode = 'markers', customdata = nodeValues, name = 'Solution nodes',
+            visible = 'legendonly', marker = dict(size = 3, color = _color('text'), opacity = 0.55),
+            hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
+                            + ' %{customdata:.4g} (solved)<extra></extra>',
+        ))
         for sign in (1.0, -1.0):
-            figure.add_trace(go.Scattergl(x = data.wallX, y = sign * data.wallR, mode = 'lines',
-                                          line = dict(color = _color('accent'), width = 2),
-                                          hoverinfo = 'skip', showlegend = False))
+            figure.add_trace(go.Scatter(x = data.wallX, y = sign * data.wallR, mode = 'lines',
+                                        line = dict(color = _color('accent'), width = 2),
+                                        hoverinfo = 'skip', showlegend = False))
+    else:
+        showScale = True
+        for x, r, values in pieces:
+            for sign in (1.0, -1.0):
+                figure.add_trace(go.Scattergl(
+                    x = x, y = sign * r, mode = 'markers', customdata = values,
+                    marker = dict(size = 3, color = shade(values), colorscale = colorscale, cmin = lowest,
+                                  cmax = highest, showscale = showScale, colorbar = colorbar),
+                    hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
+                                    + ' %{customdata:.4g}<extra></extra>',
+                    showlegend = False,
+                ))
+                showScale = False
+
+        # The wall is a WebGL trace as well: plotly draws WebGL above SVG, so an SVG wall would sit
+        # under the points whatever the trace order
+        if data.wallX.size:
+            for sign in (1.0, -1.0):
+                figure.add_trace(go.Scattergl(x = data.wallX, y = sign * data.wallR, mode = 'lines',
+                                              line = dict(color = _color('accent'), width = 2),
+                                              hoverinfo = 'skip', showlegend = False))
 
     # The seam, marked rather than blended, because the two sides are different kinds of answer
     if upstream is not None and mesh is not None:
@@ -943,7 +1044,10 @@ def plotlyField(data: StitchedFieldFigure):
     layout = _baseLayout(data.title, 'Nozzle axis [m]', 'Radius [m]')
     layout['yaxis']['scaleanchor'] = 'x'
     layout['yaxis']['scaleratio'] = 1
-    layout['margin']['b'] = 110
+    layout['margin']['b'] = 130
+    if grid is not None:
+        layout['legend'] = dict(bgcolor = _color('surface'), bordercolor = _color('border'), borderwidth = 1,
+                                x = 1.0, xanchor = 'right', y = 1.0, yanchor = 'bottom', orientation = 'h')
     figure.update_layout(**layout)
     return figure
 
