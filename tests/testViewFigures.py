@@ -29,7 +29,7 @@ for path in (root, os.path.join(root, 'src')):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from NOVA.figures import plumeSceneFigure, stitchedFieldFigure
+from NOVA.figures import PlumeFigure, plotlyField, plotlyPlume, plumeSceneFigure, stitchedFieldFigure
 
 def _syntheticNozzle(**extra):
 
@@ -113,6 +113,51 @@ def testThePlumeSceneIsOneFieldFromTheChamberThroughTheMarch():
 def testAPlumeThatDidNotMarchHasNoScene():
     nozzle = _syntheticNozzle(nozzlePlumeField = _plume(solved = False))
     assert plumeSceneFigure(nozzle) is None
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The interactive renderings -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def _markerTraces(figure):
+    return [trace for trace in figure.data if trace.mode == 'markers']
+
+@pytest.mark.parametrize('quantity', ['mach', 'pressure', 'temperature'])
+def testTheInteractiveFieldSpansTheInjectorFaceToTheExitPlane(quantity):
+    nozzle = _syntheticNozzle()
+    figure = plotlyField(stitchedFieldFigure(nozzle, quantity))
+    x = np.concatenate([np.asarray(trace.x) for trace in _markerTraces(figure)])
+    throatX = nozzle.xNozzleWall[int(np.argmin(nozzle.rNozzleWall))]
+
+    # The synthetic mesh runs on to 0.80 m; the built wall ends at 0.60 m
+    assert x.min() == pytest.approx(nozzle.xNozzleWall[0])
+    assert x.max() <= nozzle.xNozzleWall[-1]
+    # The seam is marked at the throat, and every label carries text
+    assert any(shape.x0 == pytest.approx(throatX) and shape.x1 == pytest.approx(throatX) for shape in figure.layout.shapes)
+    assert all(annotation.text for annotation in figure.layout.annotations)
+
+def testTheInteractivePressureIsShadedOnALogarithmicScale():
+    data = stitchedFieldFigure(_syntheticNozzle(), 'pressure')
+    traces = _markerTraces(plotlyField(data))
+    shaded = np.concatenate([np.asarray(trace.marker.color) for trace in traces])
+    read = np.concatenate([np.asarray(trace.customdata) for trace in traces])
+    # The color is the logarithm of the value the hover reads, and the bar is ticked at 1, 2 and 5
+    # of each decade
+    assert np.allclose(shaded, np.log10(read))
+    bar = next(trace.marker.colorbar for trace in traces if trace.marker.showscale)
+    ticks = 10.0 ** np.asarray(bar.tickvals)
+    mantissas = ticks / 10.0 ** np.floor(np.log10(ticks) + 1e-9)
+    assert ticks.size >= 3 and np.all(np.isclose(mantissas[:, None], [1.0, 2.0, 5.0]).any(axis = 1))
+
+def testOnlyTheFirstShockCellIsLabelled():
+    data = PlumeFigure(wallX = np.array([0.0, 0.6]), wallR = np.array([0.05, 0.3]),
+                       boundaryX = np.array([0.6, 0.9]), boundaryR = np.array([0.3, 0.4]),
+                       cellX = np.array([0.9, 1.5, 2.1]))
+    figure = plotlyPlume(data)
+    texts = [annotation.text for annotation in figure.layout.annotations]
+    # An annotation without text draws as plotly.js's placeholder, 'new text'
+    assert all(texts)
+    assert texts.count('shock cells') == 1
+    assert len([shape for shape in figure.layout.shapes if shape.type == 'line']) == 3
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- The views -- #

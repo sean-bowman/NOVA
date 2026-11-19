@@ -831,51 +831,116 @@ def plotlyRevolved(data: RevolvedFigure):
     )
     return figure
 
-def plotlyField(data: FieldFigure):
+def _siText(value: float) -> str:
+
+    '''A tick value with an SI prefix, the way plotly writes its own: 20k, 500k, 2M.'''
+
+    for scale, prefix in ((1e9, 'G'), (1e6, 'M'), (1e3, 'k')):
+        if abs(value) >= scale:
+            return f'{value / scale:g}{prefix}'
+    return f'{value:g}'
+
+def plotlyField(data: StitchedFieldFigure):
 
     '''
 
-    Interactive field over the characteristic mesh, or None without plotly.
+    Interactive flow field from the injector face to the exit plane, or None when there is no
+    field.
 
-    The mesh is curvilinear, so the field is drawn as a colored point cloud rather than a
-    filled contour: plotly's contour trace needs a regular grid, and hovering a point to read
-    its exact value is more useful for inspection than banded fill anyway.
+    It draws the description the static view draws: the quasi one-dimensional answer upstream of
+    the throat, the characteristic mesh from the throat to the exit plane of the wall that is
+    built, and the seam between them marked. Both sides are drawn as colored points rather than a
+    filled contour: plotly's contour trace needs a regular grid, which the characteristic mesh is
+    not, and hovering a node reads the value the solve produced there rather than an interpolation.
+
+    Pressure falls three orders of magnitude, so its points are colored by the logarithm, the
+    color bar is ticked at decades, and the hover reads the pressure itself.
 
     '''
 
     if data is None:
         return None
 
-    x = np.concatenate([block.ravel() for block in data.xBlocks])
-    r = np.concatenate([block.ravel() for block in data.rBlocks])
-    values = np.concatenate([block.ravel() for block in data.valueBlocks])
+    # The chamber grid carries every station's one value at dozens of radii, far closer together
+    # than the stations themselves, and drawn whole it reads as a comb of solid bars. Every few
+    # radii are kept, so its points sit about as far apart radially as axially.
+    upstreamX, upstreamR, upstreamValues = (np.asarray(array, dtype = float) for array in
+                                            (data.upstreamX, data.upstreamR, data.upstreamValues))
+    if upstreamX.ndim == 2 and upstreamX.shape[0] > 1 and upstreamX.shape[1] > 2:
+        axialStep = float(np.median(np.abs(np.diff(upstreamX[:, 0]))))
+        radialStep = float(np.median(np.abs(np.diff(upstreamR[:, -2:], axis = 1))))
+        stride = max(1, int(round(axialStep / radialStep))) if radialStep > 0.0 else 1
+        columns = np.unique(np.append(np.arange(0, upstreamX.shape[1], stride), upstreamX.shape[1] - 1))
+        upstreamX, upstreamR, upstreamValues = (array[:, columns] for array in
+                                                (upstreamX, upstreamR, upstreamValues))
 
-    finite = np.isfinite(x) & np.isfinite(r) & np.isfinite(values)
-    x, r, values = x[finite], r[finite], values[finite]
-    if x.size == 0:
+    pieces = []
+    for x, r, values in ((upstreamX, upstreamR, upstreamValues),
+                         (data.meshX, data.meshR, data.meshValues)):
+        x = np.asarray(x, dtype = float).ravel()
+        r = np.asarray(r, dtype = float).ravel()
+        values = np.asarray(values, dtype = float).ravel()
+        if not (x.size and x.shape == r.shape == values.shape):
+            pieces.append(None)
+            continue
+        keep = np.isfinite(x) & np.isfinite(r) & np.isfinite(values)
+        if data.logarithmic:
+            keep &= values > 0.0
+        pieces.append((x[keep], r[keep], values[keep]) if keep.any() else None)
+    upstream, mesh = pieces
+    pieces = [piece for piece in pieces if piece is not None]
+    if not pieces:
         return None
 
-    figure = go.Figure()
-    for sign in (1.0, -1.0):
-        figure.add_trace(go.Scattergl(
-            x = x, y = sign * r, mode = 'markers',
-            marker = dict(size = 3, color = values, colorscale = figurePalette.plotlyColorscale(data.colorscale),
-                          showscale = sign > 0,
-                          colorbar = dict(title = dict(text = data.label, side = 'bottom'),
-                                          orientation = 'h', y = -0.22, thickness = 14,
-                                          outlinecolor = _color('border'))),
-            hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
-                            + ' %{marker.color:.4g}<extra></extra>',
-            showlegend = False,
-        ))
+    def shade(values: np.ndarray) -> np.ndarray:
+        return np.log10(values) if data.logarithmic else values
 
+    # One color range across both sides, so the seam reads as a change of method, not of scale
+    lowest = min(float(shade(values).min()) for _, _, values in pieces)
+    highest = max(float(shade(values).max()) for _, _, values in pieces)
+    colorbar = dict(title = dict(text = data.label, side = 'bottom'), orientation = 'h', y = -0.22,
+                    thickness = 14, outlinecolor = _color('border'))
+    if data.logarithmic:
+        # Ticks at 1, 2 and 5 of each decade, written as plotly writes its own SI ticks
+        ticks = np.array([mantissa * 10.0 ** decade for decade in range(int(np.floor(lowest)), int(np.ceil(highest)) + 1)
+                          for mantissa in (1.0, 2.0, 5.0)])
+        ticks = ticks[(np.log10(ticks) >= lowest) & (np.log10(ticks) <= highest)]
+        colorbar.update(tickvals = np.log10(ticks), ticktext = [_siText(value) for value in ticks])
+    colorscale = figurePalette.plotlyColorscale(data.colorscale)
+
+    figure = go.Figure()
+    showScale = True
+    for x, r, values in pieces:
+        for sign in (1.0, -1.0):
+            figure.add_trace(go.Scattergl(
+                x = x, y = sign * r, mode = 'markers', customdata = values,
+                marker = dict(size = 3, color = shade(values), colorscale = colorscale, cmin = lowest,
+                              cmax = highest, showscale = showScale, colorbar = colorbar),
+                hovertemplate = 'x %{x:.4f} m<br>r %{y:.4f} m<br>' + data.label
+                                + ' %{customdata:.4g}<extra></extra>',
+                showlegend = False,
+            ))
+            showScale = False
+
+    # The wall is a WebGL trace as well: plotly draws WebGL above SVG, so an SVG wall would sit
+    # under the points whatever the trace order
     if data.wallX.size:
         for sign in (1.0, -1.0):
-            figure.add_trace(go.Scatter(x = data.wallX, y = sign * data.wallR, mode = 'lines',
-                                        line = dict(color = _color('text'), width = 2),
-                                        hoverinfo = 'skip', showlegend = False))
+            figure.add_trace(go.Scattergl(x = data.wallX, y = sign * data.wallR, mode = 'lines',
+                                          line = dict(color = _color('accent'), width = 2),
+                                          hoverinfo = 'skip', showlegend = False))
 
-    layout = _baseLayout(data.title, 'Nozzle axis [m]', 'Nozzle radius [m]')
+    # The seam, marked rather than blended, because the two sides are different kinds of answer
+    if upstream is not None and mesh is not None:
+        span = float(np.max(np.abs(data.wallR)))
+        figure.add_shape(type = 'line', x0 = data.throatX, x1 = data.throatX, y0 = -span, y1 = span,
+                         line = dict(color = _color('textMuted'), width = 1, dash = 'dash'))
+        for text, anchor, shift in (('one dimensional', 'right', -6), ('characteristics', 'left', 6)):
+            figure.add_annotation(x = data.throatX, y = 0.88 * span, text = f'<i>{text}</i>',
+                                  xanchor = anchor, xshift = shift, showarrow = False,
+                                  font = dict(color = _color('textMuted'), size = 10))
+
+    layout = _baseLayout(data.title, 'Nozzle axis [m]', 'Radius [m]')
     layout['yaxis']['scaleanchor'] = 'x'
     layout['yaxis']['scaleratio'] = 1
     layout['margin']['b'] = 110
@@ -960,10 +1025,12 @@ def plotlyPlume(data):
             hovertemplate = 'x %{x:.3f} m<br>r %{y:.3f} m<extra></extra>'))
 
     for index, cellPosition in enumerate(np.asarray(data.cellX, dtype = float)):
+        # Only the first line is labelled. Any annotation argument makes plotly add an annotation,
+        # and one without text draws as plotly.js's placeholder, 'new text'.
+        label = dict(annotation_text = 'shock cells',
+                     annotation_font = dict(color = _color('textMuted'), size = 10)) if index == 0 else {}
         figure.add_vline(x = float(cellPosition),
-                         line = dict(color = _color('textMuted'), width = 1, dash = 'dash'),
-                         annotation_text = 'shock cells' if index == 0 else None,
-                         annotation_font = dict(color = _color('textMuted'), size = 10))
+                         line = dict(color = _color('textMuted'), width = 1, dash = 'dash'), **label)
 
     if data.machDiskPresent and data.machDiskDiameter > 0.0:
         halfHeight = data.machDiskDiameter / 2.0
@@ -1668,9 +1735,9 @@ interactiveFigureBuilders = {
     'contourInteractive.html':      lambda nozzle: plotlyContour(contourFigure(nozzle)),
     'nearWallInteractive.html':     lambda nozzle: plotlyNearWall(nearWallFigure(nozzle)),
     'revolvedContourView.html':     lambda nozzle: plotlyRevolved(revolvedFigure(nozzle)),
-    'machFieldInteractive.html':    lambda nozzle: plotlyField(fieldFigure(nozzle, 'mach')),
-    'pressureFieldInteractive.html': lambda nozzle: plotlyField(fieldFigure(nozzle, 'pressure')),
-    'temperatureFieldInteractive.html': lambda nozzle: plotlyField(fieldFigure(nozzle, 'temperature')),
+    'machFieldInteractive.html':    lambda nozzle: plotlyField(stitchedFieldFigure(nozzle, 'mach')),
+    'pressureFieldInteractive.html': lambda nozzle: plotlyField(stitchedFieldFigure(nozzle, 'pressure')),
+    'temperatureFieldInteractive.html': lambda nozzle: plotlyField(stitchedFieldFigure(nozzle, 'temperature')),
     'plumeStructureInteractive.html': lambda nozzle: plotlyPlume(plumeFigure(nozzle)),
     'VoluteView.html':               lambda nozzle: volutesFigure(nozzle),
     'threeChannelMeshViewInterfaced.html': lambda nozzle: channelMeshFigure(nozzle),

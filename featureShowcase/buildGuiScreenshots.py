@@ -58,10 +58,10 @@ figureTimeoutMs = 120 * 1000                   # [ms] longest wait for one view 
 exportFolderShown = r'C:\NOVA\runs'
 
 # Views photographed after the run: (sidebar label, image name, rendering, settle time [ms]). The
-# flow field and the plume are drawn static: the Matplotlib drawing ends at the built wall and the
-# march, where the interactive figures carry the whole characteristic mesh and every correlated
-# shock cell. The settle time covers what Playwright cannot wait on: WebGL scenes finish drawing
-# after the plot's SVG exists.
+# Mach field and the plume are drawn static: the Matplotlib drawing shades one continuous field,
+# where the interactive field is the solve's nodes as points, and the interactive plume is framed
+# to take in every correlated shock cell, many lip radii past the march. The settle time covers
+# what Playwright cannot wait on: WebGL scenes finish drawing after the plot's SVG exists.
 viewShots = [
     ('Mach field', 'viewMach', 'static', 1000),
     ('Plume', 'viewPlume', 'static', 1000),
