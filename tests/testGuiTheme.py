@@ -198,6 +198,16 @@ def testAnUnreadablePreferenceReadsAsTheDefault(tmp_path, monkeypatch, content):
     monkeypatch.setattr(settings, 'settingsPath', lambda: str(path))
     assert settings.load()['themeMode'] == 'dark'
 
+def testTheFormWidthRoundTripsBesideTheThemeMode(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, 'settingsPath', lambda: str(tmp_path / 'guiSettings.json'))
+    assert settings.load()['formWidth'] is None
+    settings.save({**settings.load(), 'formWidth': 560})
+    assert settings.load() == {'themeMode': 'dark', 'formWidth': 560}
+
+@pytest.mark.parametrize('width', [True, '560', 12, 1e6, None])
+def testAnOutOfRangeFormWidthIsNotKept(width):
+    assert 'formWidth' not in settings.clean({'formWidth': width})
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Help markers and the View tab -- #
 #--------------------------------------------------------------------------------------------------------------------------#

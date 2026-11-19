@@ -9,8 +9,8 @@ Each engine's figure carries four panels: the coolant circuit drawn on the half 
 pass's coolant and hot wall (or the jacket's, for a single pass), the hot wall along the whole
 nozzle from the injector face to the exit against each section's limit, and the extension's drive
 and shell (or the chamber film, where there is no extension). The first two and the last are the
-GUI's own views, drawn headless in its dark theme, so the figures are what the View tab shows for
-the same run. Engines with a channel split or a multi-pass jacket get a three-dimensional render
+GUI's own views, drawn headless in its dark theme, so the figures are what the GUI shows for the
+same run. Engines with a channel split or a multi-pass jacket get a three-dimensional render
 of that feature beside it.
 
 Every engine is run with plots, exports and the plume off, because the figures read only the

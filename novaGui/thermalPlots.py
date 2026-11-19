@@ -3,7 +3,7 @@
 
 '''
 
-The View tab's cooling views: the regenerative jacket, the film and the radiative extension.
+The cooling views: the regenerative jacket, the film and the radiative extension.
 
 Each draws from what the run kept on the Nozzle, never from a saved figure, so it follows the
 active palette mode (themeColors). A drawer draws into a pane, as novaGui.plotting describes:

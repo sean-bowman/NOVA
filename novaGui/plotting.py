@@ -397,7 +397,7 @@ def _drawCorrelatedPlume(pane, nozzle) -> None:
 
     data = backend.figuresModule().plumeFigure(nozzle)
     if data is None:
-        pane.message('No plume was computed. Set a plume ambient pressure on the Design tab and re-run.')
+        pane.message('No plume was computed. Set a plume ambient pressure in the Design form and re-run.')
         return
 
     pane.clear(projection = None)

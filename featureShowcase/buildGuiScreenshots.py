@@ -2,13 +2,15 @@
 
 '''
 
-Run the shipped nozzle through the NOVA GUI (novaGui) and photograph each tab.
+Run the shipped nozzle through the NOVA GUI (novaGui) and photograph the window.
 
 The GUI's server starts in this process on a free port, and Playwright's Chromium opens the built
 front end at the desktop window's size. The script presses Generate on the form the window opens
-with, which is the shipped nozzle, photographs the run bar while the coolant circuit iterates, and
-once the run ends steps through the tabs and views. The light-mode pictures use the theme switch,
-which saves the theme preference; the preference found at the start is written back at the end.
+with, which is the shipped nozzle, photographs the stage stepper and the stage list while the
+coolant circuit iterates, and once the run ends steps the result pane through its views, the
+results table and the export dialog. The light-mode pictures use the theme switch, which saves the
+theme preference; the preferences found at the start, the form's width among them, are written
+back at the end.
 
 It needs the web extra, the built front end and Playwright with its Chromium:
 
@@ -54,22 +56,22 @@ viewport = {'width': 1480, 'height': 940}      # [px] the desktop window's openi
 runTimeoutMs = 20 * 60 * 1000                  # [ms] longest wait for the run to finish
 figureTimeoutMs = 120 * 1000                   # [ms] longest wait for one view to draw
 
-# The Export tab's output folder in the pictures, in place of the folder of whoever runs this
+# The export dialog's output folder in the pictures, in place of the folder of whoever runs this
 exportFolderShown = r'C:\NOVA\runs'
 
-# Views photographed after the run: (sidebar label, image name, rendering, settle time [ms]). The
+# Views photographed after the run: (view key, image name, rendering, settle time [ms]). The
 # Mach field and the plume are drawn static: the Matplotlib drawing shades one continuous field,
 # where the interactive field is the solve's nodes as points, and the interactive plume is framed
 # to take in every correlated shock cell, many lip radii past the march. The settle time covers
 # what Playwright cannot wait on: WebGL scenes finish drawing after the plot's SVG exists.
 viewShots = [
-    ('Mach field', 'viewMach', 'static', 1000),
-    ('Plume', 'viewPlume', 'static', 1000),
-    ('Jacket on the wall', 'viewJacket', 'interactive', 1500),
-    ('Film cooling', 'viewFilm', 'interactive', 1500),
-    ('Coolant circuit', 'viewCircuit', 'interactive', 1500),
-    ('Channel mesh', 'viewChannelMesh', 'interactive', 6000),
-    ('Revolved contour', 'viewRevolved', 'interactive', 3000),
+    ('mach', 'viewMach', 'static', 1000),
+    ('plume', 'viewPlume', 'static', 1000),
+    ('wallMap', 'viewJacket', 'interactive', 1500),
+    ('film', 'viewFilm', 'interactive', 1500),
+    ('circuit', 'viewCircuit', 'interactive', 1500),
+    ('channelMesh', 'viewChannelMesh', 'interactive', 6000),
+    ('revolved', 'viewRevolved', 'interactive', 3000),
 ]
 
 def capture(page: Page, name: str) -> None:
@@ -132,11 +134,12 @@ def scrollFormToTop(page: Page) -> None:
     }''')
     page.wait_for_timeout(300)
 
-def showView(page: Page, label: str, rendering: str, settleMs: int) -> None:
+def showView(page: Page, key: str, rendering: str, settleMs: int) -> None:
 
-    '''Pick a view from the sidebar in `rendering` ('interactive' or 'static'), and wait for it to draw.'''
+    '''Pick a view from the result pane's menu in `rendering` ('interactive' or 'static'), and wait for it to draw.'''
 
-    page.locator('.nav-item').filter(has_text = re.compile(f'^{re.escape(label)}$')).first.click()
+    page.locator('.result-head .segmented button', has_text = 'Figure').click()
+    page.select_option('.view-select', key)
     # A 3D assembly has no switch: it draws interactive only
     switch = page.locator('.segmented button', has_text = rendering.capitalize())
     if switch.count() and 'is-selected' not in (switch.get_attribute('class') or ''):
@@ -160,7 +163,6 @@ def photograph(page: Page, base: str) -> None:
     page.goto(base)
     page.wait_for_selector('.section-header')
     page.wait_for_timeout(1000)
-    capture(page, 'designDark')
 
     # Every field's help marker shows its meaning, and a choice field's options, on hover
     formRow(page, 'Diverging section type').locator('.help-marker').hover()
@@ -178,53 +180,53 @@ def photograph(page: Page, base: str) -> None:
     # -- Generate -- #
     page.locator('.run-bar .button-primary', has_text = 'Generate').click()
     page.wait_for_timeout(500)
-    if page.locator('.modal').count():
+    if page.locator('[role="alertdialog"]').count():
         print('  the shipped nozzle raised configuration warnings; running anyway')
         page.get_by_role('button', name = 'Run anyway').click()
-    page.get_by_role('button', name = 'Show log').click()
 
-    # The run bar while the coolant circuit iterates: the stage label carries the pass number
-    page.wait_for_function("(document.querySelector('.run-stage')?.textContent ?? '').includes('pass 2')",
-                           timeout = runTimeoutMs)
+    # The stage stepper and the stage list, which opens as the run starts, while the coolant
+    # circuit iterates: the circuit's segment carries the pass number and the list its passes
+    page.wait_for_function("[...document.querySelectorAll('.stage-step')]"
+                           ".some((step) => step.textContent.includes('pass 3'))", timeout = runTimeoutMs)
     page.wait_for_timeout(1500)
     capture(page, 'generate')
 
     page.wait_for_selector('.run-bar.state-done, .run-bar.state-error', timeout = runTimeoutMs)
     if page.locator('.run-bar.state-error').count():
-        raise RuntimeError(f'the run failed: {page.locator(".run-latest").inner_text()}')
-    print(f'  {page.locator(".run-stage").inner_text()}')
-    page.get_by_role('button', name = 'Hide log').click()
-    # The run's notice would sit over the corner of every figure
+        raise RuntimeError(f'the run failed: {page.locator(".toast-error").all_inner_texts()}')
+    print(f'  {page.locator(".run-clock").inner_text()}')
+    # The stage list and the run's notice would sit over the form and the corner of every figure
+    page.keyboard.press('Escape')
     for close in page.locator('.toast-close').all():
         close.click()
 
-    # -- View: the window turns to it when the run finishes -- #
-    page.wait_for_selector('.view-sidebar')
-    for label, name, rendering, settleMs in viewShots:
-        showView(page, label, rendering, settleMs)
+    # -- The window with the run's contour beside the form, then the views -- #
+    showView(page, 'contour', 'interactive', 1500)
+    capture(page, 'designDark')
+    for key, name, rendering, settleMs in viewShots:
+        showView(page, key, rendering, settleMs)
         capture(page, name)
 
-    # -- Analyze and Export -- #
-    page.get_by_role('tab', name = 'Analyze').click()
+    # -- The results table and the export dialog -- #
+    page.locator('.result-head .segmented button', has_text = 'Table').click()
     page.wait_for_selector('.result-table')
     page.wait_for_timeout(800)
-    capture(page, 'analyze')
+    capture(page, 'table')
 
-    page.get_by_role('tab', name = 'Export').click()
-    page.wait_for_selector('.export-list')
+    page.locator('.result-head .button', has_text = 'Export').click()
+    page.wait_for_selector('.export-dialog .export-list')
     page.fill('#export-base', exportFolderShown)
     page.wait_for_timeout(1000)
     capture(page, 'export')
+    page.keyboard.press('Escape')
 
     # -- Light mode -- #
     page.get_by_role('button', name = re.compile('Switch to the light theme')).click()
-    page.get_by_role('tab', name = 'Design').click()
     scrollFormToTop(page)
-    page.wait_for_timeout(1000)
+    showView(page, 'contour', 'interactive', 1500)
     capture(page, 'designLight')
 
-    page.get_by_role('tab', name = 'View').click()
-    showView(page, 'Plume', 'static', 1000)
+    showView(page, 'plume', 'static', 1000)
     capture(page, 'viewPlumeLight')
 
     print(f'  console errors: {errors or "none"}')
@@ -237,8 +239,9 @@ def build() -> None:
         raise SystemExit('The front end is not built: run `npm install` and `npm run build` in novaGui/frontend.')
     os.makedirs(outputFolder, exist_ok = True)
 
+    # The pictures use the dark mode and the form's default width
     savedSettings = guiSettings.load()
-    guiSettings.save({**savedSettings, 'themeMode': 'dark'})
+    guiSettings.save({**savedSettings, 'themeMode': 'dark', 'formWidth': None})
 
     runner.clearStaging()
     app = createApp()

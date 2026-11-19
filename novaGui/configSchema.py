@@ -239,8 +239,8 @@ class Group:
 
 # -- Program option flags forced on for every GUI run -- #
 
-# Every GUI run writes every figure and data file into a staging folder, and the
-# Export tab copies the ones chosen to the output folder, so the runner sets these
+# Every GUI run writes every figure and data file into a staging folder, and an
+# export copies the ones chosen to the output folder, so the runner sets these
 # and the form has no row for them.
 forcedFlags = ('export', 'plotsEnabled')
 
@@ -1087,7 +1087,7 @@ groups = [
               help = 'Write every figure the run generates. Every GUI run writes them.'),
         Field('export', 'Export data files', 'bool', default = True, hidden = True,
               help = 'Write contour text files, STL geometry and the pickled nozzle. Every GUI run '
-                     'writes them, and the Export tab chooses which are kept.'),
+                     'writes them, and Export chooses which are kept.'),
     ]),
 ]
 

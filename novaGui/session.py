@@ -15,8 +15,11 @@ events.
 The worker forwards NOVA's progress events (NOVA.progress). The session folds them with
 novaGui.progress.RunProgress, the model the legacy Tkinter window uses too, and sends the browser the
 result: the bar's fraction and ceiling, a short label, the open stages as one detail line, and
-the top-level stages with their state and times. The stage times of the last finished run share
-out the next run's bar.
+the stage tree with its states, times and iterations. The last finished run's stage times share
+out the next run's bar and stand as its expected times, and its tree lists the sub-stages the
+next run has yet to reach.
+
+Each run keeps the config it ran, so the browser can name the fields edited since the run it shows.
 
 Runs write into a staging folder for the server process, `<temp>/NOVA/web<pid>/run<n>`. Each run
 gets its own folder, so a cancelled run's partial files never mix with a finished one. The staging
@@ -26,9 +29,12 @@ left behind after twelve hours, together with the legacy Tkinter front end's.
 Events, as JSON objects:
 
     {'type': 'log', 'line': str}
-    {'type': 'status', 'state': 'idle'|'running'|'done'|'error'|'cancelled', 'detail': str}
-    {'type': 'progress', 'fraction': float, 'ceiling': float, 'label': str, 'stageDetail': str,
-     'stages': [{'key', 'label', 'state', 'started', 'elapsed', 'expected'}]}
+    {'type': 'status', 'state': 'idle'|'running'|'done'|'error'|'cancelled', 'detail': str,
+     'runId': int | None}
+    {'type': 'progress', 'runId': int, 't': float, 'expectedRun': int | None, 'fraction': float,
+     'ceiling': float, 'label': str, 'stageDetail': str, 'stages': [...]}
+        `t` is the run's own clock [s] at its latest event; `stages` is RunProgress.stageList, whose
+        expected times come from run `expectedRun`
     {'type': 'result', 'runId': int, 'ok': bool, 'runName': str, 'elapsedSec': float, 'error': str}
     {'type': 'snapshot', ...}       sent once on connect: the whole state
 
@@ -68,13 +74,15 @@ class RunRecord:
 
     '''
 
-    A finished run: its summary from the worker, and the Nozzle once something asks for it.
+    A finished run: its summary from the worker, the config it ran, and the Nozzle once something
+    asks for it.
 
     '''
 
-    def __init__(self, runId: int, summary: dict):
+    def __init__(self, runId: int, summary: dict, config: dict = None):
 
         self.runId = runId
+        self.config = dict(config) if config is not None else None
         self.ok = bool(summary.get('ok'))
         self.runName = summary.get('runName', '')
         self.outputDir = summary.get('outputDir', '')
@@ -127,9 +135,13 @@ class RunSession:
         self._runCount = 0
 
         self.state = {'state': 'idle', 'detail': '', 'fraction': 0.0, 'ceiling': 0.0, 'label': '',
-                      'stageDetail': '', 'stages': [], 'runId': None, 'startedAt': None}
+                      'stageDetail': '', 'stages': [], 'runId': None, 'startedAt': None, 't': 0.0,
+                      'expectedRun': None}
         self._progress = RunProgress()        # the current run's stages, folded from its events
         self._stageHistory = {}               # [s] top-level stage times of the last finished run
+        self._lastStages = []                 # the last finished run's stage tree
+        self._lastRunId = None                # the run both of those come from
+        self._runConfig = None                # the config of the run in progress
         self.log = collections.deque(maxlen = logLines)
         self.result = None                     # the last RunRecord, finished or failed
 
@@ -153,9 +165,11 @@ class RunSession:
             self.log.append(event['line'])
         elif kind == 'status':
             self.state['state'], self.state['detail'] = event['state'], event['detail']
+            event['runId'] = self.state['runId']
         elif kind == 'progress':
             self.state.update(fraction = event['fraction'], ceiling = event['ceiling'], label = event['label'],
-                              stageDetail = event['stageDetail'], stages = event['stages'])
+                              stageDetail = event['stageDetail'], stages = event['stages'], t = event['t'],
+                              expectedRun = event['expectedRun'])
 
         with self._subscriberLock:
             subscribers = list(self._subscribers)
@@ -168,8 +182,9 @@ class RunSession:
     def _publishProgress(self) -> None:
 
         fraction, ceiling, label = self._progress.summary()
-        self._publish({'type': 'progress', 'fraction': float(fraction), 'ceiling': float(ceiling),
-                       'label': label, 'stageDetail': self._progress.detail,
+        self._publish({'type': 'progress', 'runId': self.state['runId'], 't': float(self._progress.t),
+                       'expectedRun': self._lastRunId, 'fraction': float(fraction),
+                       'ceiling': float(ceiling), 'label': label, 'stageDetail': self._progress.detail,
                        'stages': self._progress.stageList()})
 
     def _drain(self, process, eventQueue, runId: int) -> None:
@@ -203,9 +218,7 @@ class RunSession:
                 if state == 'running':
                     self._publish({'type': 'status', 'state': state, 'detail': str(detail)})
             elif kind == 'stage':
-                changed = self._progress.apply(payload)
-                # A top-level stage opening or closing changes the stage list even when the bar holds
-                if changed or payload.get('type') == 'plan' or payload.get('depth') == 0:
+                if self._progress.apply(payload):
                     self._publishProgress()
             elif kind == 'result':
                 summary = payload
@@ -222,9 +235,11 @@ class RunSession:
             if summary.get('traceback'):
                 self._publish({'type': 'log', 'line': summary['traceback']})
 
-        record = RunRecord(runId, summary)
+        record = RunRecord(runId, summary, self._runConfig)
         if record.ok:
             self._stageHistory = self._progress.durations()
+            self._lastStages = self._progress.stageList()
+            self._lastRunId = runId
         with self._lock:
             # A cancelled or failed run leaves the last good result in place for the views
             if record.ok or self.result is None or not self.result.ok:
@@ -281,9 +296,10 @@ class RunSession:
                                                   args = (dict(config), outputDir, mode, self._queue),
                                                   daemon = True)
             self.log.clear()
+            self._runConfig = dict(config)
             self.state.update(runId = runId, startedAt = time.time())
             self._publish({'type': 'status', 'state': 'running', 'detail': 'starting worker'})
-            self._progress = RunProgress(self._stageHistory, label = 'starting worker')
+            self._progress = RunProgress(self._stageHistory, label = 'starting worker', previous = self._lastStages)
             self._publishProgress()
             self._process.start()
 

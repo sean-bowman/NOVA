@@ -1,6 +1,7 @@
 /* ========================================
-   DESIGN TAB
-   Every config key, grouped into collapsible sections in the order of the shipped
+   DESIGN FORM
+   The left of the window, beside the result pane. Every config key, grouped into collapsible
+   sections in the order of the shipped
    NOVANozzle.json. Each section leads with the fields a design is made from and folds the rest
    into Advanced settings or a named fold. Rows the config makes irrelevant are hidden by the
    schema's own predicates, evaluated on the server. A search box and a changed-only filter
@@ -24,7 +25,7 @@ import { ExtensionNote, MaterialPanel } from './MaterialInfo';
 import { SelectorRow } from './SelectorRow';
 import { blocksOf, isChanged, matchesSearch } from './formModel';
 
-interface DesignTabProps {
+interface DesignFormProps {
     schema: Schema;
     config: Config;
     formVersion: number;
@@ -37,8 +38,8 @@ interface DesignTabProps {
     onSave: () => void;
 }
 
-export function DesignTab({ schema, config, formVersion, formState, errors, onPatch, onError, onReset, onLoadExample,
-                            onSave }: DesignTabProps) {
+export function DesignForm({ schema, config, formVersion, formState, errors, onPatch, onError, onReset, onLoadExample,
+                             onSave }: DesignFormProps) {
     const [query, setQuery] = useState('');
     const [changedOnly, setChangedOnly] = useState(false);
     const [openSections, setOpenSections] = useState<Record<string, boolean>>(
@@ -162,8 +163,8 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
     };
 
     return (
-        <div className="design-tab">
-            <div className="toolbar">
+        <div className="design-form">
+            <div className="toolbar form-toolbar">
                 <button type="button" className="button" onClick={onReset} title="Return every field to the shipped nozzle">
                     <ResetIcon /> Reset to example
                 </button>
@@ -172,6 +173,10 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
                     <option value="">Load example...</option>
                     {schema.examples.map((example) => <option key={example.name} value={example.name}>{example.title}</option>)}
                 </select>
+                <button type="button" className="button" onClick={onSave} title="Save the config as JSON  Ctrl+S">
+                    Save config
+                </button>
+                <span className="toolbar-break" />
                 <div className="search">
                     <SearchIcon />
                     <input className="input search-input" placeholder="Find a field" value={query} spellCheck={false}
@@ -181,11 +186,7 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
                     <input type="checkbox" checked={changedOnly} onChange={(event) => setChangedOnly(event.target.checked)} />
                     Changed only
                 </label>
-                <span className="toolbar-spacer" />
-                <span className="muted">{changedCount} changed from the shipped nozzle</span>
-                <button type="button" className="button" onClick={onSave} title="Save the config as JSON  Ctrl+S">
-                    Save config
-                </button>
+                <span className="muted changed-count">{changedCount} changed from the shipped nozzle</span>
             </div>
             {formState.problems.length > 0 && (
                 <div className="form-warnings" role="status">
@@ -195,8 +196,8 @@ export function DesignTab({ schema, config, formVersion, formState, errors, onPa
                     </ul>
                 </div>
             )}
-            <div className="design-scroll">
-                <div className="design-column" key={formVersion}>
+            <div className="pane-scroll">
+                <div className="pane-column" key={formVersion}>
                     {schema.groups.map(renderSection)}
                     {filtering && !schema.groups.some((group) => blocksOf(group).some((block) =>
                         block.kind === 'item' ? rowVisible(block.item) : block.items.some(rowVisible))) && (

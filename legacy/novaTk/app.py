@@ -192,7 +192,8 @@ class NovaApp(tk.Tk):
         finally:
             self.configure(cursor = '')
         self._pendingMatplotlib = busy
-        self._settings['themeMode'] = newMode
+        # Read the file again: the React window keeps its form width in the same file
+        self._settings = {**settings.load(), 'themeMode': newMode}
         settings.save(self._settings)
 
     # -- Run control -- #

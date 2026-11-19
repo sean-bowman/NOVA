@@ -7,7 +7,7 @@ thermochemistry from CEA, the cooling summary and each coolant pass, the extensi
 generator, the films and the plume.
 
 `resultRows` builds the rows as plain text, and both front ends show them: the web front end's
-Analyze tab through `resultTable`, and the legacy Tkinter front end's Analyze tab directly. They
+results table through `resultTable`, and the legacy Tkinter front end's Analyze tab directly. They
 therefore list the same quantities with the same formatting.
 
 The performance section carries three columns (equilibrium 1D, chamber gas 1D, delivered) as one

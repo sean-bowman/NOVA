@@ -17,8 +17,8 @@ Run results go to multiprocessing workers started with 'spawn', which re-import 
 each child; the `__main__` guard keeps a child from starting a server of its own.
 
 In the window, the page reaches one native call through pywebview's JavaScript bridge,
-`window.pywebview.api.browseFolder`, which opens the folder picker the Export tab's Browse button
-uses. A browser has no such bridge, and the Export tab then takes a typed folder alone.
+`window.pywebview.api.browseFolder`, which opens the folder picker the Export dialog's Browse
+button uses. A browser has no such bridge, and the Export dialog then takes a typed folder alone.
 
 Under pythonw (novaGui.bat) there is no console: sys.stdout and sys.stderr are None, and
 uvicorn's log setup fails on them. The launcher then writes both to `<temp>/NOVA/novaGui.log`,

@@ -20,7 +20,7 @@ Before the first run the loader:
 While a run reports its progress as events, NOVA draws no tqdm bars, so none reach the log.
 
 Every run writes all of NOVA's outputs, figures and data files alike, into the
-staging folder, where the View tab reads them. The Export tab copies the ones chosen
+staging folder, where the front end's views read them. An export copies the ones chosen
 to the output folder. A staging folder belongs to one session of a front end and is
 removed when it closes; `clearStaging` removes any a crashed session left behind.
 
@@ -319,7 +319,7 @@ class PipelineRunner:
         '''
 
         Set the program flags that make a run write every figure and data file, which
-        the View tab reads and the Export tab offers. Returns the keys that were changed.
+        the views read and an export offers. Returns the keys that were changed.
 
         '''
 

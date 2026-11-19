@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 
 from NOVA import progress
-from novaGui.progress import RunProgress, loadingCeiling
+from novaGui.progress import RunProgress, keptIterations, loadingCeiling
 
 repositoryRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -369,6 +369,83 @@ class TestTheModel:
 
         assert not model.apply(event('step', 0.0, path = '', label = None, done = 0, total = None))
 
+    def testASubStageHoldsItsPassesAndWhatRunsBelowIt(self):
+
+        model = RunProgress()
+        for item in (plan, start(0.0, 'contour', 'Contour'), end(1.0, 'contour', 1.0),
+                     start(1.0, 'cooling', 'Cooling channels'), start(1.0, 'cooling.circuit', 'Coolant circuit'),
+                     start(1.0, 'cooling.circuit.down', 'Down pass'), end(10.0, 'cooling.circuit.down', 9.0),
+                     event('iteration', 20.0, path = 'cooling.circuit', name = 'pass', index = 1,
+                           metrics = {'upOutletTemperature': 244.0}),
+                     start(20.0, 'cooling.circuit.down', 'Down pass'),
+                     event('step', 21.0, path = 'cooling.circuit.down', label = None, done = 3, total = 4)):
+            model.apply(item)
+
+        cooling = model.stageList()[1]
+        (circuit,) = cooling['children']
+        assert cooling['note'] == 'pass 2' and cooling['fraction'] is None
+        assert circuit['state'] == 'running' and circuit['started'] == 1.0
+        assert circuit['detail'] == 'Down pass 75%'
+        assert circuit['iterationName'] == 'pass' and circuit['iterationCount'] == 1
+        assert circuit['iterations'] == [{'index': 1, 't': 20.0, 'metrics': {'upOutletTemperature': 244.0}}]
+
+    def testAFinishedStageCountsItsIterations(self):
+
+        model = RunProgress()
+        items = [plan, start(0.0, 'contour', 'Contour'), start(0.0, 'contour.diverging', 'Diverging section')]
+        items += [event('iteration', float(index), path = 'contour.diverging', name = 'evaluation', index = index,
+                        metrics = {}) for index in (1, 2, 3)]
+        items += [end(4.0, 'contour.diverging', 4.0), end(4.0, 'contour', 4.0)]
+        for item in items:
+            model.apply(item)
+
+        contour = model.stageList()[0]
+        assert contour['note'] == '3 evaluations'
+        assert contour['children'][0]['state'] == 'done' and contour['children'][0]['detail'] == ''
+
+    def testItKeepsOnlyTheLatestIterations(self):
+
+        model = RunProgress()
+        model.apply(plan)
+        model.apply(start(0.0, 'contour', 'Contour'))
+        for index in range(1, keptIterations + 11):
+            model.apply(event('iteration', float(index), path = 'contour', name = 'evaluation', index = index,
+                              metrics = {}))
+
+        contour = model.stageList()[0]
+        assert contour['iterationCount'] == keptIterations + 10
+        assert [item['index'] for item in contour['iterations']] == list(range(11, keptIterations + 11))
+
+    def testTheLastRunListsTheSubStagesStillToCome(self):
+
+        first = RunProgress()
+        for item in (plan, start(0.0, 'contour', 'Contour'), start(0.0, 'contour.diverging', 'Diverging section'),
+                     end(40.0, 'contour.diverging', 40.0), start(40.0, 'contour.converging', 'Converging section'),
+                     end(41.0, 'contour.converging', 1.0), end(41.0, 'contour', 41.0),
+                     start(41.0, 'cooling', 'Cooling channels'), end(50.0, 'cooling', 9.0)):
+            first.apply(item)
+
+        second = RunProgress(first.durations(), previous = first.stageList())
+        for item in (plan, start(0.0, 'contour', 'Contour'), start(0.0, 'contour.diverging', 'Diverging section')):
+            second.apply(item)
+
+        contour, cooling = second.stageList()
+        assert contour['expected'] == 41.0 and cooling['expected'] == 9.0
+        assert [(child['key'], child['state'], child['expected']) for child in contour['children']] == \
+            [('diverging', 'running', 40.0), ('converging', 'pending', 1.0)]
+
+    def testASubStageOrAnIterationIsATreeChange(self):
+
+        model = RunProgress()
+        model.apply(plan)
+        model.apply(start(0.0, 'contour', 'Contour'))
+        model.apply(start(0.0, 'contour.diverging', 'Diverging section'))
+        model.apply(event('iteration', 1.0, path = 'contour.diverging', name = 'evaluation', index = 1, metrics = {}))
+
+        # The same iteration number again leaves the bar and its label alone but adds to the list
+        assert model.apply(event('iteration', 2.0, path = 'contour.diverging', name = 'evaluation', index = 1,
+                                 metrics = {}))
+
     def testARealRunEndsFullAndNeverRunsBackward(self, reducedRuns):
 
         model = RunProgress()
@@ -382,3 +459,15 @@ class TestTheModel:
         assert model.fraction == 1.0
         assert all(stage['state'] == 'done' for stage in model.stageList())
         assert set(model.durations()) == {'contour', 'cooling', 'performance'}
+
+    def testARealRunsTreeClosesEverySubStage(self, reducedRuns):
+
+        model = RunProgress()
+        for item in reducedRuns[0]:
+            model.apply(item)
+
+        stages = {stage['key']: stage for stage in model.stageList()}
+        assert 'sizing' in [child['key'] for child in stages['cooling']['children']]
+        for stage in stages.values():
+            assert all(child['state'] == 'done' and child['elapsed'] is not None for child in stage['children'])
+            json.dumps(stage, allow_nan = False)

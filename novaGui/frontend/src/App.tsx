@@ -1,32 +1,35 @@
 /* ========================================
    NOVA APP
-   The window: header (plume mark, wordmark, Load config, theme switch, About), the Design,
-   View, Analyze and Export tabs, and the run bar. The config lives here in backend values
-   (SI), so the Design tab edits it and the run bar sends it as it stands. An entry that does
-   not parse blocks a run; a cross-field problem asks first, as the legacy Tkinter form does.
+   The window: header (plume mark, wordmark, Load config, theme switch, About), the Design form
+   and the result pane side by side with a splitter between them, and the run bar with its stage
+   stepper. The config lives here in backend values (SI), so the form edits it and the run bar
+   sends it as it stands. An entry that does not parse blocks a run; a cross-field problem asks
+   first, as the legacy Tkinter form does.
+
+   The form's width is dragged on the splitter, or moved with the arrow keys on it, and is kept
+   between launches with the theme mode (novaGui.settings). A double click returns it to the
+   default. Below a narrow window width the form and the pane stack instead.
    Sean Bowman [11/16/2026]
    ======================================== */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+    useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent,
+    type PointerEvent as ReactPointerEvent,
+} from 'react';
 
-import { AnalyzeTab } from './analyze/AnalyzeTab';
 import { api } from './api';
-import { MoonIcon, SunIcon } from './components/Icons';
-import { DesignTab } from './design/DesignTab';
-import { ExportTab } from './export/ExportTab';
+import { CloseIcon, MoonIcon, SunIcon } from './components/Icons';
+import { DesignForm } from './design/DesignForm';
+import { ExportPanel } from './export/ExportPanel';
+import { ResultPane } from './result/ResultPane';
 import { LogDrawer, RunBar } from './run/RunBar';
 import { useRunEvents } from './run/useRunEvents';
-import type { Config, FormState, Mode, RunSummary, Schema, ViewIndex } from './types';
-import { ViewTab } from './view/ViewTab';
+import type { Config, FormState, Mode, ResultTable, RunSummary, Schema, ViewIndex } from './types';
 
-type TabName = 'design' | 'view' | 'analyze' | 'export';
-
-const tabs: { name: TabName; label: string }[] = [
-    { name: 'design', label: 'Design' },
-    { name: 'view', label: 'View' },
-    { name: 'analyze', label: 'Analyze' },
-    { name: 'export', label: 'Export' },
-];
+const defaultFormWidth = 540;   // [px]
+const minFormWidth = 380;       // [px]
+const minPaneWidth = 480;       // [px]
+const keyStep = 24;             // [px] one arrow key press on the splitter
 
 interface Toast {
     id: number;
@@ -46,15 +49,22 @@ export function App() {
     const [formState, setFormState] = useState<FormState>({ hidden: [], expand: [], problems: [], flagged: [] });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [mode, setMode] = useState<Mode>(initialMode);
-    const [tab, setTab] = useState<TabName>('design');
     const [viewIndex, setViewIndex] = useState<ViewIndex | null>(null);
+    const [table, setTable] = useState<ResultTable | null>(null);
+    const [tableLoading, setTableLoading] = useState(false);
+    const [tableError, setTableError] = useState('');
+    const [formWidth, setFormWidth] = useState(defaultFormWidth);
     const [logOpen, setLogOpen] = useState(false);
+    const [stagesOpen, setStagesOpen] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
     const [aboutOpen, setAboutOpen] = useState(false);
     const [confirmProblems, setConfirmProblems] = useState<string[] | null>(null);
     const [toasts, setToasts] = useState<Toast[]>([]);
     const [loadError, setLoadError] = useState('');
     const fileInput = useRef<HTMLInputElement>(null);
+    const workspace = useRef<HTMLDivElement>(null);
     const toastCount = useRef(0);
+    const tableRun = useRef<number | null | undefined>(undefined);
 
     const notify = useCallback((kind: Toast['kind'], title: string, body = '') => {
         const id = ++toastCount.current;
@@ -68,7 +78,7 @@ export function App() {
         api.views().then(setViewIndex).catch((error: Error) => notify('error', 'Views unavailable', error.message));
     }, [notify]);
 
-    // -- Startup: the schema, the form's first state, the views of any run the server holds -- //
+    // -- Startup: the schema, the form's first state, the saved form width, any run the server holds -- //
     useEffect(() => {
         api.schema()
             .then(async (loaded) => {
@@ -78,6 +88,7 @@ export function App() {
                 setSchema(loaded);
             })
             .catch((error: Error) => setLoadError(error.message));
+        api.settings().then((saved) => saved.formWidth && setFormWidth(saved.formWidth)).catch(() => undefined);
         refreshViews();
     }, [refreshViews]);
 
@@ -95,6 +106,37 @@ export function App() {
             window.clearTimeout(timer);
         };
     }, [schema, config]);
+
+    // -- The results table of the run the pane shows; its headline also heads the pane -- //
+    const shownRun = viewIndex?.runId ?? null;
+    useEffect(() => {
+        if (viewIndex === null || tableRun.current === shownRun) {
+            return;
+        }
+        tableRun.current = shownRun;
+        if (shownRun === null) {
+            setTable({ runId: null, runName: '', summary: '', sections: [] });
+            return;
+        }
+        // A reply counts only while its run is still the one shown
+        const forRun = shownRun;
+        setTableLoading(true);
+        setTableError('');
+        api.analysis()
+            .then((loaded) => {
+                if (tableRun.current === forRun) {
+                    setTable(loaded);
+                    setTableLoading(false);
+                }
+            })
+            .catch((failure: Error) => {
+                if (tableRun.current === forRun) {
+                    tableRun.current = undefined;
+                    setTableError(failure.message);
+                    setTableLoading(false);
+                }
+            });
+    }, [viewIndex, shownRun]);
 
     const patchConfig = useCallback((patch: Config) => setConfig((previous) => ({ ...previous, ...patch })), []);
 
@@ -124,7 +166,6 @@ export function App() {
         refreshViews();
         if (result.ok) {
             notify('info', 'Nozzle generated', `${result.runName} in ${result.elapsedSec.toFixed(1)} s`);
-            setTab('view');
         } else if (result.error !== 'run cancelled') {
             notify('error', 'Run failed', `${result.error}\nThe run log carries the full traceback.`);
         }
@@ -136,6 +177,15 @@ export function App() {
     const canGenerate = schema !== null && !running && errorList.length === 0 && run.connected;
     const blockReason = errorList.length > 0 ? `Fix first: ${errorList[0]}` : (!run.connected ? 'The NOVA server is not answering' : '');
 
+    // The stage list opens as a run starts; closing it holds until the next run
+    const wasRunning = useRef(false);
+    useEffect(() => {
+        if (running && !wasRunning.current) {
+            setStagesOpen(true);
+        }
+        wasRunning.current = running;
+    }, [running]);
+
     const startRun = useCallback(() => {
         setConfirmProblems(null);
         api.startRun(config, mode).catch((error: Error) => notify('error', 'Run did not start', error.message));
@@ -145,7 +195,6 @@ export function App() {
         if (!canGenerate) {
             if (errorList.length > 0) {
                 notify('error', 'The form has problems', errorList.join('\n'));
-                setTab('design');
             }
             return;
         }
@@ -210,9 +259,69 @@ export function App() {
         api.saveSettings({ themeMode: next }).catch(() => undefined);
     };
 
-    // -- Shortcuts: the browser's own Ctrl+R, Ctrl+O and Ctrl+S give way to NOVA's -- //
+    // -- Splitter -- //
+    const clampWidth = useCallback((width: number) => {
+        const total = workspace.current?.clientWidth ?? window.innerWidth;
+        return Math.round(Math.max(minFormWidth, Math.min(width, total - minPaneWidth)));
+    }, []);
+
+    const keepWidth = useCallback((width: number) => {
+        api.saveSettings({ formWidth: width }).catch(() => undefined);
+    }, []);
+
+    const drag = useRef<{ x: number; width: number } | null>(null);
+
+    const onSplitterDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        drag.current = { x: event.clientX, width: clampWidth(formWidth) };
+    };
+
+    const onSplitterMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (drag.current) {
+            setFormWidth(clampWidth(drag.current.width + event.clientX - drag.current.x));
+        }
+    };
+
+    const onSplitterUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (drag.current) {
+            drag.current = null;
+            event.currentTarget.releasePointerCapture(event.pointerId);
+            keepWidth(formWidth);
+        }
+    };
+
+    const onSplitterKey = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+        const moves: Record<string, number> = {
+            ArrowLeft: formWidth - keyStep, ArrowRight: formWidth + keyStep, Home: minFormWidth, End: Number.MAX_SAFE_INTEGER,
+        };
+        if (event.key in moves) {
+            event.preventDefault();
+            const width = clampWidth(moves[event.key]);
+            setFormWidth(width);
+            keepWidth(width);
+        }
+    };
+
+    const resetWidth = () => {
+        setFormWidth(defaultFormWidth);
+        keepWidth(defaultFormWidth);
+    };
+
+    // -- Shortcuts: the browser's own Ctrl+R, Ctrl+O and Ctrl+S give way to NOVA's; Escape closes -- //
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                if (confirmProblems) {
+                    setConfirmProblems(null);
+                } else if (aboutOpen) {
+                    setAboutOpen(false);
+                } else if (exportOpen) {
+                    setExportOpen(false);
+                } else if (stagesOpen) {
+                    setStagesOpen(false);
+                }
+                return;
+            }
             if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) {
                 return;
             }
@@ -230,7 +339,7 @@ export function App() {
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [generate, openFile, saveConfig]);
+    }, [generate, openFile, saveConfig, confirmProblems, aboutOpen, exportOpen, stagesOpen]);
 
     return (
         <div className="app">
@@ -257,45 +366,30 @@ export function App() {
                        }} />
             </header>
 
-            <nav className="tab-bar" role="tablist">
-                {tabs.map((entry) => (
-                    <button key={entry.name} type="button" role="tab" aria-selected={tab === entry.name}
-                            className={`tab ${tab === entry.name ? 'is-selected' : ''}`} onClick={() => setTab(entry.name)}>
-                        {entry.label}
-                    </button>
-                ))}
-            </nav>
-
-            <main className="tab-content">
-                {loadError && <div className="empty">The NOVA server did not answer: {loadError}</div>}
-                {!schema && !loadError && <div className="empty"><span className="spinner" /> Loading</div>}
-                {schema && (
-                    <div className="tab-panel" hidden={tab !== 'design'}>
-                        <DesignTab schema={schema} config={config} formVersion={formVersion} formState={formState}
-                                   errors={errors} onPatch={patchConfig} onError={reportError} onReset={resetConfig}
-                                   onLoadExample={loadExample} onSave={saveConfig} />
-                    </div>
-                )}
-                {tab === 'view' && (
-                    <div className="tab-panel">
-                        <ViewTab index={viewIndex} mode={mode} />
-                    </div>
-                )}
-                {schema && (
-                    <div className="tab-panel" hidden={tab !== 'analyze'}>
-                        <AnalyzeTab runId={viewIndex?.runId ?? null} visible={tab === 'analyze'} onNotify={notify} />
-                    </div>
-                )}
-                {schema && (
-                    <div className="tab-panel" hidden={tab !== 'export'}>
-                        <ExportTab runId={viewIndex?.runId ?? null} formName={String(config.filename || '')} onNotify={notify} />
-                    </div>
-                )}
+            <main ref={workspace} className="workspace" style={{ '--form-width': `${formWidth}px` } as CSSProperties}>
+                <section className="design-pane" aria-label="Design">
+                    {loadError && <div className="empty">The NOVA server did not answer: {loadError}</div>}
+                    {!schema && !loadError && <div className="empty"><span className="spinner" /> Loading</div>}
+                    {schema && (
+                        <DesignForm schema={schema} config={config} formVersion={formVersion} formState={formState}
+                                    errors={errors} onPatch={patchConfig} onError={reportError} onReset={resetConfig}
+                                    onLoadExample={loadExample} onSave={saveConfig} />
+                    )}
+                </section>
+                <div className="splitter" role="separator" aria-orientation="vertical" aria-label="Form width"
+                     aria-valuenow={formWidth} aria-valuemin={minFormWidth} tabIndex={0}
+                     title="Drag to resize the form; double-click for the default width"
+                     onPointerDown={onSplitterDown} onPointerMove={onSplitterMove} onPointerUp={onSplitterUp}
+                     onPointerCancel={onSplitterUp} onKeyDown={onSplitterKey} onDoubleClick={resetWidth} />
+                <ResultPane index={viewIndex} mode={mode} run={run} schema={schema} config={config} table={table}
+                            tableLoading={tableLoading} tableError={tableError} onExport={() => setExportOpen(true)}
+                            onNotify={notify} />
             </main>
 
             {logOpen && <LogDrawer lines={run.log} />}
-            <RunBar run={run} canGenerate={canGenerate} blockReason={blockReason} logOpen={logOpen}
-                    onGenerate={generate} onCancel={cancel} onToggleLog={() => setLogOpen((open) => !open)} />
+            <RunBar run={run} canGenerate={canGenerate} blockReason={blockReason} logOpen={logOpen} stagesOpen={stagesOpen}
+                    onGenerate={generate} onCancel={cancel} onToggleLog={() => setLogOpen((open) => !open)}
+                    onToggleStages={() => setStagesOpen((open) => !open)} />
 
             <div className="toasts" aria-live="polite">
                 {toasts.map((toast) => (
@@ -310,6 +404,24 @@ export function App() {
                 ))}
             </div>
 
+            {/* Kept mounted while closed, so the folder and the checks hold from one opening to the next */}
+            {schema && (
+                <div className="modal-scrim" hidden={!exportOpen} onClick={() => setExportOpen(false)}>
+                    <div className="card modal export-dialog" role="dialog" aria-label="Export outputs"
+                         onClick={(event) => event.stopPropagation()}>
+                        <div className="export-dialog-head">
+                            <h2>Export outputs</h2>
+                            <span className="toolbar-spacer" />
+                            <button type="button" className="icon-button" aria-label="Close the export dialog"
+                                    onClick={() => setExportOpen(false)}>
+                                <CloseIcon />
+                            </button>
+                        </div>
+                        <ExportPanel runId={shownRun} formName={String(config.filename || '')} onNotify={notify} />
+                    </div>
+                </div>
+            )}
+
             {confirmProblems && (
                 <div className="modal-scrim" onClick={() => setConfirmProblems(null)}>
                     <div className="card modal" role="alertdialog" aria-label="Configuration warnings"
@@ -320,7 +432,7 @@ export function App() {
                             {confirmProblems.map((problem) => <li key={problem}>{problem}</li>)}
                         </ul>
                         <div className="modal-actions">
-                            <button type="button" className="button" onClick={() => { setConfirmProblems(null); setTab('design'); }}>
+                            <button type="button" className="button" onClick={() => setConfirmProblems(null)}>
                                 Back to the form
                             </button>
                             <button type="button" className="button button-primary" onClick={startRun} autoFocus>
@@ -336,11 +448,12 @@ export function App() {
                     <div className="card modal" role="dialog" aria-label="About NOVA" onClick={(event) => event.stopPropagation()}>
                         <h2>NOVA -- Nozzle Optimization for Variable Applications</h2>
                         <p>
-                            Web front end for the NOVA suite. Design a nozzle on the Design tab, run the contour,
-                            cooling, heat transfer and plume pipeline in a worker process, inspect the result on the
-                            View and Analyze tabs, and copy the outputs to keep from the Export tab.
+                            Web front end for the NOVA suite. Design a nozzle in the form on the left and Generate it:
+                            the contour, cooling, heat transfer and plume pipeline runs in a worker process, and the
+                            run bar steps through its stages. The pane on the right shows the last finished run, as
+                            figures or as a results table, and Export copies the outputs to keep.
                         </p>
-                        <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one.</p>
+                        <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one, Escape close.</p>
                         <div className="modal-actions">
                             <button type="button" className="button" onClick={() => setAboutOpen(false)}>Close</button>
                         </div>

@@ -3,7 +3,7 @@
 
 '''
 
-The Export tab's file handling: listing a finished run's outputs, copying the chosen ones to an
+Export's file handling: listing a finished run's outputs, copying the chosen ones to an
 output folder, and opening a file or folder in the desktop's own application.
 
 Every run writes all of NOVA's outputs into its staging folder (`<temp>/NOVA/web<pid>/run<n>/`):

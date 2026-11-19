@@ -105,7 +105,7 @@ from NOVA import gasDynamics, materials, fluidProps
 
 ## Quickstart: GUI
 
-[novaGui/](novaGui/) is the front end: a React app served by a FastAPI layer over the same pipeline, in a desktop window. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` in a worker process that Cancel can stop, and presents the result across four tabs. It needs the `web` extra and a one-time build of the app, which takes Node:
+[novaGui/](novaGui/) is the front end: a React app served by a FastAPI layer over the same pipeline, in a desktop window. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` in a worker process that Cancel can stop, and shows the result beside the form. It needs the `web` extra and a one-time build of the app, which takes Node:
 
 ```bash
 pip install -e .[web]
@@ -118,9 +118,9 @@ On Windows, `novaGui.bat` launches it with no console window and writes startup 
 
 ### Design
 
-The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. A search box finds a field by its label, key, help or options, and **Changed only** shows the fields that differ from the shipped nozzle. Problems across fields list above the form and mark the rows they name. **Load config** in the header opens a JSON file, **Save config** writes one, **Reset to example** returns to the shipped nozzle, and **Load example** offers the engines in `assets/examples/`.
+The window holds the Design form on the left and the result pane on the right, with a splitter between them that sets the form's width. The form opens on the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. A search box finds a field by its label, key, help or options, and **Changed only** shows the fields that differ from the shipped nozzle. Problems across fields list above the form and mark the rows they name. **Load config** in the header opens a JSON file, **Save config** writes one, **Reset to example** returns to the shipped nozzle, and **Load example** offers the engines in `assets/examples/`.
 
-![Design tab](docs/images/novaGui/designDark.png)
+![The window](docs/images/novaGui/designDark.png)
 
 The Coolant Circuit section picks the architecture, and a note beneath the choice says what that circuit does, where it is viable and which engines flew it; the extension circuit's outlet carries the same.
 
@@ -132,13 +132,15 @@ Every field carries an (i) marker. Hovering it gives the field's meaning.
 
 ### Generate
 
-**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The bar follows the run's progress events: each stage as it opens, the passes of the coolant circuit and the solves of the contour. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
+
+The result pane keeps the last finished run until the next one finishes, and a strip under its header says which run it shows. Once the form is edited, the strip names each field that differs from the config that run ran, with its value then and now.
 
 ![Run in progress](docs/images/novaGui/generate.png)
 
 ### View
 
-When the run finishes the window turns to View: one figure at a time, picked from a sidebar of contour, flow, plume, cooling and 3D views. Each draws interactive (plotly, to zoom, rotate and read values off) or static (the Matplotlib drawing), behind a switch.
+The result pane draws one figure at a time, picked from a menu of contour, flow, plume, cooling and 3D views. Each draws interactive (plotly, to zoom, rotate and read values off) or static (the Matplotlib drawing), behind a switch.
 
 The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked.
 
@@ -166,25 +168,25 @@ The channel mesh, the revolved contour and the volutes are 3D views at full reso
 | --- | --- |
 | ![Channel mesh](docs/images/novaGui/viewChannelMesh.png) | ![Revolved contour](docs/images/novaGui/viewRevolved.png) |
 
-### Analyze
+### Table
 
-The numbers behind the figures in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. It filters by name, copies as tab-separated text and saves as CSV.
+**Table** in the result pane's header swaps the figure for the numbers behind it, in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. It filters by name, copies as tab-separated text and saves as CSV.
 
-![Analyze tab](docs/images/novaGui/analyze.png)
+![Results table](docs/images/novaGui/table.png)
 
 ### Export
 
-A run writes its outputs to a staging folder, not to the output folder. The Export tab lists them by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
+A run writes its outputs to a staging folder, not to the output folder. **Export** in the result pane's header opens a dialog that lists them by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
 
-![Export tab](docs/images/novaGui/export.png)
+![Export dialog](docs/images/novaGui/export.png)
 
 ### Light mode
 
-The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette, and the choice persists between sessions.
+The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette, and the choice persists between sessions with the form's width.
 
 | Design | Plume |
 | --- | --- |
-| ![Design tab, light](docs/images/novaGui/designLight.png) | ![Plume, light](docs/images/novaGui/viewPlumeLight.png) |
+| ![Design form, light](docs/images/novaGui/designLight.png) | ![Plume, light](docs/images/novaGui/viewPlumeLight.png) |
 
 [novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
 
@@ -215,7 +217,7 @@ Grouped by section, matching the order in the config file.
 | `divergingSectionDesignVariables`       | deg, deg, --, -- | Pins a`toc` wall instead of searching for one: inflection angle, exit angle, inflection tension, exit tension. `null` searches                     |
 | `gammaModel`                            | --    | `chamber` (default) or `effective`: which ratio of specific heats the constant-gamma contour solve runs in                                             |
 
-`L*` is measured over the whole chamber volume, so the converging cone counts toward it and the barrel takes up the remainder. Chamber length, volume, delivered L* and contraction ratio are reported on the Analyze tab of the GUI.
+`L*` is measured over the whole chamber volume, so the converging cone counts toward it and the barrel takes up the remainder. Chamber length, volume, delivered L* and contraction ratio are reported in the GUI's results table.
 
 ### Combustion
 
@@ -470,7 +472,7 @@ CEA output at the chamber, compared against CEARun for the same case:
 
 ### Performance: estimated and delivered
 
-The engine is sized before any contour exists, from a one-dimensional estimate: the requested thrust becomes a mass flow through CEA's matched-expansion specific impulse at the area ratio. After the solve, the same quantities are integrated over the solved exit plane. Every run prints this table and writes it to `*Performance.json`; the Analyze tab shows it too. The one-dimensional estimate appears in two gases: CEA's equilibrium gas, and the frozen chamber gas the method of characteristics is solved in, which is the like-for-like reference for what the contour delivers. Delivered exit-state values are mass averages over the plane. Each thrust coefficient and specific impulse is given at a named back pressure, because a thrust coefficient means nothing without one. The design back pressure is the one-dimensional equilibrium exit pressure, 13.99 kPa: the requested thrust is defined there.
+The engine is sized before any contour exists, from a one-dimensional estimate: the requested thrust becomes a mass flow through CEA's matched-expansion specific impulse at the area ratio. After the solve, the same quantities are integrated over the solved exit plane. Every run prints this table and writes it to `*Performance.json`; the GUI's results table shows it too. The one-dimensional estimate appears in two gases: CEA's equilibrium gas, and the frozen chamber gas the method of characteristics is solved in, which is the like-for-like reference for what the contour delivers. Delivered exit-state values are mass averages over the plane. Each thrust coefficient and specific impulse is given at a named back pressure, because a thrust coefficient means nothing without one. The design back pressure is the one-dimensional equilibrium exit pressure, 13.99 kPa: the requested thrust is defined there.
 
 | Quantity                                    | 1D equilibrium | 1D chamber gas | Delivered | Delivered, after friction |
 | ------------------------------------------- | -------------- | -------------- | --------- | ------------------------- |
