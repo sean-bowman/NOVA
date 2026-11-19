@@ -6,15 +6,15 @@
 Export's file handling: listing a finished run's outputs, copying the chosen ones to an
 output folder, and opening a file or folder in the desktop's own application.
 
-Every run writes all of NOVA's outputs into its staging folder (`<temp>/NOVA/web<pid>/run<n>/`):
-the outputs in `<runName>Outputs/` and the config the run was given beside it as
-`<runName>RunConfig.json`. Nothing reaches the output folder until an export copies the chosen
+Every run writes all of NOVA's outputs into a folder of its own, in the web GUI its run store
+folder (`<store>/run<id>/`, novaGui.runStore): the outputs in `<runName>Outputs/` and the config
+the run was given beside it as `<runName>RunConfig.json`. Nothing reaches the output folder until an export copies the chosen
 files into `<output folder>/<runName>Outputs/`. The categories and the rule that files an output
 in one by its name (`outputCategories`, `categoryOf`) are shared with the legacy Tkinter front
 end's Export tab; the default output folder is `runs/` at the repository root.
 
 The browser names files by their base name, and only names the run listed are copied, opened or
-previewed, so a request cannot reach a file outside the run's staging folder.
+previewed, so a request cannot reach a file outside the run's own folder.
 
 The Export dialog previews a file before it is exported: an image as itself, an STL surface in the
 browser's WebGL viewer (`stlMesh` reads it into vertices and triangles), and a text, CSV or JSON

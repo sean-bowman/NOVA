@@ -19,12 +19,20 @@ the stage tree with its states, times and iterations. The last finished run's st
 out the next run's bar and stand as its expected times, and its tree lists the sub-stages the
 next run has yet to reach.
 
-The session keeps the last `keptRuns` finished runs, each with the config it ran and the headline
-of its result table, so the browser can list them, show any of them, and name the fields that differ
-between two of them or between one and the form. One kept run can be the baseline the others are
-compared against; it stays however many runs follow it. A run that drops out of the list takes its
-staging folder with it. A kept run unpickles its Nozzle on first use, and only the `keptNozzles`
-runs drawn from most recently keep theirs in memory.
+The session keeps finished runs, each with the config it ran and the headline of its result
+table, so the browser can list them, show any of them, and name the fields that differ between two
+of them or between one and the form. One kept run can be the baseline the others are compared
+against; it stays however many runs follow it. A kept run can carry a name and a note, and can be
+deleted. A kept run unpickles its Nozzle on first use, and only the `keptNozzles` runs drawn from
+most recently keep theirs in memory.
+
+With a run store (novaGui.runStore), as the GUI has, each run writes into a store folder of its
+own, a finished run's record is saved beside its outputs, and the session starts with every run
+the store holds, its baseline among them, so runs outlast the window. Run ids come from the store
+and count up across launches. The store's limits decide which unnamed runs go as new ones finish;
+a cancelled or failed run's folder goes as soon as the run ends. Without a store, runs write into
+the staging folder below, the session keeps the last `keptRuns` of them, and a run that drops out
+of the list takes its staging folder with it.
 
 The warnings a run raises (novaGui.runner.warningRelay) are collected as it goes, one entry per
 distinct warning with the number of times it came, and kept with the run, so the browser can count
@@ -35,9 +43,9 @@ contour, the near-wall state, the three flow fields and the revolved wall). The 
 as the running run's partial result, so the browser can draw them while cooling and the plume
 still run. They are dropped when the run ends; a finished run draws from its Nozzle.
 
-Runs write into a staging folder for the server process, `<temp>/NOVA/web<pid>/run<n>`. Each run
-gets its own folder, so a cancelled run's partial files never mix with a finished one. The staging
-folder is removed when the server exits; novaGui.runner.clearStaging collects one a crashed server
+Without a store, runs write into a staging folder for the server process, `<temp>/NOVA/web<pid>/run<n>`.
+Each run gets its own folder, so a cancelled run's partial files never mix with a finished one. The
+staging folder is removed when the server exits; novaGui.runner.clearStaging collects one a crashed server
 left behind after twelve hours, together with the legacy Tkinter front end's.
 
 Events, as JSON objects:
@@ -53,7 +61,8 @@ Events, as JSON objects:
     {'type': 'warning', 'runId': int, 'warnings': [{'category', 'message', 'where', 'count'}]}
         every warning of the run so far
     {'type': 'result', 'runId': int, 'ok': bool, 'runName': str, 'elapsedSec': float, 'error': str}
-    {'type': 'runs', 'baseline': int | None}      the kept runs or the baseline changed
+    {'type': 'runs', 'baseline': int | None}      the kept runs, a run's name or note, or the baseline
+                                                    changed
     {'type': 'settings', ...}                       saved preferences changed (novaGui.settings)
     {'type': 'snapshot', ...}                       sent once on connect: the whole state
 
@@ -77,10 +86,13 @@ import time
 
 # Local imports
 from .progress import RunProgress
+from . import runStore
 from . import worker
 
-keptRuns = 8         # finished runs the session keeps, besides the baseline
+keptRuns = 8         # finished runs a session without a store keeps, besides the baseline
 keptNozzles = 3      # kept runs whose unpickled Nozzle stays in memory
+titleLength = 80     # [characters] the longest name a run takes
+noteLength = 4000    # [characters] the longest note a run takes
 
 def stagingRoot() -> str:
 
@@ -96,12 +108,14 @@ class RunRecord:
 
     '''
 
-    A finished run: its summary from the worker, the config it ran, and the Nozzle once something
-    asks for it.
+    A finished run: its summary from the worker, the config it ran, its name and note, and the
+    Nozzle once something asks for it. `folder` is its run store folder, or None for a run the
+    store does not hold.
 
     '''
 
-    def __init__(self, runId: int, summary: dict, config: dict = None, warnings: list = None):
+    def __init__(self, runId: int, summary: dict, config: dict = None, warnings: list = None,
+                 folder: str | None = None):
 
         self.runId = runId
         self.warnings = [dict(entry) for entry in warnings] if warnings else []
@@ -114,16 +128,43 @@ class RunRecord:
         self.headline = summary.get('headline', '')          # the result table's summary line
         self.error = summary.get('error', '')
         self.traceback = summary.get('traceback', '')
-        self.finishedAt = time.time()                       # [s] epoch
+        self.finishedAt = float(summary.get('finishedAt') or time.time())     # [s] epoch
+        self.title = str(summary.get('title') or '')        # the name given to the run, '' for none
+        self.note = str(summary.get('note') or '')
+        self.bytes = int(summary.get('bytes') or 0)         # [B] its files, in the store
+        self.folder = folder
+        self.loadError = ''                                 # why its pickle did not load
         self._nozzle = None
         self._lock = threading.Lock()
+
+    @classmethod
+    def fromStored(cls, content: dict) -> 'RunRecord':
+
+        '''A run as the store saved it (novaGui.runStore.RunStore.records).'''
+
+        config = content.get('config')
+        warnings = content.get('warnings')
+        return cls(int(content['runId']), {**content, 'ok': True},
+                   config = config if isinstance(config, dict) else None,
+                   warnings = [entry for entry in warnings if isinstance(entry, dict)] if isinstance(warnings, list) else None,
+                   folder = content.get('folder'))
+
+    def stored(self) -> dict:
+
+        '''The run as the store saves it.'''
+
+        return {'runName': self.runName, 'title': self.title, 'note': self.note, 'elapsedSec': self.elapsedSec,
+                'headline': self.headline, 'finishedAt': self.finishedAt, 'config': self.config,
+                'warnings': self.warnings, 'outputDir': self.outputDir, 'picklePath': self.picklePath}
 
     def nozzle(self):
 
         '''
 
-        The run's Nozzle, unpickled on first use. The pickle is one this server's worker wrote
-        into its own staging folder. Returns None for a failed run or a missing pickle.
+        The run's Nozzle, unpickled on first use, from a pickle this server's worker wrote or the
+        run store keeps. Returns None for a failed run, a missing pickle, or one that does not
+        load, such as a run saved by a NOVA whose classes have since changed; `loadError` then says
+        why.
 
         '''
 
@@ -131,8 +172,12 @@ class RunRecord:
             return None
         with self._lock:
             if self._nozzle is None and os.path.isfile(self.picklePath):
-                with open(self.picklePath, 'rb') as handle:
-                    self._nozzle = pickle.load(handle)
+                try:
+                    with open(self.picklePath, 'rb') as handle:
+                        self._nozzle = pickle.load(handle)
+                    self.loadError = ''
+                except Exception as exc:                   # noqa: BLE001 -- any unpickling failure
+                    self.loadError = f'its saved result does not load in this NOVA ({type(exc).__name__}: {exc})'
         return self._nozzle
 
     def release(self) -> None:
@@ -152,9 +197,10 @@ class RunRecord:
 
         '''The run as the run list shows it.'''
 
-        return {'runId': self.runId, 'runName': self.runName, 'elapsedSec': self.elapsedSec,
-                'headline': self.headline, 'finishedAt': self.finishedAt, 'config': self.config,
-                'warnings': self.warnings}
+        return {'runId': self.runId, 'runName': self.runName, 'title': self.title, 'note': self.note,
+                'elapsedSec': self.elapsedSec, 'headline': self.headline, 'finishedAt': self.finishedAt,
+                'config': self.config, 'warnings': self.warnings, 'bytes': self.bytes,
+                'saved': self.folder is not None}
 
 class RunSession:
 
@@ -165,7 +211,7 @@ class RunSession:
     '''
 
     # -- Constructor -- #
-    def __init__(self, logLines: int = 4000):
+    def __init__(self, logLines: int = 4000, store: runStore.RunStore | None = None):
 
         self._lock = threading.Lock()
         self._context = multiprocessing.get_context('spawn')
@@ -192,6 +238,16 @@ class RunSession:
 
         self._subscribers = set()              # (loop, asyncio.Queue) pairs
         self._subscriberLock = threading.Lock()
+
+        # The runs the store kept from earlier launches, after the folders of runs that never finished
+        self.store = store
+        if store is not None:
+            store.collect()
+            for content in store.records():
+                record = RunRecord.fromStored(content)
+                self.runs[record.runId] = record
+            self.result = next(reversed(self.runs.values()), None)
+            self.baseline = store.baseline if store.baseline in self.runs else None
 
         os.makedirs(stagingRoot(), exist_ok = True)
         atexit.register(self.shutdown)
@@ -248,6 +304,15 @@ class RunSession:
             self.state['warnings'] = found
         self._publish({'type': 'warning', 'runId': runId, 'warnings': [dict(entry) for entry in found]})
 
+    def _removeFiles(self, record: RunRecord) -> None:
+
+        '''Delete a run's folder: its store folder, or without a store its staging folder.'''
+
+        if record.folder is not None and self.store is not None:
+            self.store.remove(record.runId)
+        elif self.store is None:
+            shutil.rmtree(os.path.join(stagingRoot(), f'run{record.runId}'), ignore_errors = True)
+
     def _drain(self, process, eventQueue, runId: int) -> None:
 
         '''
@@ -303,7 +368,11 @@ class RunSession:
             if summary.get('traceback'):
                 self._publish({'type': 'log', 'line': summary['traceback']})
 
-        record = RunRecord(runId, summary, self._runConfig, self.state['warnings'])
+        folder = self.store.folder(runId) if self.store is not None else None
+        record = RunRecord(runId, summary, self._runConfig, self.state['warnings'], folder = folder)
+        if not record.ok and folder is not None:
+            self.store.remove(runId)
+            record.folder = None
         if record.ok:
             self._stageHistory = self._progress.durations()
             self._lastStages = self._progress.stageList()
@@ -355,11 +424,14 @@ class RunSession:
             if self._process is not None:
                 raise RuntimeError('a run is already in progress')
 
-            self._runCount += 1
-            runId = self._runCount
-            outputDir = os.path.join(stagingRoot(), f'run{runId}')
-            shutil.rmtree(outputDir, ignore_errors = True)
-            os.makedirs(outputDir, exist_ok = True)
+            if self.store is not None:
+                runId, outputDir = self.store.claim()
+            else:
+                self._runCount += 1
+                runId = self._runCount
+                outputDir = os.path.join(stagingRoot(), f'run{runId}')
+                shutil.rmtree(outputDir, ignore_errors = True)
+                os.makedirs(outputDir, exist_ok = True)
 
             self._cancelled = False
             self._queue = self._context.Queue()
@@ -403,24 +475,89 @@ class RunSession:
 
         '''
 
-        Keep a finished run in the list, as the latest. The oldest runs beyond `keptRuns` drop out,
-        except the baseline, and their staging folders go with them.
+        Keep a finished run in the list, as the latest, and save it to the store when it is one of
+        the store's. Runs then drop out, except the baseline: with a store, the unnamed runs past
+        its limits (novaGui.runStore.pruned), oldest first; without one, the oldest past `keptRuns`.
+        A run that drops out takes its folder with it.
 
         '''
 
+        if self.store is not None and record.folder is not None:
+            record.bytes = self.store.save(record.runId, record.stored())
         dropped = []
         with self._lock:
             self.runs.pop(record.runId, None)
             self.runs[record.runId] = record
             if self.result is None or not self.result.ok or self.result.runId <= record.runId:
                 self.result = record
-            while sum(1 for runId in self.runs if runId != self.baseline) > keptRuns:
-                oldest = next(runId for runId in self.runs if runId != self.baseline)
-                dropped.append(self.runs.pop(oldest))
+            if self.store is not None:
+                kept = [(runId, bool(entry.title), entry.bytes) for runId, entry in self.runs.items()]
+                for runId in runStore.pruned(kept, self.baseline, record.runId):
+                    dropped.append(self.runs.pop(runId))
+            else:
+                while sum(1 for runId in self.runs if runId != self.baseline) > keptRuns:
+                    oldest = next(runId for runId in self.runs if runId != self.baseline)
+                    dropped.append(self.runs.pop(oldest))
             self._drawn = [kept for kept in self._drawn if kept not in dropped]
         for old in dropped:
-            shutil.rmtree(os.path.join(stagingRoot(), f'run{old.runId}'), ignore_errors = True)
+            self._removeFiles(old)
         self._publish({'type': 'runs', 'baseline': self.baseline})
+
+    def describe(self, runId: int, title: str | None = None, note: str | None = None) -> RunRecord:
+
+        '''
+
+        Give a kept run a name, a note, or both; None leaves one as it is and '' clears it. A
+        named run stays in the store however many runs follow it.
+
+        Raises:
+        -------
+        KeyError : if the run is not kept
+        ValueError : if the name or the note is too long
+
+        '''
+
+        title = None if title is None else ' '.join(str(title).split())
+        note = None if note is None else str(note).strip()
+        if title is not None and len(title) > titleLength:
+            raise ValueError(f'a run name takes at most {titleLength} characters')
+        if note is not None and len(note) > noteLength:
+            raise ValueError(f'a run note takes at most {noteLength} characters')
+        with self._lock:
+            record = self.runs.get(runId)
+            if record is None:
+                raise KeyError(runId)
+            if title is not None:
+                record.title = title
+            if note is not None:
+                record.note = note
+        if self.store is not None and record.folder is not None:
+            record.bytes = self.store.save(record.runId, record.stored())
+        self._publish({'type': 'runs', 'baseline': self.baseline})
+        return record
+
+    def delete(self, runId: int) -> RunRecord:
+
+        '''
+
+        Delete a kept run and its files. Deleting the baseline clears it.
+
+        Raises:
+        -------
+        KeyError : if the run is not kept
+
+        '''
+
+        with self._lock:
+            record = self.runs.get(runId)
+        if record is None:
+            raise KeyError(runId)
+        if self.baseline == runId:
+            self.setBaseline(None)
+        self.forget(runId)
+        self._removeFiles(record)
+        self._publish({'type': 'runs', 'baseline': self.baseline})
+        return record
 
     def forget(self, runId: int) -> None:
 
@@ -480,6 +617,8 @@ class RunSession:
             if runId is not None and runId not in self.runs:
                 raise KeyError(runId)
             self.baseline = runId
+        if self.store is not None:
+            self.store.setBaseline(runId)
         self._publish({'type': 'runs', 'baseline': runId})
 
     def runList(self) -> dict:
@@ -491,7 +630,8 @@ class RunSession:
         Returns:
         --------
         dict : {'runs': [RunRecord.entry], 'baseline': int | None, 'latest': int | None,
-            'running': {'runId', 'config', 'views', 'warnings'} | None}
+            'running': {'runId', 'config', 'views', 'warnings'} | None,
+            'store': {'folder', 'unnamedRuns', 'bytes', 'byteLimit'} | None}
 
         '''
 
@@ -506,7 +646,11 @@ class RunSession:
             views = list(partial['figures']) if partial and partial['runId'] == runId else []
             running = {'runId': runId, 'config': self._runConfig, 'views': views,
                        'warnings': [dict(entry) for entry in self.state['warnings']]}
-        return {'runs': runs, 'baseline': baseline, 'latest': latest, 'running': running}
+        store = None
+        if self.store is not None:
+            store = {'folder': self.store.root, 'unnamedRuns': runStore.unnamedRuns,
+                     'bytes': sum(entry['bytes'] for entry in runs), 'byteLimit': runStore.storeBytes}
+        return {'runs': runs, 'baseline': baseline, 'latest': latest, 'running': running, 'store': store}
 
     def partialFigure(self, runId: int, key: str):
 
@@ -559,7 +703,7 @@ class RunSession:
 
         '''
 
-        Stop any run and remove this server's staging folder.
+        Stop any run, with its store folder, and remove this server's staging folder.
 
         '''
 
@@ -568,4 +712,6 @@ class RunSession:
             self._cancelled = True
             process.terminate()
             process.join(timeout = 5.0)
+            if self.store is not None and self.state['runId'] is not None:
+                self.store.remove(self.state['runId'])
         shutil.rmtree(stagingRoot(), ignore_errors = True)

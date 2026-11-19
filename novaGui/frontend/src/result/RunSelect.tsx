@@ -1,9 +1,10 @@
 /* ========================================
    RUN SELECT
    The run a window shows, picked from the runs the server keeps: the latest, followed as new
-   runs finish, or any kept run by its number, name, headline and run time. A run still going is
-   listed once its contour stage has settled the contour and the flow fields. The menu's own
-   label carries the shown run's headline, and its tooltip the whole of it.
+   runs finish, or any kept run by its number, the name it was given (else its config's filename),
+   headline and run time. A run still going is listed once its contour stage has settled the
+   contour and the flow fields. The menu's own label carries the shown run's headline, and its
+   tooltip the whole of it with the run's note.
    Sean Bowman [11/19/2026]
    ======================================== */
 
@@ -11,12 +12,18 @@ import { formatClock } from '../run/stageText';
 import type { RunEntry } from '../types';
 import type { RunsView } from './useRuns';
 
-function headlineOf(entry: RunEntry): string {
+/** The result table's summary line as one line: thrust, delivered Isp, propellants. */
+export function headlineOf(entry: RunEntry): string {
     return entry.headline.split(/\s{2,}/).filter(Boolean).join(', ');
 }
 
+/** A run's name: the one it was given, else its config's filename. */
+export function runTitle(entry: RunEntry): string {
+    return entry.title || entry.runName;
+}
+
 function runLabel(entry: RunEntry, baseline: number | null): string {
-    const parts = [`Run ${entry.runId}`, entry.runName, headlineOf(entry), formatClock(entry.elapsedSec)];
+    const parts = [`Run ${entry.runId}`, runTitle(entry), headlineOf(entry), formatClock(entry.elapsedSec)];
     return parts.filter(Boolean).join(' · ') + (entry.runId === baseline ? ' · baseline' : '');
 }
 
@@ -30,7 +37,7 @@ export function RunSelect({ runs }: { runs: RunsView }) {
     if (running && partial && choice === 'latest') {
         latest = `Latest: run ${running.runId}, running`;
     } else if (latestEntry) {
-        latest = [`Latest: run ${latestEntry.runId}`, headlineOf(latestEntry)].filter(Boolean).join(' · ');
+        latest = [`Latest: run ${latestEntry.runId}`, latestEntry.title, headlineOf(latestEntry)].filter(Boolean).join(' · ');
     }
 
     const shownEntry = runs.entry(shown);
@@ -38,7 +45,9 @@ export function RunSelect({ runs }: { runs: RunsView }) {
     if (partial && shown !== null) {
         title = `Run ${shown}, running: its contour stage is done`;
     } else if (shownEntry) {
-        title = `${runLabel(shownEntry, baseline)}\nfinished in ${formatClock(shownEntry.elapsedSec)}`;
+        const named = shownEntry.title ? `\nconfig ${shownEntry.runName}` : '';
+        const note = shownEntry.note ? `\n\n${shownEntry.note}` : '';
+        title = `${runLabel(shownEntry, baseline)}${named}\nfinished in ${formatClock(shownEntry.elapsedSec)}${note}`;
     }
 
     return (

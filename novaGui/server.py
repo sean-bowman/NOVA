@@ -17,14 +17,17 @@ Routes, all under /api:
     GET  /examples/{name}           a shipped example engine's config, merged over the defaults
     GET  /materials/wall            a wall alloy's sampled properties, ?name=&temperatureK=
     GET  /materials/extension       an extension material's store entry: the note and the fill, ?name=
-    GET  /runs                      the kept runs, newest first, the baseline, and the run in progress
+    GET  /runs                      the kept runs, newest first, the baseline, the run in progress, and
+                                    the run store's folder and limits
     POST /runs                      start a run: {'config': {...}, 'mode': 'dark'|'light'}
     PUT  /runs/baseline             make a kept run the baseline: {'runId': int | None}
+    PATCH /runs/{runId}             name a kept run or write its note: {'title': str, 'note': str}, either
+    DELETE /runs/{runId}            delete a kept run and its files
     POST /runs/cancel               terminate the running worker
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
     GET  /views                     the view list, the keys a run produced, and that run's id, name,
-                                    time and config, ?run=
+                                    time and config, or why its saved result does not load, ?run=
     GET  /views/{key}/interactive   a view's plotly figure JSON, ?mode=&run=&compare=
     GET  /views/{key}/static        a view's Matplotlib PNG, ?mode=&run=&width=&height=&ratio=
     GET  /analysis                  a run's result table (novaGui.analysis), ?run=&baseline=
@@ -37,8 +40,9 @@ Routes, all under /api:
     POST /export/open               open {'what': 'file', 'runId', 'name'} or {'what': 'folder', 'baseDir'}
 
 `run` names a kept run (novaGui.session); without it a route answers for the latest good run. The
-run in progress answers /views and /views/{key}/interactive with the figures its contour stage
-settled, once the worker has sent them. `compare` draws a second kept run over a line plot, and
+GUI's session keeps its runs in the run store (novaGui.runStore), so they outlast the window, and
+a run's id stays its own across launches. The run in progress answers /views and
+/views/{key}/interactive with the figures its contour stage settled, once the worker has sent them. `compare` draws a second kept run over a line plot, and
 `baseline` sets a second run's table beside the first (novaGui.analysis.compareTables).
 
 A view's figure is built once per run, view, palette mode and compared run, and kept while its run
@@ -89,6 +93,7 @@ from . import outputs
 from . import schemaJson
 from . import views
 from . import settings as guiSettings
+from .runStore import RunStore
 from .session import RunSession
 
 frontendDist = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend', 'dist')
@@ -118,7 +123,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
     Parameters:
     -----------
     session : RunSession, optional
-        The session to serve; a new one by default.
+        The session to serve; by default a new one on the run store (novaGui.runStore).
     warm : bool
         Load NOVA and the view machinery on a background thread at startup, so the first figure
         does not wait on the imports.
@@ -136,7 +141,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         yield
 
     app = FastAPI(title = 'NOVA', docs_url = '/api/docs', openapi_url = '/api/openapi.json', lifespan = lifespan)
-    app.state.session = session if session is not None else RunSession()
+    app.state.session = session if session is not None else RunSession(store = RunStore())
     # Level 5 compresses a field figure to about a quarter in a few tens of milliseconds; level 9
     # takes several times as long for a few percent more
     app.add_middleware(GZipMiddleware, minimum_size = 1000, compresslevel = 5)
@@ -237,6 +242,37 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             raise HTTPException(404, f'run {runId} is not kept') from exc
         return {'baseline': runId}
 
+    @app.patch('/api/runs/{runId}')
+    async def describeRun(runId: int, request: Request) -> dict:
+
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, 'the body must be an object')
+        fields = {key: body[key] for key in ('title', 'note') if key in body}
+        if not fields or any(not isinstance(value, str) for value in fields.values()):
+            raise HTTPException(400, 'give a title, a note or both, as text')
+        try:
+            record = app.state.session.describe(runId, **fields)
+        except KeyError as exc:
+            raise HTTPException(404, f'run {runId} is not kept') from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return record.entry()
+
+    @app.delete('/api/runs/{runId}')
+    def deleteRun(runId: int) -> dict:
+
+        try:
+            app.state.session.delete(runId)
+        except KeyError as exc:
+            raise HTTPException(404, f'run {runId} is not kept') from exc
+        # Its figures and its table go with it, and so do the figures it was drawn over
+        with figureLock:
+            for stale in [entry for entry in figureCache if runId in (entry[0], entry[4])]:
+                del figureCache[stale]
+        tables.pop(runId, None)
+        return {'deleted': runId}
+
     @app.post('/api/runs')
     async def startRun(request: Request) -> dict:
 
@@ -301,7 +337,8 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         record = _record(run)
         nozzle = app.state.session.nozzle(record)
         if nozzle is None:
-            raise HTTPException(404, 'no finished run to draw')
+            raise HTTPException(404, f'run {record.runId} cannot be drawn: {record.loadError}' if record.loadError
+                                else 'no finished run to draw')
         return nozzle
 
     def _running(run: int | None) -> bool:
@@ -321,14 +358,15 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             available = [spec['key'] for spec in listed if spec['key'] in partial['views']]
             config = partial['config'] or {}
             return {'views': listed, 'available': available, 'runId': run, 'runName': str(config.get('filename') or ''),
-                    'elapsedSec': None, 'config': partial['config'], 'partial': True}
+                    'elapsedSec': None, 'config': partial['config'], 'partial': True, 'loadError': ''}
         record = session.record(run)
         finished = record is not None and record.ok
         return {'views': listed, 'available': views.availableViews(record) if finished else [],
                 'runId': record.runId if finished else None,
                 'runName': record.runName if finished else '',
                 'elapsedSec': record.elapsedSec if finished else None,
-                'config': record.config if finished else None, 'partial': False}
+                'config': record.config if finished else None, 'partial': False,
+                'loadError': record.loadError if finished else ''}
 
     # (runId, partial, key, mode, compare, baseline): (figure JSON as bytes, the same gzipped)
     figureCache = collections.OrderedDict()

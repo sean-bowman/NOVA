@@ -12,8 +12,13 @@
    What the pane shows can fall behind the form, so a strip under its header says so: while a
    run is going, which run the pane shows; after a run was cancelled or failed, that the pane kept
    the run before; and once the form is edited, which fields differ from the config the shown run
-   ran. A second strip names the fields that differ between the shown run and the baseline, and a
-   third lists the warnings the shown run raised, each once with the number of times it came.
+   ran, with a button that puts that config back into the form. A second strip names the fields
+   that differ between the shown run and the baseline, and a third lists the warnings the shown
+   run raised, each once with the number of times it came. A saved run whose result no longer
+   loads in this NOVA says so in place of its figures, and its config can still go into the form.
+
+   The pencil beside the run menu opens the shown run's details (RunDetails): its name and note,
+   the baseline, putting its config into the form, and deleting it.
    Sean Bowman [11/19/2026]
    ======================================== */
 
@@ -21,12 +26,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../api';
 import { ResultsTable } from '../analyze/ResultsTable';
-import { DownloadIcon, InfoIcon } from '../components/Icons';
+import { DownloadIcon, InfoIcon, PencilIcon } from '../components/Icons';
 import type { RunView } from '../run/useRunEvents';
-import type { Config, Mode, ResultTable, RunWarning, Schema } from '../types';
+import type { Config, Mode, ResultTable, RunEntry, RunWarning, Schema } from '../types';
 import { FigureView, type FigureLayout } from '../view/FigureView';
 import { changesSince, type FieldChange } from './changes';
-import { RunSelect } from './RunSelect';
+import { RunDetails } from './RunDetails';
+import { RunSelect, runTitle } from './RunSelect';
 import type { RunsView } from './useRuns';
 
 const changesListed = 3;        // changes named in a strip; the rest are counted, and all are in its tooltip
@@ -39,6 +45,7 @@ interface ResultPaneProps {
     schema: Schema | null;
     config: Config;
     onExport: () => void;
+    onEditFrom: (entry: RunEntry) => void;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
 }
 
@@ -87,8 +94,9 @@ function statusOf(run: RunView, runs: RunsView, changes: FieldChange[]): { text:
     return parts.length > 0 ? { tone: 'warn', text: parts.join(' ') } : null;
 }
 
-export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify }: ResultPaneProps) {
+export function ResultPane({ runs, mode, run, schema, config, onExport, onEditFrom, onNotify }: ResultPaneProps) {
     const [showing, setShowing] = useState<'figure' | 'table'>('figure');
+    const [detailsFor, setDetailsFor] = useState<number | null>(null);
     const [selected, setSelected] = useState('contour');
     const [layout, setLayout] = useState<FigureLayout>('single');
     const [table, setTable] = useState<ResultTable | null>(null);
@@ -156,11 +164,21 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
 
     const available = useMemo(() => new Set(index?.available ?? []), [index]);
     const keptRuns = list?.runs ?? [];
+    const detailsEntry = detailsFor !== null ? runs.entry(detailsFor) : undefined;
+    // The form differs from the run shown, finished, whose config it can go back to
+    const canEditFrom = run.state !== 'running' && !partial && formChanges.length > 0 && !!shownEntry?.config;
+    const loadError = !partial && shown !== null ? (index?.loadError ?? '') : '';
 
     return (
         <section className="result-pane card" aria-label="Result">
             <header className="result-head">
                 <RunSelect runs={runs} />
+                <button type="button" className="icon-button" disabled={!shownEntry || partial}
+                        aria-label={shownEntry ? `Details of run ${shownEntry.runId}` : 'Run details'}
+                        title={shownEntry ? `Run ${shownEntry.runId}: name, note, baseline, edit from it, delete` : 'No finished run shown'}
+                        onClick={() => shownEntry && setDetailsFor(shownEntry.runId)}>
+                    <PencilIcon />
+                </button>
                 <span className="toolbar-spacer" />
                 <label className="baseline-pick">
                     <span className="muted">Baseline</span>
@@ -169,7 +187,7 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
                             title="A run the shown run is compared against: drawn dashed on the line plots, and set beside it in the table">
                         <option value="">None</option>
                         {keptRuns.map((entry) => (
-                            <option key={entry.runId} value={entry.runId}>Run {entry.runId}{entry.runName ? ` · ${entry.runName}` : ''}</option>
+                            <option key={entry.runId} value={entry.runId}>Run {entry.runId}{runTitle(entry) ? ` · ${runTitle(entry)}` : ''}</option>
                         ))}
                     </select>
                 </label>
@@ -188,6 +206,23 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
                      title={formChanges.length > changesListed ? formChanges.map(changeText).join('\n') : undefined}>
                     <InfoIcon />
                     <span>{status.text}</span>
+                    {canEditFrom && shownEntry && (
+                        <button type="button" className="button strip-action" onClick={() => onEditFrom(shownEntry)}
+                                title={`Put the config run ${shownEntry.runId} ran back into the Design form`}>
+                            Edit from run {shownEntry.runId}
+                        </button>
+                    )}
+                </div>
+            )}
+            {loadError && (
+                <div className="result-status is-warn" role="status">
+                    <InfoIcon />
+                    <span>Run {shown} cannot be drawn: {loadError}. Its config can still go into the form.</span>
+                    {shownEntry?.config && !canEditFrom && (
+                        <button type="button" className="button strip-action" onClick={() => onEditFrom(shownEntry)}>
+                            Edit from run {shownEntry.runId}
+                        </button>
+                    )}
                 </div>
             )}
             {baselineText && (
@@ -224,6 +259,11 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
                               emptyText={partial ? `The table fills when run ${shown} finishes.` : 'Generate a nozzle to fill this table.'}
                               onOpenView={openView} onNotify={onNotify} />
             </div>
+            {detailsEntry && (
+                <RunDetails key={detailsEntry.runId} entry={detailsEntry} baseline={baseline} store={list?.store ?? null}
+                            onEditFrom={onEditFrom} onBaseline={runs.setBaseline} onClose={() => setDetailsFor(null)}
+                            onNotify={onNotify} />
+            )}
         </section>
     );
 }

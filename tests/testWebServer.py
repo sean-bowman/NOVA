@@ -5,9 +5,10 @@
 The GUI's server: the Design form schema it serializes, the dependency predicates it
 evaluates, the unit table it hands the browser, the routes that read files, the cross-field checks
 and the material routes, the result table with its headline numbers and its comparison against a
-baseline run, the export routes and file previews, the kept runs and the baseline, the cooling
-figures, the overlay of a second run, the filled flow field, the palette stylesheet, and a run
-session's error, cancel and mid-run contour paths.
+baseline run, the export routes and file previews, the kept runs and the baseline, the run store
+that keeps them between launches with their names and notes, the cooling figures, the overlay of a
+second run, the filled flow field, the palette stylesheet, and a run session's error, cancel and
+mid-run contour paths.
 
 The schema, unit, route, design, result table, export and palette tests need neither a run nor a
 display; the result table and export tests stand a finished run in with a Nozzle stand-in and files
@@ -15,13 +16,15 @@ in a temporary folder. The cooling figure tests read the showcase cooling runs u
 featureShowcase/coolingRuns, which are local outputs and not in the repository; without them they
 skip. They cross-check each plotly builder against the Matplotlib drawer it ports. The session
 tests start real worker processes: one on a config NOVA rejects, one cancelled during the contour
-solve, and one that sends its contour figures when the contour stage ends and is then cancelled.
-Together they take about two minutes.
+solve, and one that sends its contour figures when the contour stage ends and is then cancelled;
+the first two run on a run store in a temporary folder and leave nothing in it. Together they take
+about two minutes.
 
 Author: Sean Bowman
 
 '''
 
+import json
 import math
 import os
 import pickle
@@ -42,7 +45,8 @@ from fastapi.testclient import TestClient
 
 from NOVA import units as novaUnits
 from novaGui import configSchema
-from novaGui import analysis, outputs, paletteCss, schemaJson
+from novaGui import analysis, outputs, paletteCss, runStore, schemaJson
+from novaGui.runStore import RunStore
 from novaGui.server import createApp
 from novaGui import session as sessionModule
 from novaGui.session import RunRecord, RunSession
@@ -457,6 +461,166 @@ def testTheRunListAndBaselineRoutes(client):
     finally:
         session.forget(first.runId)
         session.forget(second.runId)
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The run store -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testTheStoreNeverGivesAnIdOutTwice(tmp_path):
+    '''
+    Run ids count up across launches: a deleted run's id is not given out again, and a folder
+    another server claimed is stepped over.
+    '''
+    store = RunStore(str(tmp_path))
+    assert [store.claim()[0] for _ in range(2)] == [1, 2]
+    store.remove(2)
+    again = RunStore(str(tmp_path))
+    assert again.claim() == (3, again.folder(3))
+    os.mkdir(again.folder(4))
+    assert again.claim()[0] == 5 and os.path.isdir(again.folder(5))
+
+@pytest.mark.parametrize('runs, countLimit, byteLimit, dropped', [
+    # Three unnamed runs count against a limit of two, the baseline (3) not among them
+    ([(1, False, 10), (2, True, 10), (3, False, 10), (4, False, 10), (5, False, 10)], 2, 1000, [1]),
+    # Past the size, unnamed runs go oldest first; the named run, the baseline and the newest stay
+    ([(1, False, 10), (2, True, 10), (3, False, 10), (4, False, 10), (5, False, 10)], 10, 25, [1, 4]),
+    ([(1, False, 10), (2, False, 10)], 2, 1000, []),
+])
+def testTheStoreDropsTheOldestUnnamedRunsFirst(runs, countLimit, byteLimit, dropped):
+    assert runStore.pruned(runs, baseline = 3, newest = 5, countLimit = countLimit, byteLimit = byteLimit) == dropped
+
+def _storedRun(store, session, title: str = '', **summary) -> RunRecord:
+    '''A finished run written into a store folder, with outputs and a pickled stand-in, adopted by the session.'''
+    runId, folder = store.claim()
+    outputFolder = os.path.join(folder, 'testEngineOutputs')
+    os.makedirs(outputFolder)
+    with open(os.path.join(outputFolder, 'testEngineContour.txt'), 'w') as handle:
+        handle.write('0 1\n' * 100)
+    picklePath = os.path.join(folder, 'novaGuiResult.pkl')
+    with open(picklePath, 'wb') as handle:
+        pickle.dump({'runId': runId}, handle)
+    record = RunRecord(runId, {'ok': True, 'runName': 'testEngine', 'outputDir': outputFolder, 'picklePath': picklePath,
+                               'elapsedSec': 12.5, 'headline': '100 kN  Isp 440 s', **summary},
+                       config = {'chamberPressure': 6.9e6 + runId}, folder = folder,
+                       warnings = [{'category': 'UserWarning', 'message': 'one', 'where': 'a.py:1', 'count': 2}])
+    if title:
+        record.title = title
+    session.adopt(record)
+    return record
+
+def testARunOnTheStoreOutlastsItsSession(tmp_path):
+    '''
+    A session on the store saves each finished run beside its outputs; the next session starts
+    with it, its name, note, config, warnings and headline, and the baseline.
+    '''
+    store = RunStore(str(tmp_path))
+    session = RunSession(store = store)
+    try:
+        record = _storedRun(store, session)
+        session.describe(record.runId, title = '  Baseline   design ', note = 'first try\n')
+        session.setBaseline(record.runId)
+        entry = session.runList()['runs'][0]
+        assert (entry['title'], entry['note'], entry['saved']) == ('Baseline design', 'first try', True)
+        assert entry['bytes'] > 400
+        assert session.runList()['store']['folder'] == store.root
+    finally:
+        session.shutdown()
+
+    later = RunSession(store = RunStore(str(tmp_path)))
+    try:
+        kept = later.record(record.runId)
+        assert later.baseline == record.runId and later.record().runId == record.runId
+        for name in ('runName', 'title', 'note', 'elapsedSec', 'headline', 'finishedAt', 'config', 'warnings',
+                     'outputDir', 'picklePath', 'bytes'):
+            assert getattr(kept, name) == getattr(record, name), name
+        assert later.nozzle(kept) == {'runId': record.runId}
+        with open(os.path.join(store.folder(record.runId), runStore.recordName), encoding = 'utf-8') as handle:
+            saved = json.load(handle)
+        assert saved['outputDir'] == 'testEngineOutputs' and saved['picklePath'] == 'novaGuiResult.pkl'
+    finally:
+        later.shutdown()
+
+def testTheStoreKeepsNamedRunsAndTheBaselinePastItsLimit(tmp_path, monkeypatch):
+    '''
+    Past the store's limit the oldest unnamed run goes with its folder; a named run and the baseline
+    stay. A deleted run takes its folder, and deleting the baseline clears it.
+    '''
+    monkeypatch.setattr(runStore, 'unnamedRuns', 2)
+    store = RunStore(str(tmp_path))
+    session = RunSession(store = store)
+    try:
+        named = _storedRun(store, session, title = 'keep me')
+        records = [_storedRun(store, session) for _ in range(2)]
+        session.setBaseline(records[0].runId)
+        records += [_storedRun(store, session) for _ in range(2)]
+        assert list(session.runs) == [named.runId, records[0].runId, records[2].runId, records[3].runId]
+        assert not os.path.isdir(records[1].folder) and os.path.isdir(named.folder)
+
+        session.delete(records[0].runId)
+        assert session.baseline is None and store.baseline is None
+        assert not os.path.isdir(records[0].folder) and records[0].runId not in session.runs
+        with pytest.raises(KeyError):
+            session.delete(records[0].runId)
+        with pytest.raises(ValueError):
+            session.describe(named.runId, title = 'x' * (sessionModule.titleLength + 1))
+    finally:
+        session.shutdown()
+
+def testTheStoreCollectsRunsThatNeverFinished(tmp_path):
+    '''A folder with no record, left by a server that closed mid-run, goes once it is stale; a fresh one stays.'''
+    store = RunStore(str(tmp_path))
+    staleId, stale = store.claim()
+    freshId, fresh = store.claim()
+    old = time.time() - 3600.0 * (runStore.staleHours + 1.0)
+    os.utime(stale, (old, old))
+    RunSession(store = RunStore(str(tmp_path))).shutdown()
+    assert not os.path.isdir(stale) and os.path.isdir(fresh)
+    assert store.claim()[0] == freshId + 1
+
+def testARunWhosePickleNoLongerLoadsSaysWhy(client, tmp_path):
+    '''
+    A saved run whose Nozzle no longer unpickles still lists, with its config; its views and table
+    answer with the reason.
+    '''
+    broken = tmp_path / 'novaGuiResult.pkl'
+    broken.write_bytes(b'not a pickle')
+    session = client.app.state.session
+    record = RunRecord(next(_runIds), {'ok': True, 'runName': 'oldEngine', 'picklePath': str(broken)},
+                       config = {'chamberPressure': 5e6})
+    session.adopt(record)
+    try:
+        index = client.get('/api/views', params = {'run': record.runId}).json()
+        assert index['available'] == [] and index['config'] == {'chamberPressure': 5e6}
+        assert 'does not load in this NOVA' in index['loadError']
+        table = client.get('/api/analysis', params = {'run': record.runId})
+        assert table.status_code == 404 and 'cannot be drawn' in table.json()['detail']
+    finally:
+        session.forget(record.runId)
+
+def testTheRunNameNoteAndDeleteRoutes(client):
+    session = client.app.state.session
+    record = _record(next(_runIds))
+    session.adopt(record)
+    try:
+        named = client.patch(f'/api/runs/{record.runId}', json = {'title': '8 MPa', 'note': 'higher pc'})
+        assert named.status_code == 200 and (named.json()['title'], named.json()['note']) == ('8 MPa', 'higher pc')
+        assert client.patch(f'/api/runs/{record.runId}', json = {'note': ''}).json()['title'] == '8 MPa'
+        assert client.get('/api/runs').json()['runs'][0]['note'] == ''
+        assert client.patch(f'/api/runs/{record.runId}', json = {}).status_code == 400
+        assert client.patch(f'/api/runs/{record.runId}', json = {'title': 5}).status_code == 400
+        assert client.patch(f'/api/runs/{record.runId}', json = {'title': 'x' * 200}).status_code == 400
+        assert client.patch('/api/runs/99999', json = {'title': 'a'}).status_code == 404
+
+        session.setBaseline(record.runId)
+        cache = client.app.state.figureCache
+        cache[(record.runId, False, 'contour', 'dark', None, None)] = (b'{}', b'')
+        assert client.delete(f'/api/runs/{record.runId}').json() == {'deleted': record.runId}
+        assert all(entry[0] != record.runId for entry in cache)
+        listing = client.get('/api/runs').json()
+        assert listing['baseline'] is None and record.runId not in [entry['runId'] for entry in listing['runs']]
+        assert client.delete(f'/api/runs/{record.runId}').status_code == 404
+    finally:
+        session.forget(record.runId)
 
 @pytest.mark.parametrize('shown, baseline, text', [
     ('441.8', '440.3', '+1.5 (+0.34 %)'),
@@ -919,20 +1083,24 @@ def _waitForEnd(session: RunSession, timeoutSec: float) -> None:
         time.sleep(0.25)
     assert not session.busy, 'the run did not end in time'
 
-def testARejectedConfigEndsTheRunWithItsError():
+def testARejectedConfigEndsTheRunWithItsError(tmp_path):
     '''
     A config NOVA refuses ends the run as an error, carries NOVA's message, and logs the traceback.
+    The run's store folder goes with it.
     '''
-    session = RunSession()
+    store = RunStore(str(tmp_path))
+    session = RunSession(store = store)
     try:
         config = configSchema.defaultConfig()
         config['divergingSectionType'] = 'notAContour'
-        session.start(config, 'dark')
+        runId = session.start(config, 'dark')
+        assert os.path.isdir(store.folder(runId))
         _waitForEnd(session, 120.0)
         assert session.state['state'] == 'error'
         assert session.result is not None and not session.result.ok
         assert session.result.error
         assert any('Traceback' in line for line in session.log)
+        assert not os.path.isdir(store.folder(runId)) and session.runList()['runs'] == []
     finally:
         session.shutdown()
 
@@ -940,13 +1108,15 @@ def _contourRunning(session) -> bool:
     '''Whether the session's run has reported its contour stage open.'''
     return any(stage['key'] == 'contour' and stage['state'] == 'running' for stage in session.state['stages'])
 
-def testACancelledRunEndsCancelledAndFreesTheSession():
+def testACancelledRunEndsCancelledAndFreesTheSession(tmp_path):
     '''
-    Cancel terminates the worker mid-solve; the session reports it cancelled and takes another run.
+    Cancel terminates the worker mid-solve; the session reports it cancelled, removes the run's store
+    folder, and takes another run.
     '''
-    session = RunSession()
+    store = RunStore(str(tmp_path))
+    session = RunSession(store = store)
     try:
-        session.start(configSchema.defaultConfig(), 'dark')
+        runId = session.start(configSchema.defaultConfig(), 'dark')
         deadline = time.time() + 90.0
         while not _contourRunning(session) and time.time() < deadline:
             time.sleep(0.25)
@@ -957,6 +1127,7 @@ def testACancelledRunEndsCancelledAndFreesTheSession():
         _waitForEnd(session, 30.0)
         assert session.state['state'] == 'cancelled'
         assert not session.cancel()
+        assert not os.path.isdir(store.folder(runId)) and os.listdir(store.root) == [runStore.indexName]
     finally:
         session.shutdown()
 

@@ -1766,10 +1766,12 @@ select.input option {
 }
 
 /* -- Kept runs and the baseline -- */
+/* Narrow enough that a named run's label leaves Export on the header's first line; the
+   menu's tooltip carries the whole label */
 .run-select {
     width: auto;
     min-width: 170px;
-    max-width: min(420px, 100%);
+    max-width: min(360px, 100%);
     font-weight: 600;
 }
 
@@ -2080,4 +2082,68 @@ select.input option {
     min-height: 0;
     margin: 10px;
     overflow: hidden;
+}
+
+/* -- A kept run's details: name, note, baseline, edit from it, delete -- */
+.run-details {
+    width: min(600px, 92vw);
+}
+
+.run-details-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.run-details-head h2 {
+    margin: 0;
+}
+
+.run-details-field {
+    display: grid;
+    grid-template-columns: 52px 1fr;
+    align-items: start;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.run-details-field > span {
+    padding-top: 6px;
+    color: var(--text-muted);
+    font-size: 12.5px;
+}
+
+.run-note {
+    height: auto;
+    min-height: 84px;
+    padding: 6px 9px;
+    resize: vertical;
+    font: inherit;
+    line-height: 1.45;
+}
+
+.run-details-facts {
+    display: grid;
+    gap: 3px;
+    margin: 14px 0 0 62px;
+    font-size: 12.5px;
+}
+
+.modal p.run-details-store {
+    margin: 10px 0 0 62px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.run-details-confirm {
+    align-items: center;
+    font-weight: 600;
+}
+
+.result-status .strip-action {
+    flex: none;
+    height: 24px;
+    margin: -3px 0 -3px auto;
+    padding: 0 10px;
+    font-size: 12px;
 }

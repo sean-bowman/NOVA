@@ -212,12 +212,24 @@ export type RunEvent =
 /** A kept finished run, as the run list carries it (novaGui.session.RunRecord.entry). */
 export interface RunEntry {
     runId: number;
-    runName: string;
+    runName: string;              // the config's filename, which names its outputs
+    title: string;                // the name given to the run, '' for none
+    note: string;
     elapsedSec: number;
     headline: string;             // thrust, delivered Isp, propellants
     finishedAt: number;           // [s] epoch
     config: Config | null;
     warnings: RunWarning[];
+    bytes: number;                // [B] its files in the run store, 0 for a run held in memory
+    saved: boolean;               // the run store holds it
+}
+
+/** The run store the server keeps runs in between launches (novaGui.runStore). */
+export interface RunStoreInfo {
+    folder: string;
+    unnamedRuns: number;          // unnamed runs kept, besides the named ones and the baseline
+    bytes: number;                // [B] the kept runs' files
+    byteLimit: number;            // [B] past which unnamed runs go
 }
 
 export interface RunList {
@@ -225,6 +237,7 @@ export interface RunList {
     baseline: number | null;
     latest: number | null;        // the latest good run
     running: { runId: number; config: Config | null; views: string[]; warnings: RunWarning[] } | null;
+    store: RunStoreInfo | null;   // null when the server keeps runs in memory alone
 }
 
 export interface ViewSpec {
@@ -249,6 +262,7 @@ export interface ViewIndex {
     elapsedSec: number | null;
     config: Config | null;
     partial: boolean;
+    loadError: string;            // why the run's saved result does not load, '' when it does
 }
 
 export interface Settings {

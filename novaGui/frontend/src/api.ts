@@ -7,8 +7,8 @@
    ======================================== */
 
 import type {
-    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, MeshPreview, Mode, ResultTable, RunEvent,
-    RunList, Schema, Settings, ViewIndex, WallSample,
+    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, MeshPreview, Mode, ResultTable, RunEntry,
+    RunEvent, RunList, Schema, Settings, ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -60,6 +60,9 @@ export const api = {
     saveSettings: (settings: Partial<Settings>) => request<Settings>('/api/settings', jsonBody('PUT', settings)),
     runs: () => request<RunList>('/api/runs'),
     setBaseline: (runId: number | null) => request<{ baseline: number | null }>('/api/runs/baseline', jsonBody('PUT', { runId })),
+    describeRun: (runId: number, fields: { title?: string; note?: string }) =>
+        request<RunEntry>(`/api/runs/${runId}`, jsonBody('PATCH', fields)),
+    deleteRun: (runId: number) => request<{ deleted: number }>(`/api/runs/${runId}`, { method: 'DELETE' }),
     startRun: (config: Config, mode: Mode) => request<{ runId: number }>('/api/runs', jsonBody('POST', { config, mode })),
     cancelRun: () => request<{ cancelled: boolean }>('/api/runs/cancel', { method: 'POST' }),
     views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),

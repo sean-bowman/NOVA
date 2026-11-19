@@ -174,7 +174,11 @@ The channel mesh, the revolved contour and the volutes are 3D views at full reso
 
 ### Runs and the baseline
 
-The server keeps the last eight finished runs. The run menu at the left of the pane's header shows any of them, by number, name, thrust, Isp and run time; it follows the latest run until another is picked, and a new run sets it back to following. **Baseline** picks the run the shown one is compared against, and that run is kept however many follow it. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
+Finished runs are saved, so they are still there the next time the GUI opens, and each keeps its number. The run menu at the left of the pane's header shows any of them, by number, name, thrust, Isp and run time; it follows the latest run until another is picked, and a new run sets it back to following. **Baseline** picks the run the shown one is compared against. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
+
+The pencil beside the run menu opens the shown run's details: a name, which the run menu shows in place of the config's filename, a free-text note, the baseline, **Edit from this run**, and **Delete run**. Edit from this run puts the config that run ran back into the Design form, so iterating from an earlier design takes one click; when the form differs from the run shown, the strip under the header that names the changed fields offers the same button. Named runs and the baseline are kept however many runs follow; unnamed runs go oldest first past 24 of them or 2 GB in all. The runs are saved under `%LOCALAPPDATA%\NOVA\runs` (`~/.local/share/NOVA/runs` elsewhere), or the folder `NOVA_RUN_STORE` names.
+
+![A run's details](docs/images/novaGui/runDetails.png)
 
 ![A run over its baseline](docs/images/novaGui/compare.png)
 
@@ -190,7 +194,7 @@ Beside a baseline, each value carries the baseline's value and the change from i
 
 ### Export
 
-A run writes its outputs to a staging folder, not to the output folder. **Export** in the result pane's header opens a dialog that lists the shown run's outputs by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. The figures carry thumbnails, and the eye on a row previews the file beside the list: an image as itself, an STL surface in the 3D viewer, a text or JSON file as its first lines. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
+A run writes its outputs into its own folder in the run store, not to the output folder. **Export** in the result pane's header opens a dialog that lists the shown run's outputs by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. The figures carry thumbnails, and the eye on a row previews the file beside the list: an image as itself, an STL surface in the 3D viewer, a text or JSON file as its first lines. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
 
 ![Export dialog](docs/images/novaGui/export.png)
 
