@@ -13,8 +13,12 @@ files into `<output folder>/<runName>Outputs/`. The categories and the rule that
 in one by its name (`outputCategories`, `categoryOf`) are shared with the legacy Tkinter front
 end's Export tab; the default output folder is `runs/` at the repository root.
 
-The browser names files by their base name, and only names the run listed are copied or opened, so
-a request cannot reach a file outside the run's staging folder.
+The browser names files by their base name, and only names the run listed are copied, opened or
+previewed, so a request cannot reach a file outside the run's staging folder.
+
+The Export dialog previews a file before it is exported: an image as itself, an STL surface in the
+browser's WebGL viewer (`stlMesh` reads it into vertices and triangles), and a text, CSV or JSON
+file as its first lines (`previewKind` says which).
 
 Author: Sean Bowman
 Date:   11/17/2026
@@ -68,6 +72,94 @@ def categoryOf(fileName: str) -> str:
         return 'nozzle'
 
     return 'other'
+
+previewTextBytes = 200000      # [B] the most of a text file a preview reads
+previewTriangles = 200000      # [-] the most triangles an STL preview draws
+
+def previewKind(fileName: str) -> str | None:
+
+    '''How the Export dialog previews a file: 'image', 'mesh', 'text', or None for no preview.'''
+
+    lower = fileName.lower()
+    if lower.endswith(('.png', '.jpg', '.jpeg', '.svg')):
+        return 'image'
+    if lower.endswith('.stl'):
+        return 'mesh'
+    if lower.endswith(('.txt', '.csv', '.json', '.dat')):
+        return 'text'
+    return None
+
+def _readStl(path: str):
+
+    '''
+
+    An STL file's triangles as an (n, 3, 3) array [file units], binary or ASCII.
+
+    '''
+
+    import numpy as np
+
+    size = os.path.getsize(path)
+    with open(path, 'rb') as handle:
+        head = handle.read(84)
+        count = int.from_bytes(head[80:84], 'little') if len(head) == 84 else -1
+        if count >= 0 and size == 84 + 50 * count:
+            record = np.dtype([('normal', '<f4', 3), ('corners', '<f4', (3, 3)), ('attribute', '<u2')])
+            return np.fromfile(handle, dtype = record, count = count)['corners'].astype(float)
+
+    corners = []
+    with open(path, encoding = 'ascii', errors = 'replace') as handle:
+        for line in handle:
+            parts = line.split()
+            if len(parts) == 4 and parts[0] == 'vertex':
+                corners.append([float(value) for value in parts[1:]])
+    usable = len(corners) - len(corners) % 3
+    return np.asarray(corners[:usable], dtype = float).reshape(-1, 3, 3)
+
+def stlMesh(path: str, maxTriangles: int = previewTriangles) -> dict:
+
+    '''
+
+    An STL surface as the browser's mesh viewer draws it: shared vertices and the triangles
+    between them.
+
+    Corners are merged where they coincide, as an STL repeats each one for every triangle that
+    meets it. A surface with more than `maxTriangles` is thinned by clustering: corners are
+    snapped to a lattice fine enough to keep the shape, and triangles whose corners collapse
+    together are dropped.
+
+    Returns:
+    --------
+    dict : {'x', 'y', 'z': [vertex coordinates], 'i', 'j', 'k': [vertex indices per triangle],
+        'triangles': in the file, 'shown': drawn}
+
+    '''
+
+    import numpy as np
+
+    triangles = _readStl(path)
+    total = len(triangles)
+    corners = triangles.reshape(-1, 3)
+    if total == 0:
+        return {'x': [], 'y': [], 'z': [], 'i': [], 'j': [], 'k': [], 'triangles': 0, 'shown': 0}
+
+    # The first lattice only merges coincident corners (an STL stores single precision); coarser
+    # ones thin a surface over the cap
+    extent = float(np.max(np.ptp(corners, axis = 0))) or 1.0
+    cells = 1e6
+    while True:
+        snapped = np.round(corners / (extent / cells))
+        vertices, index = np.unique(snapped, axis = 0, return_inverse = True)
+        faces = index.reshape(-1, 3)
+        faces = faces[(faces[:, 0] != faces[:, 1]) & (faces[:, 1] != faces[:, 2]) & (faces[:, 0] != faces[:, 2])]
+        if len(faces) <= maxTriangles or cells < 20.0:
+            break
+        cells = min(cells, 3000.0) * 0.7
+
+    points = vertices * (extent / cells)
+    return {'x': points[:, 0].tolist(), 'y': points[:, 1].tolist(), 'z': points[:, 2].tolist(),
+            'i': faces[:, 0].tolist(), 'j': faces[:, 1].tolist(), 'k': faces[:, 2].tolist(),
+            'triangles': total, 'shown': int(len(faces))}
 
 def categories() -> list:
 

@@ -4,8 +4,10 @@
 
 The GUI's server: the Design form schema it serializes, the dependency predicates it
 evaluates, the unit table it hands the browser, the routes that read files, the cross-field checks
-and the material routes, the result table, the export routes, the cooling figures, the palette
-stylesheet, and a run session's error and cancel paths.
+and the material routes, the result table with its headline numbers and its comparison against a
+baseline run, the export routes and file previews, the kept runs and the baseline, the cooling
+figures, the overlay of a second run, the filled flow field, the palette stylesheet, and a run
+session's error, cancel and mid-run contour paths.
 
 The schema, unit, route, design, result table, export and palette tests need neither a run nor a
 display; the result table and export tests stand a finished run in with a Nozzle stand-in and files
@@ -13,7 +15,8 @@ in a temporary folder. The cooling figure tests read the showcase cooling runs u
 featureShowcase/coolingRuns, which are local outputs and not in the repository; without them they
 skip. They cross-check each plotly builder against the Matplotlib drawer it ports. The session
 tests start real worker processes: one on a config NOVA rejects, one cancelled during the contour
-solve. Together they take about a minute.
+solve, and one that sends its contour figures when the contour stage ends and is then cancelled.
+Together they take about two minutes.
 
 Author: Sean Bowman
 
@@ -21,6 +24,8 @@ Author: Sean Bowman
 
 import math
 import os
+import pickle
+import struct
 import sys
 import time
 import types
@@ -39,6 +44,7 @@ from NOVA import units as novaUnits
 from novaGui import configSchema
 from novaGui import analysis, outputs, paletteCss, schemaJson
 from novaGui.server import createApp
+from novaGui import session as sessionModule
 from novaGui.session import RunRecord, RunSession
 
 @pytest.fixture(scope = 'module')
@@ -228,11 +234,18 @@ def testAValueSplitsFromItsUnitOnlyWhenTheRestIsAUnit(text, split):
 # -- Export -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
+def _stl(triangles: list) -> bytes:
+    '''A binary STL of the given triangles, each three (x, y, z) corners.'''
+    body = b''.join(struct.pack('<12fH', 0.0, 0.0, 1.0, *[value for corner in corners for value in corner], 0)
+                    for corners in triangles)
+    return b'x' * 80 + struct.pack('<I', len(triangles)) + body
+
 _outputBytes = {
     'machContours.png':          b'p' * 2048,
     'contourInteractive.html':   b'<html></html>',
     'testEngineHotWall.txt':     b'0.0 0.05\n',
     'testEngine.pkl':            b'\x80\x04N.',
+    'testEngineWall.stl':        _stl([((0, 0, 0), (1, 0, 0), (0, 1, 0)), ((1, 0, 0), (1, 1, 0), (0, 1, 0))]),
 }
 _runIds = iter(range(700, 800))
 
@@ -250,22 +263,24 @@ def finishedRun(client, tmp_path):
                                        'picklePath': 'held in memory', 'elapsedSec': 1.0})
     record._nozzle = _nozzleStandIn()
     session = client.app.state.session
-    session.result = record
+    session.adopt(record)
     yield record
-    session.result = None
+    session.forget(record.runId)
 
 def testTheViewIndexCarriesTheConfigItsRunRan(client):
     '''The result pane compares the form with the config of the run it shows.'''
     session = client.app.state.session
-    session.result = RunRecord(next(_runIds), {'ok': True, 'runName': 'testEngine', 'elapsedSec': 12.5},
-                               config = {'chamberPressure': 6.9e6, 'ambientPressure': 5000.0})
+    record = RunRecord(next(_runIds), {'ok': True, 'runName': 'testEngine', 'elapsedSec': 12.5},
+                       config = {'chamberPressure': 6.9e6, 'ambientPressure': 5000.0})
+    session.adopt(record)
     try:
         index = client.get('/api/views').json()
-        assert index['runId'] == session.result.runId and index['runName'] == 'testEngine'
+        assert index['runId'] == record.runId and index['runName'] == 'testEngine'
         assert index['elapsedSec'] == 12.5
         assert index['config'] == {'chamberPressure': 6.9e6, 'ambientPressure': 5000.0}
+        assert client.get(f'/api/views?run={record.runId}').json()['runId'] == record.runId
     finally:
-        session.result = None
+        session.forget(record.runId)
     assert client.get('/api/views').json()['config'] is None
 
 def testTheFormWidthIsSavedApartFromTheThemeMode(client, tmp_path, monkeypatch):
@@ -295,9 +310,46 @@ def testTheExportListingFilesEachOutputByCategory(client, finishedRun):
     files = {entry['name']: entry for entry in client.get('/api/export').json()['files']}
     assert {name: entry['category'] for name, entry in files.items()} == {
         'machContours.png': 'figures', 'contourInteractive.html': 'interactive',
-        'testEngineHotWall.txt': 'contours', 'testEngine.pkl': 'nozzle', 'testEngineRunConfig.json': 'config'}
+        'testEngineHotWall.txt': 'contours', 'testEngine.pkl': 'nozzle', 'testEngineRunConfig.json': 'config',
+        'testEngineWall.stl': 'geometry'}
     assert files['machContours.png']['bytes'] == 2048
+    assert {name: entry['preview'] for name, entry in files.items()} == {
+        'machContours.png': 'image', 'contourInteractive.html': None, 'testEngineHotWall.txt': 'text',
+        'testEngine.pkl': None, 'testEngineRunConfig.json': 'text', 'testEngineWall.stl': 'mesh'}
 
+def testAPreviewReadsOnlyTheRunsListedFiles(client, finishedRun):
+    '''
+    An image previews as itself, a text file as its text, an STL as shared vertices and triangles;
+    a name outside the run's listing, or a file with no preview, is refused.
+    '''
+    image = client.get('/api/export/file', params = {'name': 'machContours.png'})
+    assert image.status_code == 200 and image.content == _outputBytes['machContours.png']
+    text = client.get('/api/export/file', params = {'name': 'testEngineHotWall.txt', 'run': finishedRun.runId}).json()
+    assert text == {'text': '0.0 0.05\n', 'bytes': 9, 'cut': False}
+    mesh = client.get('/api/export/mesh', params = {'name': 'testEngineWall.stl'}).json()
+    assert (mesh['triangles'], mesh['shown'], len(mesh['x'])) == (2, 2, 4)
+    corners = {tuple(round(mesh[axis][index], 9) for axis in 'xyz') for index in mesh['i'] + mesh['j'] + mesh['k']}
+    assert corners == {(0, 0, 0), (1, 0, 0), (0, 1, 0), (1, 1, 0)}
+    assert client.get('/api/export/file', params = {'name': '..\\..\\secret.txt'}).status_code == 404
+    assert client.get('/api/export/file', params = {'name': 'testEngine.pkl'}).status_code == 400
+    assert client.get('/api/export/mesh', params = {'name': 'machContours.png'}).status_code == 400
+
+def testAThinnedMeshStaysUnderItsCap(tmp_path):
+    '''A surface over the cap is thinned by clustering its corners, and says how far.'''
+    grid = 60
+    triangles = []
+    for row in range(grid):
+        for column in range(grid):
+            a, b = (row / grid, column / grid, 0.0), ((row + 1) / grid, column / grid, 0.0)
+            c, d = (row / grid, (column + 1) / grid, 0.0), ((row + 1) / grid, (column + 1) / grid, 0.0)
+            triangles += [(a, b, d), (a, d, c)]
+    path = tmp_path / 'sheet.stl'
+    path.write_bytes(_stl(triangles))
+    whole = outputs.stlMesh(str(path))
+    assert (whole['triangles'], whole['shown'], len(whole['x'])) == (7200, 7200, 61 * 61)
+    thinned = outputs.stlMesh(str(path), maxTriangles = 2000)
+    assert thinned['triangles'] == 7200 and thinned['shown'] <= 2000
+    assert min(thinned['x']) == pytest.approx(0.0, abs = 0.02) and max(thinned['x']) == pytest.approx(1.0, abs = 0.02)
 def testAnExportCopiesTheChosenFilesUnderTheRunName(client, finishedRun, tmp_path):
     base = tmp_path / 'exports'
     reply = client.post('/api/export', json = {'baseDir': str(base),
@@ -333,6 +385,206 @@ def testOpeningReachesOnlyTheRunsFilesAndTheTargetFolder(client, finishedRun, tm
     assert opened == [os.path.join(finishedRun.outputDir, 'testEngine.pkl')]
 
 #--------------------------------------------------------------------------------------------------------------------------#
+# -- Kept runs, the baseline and the comparison -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def _record(runId: int, **summary) -> RunRecord:
+    return RunRecord(runId, {'ok': True, 'runName': f'engine{runId}', 'elapsedSec': 10.0, **summary},
+                     config = {'chamberPressure': 6.9e6 + runId})
+
+def testTheSessionKeepsTheLatestRunsAndTheBaseline():
+    '''
+    The session keeps the last keptRuns finished runs and the baseline however many follow it; a
+    run that drops out takes its staging folder with it.
+    '''
+    session = RunSession()
+    try:
+        for runId in (1, 2):
+            session.adopt(_record(runId))
+        session.setBaseline(1)
+        dropped = os.path.join(sessionModule.stagingRoot(), 'run2')
+        os.makedirs(dropped, exist_ok = True)
+        last = sessionModule.keptRuns + 3
+        for runId in range(3, last + 1):
+            session.adopt(_record(runId))
+        kept = list(session.runs)
+        assert kept[0] == 1 and len(kept) == sessionModule.keptRuns + 1
+        assert kept[1:] == list(range(last - sessionModule.keptRuns + 1, last + 1))
+        assert not os.path.isdir(dropped)
+        assert session.record().runId == last and session.record(1).runId == 1 and session.record(2) is None
+        listing = session.runList()
+        assert [entry['runId'] for entry in listing['runs']][:2] == [last, last - 1]
+        assert (listing['baseline'], listing['latest'], listing['running']) == (1, last, None)
+        with pytest.raises(KeyError):
+            session.setBaseline(2)
+    finally:
+        session.shutdown()
+
+def testOnlyTheRunsDrawnFromLatelyKeepTheirNozzle(tmp_path):
+    '''A kept run past the last keptNozzles drawn from releases its Nozzle and reads its pickle again.'''
+    session = RunSession()
+    try:
+        records = []
+        for runId in range(1, sessionModule.keptNozzles + 2):
+            path = tmp_path / f'run{runId}.pkl'
+            path.write_bytes(pickle.dumps({'runId': runId}))
+            records.append(_record(runId, picklePath = str(path)))
+            session.adopt(records[-1])
+        for record in records:
+            assert session.nozzle(record) == {'runId': record.runId}
+        assert records[0]._nozzle is None
+        assert all(record._nozzle is not None for record in records[1:])
+        assert session.nozzle(records[0]) == {'runId': 1}
+    finally:
+        session.shutdown()
+
+def testTheRunListAndBaselineRoutes(client):
+    session = client.app.state.session
+    first, second = _record(next(_runIds)), _record(next(_runIds))
+    session.adopt(first)
+    session.adopt(second)
+    try:
+        listing = client.get('/api/runs').json()
+        assert [entry['runId'] for entry in listing['runs']][:2] == [second.runId, first.runId]
+        assert listing['runs'][0]['config'] == second.config
+        assert client.put('/api/runs/baseline', json = {'runId': first.runId}).json() == {'baseline': first.runId}
+        assert client.get('/api/runs').json()['baseline'] == first.runId
+        assert client.put('/api/runs/baseline', json = {'runId': 99999}).status_code == 404
+        assert client.put('/api/runs/baseline', json = {'runId': True}).status_code == 400
+        assert client.put('/api/runs/baseline', json = {'runId': None}).json() == {'baseline': None}
+        assert client.get(f'/api/views?run=99999').status_code == 200
+        assert client.get(f'/api/analysis?run=99999').status_code == 404
+    finally:
+        session.forget(first.runId)
+        session.forget(second.runId)
+
+@pytest.mark.parametrize('shown, baseline, text', [
+    ('441.8', '440.3', '+1.5 (+0.34 %)'),
+    ('1156.8', '1000.0', '+156.8 (+16 %)'),
+    ('800.0', '758.2', '+41.8 (+5.5 %)'),
+    ('100000', '100000', ''),
+    ('0.365', '0', '+0.365'),
+    ('1.2e+05', '1e+05', '+2e+04 (+20 %)'),
+    ('B, one and a half pass', 'A, single pass', 'differs'),
+    ('--', '12.0', ''),
+])
+def testAChangeIsWrittenToTheShownDecimals(shown, baseline, text):
+    assert analysis.change(shown, baseline) == text
+
+def testTheComparisonMatchesRowsAndKeepsTheBaselinesOwn():
+    '''
+    Rows match by section and label, a repeated label by its place among its namesakes; rows and
+    sections only the baseline has follow with blank cells, and a row whose shape differs is not
+    compared.
+    '''
+    def table(sections, numbers = ()):
+        return {'summary': '', 'headline': list(numbers),
+                'sections': [{'title': title, 'columns': None,
+                              'rows': [{'label': label, 'cells': cells, 'unit': unit, 'indent': False, 'view': None}
+                                       for label, cells, unit in rows]} for title, rows in sections]}
+    shown = table([('Sizing', [('Thrust', ['100000'], 'N'), ('  coolant', ['96.0 to 257.0 K'], ''),
+                               ('  coolant', ['257.0 to 300.0 K'], ''), ('Exit radius', ['319.28'], 'mm')])],
+                  [{'key': 'isp', 'label': 'Delivered Isp', 'value': '441.8', 'unit': 's'}])
+    baseline = table([('Sizing', [('Thrust', ['90000'], 'N'), ('  coolant', ['96.0 to 160.0 K'], ''),
+                                  ('Exit radius', ['319.28'], 'cm'), ('Split area ratio', ['2.5'], '')]),
+                      ('Plume', [('Ambient pressure', ['5000'], 'Pa')])],
+                     [{'key': 'isp', 'label': 'Delivered Isp', 'value': '440.3', 'unit': 's'}])
+    compared = analysis.compareTables(shown, baseline)
+    rows = compared['sections'][0]['rows']
+    assert [(row['label'], row['baseline'], row['change']) for row in rows] == [
+        ('Thrust', ['90000'], ['+10000 (+11 %)']),
+        ('  coolant', ['96.0 to 160.0 K'], ['differs']),
+        ('  coolant', None, None),
+        ('Exit radius', ['319.28'], None),
+        ('Split area ratio', ['2.5'], None),
+    ]
+    assert rows[-1]['cells'] == ['--'] and rows[-1]['baselineOnly']
+    assert compared['sections'][1]['title'] == 'Plume' and compared['sections'][1]['baselineOnly']
+    assert compared['headline'][0]['change'] == '+1.5 (+0.34 %)'
+
+def testPressureDropsEitherSideOfOneBarStillCompare():
+    '''A pass's pressure drop reads in one unit for every run, so 55.6 kPa against 0.114 MPa compares.'''
+    shown, baseline = analysis._pressureText(1.14e5), analysis._pressureText(5.56e4)
+    assert shown[1] == baseline[1] == 'MPa'
+    numbers = [{'key': 'dropDown', 'label': 'Down pass pressure drop', 'value': shown[0], 'unit': shown[1]}]
+    olds = [{'key': 'dropDown', 'label': 'Down pass pressure drop', 'value': baseline[0], 'unit': baseline[1]}]
+    compared = analysis.compareTables({'headline': numbers, 'sections': []}, {'headline': olds, 'sections': []})
+    assert compared['headline'][0]['baseline'] == '0.0556' and compared['headline'][0]['change'] == '+0.058 (+105 %)'
+
+def testTheAnalysisRouteSetsTheBaselineBeside(client, finishedRun):
+    other = RunRecord(next(_runIds), {'ok': True, 'runName': 'otherEngine', 'elapsedSec': 1.0,
+                                      'picklePath': 'held in memory'})
+    stand = _nozzleStandIn()
+    stand.thrust = 9.0e4
+    other._nozzle = stand
+    client.app.state.session.adopt(other)
+    try:
+        table = client.get('/api/analysis', params = {'run': finishedRun.runId, 'baseline': other.runId}).json()
+        assert (table['runId'], table['baselineRun']) == (finishedRun.runId, other.runId)
+        thrust = next(row for row in table['sections'][0]['rows'] if row['label'] == 'Thrust')
+        assert (thrust['cells'], thrust['baseline'], thrust['change']) == (['100000'], ['90000'], ['+10000 (+11 %)'])
+        alone = client.get('/api/analysis', params = {'run': finishedRun.runId}).json()
+        assert alone['baselineRun'] is None and 'baseline' not in alone['sections'][0]['rows'][0]
+    finally:
+        client.app.state.session.forget(other.runId)
+
+def testEveryRowNamesAFigureOnlyWhereOneShowsIt():
+    table = analysis.resultTable(_nozzleStandIn())
+    views = {(section['title'], row['label']): row['view'] for section in table['sections'] for row in section['rows']}
+    assert views[('Sizing', 'Throat radius')] == 'contour'
+    assert views[('Performance: 1D estimate and delivered', 'Exit Mach number')] == 'mach'
+    assert views[('Performance: 1D estimate and delivered', 'Nozzle efficiency, vacuum')] is None
+    from novaGui import viewCatalog
+    keys = {spec.key for spec in viewCatalog.views}
+    assert {view for view in analysis.sectionViews.values()} | {view for view in analysis.rowViews.values()} <= keys
+
+def testTheHeadlineRepeatsTheTablesNumbers():
+    '''The headline numbers are the table's own, in display units, and say which figure shows each.'''
+    numbers = {number['key']: number for number in analysis.resultTable(_nozzleStandIn())['headline']}
+    assert (numbers['isp']['value'], numbers['isp']['unit']) == ('441.8', 's')
+    assert (numbers['thrust']['value'], numbers['thrust']['unit']) == ('101.7', 'kN')
+    assert (numbers['length']['value'], numbers['exitDiameter']['value']) == ('1200.0', '600.0')
+    assert numbers['length']['view'] == 'contour' and 'peakWall' not in numbers
+
+def testAShowcaseJacketsHeadlineReadsItsLimitAndPasses():
+    nozzle = _showcase('NOVANozzle')
+    table = analysis.resultTable(nozzle)
+    numbers = {number['key']: number for number in table['headline']}
+    cooling = {row['label']: row for section in table['sections'] if section['title'] == 'Cooling' for row in section['rows']}
+    assert numbers['peakWall']['value'] == cooling['Peak hot wall temperature']['cells'][0]
+    # A jacket sized to its limit reads at it, and is not over it
+    assert numbers['peakWall']['tone'] == '' and 'margin 0 K' in numbers['peakWall']['detail']
+    circuit = nozzle.coolantCircuitSolution
+    drop = float(circuit.up.state.coolantInitialPressure) - float(circuit.up.state.coolantExitPressure)
+    assert float(numbers['dropUp']['value']) * {'MPa': 1e6, 'kPa': 1e3}[numbers['dropUp']['unit']] == pytest.approx(drop, rel = 2e-3)
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- A run still going -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testARunInProgressServesTheFiguresItsContourSettled(client):
+    '''
+    While a run is going, the views and their figures come from the descriptions its contour stage
+    settled; the views it has yet to settle are refused.
+    '''
+    from NOVA import figures
+    session = client.app.state.session
+    contour = figures.ContourFigure(x = np.linspace(-0.2, 1.0, 40), r = np.linspace(0.09, 0.3, 40), throatX = 0.0,
+                                    throatRadius = 0.05, exitRadius = 0.3, length = 1.2)
+    saved = (session._process, session.state['runId'], session._runConfig, session.partial)
+    session._process, session.state['runId'], session._runConfig = object(), 4242, {'filename': 'liveEngine'}
+    session.partial = {'runId': 4242, 'figures': {'contour': contour}}
+    try:
+        index = client.get('/api/views', params = {'run': 4242}).json()
+        assert (index['partial'], index['available'], index['runName']) == (True, ['contour'], 'liveEngine')
+        figure = client.get('/api/views/contour/interactive', params = {'run': 4242, 'mode': 'light'})
+        assert figure.status_code == 200 and figure.json()['data'][0]['name'] == 'Wall contour'
+        assert client.get('/api/views/mach/interactive', params = {'run': 4242}).status_code == 404
+        assert session.runList()['running'] == {'runId': 4242, 'config': {'filename': 'liveEngine'}, 'views': ['contour']}
+    finally:
+        session._process, session.state['runId'], session._runConfig, session.partial = saved
+
+#--------------------------------------------------------------------------------------------------------------------------#
 # -- Design aids -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
@@ -350,15 +602,19 @@ def testTheShippedNozzleRaisesNoProblem(client):
      "'Service atmosphere' has no limit for C/SiC, which has one for inert, oxidising.", 'extensionAtmosphere'),
     ({'channelType': 'helical', 'channelHelixAngle': None}, "Helical channels need a 'Channel helix angle'.",
      'channelHelixAngle'),
-    ({'makeCoolingChannels': False, 'makeInletVolute': True}, 'Volute generation requires cooling channels to be enabled.',
-     None),
+    ({'makeCoolingChannels': False, 'makeInletVolute': True}, "Volutes need 'Generate cooling channels' on.",
+     'makeCoolingChannels'),
+    ({'hotWallThickness': None}, "Cooling channels need 'Hot wall thickness'.", 'hotWallThickness'),
 ])
 def testTheCrossFieldChecksAreTheTkinterForms(client, changes, problem, flagged):
-    '''The problems are ConfigTab.validate's own words, and the row a problem quotes is flagged.'''
+    '''
+    The problems are the words both forms show, the row a problem quotes is flagged, and the row
+    carries that problem for the browser to write under it.
+    '''
     state = client.post('/api/schema/state', json = _withDefaults(**changes)).json()
     assert problem in state['problems']
-    if flagged is not None:
-        assert flagged in state['flagged']
+    assert flagged in state['flagged']
+    assert problem in state['notes'][flagged]
 
 def testTheRequiredSelectorCheckIsLeftToTheBrowserRow(client):
     '''The browser's selector row blocks a blank required option itself; the server does not repeat it.'''
@@ -484,7 +740,7 @@ def testTheUnlabelledPanelsDrawTheJacketArrays():
     assert np.allclose(hover['Hot wall'].customdata, thermalPlots._metalWall(results))
     assert np.allclose(hover['Coolant'].customdata, results['temperature'])
 
-def testThePlumeTitleNamesTheInteractiveRendering():
+def testThePlumeTitleNamesTheInteractiveView():
     '''The reworded drawer text is still in the drawers, and rewording keeps the title's style.'''
     import inspect
     from matplotlib.figure import Figure
@@ -497,12 +753,54 @@ def testThePlumeTitleNamesTheInteractiveRendering():
     ax = figure.add_subplot()
     ax.set_title('Mach disk lies beyond the march; Open interactive shows them', color = '#123456', fontsize = 10)
     views._overrideText(figure)
-    assert ax.get_title() == 'Mach disk lies beyond the march; the Interactive rendering shows them'
+    assert ax.get_title() == 'Mach disk lies beyond the march; the interactive view shows them'
     assert ax.title.get_fontsize() == 10 and ax.title.get_color() == '#123456'
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Palette -- #
 #--------------------------------------------------------------------------------------------------------------------------#
+
+def testTheLinePlotsDrawTheBaselineDashedOverTheShownRun():
+    '''
+    The second run's lines are added dashed in their own colors, named for it; its fills are not,
+    and the title says which run is which. A field view is not overlaid.
+    '''
+    import json
+    from novaGui import views
+    shown, baseline = _showcase('NOVANozzle'), _showcase('novaSinglePass')
+    alone = json.loads(views.interactiveFigure(shown, 'jacketTemperatures', 'dark'))
+    other = json.loads(views.interactiveFigure(baseline, 'jacketTemperatures', 'dark'))
+    both = json.loads(views.interactiveFigure(shown, 'jacketTemperatures', 'dark', compare = baseline,
+                                              labels = ('run 3', 'run 1')))
+    lines = [trace for trace in other['data'] if 'lines' in trace.get('mode', 'lines') and trace.get('fill') in (None, 'none')]
+    added = both['data'][len(alone['data']):]
+    assert len(added) == len(lines) and len(lines) < len(other['data'])
+    assert all(trace['line']['dash'] == 'dash' and trace['name'].endswith(', run 1') for trace in added)
+    assert [trace['line'].get('color') for trace in added] == [trace['line'].get('color') for trace in lines]
+    assert 'solid: run 3, dashed: run 1' in both['layout']['title']['text']
+    field = json.loads(views.interactiveFigure(shown, 'mach', 'dark', compare = baseline))
+    assert len(field['data']) == len(json.loads(views.interactiveFigure(shown, 'mach', 'dark'))['data'])
+
+def testTheFilledFieldShadesInsideTheWallOnly():
+    '''
+    The filled field is NaN outside the wall and inside it stays within the solved nodes' range,
+    since linear interpolation over triangles and the nearest node cannot leave it.
+    '''
+    from NOVA import figures
+    nozzle = _showcase('NOVANozzle')
+    data = figures.stitchedFieldFigure(nozzle, 'mach')
+    figure = figures.plotlyField(data, filled = True)
+    heatmap = figure.data[0]
+    x, r, z = np.asarray(heatmap.x), np.asarray(heatmap.y), np.asarray(heatmap.z, dtype = float)
+    wallX, wallR = np.asarray(data.wallX), np.asarray(data.wallR)
+    wall = np.interp(x, wallX[np.argsort(wallX)], wallR[np.argsort(wallX)])
+    outside = np.abs(r)[:, None] > wall[None, :] * 1.0001
+    assert np.all(np.isnan(z[outside]))
+    inside = np.abs(r)[:, None] < wall[None, :] * 0.98
+    assert np.isfinite(z[inside]).mean() > 0.999
+    nodes = np.concatenate([np.ravel(data.meshValues), np.ravel(data.upstreamValues)])
+    assert np.nanmin(z) >= np.nanmin(nodes) - 1e-6 and np.nanmax(z) <= np.nanmax(nodes) + 1e-6
+    assert figure.data[1].name == 'Solution nodes' and figure.data[1].visible == 'legendonly'
 
 def testThePaletteStylesheetMatchesThePythonPalette():
     '''
@@ -560,5 +858,29 @@ def testACancelledRunEndsCancelledAndFreesTheSession():
         _waitForEnd(session, 30.0)
         assert session.state['state'] == 'cancelled'
         assert not session.cancel()
+    finally:
+        session.shutdown()
+
+def testARunSendsItsContourFiguresBeforeItEnds():
+    '''
+    When the contour stage ends, the worker sends the contour, the near-wall state and the flow
+    fields; the session keeps them as the run's partial result and draws them on request.
+    '''
+    from novaGui import views
+    session = RunSession()
+    try:
+        runId = session.start(configSchema.defaultConfig(), 'dark')
+        deadline = time.time() + 240.0
+        while session.partial is None and session.busy and time.time() < deadline:
+            time.sleep(0.5)
+        assert session.partial is not None, 'the run never sent its contour figures'
+        assert session.partial['runId'] == runId
+        assert {'contour', 'nearWall', 'mach', 'pressure', 'temperature'} <= set(session.partial['figures'])
+        assert session.runList()['running']['views'] == list(session.partial['figures'])
+        figure = views.partialFigure(session.partialFigure(runId, 'mach'), 'mach', 'dark')
+        assert figure is not None and '"heatmap"' in figure
+        assert session.cancel()
+        _waitForEnd(session, 30.0)
+        assert session.partial is None and session.state['state'] == 'cancelled'
     finally:
         session.shutdown()

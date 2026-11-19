@@ -17,14 +17,22 @@ system when the process ends, so a cancelled run does not block the next one.
 
 On success the worker pickles the Nozzle to `novaGuiResult.pkl` in the run's output folder,
 after generateNozzle has returned, so the pickle carries every attribute the run set. The
-server unpickles it to draw the views.
+server unpickles it to draw the views. The result also carries the headline of the run's result
+table (novaGui.analysis), so the server can list the run without unpickling it.
+
+When the contour stage ends, the worker takes the figure descriptions that stage settles
+(novaGui.plotting.contourStageViews) off the Nozzle, on the run's own thread while NOVA waits, and
+sends them ahead of the result. A description is plain arrays and labels in no palette, so the
+server draws it in whichever mode the browser asks for.
 
 Messages put on the queue:
 
     ('log', str)
     ('status', (state, detail))
     ('stage', dict)         a NOVA.progress event
-    ('result', dict)        terminal: ok, runName, outputDir, picklePath, elapsedSec, error, traceback
+    ('partial', dict)       {'stage': 'contour', 'figures': {view key: figure description}}
+    ('result', dict)        terminal: ok, runName, outputDir, picklePath, elapsedSec, headline, error,
+                            traceback
 
 Author: Sean Bowman
 Date:   11/16/2026
@@ -73,6 +81,7 @@ def runPipeline(config: dict, outputDir: str, mode: str, eventQueue) -> None:
 
     local = queue.Queue()
     runner = PipelineRunner(local)
+    runner.stageHook = _contourHook(eventQueue)
     runner.start(config, outputDir)
 
     # The runner's last message is always its result
@@ -88,13 +97,52 @@ def runPipeline(config: dict, outputDir: str, mode: str, eventQueue) -> None:
             'outputDir':  payload.outputDir,
             'picklePath': '',
             'elapsedSec': payload.elapsedSec,
+            'headline':   '',
             'error':      payload.error,
             'traceback':  payload.traceback,
         }
         if payload.ok:
+            summary['headline'] = _headline(payload.nozzle)
             summary['picklePath'] = _pickleNozzle(payload.nozzle, outputDir, eventQueue)
         eventQueue.put(('result', summary))
         break
+
+def _contourHook(eventQueue):
+
+    '''
+
+    The runner's stage hook: when the top-level contour stage ends, send the views it settled.
+
+    '''
+
+    def hook(nozzle, event: dict) -> None:
+        if event.get('type') != 'stageEnd' or event.get('path') != 'contour' or not event.get('ok'):
+            return
+        from novaGui import backend, plotting
+        module = backend.figuresModule()
+        figures = {}
+        for key in plotting.contourStageViews:
+            extract, _ = plotting.figureDescriptions[key]
+            try:
+                data = extract(module, nozzle)
+            except Exception:                              # noqa: BLE001 -- the finished run draws it
+                continue
+            if data is not None:
+                figures[key] = data
+        if figures:
+            eventQueue.put(('partial', {'stage': 'contour', 'figures': figures}))
+
+    return hook
+
+def _headline(nozzle) -> str:
+
+    '''The result table's summary line (thrust, delivered Isp, propellants), or '' if it fails.'''
+
+    try:
+        from novaGui.analysis import resultRows
+        return resultRows(nozzle)[0]
+    except Exception:                                      # noqa: BLE001 -- the list shows the run without it
+        return ''
 
 def _pickleNozzle(nozzle, outputDir: str, eventQueue) -> str:
 

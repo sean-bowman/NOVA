@@ -7,10 +7,13 @@ Run the shipped nozzle through the NOVA GUI (novaGui) and photograph the window.
 The GUI's server starts in this process on a free port, and Playwright's Chromium opens the built
 front end at the desktop window's size. The script presses Generate on the form the window opens
 with, which is the shipped nozzle, photographs the stage stepper and the stage list while the
-coolant circuit iterates, and once the run ends steps the result pane through its views, the
-results table and the export dialog. The light-mode pictures use the theme switch, which saves the
-theme preference; the preferences found at the start, the form's width among them, are written
-back at the end.
+coolant circuit iterates, with the run's contour already in the result pane, and once the run ends
+steps the result pane through its views, the results table and the export dialog with a preview.
+It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
+of a run drawn over its baseline, the table beside it, and the grid of views along the nozzle axis
+in a popped-out window. The light-mode pictures use the theme switch, which saves the theme
+preference; the preferences found at the start, the form's width among them, are written back at
+the end.
 
 It needs the web extra, the built front end and Playwright with its Chromium:
 
@@ -18,8 +21,8 @@ It needs the web extra, the built front end and Playwright with its Chromium:
     python -m playwright install chromium
     cd novaGui/frontend && npm install && npm run build && cd ../..
 
-Run it from the NOVA root. The run itself takes about five minutes, because the shipped nozzle
-builds a full cooling jacket, its outlet volute and the marched plume:
+Run it from the NOVA root. Each of the two runs takes about five minutes, because the shipped
+nozzle builds a full cooling jacket, its outlet volute and the marched plume:
 
     python featureShowcase/buildGuiScreenshots.py
 
@@ -53,25 +56,24 @@ from novaGui.server import createApp, frontendDist
 
 outputFolder = os.path.join(root, 'docs', 'images', 'novaGui')
 viewport = {'width': 1480, 'height': 940}      # [px] the desktop window's opening size
+popoutViewport = {'width': 1920, 'height': 1080}   # [px] a popped-out window on a second monitor
+comparedPressure = '8000000'                   # [Pa] the second run's chamber pressure
 runTimeoutMs = 20 * 60 * 1000                  # [ms] longest wait for the run to finish
 figureTimeoutMs = 120 * 1000                   # [ms] longest wait for one view to draw
 
 # The export dialog's output folder in the pictures, in place of the folder of whoever runs this
 exportFolderShown = r'C:\NOVA\runs'
 
-# Views photographed after the run: (view key, image name, rendering, settle time [ms]). The
-# Mach field and the plume are drawn static: the Matplotlib drawing shades one continuous field,
-# where the interactive field is the solve's nodes as points, and the interactive plume is framed
-# to take in every correlated shock cell, many lip radii past the march. The settle time covers
-# what Playwright cannot wait on: WebGL scenes finish drawing after the plot's SVG exists.
+# Views photographed after the run: (view key, image name, settle time [ms]). The settle time
+# covers what Playwright cannot wait on: WebGL scenes finish drawing after the plot's SVG exists.
 viewShots = [
-    ('mach', 'viewMach', 'static', 1000),
-    ('plume', 'viewPlume', 'static', 1000),
-    ('wallMap', 'viewJacket', 'interactive', 1500),
-    ('film', 'viewFilm', 'interactive', 1500),
-    ('circuit', 'viewCircuit', 'interactive', 1500),
-    ('channelMesh', 'viewChannelMesh', 'interactive', 6000),
-    ('revolved', 'viewRevolved', 'interactive', 3000),
+    ('mach', 'viewMach', 1500),
+    ('plume', 'viewPlume', 1500),
+    ('wallMap', 'viewJacket', 1500),
+    ('film', 'viewFilm', 1500),
+    ('circuit', 'viewCircuit', 1500),
+    ('channelMesh', 'viewChannelMesh', 6000),
+    ('revolved', 'viewRevolved', 3000),
 ]
 
 def capture(page: Page, name: str) -> None:
@@ -134,22 +136,61 @@ def scrollFormToTop(page: Page) -> None:
     }''')
     page.wait_for_timeout(300)
 
-def showView(page: Page, key: str, rendering: str, settleMs: int) -> None:
+def figuresDrawn(page: Page, count: int, settleMs: int) -> None:
 
-    '''Pick a view from the result pane's menu in `rendering` ('interactive' or 'static'), and wait for it to draw.'''
+    '''Wait until `count` figures have drawn and none is still loading.'''
 
-    page.locator('.result-head .segmented button', has_text = 'Figure').click()
-    page.select_option('.view-select', key)
-    # A 3D assembly has no switch: it draws interactive only
-    switch = page.locator('.segmented button', has_text = rendering.capitalize())
-    if switch.count() and 'is-selected' not in (switch.get_attribute('class') or ''):
-        switch.click()
-    drawn = '.static-image' if switch.count() and rendering == 'static' else '.plotly-host .main-svg'
-    # The previous view's figure stays until the next one starts loading; give the load time to begin
-    page.wait_for_timeout(300)
-    page.wait_for_selector(drawn, timeout = figureTimeoutMs)
+    page.wait_for_function(f'document.querySelectorAll(".plotly-host .main-svg").length >= {count}',
+                           timeout = figureTimeoutMs)
     page.wait_for_selector('.figure-overlay', state = 'detached', timeout = figureTimeoutMs)
     page.wait_for_timeout(settleMs)
+
+def showView(page: Page, key: str, settleMs: int) -> None:
+
+    '''Pick a view from the result pane's menu, one at a time, and wait for it to draw.'''
+
+    page.locator('.result-head .segmented button', has_text = 'Figure').click()
+    page.locator('.figure-toolbar .segmented button', has_text = 'One').click()
+    page.select_option('.figure-toolbar > .view-select', key)
+    # The previous view's figure stays until the next one starts loading; give the load time to begin
+    page.wait_for_timeout(300)
+    figuresDrawn(page, 1, settleMs)
+
+def hoverPlot(page: Page, cell: int) -> None:
+
+    '''Rest the mouse in the middle of the plot area of the `cell`th figure (from 0), moving the axial cursor there.'''
+
+    host = page.locator('.plotly-host').nth(cell)
+    box = host.bounding_box()
+    left, width, top, height = host.evaluate('element => { const f = element._fullLayout; '
+                                             'return [f.xaxis._offset, f.xaxis._length, f.yaxis._offset, f.yaxis._length]; }')
+    for share in (0.30, 0.34):
+        page.mouse.move(box['x'] + left + share * width, box['y'] + top + 0.5 * height)
+        page.wait_for_timeout(300)
+    page.wait_for_timeout(500)
+
+def generate(page: Page) -> None:
+
+    '''Press Generate, accept any configuration warning, and wait for the run to end.'''
+
+    page.locator('.run-bar .button-primary', has_text = 'Generate').click()
+    page.wait_for_timeout(500)
+    if page.locator('[role="alertdialog"]').count():
+        print('  the form raised configuration warnings; running anyway')
+        page.get_by_role('button', name = 'Run anyway').click()
+
+def finished(page: Page) -> None:
+
+    '''Wait for the run to end, then close the stage list and the run's notices.'''
+
+    page.wait_for_selector('.run-bar.state-done, .run-bar.state-error', timeout = runTimeoutMs)
+    if page.locator('.run-bar.state-error').count():
+        raise RuntimeError(f'the run failed: {page.locator(".toast-error").all_inner_texts()}')
+    print(f'  {page.locator(".run-clock").inner_text()}')
+    # The stage list and the run's notice would sit over the form and the corner of every figure
+    page.keyboard.press('Escape')
+    for close in page.locator('.toast-close').all():
+        close.click()
 
 def photograph(page: Page, base: str) -> None:
 
@@ -178,36 +219,26 @@ def photograph(page: Page, base: str) -> None:
     scrollFormToTop(page)
 
     # -- Generate -- #
-    page.locator('.run-bar .button-primary', has_text = 'Generate').click()
-    page.wait_for_timeout(500)
-    if page.locator('[role="alertdialog"]').count():
-        print('  the shipped nozzle raised configuration warnings; running anyway')
-        page.get_by_role('button', name = 'Run anyway').click()
+    generate(page)
 
     # The stage stepper and the stage list, which opens as the run starts, while the coolant
-    # circuit iterates: the circuit's segment carries the pass number and the list its passes
+    # circuit iterates: the circuit's segment carries the pass number and the list its passes, and
+    # the result pane already draws the contour the run settled
     page.wait_for_function("[...document.querySelectorAll('.stage-step')]"
                            ".some((step) => step.textContent.includes('pass 3'))", timeout = runTimeoutMs)
-    page.wait_for_timeout(1500)
+    page.wait_for_selector('.run-select option:has-text("running")', state = 'attached', timeout = figureTimeoutMs)
+    figuresDrawn(page, 1, 1500)
     capture(page, 'generate')
-
-    page.wait_for_selector('.run-bar.state-done, .run-bar.state-error', timeout = runTimeoutMs)
-    if page.locator('.run-bar.state-error').count():
-        raise RuntimeError(f'the run failed: {page.locator(".toast-error").all_inner_texts()}')
-    print(f'  {page.locator(".run-clock").inner_text()}')
-    # The stage list and the run's notice would sit over the form and the corner of every figure
-    page.keyboard.press('Escape')
-    for close in page.locator('.toast-close').all():
-        close.click()
+    finished(page)
 
     # -- The window with the run's contour beside the form, then the views -- #
-    showView(page, 'contour', 'interactive', 1500)
+    showView(page, 'contour', 1500)
     capture(page, 'designDark')
-    for key, name, rendering, settleMs in viewShots:
-        showView(page, key, rendering, settleMs)
+    for key, name, settleMs in viewShots:
+        showView(page, key, settleMs)
         capture(page, name)
 
-    # -- The results table and the export dialog -- #
+    # -- The results table, and the export dialog previewing the hot wall surface -- #
     page.locator('.result-head .segmented button', has_text = 'Table').click()
     page.wait_for_selector('.result-table')
     page.wait_for_timeout(800)
@@ -216,17 +247,49 @@ def photograph(page: Page, base: str) -> None:
     page.locator('.result-head .button', has_text = 'Export').click()
     page.wait_for_selector('.export-dialog .export-list')
     page.fill('#export-base', exportFolderShown)
-    page.wait_for_timeout(1000)
+    page.locator('.output-category-row', has_text = '3D geometry').click()
+    page.locator('.output-file-row', has_text = '.stl').first.locator('.output-preview-button').click()
+    page.wait_for_selector('.output-preview canvas', timeout = figureTimeoutMs)
+    page.wait_for_timeout(2500)
     capture(page, 'export')
     page.keyboard.press('Escape')
+
+    # -- A second run against the first as its baseline -- #
+    page.select_option('.baseline-select', page.locator('.baseline-select option').nth(1).get_attribute('value'))
+    formRow(page, 'Chamber pressure').locator('.form-editor input').fill(comparedPressure)
+    page.wait_for_timeout(600)
+    generate(page)
+    finished(page)
+
+    showView(page, 'jacketTemperatures', 1500)
+    capture(page, 'compare')
+
+    page.locator('.result-head .segmented button', has_text = 'Table').click()
+    page.wait_for_selector('.result-table.is-compared')
+    page.wait_for_timeout(800)
+    capture(page, 'tableCompare')
+
+    # The grid of views along the axis, popped out onto a second monitor, with the cursor on the throat region
+    page.locator('.result-head .segmented button', has_text = 'Figure').click()
+    page.locator('.figure-toolbar .segmented button', has_text = 'Grid').click()
+    with page.context.expect_page() as popped:
+        page.get_by_role('button', name = 'Pop out').click()
+    window = popped.value
+    window.set_viewport_size(popoutViewport)
+    window.wait_for_selector('.popout .figure-cell')
+    figuresDrawn(window, 4, 2000)
+    hoverPlot(window, 1)
+    capture(window, 'grid')
+    window.close()
+    page.locator('.figure-toolbar .segmented button', has_text = 'One').click()
 
     # -- Light mode -- #
     page.get_by_role('button', name = re.compile('Switch to the light theme')).click()
     scrollFormToTop(page)
-    showView(page, 'contour', 'interactive', 1500)
+    showView(page, 'contour', 1500)
     capture(page, 'designLight')
 
-    showView(page, 'plume', 'static', 1000)
+    showView(page, 'plume', 1500)
     capture(page, 'viewPlumeLight')
 
     print(f'  console errors: {errors or "none"}')
@@ -255,7 +318,7 @@ def build() -> None:
             raise RuntimeError('the NOVA server did not start')
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
-            page = browser.new_page(viewport = viewport, device_scale_factor = 1)
+            page = browser.new_context(viewport = viewport, device_scale_factor = 1).new_page()
             try:
                 photograph(page, f'http://127.0.0.1:{port}/')
             finally:

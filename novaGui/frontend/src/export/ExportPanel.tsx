@@ -1,39 +1,33 @@
 /* ========================================
    EXPORT PANEL
-   The dialog the result pane's Export button opens. Chooses which of the last good run's
-   outputs to keep and copies them to an output folder,
-   as <output folder>/<run name>Outputs/. The outputs are listed by category (novaGui/outputs.py, shared with
-   the legacy Tkinter Export tab); a check on a category or on a single file chooses
-   it. Every output is chosen after a run, except the categories unchecked before it. A file
-   opens in its desktop application on a double click. In the desktop window Browse opens the
-   native folder picker; in a browser the folder is typed.
+   The dialog the result pane's Export button opens. Chooses which of the shown run's outputs to
+   keep and copies them to an output folder, as <output folder>/<run name>Outputs/. The outputs
+   are listed by category (novaGui/outputs.py, shared with the legacy Tkinter Export tab); a check
+   on a category or on a single file chooses it. Every output is chosen after a run, except the
+   categories unchecked before it. A file opens in its desktop application on a double click.
+   In the desktop window Browse opens the native folder picker; in a browser the folder is typed.
+
+   An image, an STL surface or a text file previews beside the list (OutputPreview.tsx), and the
+   images carry a thumbnail in their row.
    Sean Bowman [11/17/2026]
    ======================================== */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { api, windowBridge } from '../api';
-import { ChevronIcon, FolderIcon } from '../components/Icons';
-import type { ExportIndex, ExportTarget, OutputFile } from '../types';
+import { api, exportFileUrl, windowBridge } from '../api';
+import { ChevronIcon, EyeIcon, FolderIcon } from '../components/Icons';
+import type { ExportIndex, ExportTarget, Mode, OutputFile } from '../types';
+import { formatSize } from './fileSize';
+import { OutputPreview } from './OutputPreview';
 
 interface ExportPanelProps {
     runId: number | null;
+    mode: Mode;
     formName: string;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
 }
 
 type CheckState = 'all' | 'some' | 'none';
-
-export function formatSize(byteCount: number): string {
-    let value = byteCount;
-    for (const unit of ['B', 'KB', 'MB', 'GB']) {
-        if (value < 1024 || unit === 'GB') {
-            return unit === 'B' ? `${value.toFixed(0)} B` : `${value.toFixed(1)} ${unit}`;
-        }
-        value /= 1024;
-    }
-    return `${value.toFixed(1)} GB`;
-}
 
 function extension(name: string): string {
     const dot = name.lastIndexOf('.');
@@ -53,7 +47,7 @@ function Check({ state, label, onToggle }: { state: CheckState; label: string; o
     );
 }
 
-export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
+export function ExportPanel({ runId, mode, formName, onNotify }: ExportPanelProps) {
     const [index, setIndex] = useState<ExportIndex | null>(null);
     const [baseDir, setBaseDir] = useState('');
     const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -62,6 +56,7 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
     const [target, setTarget] = useState<ExportTarget | null>(null);
     const [lastExport, setLastExport] = useState('');
     const [busy, setBusy] = useState(false);
+    const [preview, setPreview] = useState<OutputFile | null>(null);
     const [bridgeReady, setBridgeReady] = useState(() => windowBridge() !== null);
     const uncheckedRef = useRef(unchecked);
     uncheckedRef.current = unchecked;
@@ -76,7 +71,8 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
     // A new run lists its outputs, every one chosen but those of the categories left unchecked
     useEffect(() => {
         let cancelled = false;
-        api.exportIndex()
+        setPreview(null);
+        api.exportIndex(runId)
             .then((loaded) => {
                 if (cancelled) {
                     return;
@@ -188,7 +184,7 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
             return;
         }
         setBusy(true);
-        api.exportFiles(baseDir, names)
+        api.exportFiles(index?.runId ?? null, baseDir, names)
             .then((result) => {
                 setLastExport(`Exported ${result.written} files, ${formatSize(result.bytes)}, to ${result.target}`);
                 onNotify('info', 'Outputs exported', `${result.written} files to ${result.target}`);
@@ -198,11 +194,11 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
     };
 
     const openFolder = () => {
-        api.openFolder(baseDir, runName).catch((failure: Error) => onNotify('error', 'Folder not opened', failure.message));
+        api.openFolder(index?.runId ?? null, baseDir, runName).catch((failure: Error) => onNotify('error', 'Folder not opened', failure.message));
     };
 
     const openFile = (name: string) => {
-        api.openOutput(name).catch((failure: Error) => onNotify('error', 'File not opened', failure.message));
+        api.openOutput(index?.runId ?? null, name).catch((failure: Error) => onNotify('error', 'File not opened', failure.message));
     };
 
     // Categories shown: before a run every kind a run writes, after one only the kinds it wrote
@@ -238,6 +234,7 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
                 </div>
             </div>
 
+            <div className={`export-body ${preview ? 'has-preview' : ''}`}>
             <div className="card export-list">
                 <div className="export-list-heading">
                     <span className="eyebrow eyebrow-inline">Outputs</span>
@@ -274,14 +271,34 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
                                     <span className="output-size">{members.length > 0 ? formatSize(bytes) : ''}</span>
                                 </div>
                                 {expanded && members.map((file) => (
-                                    <div key={file.name} className="output-row output-file-row" title="Double-click to open"
-                                         onClick={() => toggleFile(file.name)} onDoubleClick={() => openFile(file.name)}>
+                                    <div key={file.name} className={`output-row output-file-row ${preview?.name === file.name ? 'is-previewed' : ''}`}
+                                         title="Double-click to open" onClick={() => toggleFile(file.name)}
+                                         onDoubleClick={() => openFile(file.name)}>
                                         <span className="output-toggle output-file-check">
                                             <Check state={chosen.has(file.name) ? 'all' : 'none'} label={`Export ${file.name}`}
                                                    onToggle={() => toggleFile(file.name)} />
                                         </span>
-                                        <span className="output-name mono">{file.name}</span>
-                                        <span className="muted">{extension(file.name)}</span>
+                                        <span className="output-name mono">
+                                            {file.preview === 'image' && (
+                                                <img className="output-thumb" src={exportFileUrl(index?.runId ?? null, file.name)} alt=""
+                                                     loading="lazy" draggable={false} />
+                                            )}
+                                            <span className="output-file-name">{file.name}</span>
+                                        </span>
+                                        <span className="muted output-kind">
+                                            {extension(file.name)}
+                                            {file.preview && (
+                                                <button type="button" className="icon-button output-preview-button"
+                                                        aria-label={`Preview ${file.name}`} title="Preview"
+                                                        onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            setPreview((current) => (current?.name === file.name ? null : file));
+                                                        }}
+                                                        onDoubleClick={(event) => event.stopPropagation()}>
+                                                    <EyeIcon />
+                                                </button>
+                                            )}
+                                        </span>
                                         <span className="output-size">{formatSize(file.bytes)}</span>
                                     </div>
                                 ))}
@@ -289,6 +306,9 @@ export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
                         );
                     })}
                 </div>
+            </div>
+
+            {preview && <OutputPreview runId={index?.runId ?? null} file={preview} mode={mode} onClose={() => setPreview(null)} />}
             </div>
 
             <div className="export-actions">

@@ -16,9 +16,11 @@ progress and removes the session's staging folder. In --browser and --api mode, 
 Run results go to multiprocessing workers started with 'spawn', which re-import this module in
 each child; the `__main__` guard keeps a child from starting a server of its own.
 
-In the window, the page reaches one native call through pywebview's JavaScript bridge,
+In the window, the page reaches two native calls through pywebview's JavaScript bridge:
 `window.pywebview.api.browseFolder`, which opens the folder picker the Export dialog's Browse
-button uses. A browser has no such bridge, and the Export dialog then takes a typed folder alone.
+button uses, and `openWindow`, which opens a figure in a window of its own for a second monitor.
+Those windows close with the main one. A browser has no such bridge: the Export dialog then takes
+a typed folder alone, and a figure pops out into a browser window instead.
 
 Under pythonw (novaGui.bat) there is no console: sys.stdout and sys.stderr are None, and
 uvicorn's log setup fails on them. The launcher then writes both to `<temp>/NOVA/novaGui.log`,
@@ -89,6 +91,38 @@ class WindowApi:
     def __init__(self):
 
         self._window = None
+        self._base = ''
+
+    def openWindow(self, path: str, title: str = 'NOVA') -> bool:
+
+        '''
+
+        Open a page of the app in a second window: a figure popped out of the result pane. `path` is
+        the page's path and query on this server; anything else is refused.
+
+        '''
+
+        import webview
+
+        if self._window is None or not isinstance(path, str) or not path.startswith('/') or path.startswith('//'):
+            return False
+        mode = guiSettingsMode()
+        webview.create_window(str(title)[:120] or 'NOVA', self._base.rstrip('/') + path, width = 1100, height = 760,
+                              min_size = (560, 420), background_color = _background(mode), text_select = True)
+        return True
+
+    def _closeOthers(self) -> None:
+
+        '''Close every window but the main one, when the main one closes.'''
+
+        import webview
+
+        for window in list(webview.windows):
+            if window is not self._window:
+                try:
+                    window.destroy()
+                except Exception:                          # noqa: BLE001 -- it may be closing already
+                    pass
 
     def browseFolder(self, initial: str = '') -> str:
 
@@ -103,6 +137,18 @@ class WindowApi:
         if not chosen:
             return ''
         return str(chosen[0] if isinstance(chosen, (list, tuple)) else chosen)
+
+def guiSettingsMode() -> str:
+
+    '''The saved theme mode, for a new window's background before its page paints.'''
+
+    from . import settings as guiSettings
+
+    return guiSettings.load()['themeMode']
+
+def _background(mode: str) -> str:
+
+    return '#E8E9EA' if mode == 'light' else '#1C1E22'
 
 def main(argv: list | None = None) -> int:
 
@@ -166,10 +212,11 @@ def main(argv: list | None = None) -> int:
 
     # The window opens on the palette's background, so it does not flash white before the page paints
     mode = guiSettings.load()['themeMode']
-    background = '#E8E9EA' if mode == 'light' else '#1C1E22'
     bridge = WindowApi()
+    bridge._base = url
     bridge._window = webview.create_window('NOVA', url, width = 1480, height = 940, min_size = (1040, 680),
-                                           background_color = background, text_select = True, js_api = bridge)
+                                           background_color = _background(mode), text_select = True, js_api = bridge)
+    bridge._window.events.closed += bridge._closeOthers
     # Downloads carry saved configs out of the window
     webview.settings['ALLOW_DOWNLOADS'] = True
     webview.start()

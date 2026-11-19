@@ -541,15 +541,58 @@ def drawPlotly3d(pane, figure, maximumGrid: int = 60) -> None:
 # -- Interactive companion -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-# View key -> the figures.py builder that renders the same description with plotly.
-interactiveBuilders = {
-    'contour':     lambda module, nozzle: module.plotlyContour(module.contourFigure(nozzle)),
-    'nearWall':    lambda module, nozzle: module.plotlyNearWall(module.nearWallFigure(nozzle)),
-    'revolved':    lambda module, nozzle: module.plotlyRevolved(module.revolvedFigure(nozzle)),
-    'mach':        lambda module, nozzle: module.plotlyField(module.stitchedFieldFigure(nozzle, 'mach')),
-    'pressure':    lambda module, nozzle: module.plotlyField(module.stitchedFieldFigure(nozzle, 'pressure')),
-    'temperature': lambda module, nozzle: module.plotlyField(module.stitchedFieldFigure(nozzle, 'temperature')),
-    'plume':       lambda module, nozzle: module.plotlyPlume(module.plumeFigure(nozzle)),
+# View key -> (extractor, renderer): the figures.py extractor that describes the view from a Nozzle,
+# and the renderer that draws that description with plotly. The flow fields are filled, as the
+# static view shades them.
+figureDescriptions = {
+    'contour':     (lambda module, nozzle: module.contourFigure(nozzle), lambda module, data: module.plotlyContour(data)),
+    'nearWall':    (lambda module, nozzle: module.nearWallFigure(nozzle), lambda module, data: module.plotlyNearWall(data)),
+    'revolved':    (lambda module, nozzle: module.revolvedFigure(nozzle), lambda module, data: module.plotlyRevolved(data)),
+    'mach':        (lambda module, nozzle: module.stitchedFieldFigure(nozzle, 'mach'),
+                    lambda module, data: module.plotlyField(data, filled = True)),
+    'pressure':    (lambda module, nozzle: module.stitchedFieldFigure(nozzle, 'pressure'),
+                    lambda module, data: module.plotlyField(data, filled = True)),
+    'temperature': (lambda module, nozzle: module.stitchedFieldFigure(nozzle, 'temperature'),
+                    lambda module, data: module.plotlyField(data, filled = True)),
+    'plume':       (lambda module, nozzle: module.plumeFigure(nozzle), lambda module, data: _framedPlume(module, data)),
+}
+
+def _framedPlume(module, data):
+
+    '''
+
+    The interactive plume, opened on the frame the static drawing uses: the nozzle and the marched
+    plume. The figure itself takes in every correlated shock cell, many lip radii past the march;
+    zooming out or a double click shows them.
+
+    '''
+
+    figure = module.plotlyPlume(data)
+    stations = np.asarray(getattr(data, 'fieldX', []), dtype = float)
+    wall = np.asarray(getattr(data, 'wallX', []), dtype = float)
+    if figure is not None and stations.size and wall.size:
+        figure.update_xaxes(range = [float(np.min(wall)), float(np.max(stations))])
+    return figure
+
+# The views whose description is settled once a run's contour stage ends: the web front end draws
+# them from that description while cooling and the plume still run
+contourStageViews = ('contour', 'nearWall', 'mach', 'pressure', 'temperature', 'revolved')
+
+def _described(key: str):
+
+    '''A builder `(figuresModule, nozzle) -> Figure or None` that renders the view's description.'''
+
+    extract, render = figureDescriptions[key]
+
+    def build(module, nozzle):
+        data = extract(module, nozzle)
+        return render(module, data) if data is not None else None
+
+    return build
+
+# View key -> the builder that renders it with plotly, `(figuresModule, nozzle) -> Figure or None`
+interactiveBuilders = {key: _described(key) for key in figureDescriptions}
+interactiveBuilders.update({
     'channelMesh': lambda module, nozzle: module.channelMeshFigure(nozzle),
     'volute':      lambda module, nozzle: module.volutesFigure(nozzle),
-}
+})

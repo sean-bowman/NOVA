@@ -1,14 +1,16 @@
 /* ========================================
    RUN EVENTS
    The run session as React state, fed by the server's event stream. The stream opens with a
-   snapshot, so a reload or a reconnect mid-run picks up where the run is.
+   snapshot, so a reload or a reconnect mid-run picks up where the run is. Besides the run itself
+   it carries the figures a running run has settled, a count that moves whenever the kept runs or
+   the baseline change, and the theme mode last saved from any window.
    Sean Bowman [11/16/2026]
    ======================================== */
 
 import { useEffect, useRef, useState } from 'react';
 
 import { subscribeRunEvents } from '../api';
-import type { RunEvent, RunProgressFields, RunStage, RunStateName, RunSummary } from '../types';
+import type { Mode, PartialRun, RunEvent, RunProgressFields, RunStage, RunStateName, RunSummary } from '../types';
 
 const maxLogLines = 4000;
 
@@ -29,12 +31,15 @@ export interface RunView {
     log: string[];
     result: RunSummary | null;
     connected: boolean;
+    partial: PartialRun | null;   // the running run's settled figures
+    runsVersion: number;          // moves when the kept runs or the baseline change
+    savedMode: Mode | null;       // the theme mode last saved from any window
 }
 
 const initial: RunView = {
     state: 'idle', detail: '', runId: null, fraction: 0, ceiling: 0, label: '', stageDetail: '', stages: [],
     expectedRun: null, runClock: 0, progressAt: 0, startedAt: null, endedAt: null, log: [], result: null,
-    connected: false,
+    connected: false, partial: null, runsVersion: 0, savedMode: null,
 };
 
 function progressOf(event: RunProgressFields): Partial<RunView> {
@@ -51,6 +56,7 @@ function reduce(previous: RunView, event: RunEvent): RunView {
             return {
                 ...previous, ...progressOf(event), state: event.state, detail: event.detail,
                 startedAt: event.startedAt, endedAt: null, log: event.log.slice(-maxLogLines), result: event.result,
+                partial: event.partial ?? null, runsVersion: previous.runsVersion + 1,
             };
         case 'log': {
             const log = previous.log.length >= maxLogLines ? previous.log.slice(1 - maxLogLines) : previous.log.slice();
@@ -63,17 +69,24 @@ function reduce(previous: RunView, event: RunEvent): RunView {
                 ...(event.state === 'running' && previous.state !== 'running'
                     ? {
                         startedAt: Date.now() / 1000, endedAt: null, fraction: 0, ceiling: 0, label: '', stages: [],
-                        runClock: 0, log: [],
+                        runClock: 0, log: [], partial: null,
                     }
                     : {}),
-                ...(event.state !== 'running' && previous.state === 'running' ? { endedAt: Date.now() / 1000 } : {}),
+                ...(event.state !== 'running' && previous.state === 'running'
+                    ? { endedAt: Date.now() / 1000, partial: null } : {}),
             };
         case 'progress':
             return { ...previous, ...progressOf(event) };
+        case 'partial':
+            return { ...previous, partial: { runId: event.runId, views: event.views } };
         case 'result': {
             const { type: _type, ...summary } = event;
-            return { ...previous, result: summary };
+            return { ...previous, result: summary, partial: null };
         }
+        case 'runs':
+            return { ...previous, runsVersion: previous.runsVersion + 1 };
+        case 'settings':
+            return { ...previous, savedMode: event.themeMode };
         default:
             return previous;
     }

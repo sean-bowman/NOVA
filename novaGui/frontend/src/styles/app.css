@@ -489,6 +489,107 @@ select.input option {
     display: flex;
     flex-direction: column;
     height: 100%;
+    container-type: inline-size;
+}
+
+/* -- Section outline: a row of sections above a narrow form, a rail beside a wide one -- */
+.design-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.outline {
+    display: flex;
+    flex: none;
+    gap: 6px;
+    padding: 8px 16px;
+    overflow-x: auto;
+    border-bottom: 1px solid var(--border);
+    scrollbar-width: thin;
+}
+
+.outline-item {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.outline-item:hover {
+    color: var(--text);
+}
+
+.outline-item.is-current {
+    background: var(--accent-muted);
+    border-color: var(--accent-dim);
+    color: var(--text);
+}
+
+.outline-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.outline-count {
+    padding: 0 6px;
+    border-radius: 8px;
+    background: var(--accent-muted);
+    color: var(--accent);
+    font-size: 10.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.outline-count.is-warn {
+    background: color-mix(in srgb, var(--yellow) 20%, transparent);
+    color: var(--yellow);
+}
+
+.outline-count.is-error {
+    background: color-mix(in srgb, var(--red) 20%, transparent);
+    color: var(--red);
+}
+
+@container (min-width: 760px) {
+    .design-body {
+        flex-direction: row;
+    }
+
+    .outline {
+        flex-direction: column;
+        width: 200px;
+        padding: 12px 6px 12px 10px;
+        overflow: hidden auto;
+        border-bottom: 0;
+        border-right: 1px solid var(--border);
+    }
+
+    .outline-item {
+        width: 100%;
+        padding: 5px 8px;
+        border-color: transparent;
+        border-radius: 6px;
+        text-align: left;
+    }
+
+    .outline-title {
+        flex: 1;
+    }
+
+    .design-body .pane-scroll {
+        flex: 1;
+    }
 }
 
 .toolbar {
@@ -673,6 +774,10 @@ select.input option {
 
 .form-note-error {
     color: var(--red);
+}
+
+.form-note-warn {
+    color: var(--yellow);
 }
 
 .label-warn {
@@ -875,6 +980,7 @@ select.input option {
 }
 
 .result-meta {
+    flex: 1 1 0;
     min-width: 0;
     overflow: hidden;
     font-size: 12px;
@@ -976,15 +1082,6 @@ select.input option {
 .plotly-host {
     position: absolute;
     inset: 0;
-}
-
-.static-image {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    user-select: none;
 }
 
 .figure-overlay {
@@ -1264,9 +1361,42 @@ select.input option {
 }
 
 .output-file-row .output-name {
-    display: block;
+    align-items: center;
     padding-left: 22px;
     font-size: 12px;
+}
+
+.output-file-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.output-file-row.is-previewed {
+    background: var(--accent-muted);
+}
+
+.output-thumb {
+    flex: none;
+    width: 34px;
+    height: 22px;
+    margin-right: -2px;
+    object-fit: cover;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+}
+
+.output-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.output-preview-button {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
 }
 
 .output-size {
@@ -1643,4 +1773,297 @@ select.input option {
 
 .modal-list li + li {
     margin-top: 4px;
+}
+
+/* -- Kept runs and the baseline -- */
+.run-select {
+    width: auto;
+    min-width: 170px;
+    max-width: min(420px, 100%);
+    font-weight: 600;
+}
+
+.baseline-pick {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+}
+
+.baseline-select {
+    width: auto;
+    max-width: 220px;
+}
+
+.result-status.is-baseline {
+    align-items: center;
+}
+
+/* The dashed stroke the baseline's lines are drawn in */
+.baseline-key {
+    flex: none;
+    width: 20px;
+    border-top: 2px dashed var(--text-muted);
+}
+
+/* -- Figure grid and the axial cursor -- */
+/* Two views a row where the pane is wide enough, as on a second monitor; one, and a scroll, where
+   it is not, since each view is a figure of stacked panels */
+.figure-grid {
+    display: grid;
+    flex: 1;
+    grid-template-columns: repeat(auto-fit, minmax(min(max(520px, calc(50% - 4px)), 100%), 1fr));
+    grid-auto-rows: minmax(380px, 1fr);
+    gap: 8px;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+.figure-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.figure-cell-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.view-select-compact {
+    flex: 1;
+    min-width: 0;
+    height: 28px;
+    font-size: 12px;
+}
+
+.figure-cell .figure-pane {
+    min-height: 0;
+}
+
+.axial-cursor-layer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.axial-cursor {
+    position: absolute;
+    width: 0;
+    border-left: 1px dashed var(--accent);
+}
+
+.axial-cursor-label {
+    position: absolute;
+    padding: 1px 6px;
+    transform: translate(-50%, -100%);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: Consolas, 'Cascadia Mono', ui-monospace, monospace;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* -- Headline numbers above the results table -- */
+.headline {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.headline-number {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+}
+
+.headline-number.is-link {
+    cursor: pointer;
+}
+
+.headline-number.is-link:hover {
+    border-color: var(--accent-dim);
+}
+
+.headline-number.is-warn {
+    border-color: color-mix(in srgb, var(--yellow) 55%, var(--border));
+}
+
+.headline-label {
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.headline-value {
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.headline-unit {
+    margin-left: 4px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+.headline-detail,
+.headline-change {
+    color: var(--text-muted);
+    font-size: 11.5px;
+}
+
+.headline-change {
+    font-family: Consolas, 'Cascadia Mono', ui-monospace, monospace;
+}
+
+.headline-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--yellow);
+    font-size: 11.5px;
+}
+
+/* -- Results table: rows that open a figure, and the baseline beside the shown run -- */
+.result-table tr.is-link {
+    cursor: pointer;
+}
+
+.result-link-icon {
+    margin-left: 6px;
+    color: var(--accent);
+    font-size: 12px;
+    vertical-align: -1px;
+    opacity: 0;
+}
+
+.result-table tr.is-link:hover .result-link-icon {
+    opacity: 1;
+}
+
+.result-change {
+    display: block;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+
+.result-value.is-baseline,
+.result-change-cell {
+    color: var(--text-muted);
+}
+
+.result-change-cell {
+    font-size: 12px;
+}
+
+.is-baseline-only td {
+    color: var(--text-dim);
+    font-style: italic;
+}
+
+/* -- Export previews -- */
+.export-body {
+    display: grid;
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    min-height: 0;
+}
+
+.export-body.has-preview {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 0.85fr);
+}
+
+.output-preview {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: 10px 12px;
+}
+
+.output-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: 8px;
+}
+
+.output-preview-name {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.preview-stage {
+    position: relative;
+    flex: 1;
+    min-height: 220px;
+    background: var(--bg);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.preview-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.preview-text {
+    flex: 1;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 10px;
+    overflow: auto;
+    background: var(--bg);
+    border-radius: 6px;
+    font-family: Consolas, 'Cascadia Mono', ui-monospace, monospace;
+    font-size: 11.5px;
+    white-space: pre;
+}
+
+.preview-note {
+    margin: 6px 0 0;
+    font-size: 12px;
+}
+
+/* -- Pop-out figure window -- */
+.app.popout {
+    grid-template-rows: auto minmax(0, 1fr);
+}
+
+.wordmark-small {
+    font-size: 18px;
+}
+
+.popout-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    margin: 10px;
+    overflow: hidden;
 }
