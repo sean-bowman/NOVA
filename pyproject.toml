@@ -36,9 +36,11 @@ gui = ['pillow>=9.1']
 web = ['fastapi>=0.110', 'uvicorn>=0.29', 'pywebview>=5.0']
 # REFPROP-backed fluid properties, which need a licensed REFPROP installation.
 refprop = ['ctREFPROP>=0.10.5']
-# Static image export of plotly figures, for regenerating the README's screenshots. Needs a
-# separate Chrome install (`plotly_get_chrome`); nothing at runtime reads it.
-screenshots = ['kaleido>=0.2']
+# For regenerating the README's images; nothing at runtime reads these. Kaleido exports plotly
+# figures as static images and needs a separate Chrome install (`plotly_get_chrome`). Playwright
+# drives the GUI for its screenshots and needs its own Chromium (`python -m playwright install
+# chromium`).
+screenshots = ['kaleido>=0.2', 'playwright>=1.40']
 
 [tool.setuptools]
 package-dir = { '' = 'src' }

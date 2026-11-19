@@ -32,7 +32,7 @@ python featureShowcase/buildFamiliesReportFigures.py  # figures for the contour 
 python featureShowcase/buildCalorimeter40k.py figures # figures for the 40k calorimeter report
 python featureShowcase/buildReport.py             # renders the effort report and the design overview to HTML
 python featureShowcase/buildGuiGraphic.py         # the GUI's plume graphic, banner and icon
-python featureShowcase/buildGuiScreenshots.py     # the GUI walkthrough screenshots in docs/images/gui
+python featureShowcase/buildGuiScreenshots.py     # the GUI walkthrough screenshots in docs/images/novaGui, about 6 minutes
 ```
 
 The six slow studies cache what they solve (`contourValidation.npz`, `contourFamilies.npz`, `subfamilyStudy.npz`, `referenceOverlays.npz`, `family_*.pkl`, `coolingRuns/`) and take `--draw` to redraw their figures from the cache in seconds. `buildCoolingShowcase.py --engine <name>` solves one engine, so several can run side by side.

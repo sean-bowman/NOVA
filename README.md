@@ -120,29 +120,71 @@ On Windows, `novaGui.bat` launches it with no console window and writes startup 
 
 The window opens on the Design tab holding the shipped nozzle, the [worked example](#worked-example-loxlh2-upper-stage-nozzle) below. Each section leads with the fields a design is made from and folds the rest into **Advanced settings**, which hold the shipped nozzle's values until changed; each volute has a fold of its own. Alternative inputs share a selector row: L* or chamber barrel length, thrust or engine mass flow, expansion ratio or exit pressure, and where the regen jacket is truncated. Dependent fields stay hidden until they apply, every dimensioned field carries a unit dropdown that converts in place, and the selected wall alloy's sampled properties show beneath it. A search box finds a field by its label, key, help or options, and **Changed only** shows the fields that differ from the shipped nozzle. Problems across fields list above the form and mark the rows they name. **Load config** in the header opens a JSON file, **Save config** writes one, **Reset to example** returns to the shipped nozzle, and **Load example** offers the engines in `assets/examples/`.
 
+![Design tab](docs/images/novaGui/designDark.png)
+
+The Coolant Circuit section picks the architecture, and a note beneath the choice says what that circuit does, where it is viable and which engines flew it; the extension circuit's outlet carries the same.
+
+![Coolant circuit choice](docs/images/novaGui/designCircuit.png)
+
+Every field carries an (i) marker. Hovering it gives the field's meaning.
+
+![Field help](docs/images/novaGui/designHelp.png)
+
 ### Generate
 
-**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The bar follows the run's progress events: each stage as it opens, the passes of the coolant circuit and the solves of the contour, with the run log beside it carrying the full output. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The bar follows the run's progress events: each stage as it opens, the passes of the coolant circuit and the solves of the contour. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
+
+![Run in progress](docs/images/novaGui/generate.png)
 
 ### View
 
 When the run finishes the window turns to View: one figure at a time, picked from a sidebar of contour, flow, plume, cooling and 3D views. Each draws interactive (plotly, to zoom, rotate and read values off) or static (the Matplotlib drawing), behind a switch.
 
-The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked. The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary.
+The flow fields run from the injector face to the exit plane: the one-dimensional answer upstream of the throat, where no characteristic is solved, and the characteristic mesh from the throat to the exit of the wall that is built, with the seam between them marked.
 
-The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers. With film cooling on, the film view maps the film along the wall; with a radiative extension, the extension view draws the whole wall on one temperature scale against the shell's limit. The circuit view draws the coolant's paths on the half section, and with two passes or an extension circuit, the passes view draws each one's coolant and hot wall. The channel mesh, the revolved contour and the volutes are 3D views at full resolution.
+![Mach field](docs/images/novaGui/viewMach.png)
+
+The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary.
+
+![Plume](docs/images/novaGui/viewPlume.png)
+
+The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers.
+
+![Jacket on the wall](docs/images/novaGui/viewJacket.png)
+
+With film cooling on, the film view maps the film along the wall; with a radiative extension, the extension view draws the whole wall on one temperature scale against the shell's limit.
+
+![Film cooling](docs/images/novaGui/viewFilm.png)
+
+The circuit view draws the coolant's paths on the half section, and with two passes or an extension circuit, the passes view draws each one's coolant and hot wall.
+
+![Coolant circuit](docs/images/novaGui/viewCircuit.png)
+
+The channel mesh, the revolved contour and the volutes are 3D views at full resolution.
+
+| Channel mesh | Revolved contour |
+| --- | --- |
+| ![Channel mesh](docs/images/novaGui/viewChannelMesh.png) | ![Revolved contour](docs/images/novaGui/viewRevolved.png) |
 
 ### Analyze
 
 The numbers behind the figures in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. It filters by name, copies as tab-separated text and saves as CSV.
 
+![Analyze tab](docs/images/novaGui/analyze.png)
+
 ### Export
 
 A run writes its outputs to a staging folder, not to the output folder. The Export tab lists them by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.
 
+![Export tab](docs/images/novaGui/export.png)
+
 ### Light mode
 
 The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette, and the choice persists between sessions.
+
+| Design | Plume |
+| --- | --- |
+| ![Design tab, light](docs/images/novaGui/designLight.png) | ![Plume, light](docs/images/novaGui/viewPlumeLight.png) |
 
 [novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
 
