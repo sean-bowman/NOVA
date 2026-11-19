@@ -126,26 +126,54 @@ export interface RunSummary {
     error: string;
 }
 
-/** A top-level stage of a run, from the progress events NOVA sends (NOVA.progress). */
-export interface RunStage {
+export type StageState = 'pending' | 'running' | 'done' | 'failed';
+
+/** One finished iteration of an iterative solve, as NOVA.progress reports it. */
+export interface StageIteration {
+    index: number;                            // numbered from 1
+    t: number;                                // [s] on the run's own clock
+    metrics: Record<string, number | null>;   // SI
+}
+
+/** A stage of a run (novaGui.progress.RunProgress.stageList), top-level or one level inside. */
+export interface StageNode {
     key: string;
     label: string;
-    state: 'pending' | 'running' | 'done' | 'failed';
+    state: StageState;
     started: number | null;       // [s] on the run's own clock
     elapsed: number | null;       // [s] once finished
     expected: number | null;      // [s] on the last finished run
+    detail: string;               // what runs below it while it runs: 'Up pass 45%'
+    iterationName: string | null; // 'pass', 'evaluation'
+    iterationCount: number;
+    iterations: StageIteration[]; // the latest ones, oldest first
+    expectedIterations: number | null;
 }
 
-export interface RunSnapshot {
-    type: 'snapshot';
-    state: RunStateName;
-    detail: string;
+/** A top-level stage, with the share of the run it stands for and its sub-stages. */
+export interface RunStage extends StageNode {
+    weight: number;               // [s] its expected time, or the nominal one before any run
+    note: string;                 // 'pass 4', '45%', or once finished '7 passes'
+    fraction: number | null;      // how far a loop reported in the stage itself has gone
+    children: StageNode[];
+}
+
+/** The run fields a progress event carries; a snapshot carries them too. */
+export interface RunProgressFields {
+    runId: number | null;
+    t: number;                    // [s] the run's own clock at its latest event
+    expectedRun: number | null;   // the run whose times the stages expect
     fraction: number;
     ceiling: number;
     label: string;
     stageDetail: string;
     stages: RunStage[];
-    runId: number | null;
+}
+
+export interface RunSnapshot extends RunProgressFields {
+    type: 'snapshot';
+    state: RunStateName;
+    detail: string;
     startedAt: number | null;
     log: string[];
     result: RunSummary | null;
@@ -154,8 +182,8 @@ export interface RunSnapshot {
 export type RunEvent =
     | RunSnapshot
     | { type: 'log'; line: string }
-    | { type: 'status'; state: RunStateName; detail: string }
-    | { type: 'progress'; fraction: number; ceiling: number; label: string; stageDetail: string; stages: RunStage[] }
+    | { type: 'status'; state: RunStateName; detail: string; runId?: number | null }
+    | ({ type: 'progress' } & RunProgressFields)
     | ({ type: 'result' } & RunSummary);
 
 export interface ViewSpec {
@@ -167,10 +195,19 @@ export interface ViewSpec {
     static: boolean;
 }
 
+/** The views of the last good run, and that run: its id, name, time and the config it ran. */
 export interface ViewIndex {
     views: ViewSpec[];
     available: string[];
     runId: number | null;
+    runName: string;
+    elapsedSec: number | null;
+    config: Config | null;
+}
+
+export interface Settings {
+    themeMode: Mode;
+    formWidth: number | null;     // [px] the Design form's width beside the result pane
 }
 
 export interface ResultRow {

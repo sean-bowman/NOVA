@@ -174,7 +174,7 @@ so each film sees the wall the films upstream have made. Both closures are solve
 
 ## Example engines
 
-Each is a complete configuration in `src/NOVA/assets/examples/`, loadable from the GUI's Design tab. Each borrows the architecture of the engine it is named after, not its published dimensions or flows, and its `_comment` says where it departs. [featureShowcase/buildCoolingShowcase.py](../featureShowcase/buildCoolingShowcase.py) solves all of them and draws each one.
+Each is a complete configuration in `src/NOVA/assets/examples/`, loadable from the GUI's Load example menu. Each borrows the architecture of the engine it is named after, not its published dimensions or flows, and its `_comment` says where it departs. [featureShowcase/buildCoolingShowcase.py](../featureShowcase/buildCoolingShowcase.py) solves all of them and draws each one.
 
 | File | Engine | Chamber circuit | Extension | Result |
 |---|---|---|---|---|

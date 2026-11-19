@@ -1,23 +1,23 @@
 /* ========================================
-   ANALYZE TAB
-   The last good run's scalar results: sizing, the chamber, delivered performance against the
-   1D estimates, station thermochemistry, the cooling summary and passes, the extension, the gas
-   generator, films and the plume. The rows are built on the server (novaGui/analysis.py), the
-   same rows the legacy Tkinter Analyze tab lists; the three performance columns are drawn as
-   columns. A filter narrows
-   the rows by name, and the table copies to the clipboard as tab-separated text or saves as CSV.
+   RESULTS TABLE
+   The last good run's scalar results, the result pane's Table: sizing, the chamber, delivered
+   performance against the 1D estimates, station thermochemistry, the cooling summary and passes,
+   the extension, the gas generator, films and the plume. The rows are built on the server
+   (novaGui/analysis.py), the same rows the legacy Tkinter Analyze tab lists; the three
+   performance columns are drawn as columns. A filter narrows the rows by name, and the table
+   copies to the clipboard as tab-separated text or saves as CSV.
    Sean Bowman [11/17/2026]
    ======================================== */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { api } from '../api';
 import { CopyIcon, DownloadIcon, NozzleGlyph, SearchIcon } from '../components/Icons';
 import type { ResultRow, ResultSection, ResultTable } from '../types';
 
-interface AnalyzeTabProps {
-    runId: number | null;
-    visible: boolean;
+interface ResultsTableProps {
+    table: ResultTable | null;
+    loading: boolean;
+    error: string;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
 }
 
@@ -86,41 +86,10 @@ async function copyText(text: string): Promise<void> {
     }
 }
 
-export function AnalyzeTab({ runId, visible, onNotify }: AnalyzeTabProps) {
-    const [table, setTable] = useState<ResultTable | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
+export function ResultsTable({ table, loading, error, onNotify }: ResultsTableProps) {
     const [query, setQuery] = useState('');
     const [closed, setClosed] = useState<Record<string, boolean>>({});
-    const requested = useRef<number | null | undefined>(undefined);
     const scroller = useRef<HTMLDivElement>(null);
-
-    // Fetch when the tab shows a run it has not asked for; the server caches the table per run
-    useEffect(() => {
-        if (!visible || requested.current === runId) {
-            return;
-        }
-        // A reply counts only while its run is still the one asked for
-        const forRun = runId;
-        requested.current = forRun;
-        setLoading(true);
-        setError('');
-        api.analysis()
-            .then((loaded) => {
-                if (requested.current === forRun) {
-                    setTable(loaded);
-                    setLoading(false);
-                }
-            })
-            .catch((failure: Error) => {
-                if (requested.current === forRun) {
-                    // A failed table may be asked for again
-                    requested.current = undefined;
-                    setError(failure.message);
-                    setLoading(false);
-                }
-            });
-    }, [visible, runId]);
 
     const filtered = useMemo(() => {
         const sections = table?.sections ?? [];
@@ -163,7 +132,7 @@ export function AnalyzeTab({ runId, visible, onNotify }: AnalyzeTabProps) {
     } else if (table === null || (loading && !hasRun)) {
         body = <div className="empty"><span className="spinner" /> Loading results</div>;
     } else if (!hasRun) {
-        body = <div className="empty">Generate a nozzle from the Design tab to fill this table.</div>;
+        body = <div className="empty">Generate a nozzle to fill this table.</div>;
     } else if (filtered.length === 0) {
         body = <div className="empty">No quantity matches “{query}”.</div>;
     } else {
@@ -215,16 +184,14 @@ export function AnalyzeTab({ runId, visible, onNotify }: AnalyzeTabProps) {
     }
 
     return (
-        <div className="analyze-tab">
-            <div className="toolbar">
-                <span className="eyebrow eyebrow-inline">Results</span>
-                {hasRun && <span className="result-summary">{table.summary}</span>}
-                <span className="toolbar-spacer" />
+        <div className="results-table">
+            <div className="figure-toolbar">
                 <label className="search">
                     <SearchIcon />
                     <input className="input search-input" type="search" placeholder="Filter quantities" value={query}
                            onChange={(event) => setQuery(event.target.value)} disabled={!hasRun} />
                 </label>
+                <span className="toolbar-spacer" />
                 <button type="button" className="button" onClick={copyTable} disabled={!hasRun}
                         title="Copy the table, as filtered, as tab-separated text">
                     <CopyIcon /> Copy
@@ -234,8 +201,8 @@ export function AnalyzeTab({ runId, visible, onNotify }: AnalyzeTabProps) {
                     <DownloadIcon /> Save CSV
                 </button>
             </div>
-            <div className="design-scroll" ref={scroller}>
-                <div className="design-column result-column">{body}</div>
+            <div className="pane-scroll" ref={scroller}>
+                <div className="pane-column">{body}</div>
             </div>
         </div>
     );

@@ -1,6 +1,7 @@
 /* ========================================
-   EXPORT TAB
-   Chooses which of the last good run's outputs to keep and copies them to an output folder,
+   EXPORT PANEL
+   The dialog the result pane's Export button opens. Chooses which of the last good run's
+   outputs to keep and copies them to an output folder,
    as <output folder>/<run name>Outputs/. The outputs are listed by category (novaGui/outputs.py, shared with
    the legacy Tkinter Export tab); a check on a category or on a single file chooses
    it. Every output is chosen after a run, except the categories unchecked before it. A file
@@ -15,7 +16,7 @@ import { api, windowBridge } from '../api';
 import { ChevronIcon, FolderIcon } from '../components/Icons';
 import type { ExportIndex, ExportTarget, OutputFile } from '../types';
 
-interface ExportTabProps {
+interface ExportPanelProps {
     runId: number | null;
     formName: string;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
@@ -52,7 +53,7 @@ function Check({ state, label, onToggle }: { state: CheckState; label: string; o
     );
 }
 
-export function ExportTab({ runId, formName, onNotify }: ExportTabProps) {
+export function ExportPanel({ runId, formName, onNotify }: ExportPanelProps) {
     const [index, setIndex] = useState<ExportIndex | null>(null);
     const [baseDir, setBaseDir] = useState('');
     const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -222,7 +223,7 @@ export function ExportTab({ runId, formName, onNotify }: ExportTabProps) {
     }
 
     return (
-        <div className="export-tab">
+        <div className="export-panel">
             <div className="card export-folder">
                 <label className="export-folder-label" htmlFor="export-base">Output folder</label>
                 <input id="export-base" className="input mono" value={baseDir} spellCheck={false}

@@ -3,7 +3,7 @@
 
 '''
 
-The View tab's figures, rendered for the browser.
+The result pane's figures, rendered for the browser.
 
 The list of views and the test of which ones a run produced are novaGui.viewCatalog, which the
 legacy Tkinter front end reads too. Each view renders one or both of two ways:

@@ -23,6 +23,52 @@ function svgProps(className?: string) {
  * A converging-diverging nozzle, flow to the right. Section headers turn it to point
  * downstream (down) when the section is open.
  */
+/**
+ * A stage's state: a filled check when done, a ring with a dot while running, a dashed ring
+ * while pending, a filled cross when it failed or was cut short.
+ */
+export function StageStateIcon({ state }: { state: 'pending' | 'running' | 'done' | 'failed' | 'cancelled' }) {
+    const props = { ...svgProps(`stage-icon stage-icon-${state}`), viewBox: '0 0 14 14' };
+    if (state === 'done') {
+        return (
+            <svg {...props}>
+                <circle cx="7" cy="7" r="6" fill="currentColor" />
+                <path d="M4 7.2l2 2 4-4.4" fill="none" stroke="var(--surface)" strokeWidth="1.6"
+                      strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
+    if (state === 'running') {
+        return (
+            <svg {...props}>
+                <circle cx="7" cy="7" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <circle cx="7" cy="7" r="2.5" fill="currentColor" />
+            </svg>
+        );
+    }
+    if (state === 'pending') {
+        return (
+            <svg {...props}>
+                <circle cx="7" cy="7" r="5.6" fill="none" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 2" />
+            </svg>
+        );
+    }
+    return (
+        <svg {...props}>
+            <circle cx="7" cy="7" r="6" fill="currentColor" />
+            <path d="M4.8 4.8l4.4 4.4M9.2 4.8l-4.4 4.4" stroke="var(--surface)" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+    );
+}
+
+export function CloseIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+    );
+}
+
 export function NozzleGlyph({ className }: IconProps) {
     return (
         <svg {...svgProps(className)} fill="currentColor">

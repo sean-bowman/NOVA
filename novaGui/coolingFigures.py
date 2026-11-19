@@ -2,7 +2,7 @@
 
 '''
 
-Plotly renderings of the View tab's nine cooling views, for the browser.
+Plotly renderings of the nine cooling views, for the browser.
 
 Each builder draws the same quantities as its Matplotlib counterpart in novaGui.thermalPlots, from
 the same arrays on the Nozzle and with the same titles, colors and annotations, and reads them

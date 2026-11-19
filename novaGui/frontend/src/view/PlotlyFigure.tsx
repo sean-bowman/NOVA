@@ -69,6 +69,30 @@ export function PlotlyFigure({ viewKey, mode, runId }: PlotlyFigureProps) {
         };
     }, [viewKey, mode, runId]);
 
+    // plotly.js's own responsive mode follows the window only. The pane also changes size when the
+    // form beside it is dragged wider or a hidden pane is shown, so the figure follows the pane.
+    useEffect(() => {
+        const element = host.current;
+        if (!element) {
+            return;
+        }
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            window.cancelAnimationFrame(frame);
+            frame = window.requestAnimationFrame(() => {
+                const drawn = (element as unknown as { _fullLayout?: object })._fullLayout !== undefined;
+                if (drawn && plotlyPromise && element.clientWidth > 0 && element.clientHeight > 0) {
+                    plotlyPromise.then((Plotly) => Plotly.Plots.resize(element)).catch(() => undefined);
+                }
+            });
+        });
+        observer.observe(element);
+        return () => {
+            observer.disconnect();
+            window.cancelAnimationFrame(frame);
+        };
+    }, []);
+
     // Release WebGL contexts and listeners when the pane goes away
     useEffect(() => {
         const element = host.current;

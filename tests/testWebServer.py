@@ -254,6 +254,27 @@ def finishedRun(client, tmp_path):
     yield record
     session.result = None
 
+def testTheViewIndexCarriesTheConfigItsRunRan(client):
+    '''The result pane compares the form with the config of the run it shows.'''
+    session = client.app.state.session
+    session.result = RunRecord(next(_runIds), {'ok': True, 'runName': 'testEngine', 'elapsedSec': 12.5},
+                               config = {'chamberPressure': 6.9e6, 'ambientPressure': 5000.0})
+    try:
+        index = client.get('/api/views').json()
+        assert index['runId'] == session.result.runId and index['runName'] == 'testEngine'
+        assert index['elapsedSec'] == 12.5
+        assert index['config'] == {'chamberPressure': 6.9e6, 'ambientPressure': 5000.0}
+    finally:
+        session.result = None
+    assert client.get('/api/views').json()['config'] is None
+
+def testTheFormWidthIsSavedApartFromTheThemeMode(client, tmp_path, monkeypatch):
+    from novaGui import settings as guiSettings
+    monkeypatch.setattr(guiSettings, 'settingsPath', lambda: str(tmp_path / 'guiSettings.json'))
+    assert client.put('/api/settings', json = {'formWidth': 610}).json() == {'themeMode': 'dark', 'formWidth': 610}
+    assert client.put('/api/settings', json = {'themeMode': 'light'}).json() == {'themeMode': 'light', 'formWidth': 610}
+    assert client.put('/api/settings', json = {'formWidth': 'wide'}).json()['formWidth'] == 610
+
 def testNoRunMeansAnEmptyTableAndNoOutputs(client):
     assert client.get('/api/analysis').json()['runId'] is None
     index = client.get('/api/export').json()

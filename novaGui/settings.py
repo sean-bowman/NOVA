@@ -2,7 +2,8 @@
 
 '''
 
-The GUI's own preferences, kept between launches: at present only the theme mode.
+The GUI's own preferences, kept between launches: the theme mode, and the width of the Design
+form beside the result pane in the React window.
 
 They live in `%APPDATA%\\NOVA\\guiSettings.json` on Windows and `~/.config/NOVA/guiSettings.json`
 elsewhere, apart from any nozzle configuration. A missing, unreadable or out-of-date file reads as
@@ -17,8 +18,28 @@ import json
 import os
 import sys
 
-defaults = {'themeMode': 'dark'}
+defaults = {'themeMode': 'dark', 'formWidth': None}
 themeModes = ('dark', 'light')
+formWidthRange = (320, 4000)    # [px] the form widths kept; the window clamps to its own size
+
+def clean(settings: dict) -> dict:
+
+    '''
+
+    The recognized settings out of `settings`, each one valid: anything else is left out.
+
+    '''
+
+    kept = {}
+    if not isinstance(settings, dict):
+        return kept
+    if settings.get('themeMode') in themeModes:
+        kept['themeMode'] = settings['themeMode']
+    width = settings.get('formWidth')
+    numeric = isinstance(width, (int, float)) and not isinstance(width, bool)
+    if numeric and formWidthRange[0] <= width <= formWidthRange[1]:
+        kept['formWidth'] = int(round(width))
+    return kept
 
 def settingsPath() -> str:
 
@@ -46,8 +67,7 @@ def load() -> dict:
     except (OSError, ValueError):
         return settings
 
-    if isinstance(saved, dict) and saved.get('themeMode') in themeModes:
-        settings['themeMode'] = saved['themeMode']
+    settings.update(clean(saved))
 
     return settings
 

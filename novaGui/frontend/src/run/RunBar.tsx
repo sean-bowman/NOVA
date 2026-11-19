@@ -1,70 +1,133 @@
 /* ========================================
    RUN BAR
-   Generate and Cancel, the current stage, a determinate progress bar, elapsed time, the
-   latest output line, and the run log drawer above it.
+   Generate and Cancel, the stage stepper, the run's elapsed time, and the buttons for the stage
+   list and the run log; the log drawer sits above it.
 
-   NOVA reports its progress as events (NOVA.progress), which the server folds into a fraction,
-   the running stage's ceiling and a label. The contour solve reports every few seconds and some
-   stages only at their start and end, so between events the bar eases toward the ceiling and a
-   long stage reads as working rather than hung.
+   NOVA reports its progress as events (NOVA.progress), which the server folds into a stage tree
+   (novaGui.progress.RunProgress). The stepper draws one segment per top-level stage of the run's
+   plan, as wide as the time the stage is expected to take: its time on the last finished run, or
+   a nominal time before the first. A segment fills with the stage's own loop where it reports
+   one, else with its elapsed time against the expected time; the coolant circuit's segment is
+   notched at each finished pass. The contour solve reports every few seconds and some stages only
+   at their start and end, so the times advance on the run's clock between events.
    Sean Bowman [11/16/2026]
    ======================================== */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 import { PlayIcon, StopIcon } from '../components/Icons';
-import type { RunView } from './useRunEvents';
+import type { RunStage } from '../types';
+import { StagePanel } from './StagePanel';
+import { formatClock, runClockNow, runElapsed, shownState, stageElapsed, stageTime, type ShownState } from './stageText';
+import { useTicker, type RunView } from './useRunEvents';
 
-const creepTimeSec = 12;        // [s] time constant of the ease toward the stage ceiling
+const fullBeforeDone = 0.95;    // [-] the most a running segment fills on time alone
 
 interface RunBarProps {
     run: RunView;
     canGenerate: boolean;
     blockReason: string;
     logOpen: boolean;
+    stagesOpen: boolean;
     onGenerate: () => void;
     onCancel: () => void;
     onToggleLog: () => void;
+    onToggleStages: () => void;
 }
 
-function formatElapsed(seconds: number): string {
-    const minutes = Math.floor(seconds / 60);
-    const rest = Math.floor(seconds % 60);
-    return `${minutes}:${String(rest).padStart(2, '0')}`;
-}
-
-export function RunBar({ run, canGenerate, blockReason, logOpen, onGenerate, onCancel, onToggleLog }: RunBarProps) {
-    const running = run.state === 'running';
-    const [now, setNow] = useState(() => performance.now());
-
-    useEffect(() => {
-        if (!running) {
-            return;
-        }
-        const timer = window.setInterval(() => setNow(performance.now()), 200);
-        return () => window.clearInterval(timer);
-    }, [running]);
-
-    let shown = run.fraction;
-    if (running && run.ceiling > run.fraction) {
-        const waited = Math.max(0, now - run.progressAt) / 1000;
-        shown = run.fraction + (run.ceiling - run.fraction) * (1 - Math.exp(-waited / creepTimeSec));
-    } else if (run.state === 'done') {
-        shown = 1;
+/** [-] How full a segment is. */
+function fillOf(stage: RunStage, state: ShownState, elapsed: number | null): number {
+    if (state === 'done') {
+        return 1;
     }
+    if (state === 'pending' || elapsed === null) {
+        return 0;
+    }
+    if (stage.fraction !== null) {
+        return stage.fraction;
+    }
+    // Against the last run's time the fill is linear; against a nominal time, which can be far
+    // off, it eases so a long first run never sits at the cap from its first seconds
+    if (stage.expected !== null) {
+        return Math.min(elapsed / stage.expected, fullBeforeDone);
+    }
+    return fullBeforeDone * (1 - Math.exp(-elapsed / stage.weight));
+}
 
-    const elapsed = running && run.startedAt ? Math.max(0, Date.now() / 1000 - run.startedAt) : null;
-    const latest = run.log.length > 0 ? run.log[run.log.length - 1] : '';
+/** [%] Where the finished passes inside a stage fall along its segment. */
+function notchesOf(stage: RunStage, state: ShownState, elapsed: number | null): number[] {
+    if (stage.started === null || elapsed === null || elapsed <= 0) {
+        return [];
+    }
+    const span = state === 'done' ? elapsed : Math.max(stage.expected ?? stage.weight, elapsed);
+    const passes = [stage, ...stage.children].filter((node) => node.iterationName === 'pass')
+        .flatMap((node) => node.iterations);
+    return passes.map((iteration) => (100 * (iteration.t - stage.started!)) / span)
+        .filter((left) => left > 0.5 && left < 99);
+}
 
-    let stage = 'Ready';
+function Stepper({ run, clock }: { run: RunView; clock: number }) {
+    if (run.stages.length === 0) {
+        return (
+            <div className="stepper stepper-empty">
+                {run.state === 'running'
+                    ? <><span className="spinner" /> {run.label || 'starting'}</>
+                    : 'Generate runs the form as it stands.'}
+            </div>
+        );
+    }
+    return (
+        <ol className="stepper" aria-label="Run stages">
+            {run.stages.map((stage) => {
+                const state = shownState(stage, run);
+                const elapsed = stageElapsed(stage, clock);
+                const time = stageTime(stage, state, elapsed);
+                const note = state === 'pending' ? '' : stage.note;
+                const fill = fillOf(stage, state, elapsed);
+                return (
+                    <li key={stage.key} className={`stage-step is-${state}`} style={{ flexGrow: stage.weight }}
+                        title={[stage.label, note, time].filter(Boolean).join(', ')}>
+                        <div className="stage-step-head">
+                            <span className="stage-step-label">
+                                {stage.label}
+                                {note && <span className="stage-step-note"> · {note}</span>}
+                            </span>
+                            <span className="stage-step-time">{time}</span>
+                        </div>
+                        <div className="stage-step-track">
+                            <div className="stage-step-fill" style={{ width: `${(100 * fill).toFixed(1)}%` }} />
+                            {notchesOf(stage, state, elapsed).map((left) => (
+                                <span key={left} className="stage-step-notch" style={{ left: `${left.toFixed(2)}%` }} />
+                            ))}
+                        </div>
+                    </li>
+                );
+            })}
+        </ol>
+    );
+}
+
+export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onGenerate, onCancel, onToggleLog,
+                         onToggleStages }: RunBarProps) {
+    const running = run.state === 'running';
+    const now = useTicker(running);
+    const clock = runClockNow(run, now);
+
+    // The whole run's time against the last run's, once every stage has one to expect
+    const expectedTotal = run.stages.length > 0 && run.stages.every((stage) => stage.expected !== null)
+        ? run.stages.reduce((sum, stage) => sum + (stage.expected ?? 0), 0) : null;
+
+    const elapsed = runElapsed(run);
+    const clockMain = elapsed !== null ? formatClock(elapsed) : '';
+    let clockSub = '';
     if (running) {
-        stage = run.label || run.detail || 'running';
+        clockSub = expectedTotal !== null ? `of ~${formatClock(expectedTotal)} (run ${run.expectedRun})` : `run ${run.runId ?? ''}`;
     } else if (run.state === 'done') {
-        stage = `Done in ${run.detail}`;
+        clockSub = `run ${run.runId}, done`;
     } else if (run.state === 'error') {
-        stage = 'Run failed';
+        clockSub = `run ${run.runId} failed`;
     } else if (run.state === 'cancelled') {
-        stage = 'Cancelled';
+        clockSub = `run ${run.runId} cancelled`;
     }
 
     return (
@@ -79,17 +142,20 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, onGenerate, onC
                     <PlayIcon /> Generate
                 </button>
             )}
-            <div className="run-stage" title={running && run.stageDetail ? run.stageDetail : undefined}>{stage}</div>
-            <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100}
-                 aria-valuenow={Math.round(shown * 100)}>
-                <div className="progress-fill" style={{ width: `${(shown * 100).toFixed(1)}%` }} />
+            <Stepper run={run} clock={clock} />
+            <div className="run-clock">
+                <span className="run-clock-main">{clockMain}</span>
+                <span className="run-clock-sub">{clockSub}</span>
             </div>
-            <div className="run-elapsed">{elapsed !== null ? formatElapsed(elapsed) : ''}</div>
-            <div className="run-latest" title={latest}>{run.state === 'error' ? run.detail : latest}</div>
             {!run.connected && <span className="badge badge-error" title="The NOVA server is not answering">offline</span>}
+            <button type="button" className={`button ${stagesOpen ? 'is-pressed' : ''}`} onClick={onToggleStages}
+                    aria-expanded={stagesOpen} disabled={run.stages.length === 0} title="Every stage of the run, with its time">
+                Stages
+            </button>
             <button type="button" className="button button-quiet" onClick={onToggleLog} aria-expanded={logOpen}>
                 {logOpen ? 'Hide log' : 'Show log'}
             </button>
+            {stagesOpen && run.stages.length > 0 && <StagePanel run={run} clock={clock} onClose={onToggleStages} />}
         </div>
     );
 }

@@ -7,7 +7,7 @@
 
 import type {
     Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, Mode, ResultTable, RunEvent, Schema,
-    ViewIndex, WallSample,
+    Settings, ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -47,8 +47,8 @@ export const api = {
     wallMaterial: (name: string, temperatureK: number) =>
         request<WallSample>(`/api/materials/wall?name=${encodeURIComponent(name)}&temperatureK=${temperatureK}`),
     extensionMaterial: (name: string) => request<ExtensionEntry>(`/api/materials/extension?name=${encodeURIComponent(name)}`),
-    settings: () => request<{ themeMode: Mode }>('/api/settings'),
-    saveSettings: (settings: { themeMode: Mode }) => request<{ themeMode: Mode }>('/api/settings', jsonBody('PUT', settings)),
+    settings: () => request<Settings>('/api/settings'),
+    saveSettings: (settings: Partial<Settings>) => request<Settings>('/api/settings', jsonBody('PUT', settings)),
     startRun: (config: Config, mode: Mode) => request<{ runId: number }>('/api/runs', jsonBody('POST', { config, mode })),
     cancelRun: () => request<{ cancelled: boolean }>('/api/runs/cancel', { method: 'POST' }),
     views: () => request<ViewIndex>('/api/views'),

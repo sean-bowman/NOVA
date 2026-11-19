@@ -9,7 +9,7 @@ Routes, all under /api:
 
     GET  /health                    liveness, and whether the view machinery has loaded
     GET  /brand/{name}              the plume mark (bannerDark, bannerLight) and the icon
-    GET  /settings                  saved preferences (novaGui.settings: the theme mode)
+    GET  /settings                  saved preferences (novaGui.settings: theme mode, form width)
     PUT  /settings                  save preferences
     GET  /schema                    the Design form (novaGui.schemaJson.serializeSchema)
     POST /schema/state              rows and sections a config hides, sections it opens, and its
@@ -21,7 +21,8 @@ Routes, all under /api:
     POST /runs/cancel               terminate the running worker
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
-    GET  /views                     the view list, and the keys the last good run produced
+    GET  /views                     the view list, the keys the last good run produced, and that
+                                    run's id, name, time and config
     GET  /views/{key}/interactive   a view's plotly figure JSON, ?mode=
     GET  /views/{key}/static        a view's Matplotlib PNG, ?mode=&width=&height=&ratio=
     GET  /analysis                  the last good run's result table (novaGui.analysis)
@@ -132,8 +133,9 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
 
         body = await request.json()
         current = guiSettings.load()
-        if isinstance(body, dict) and body.get('themeMode') in guiSettings.themeModes:
-            current['themeMode'] = body['themeMode']
+        changes = guiSettings.clean(body)
+        if changes:
+            current.update(changes)
             guiSettings.save(current)
         return current
 
@@ -251,8 +253,12 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
     def viewIndex() -> dict:
 
         record = app.state.session.result
+        finished = record is not None and record.ok
         return {'views': views.viewList(), 'available': views.availableViews(record),
-                'runId': record.runId if record is not None and record.ok else None}
+                'runId': record.runId if finished else None,
+                'runName': record.runName if finished else '',
+                'elapsedSec': record.elapsedSec if finished else None,
+                'config': record.config if finished else None}
 
     @app.get('/api/views/{key}/interactive')
     def interactiveView(key: str, mode: str = 'dark') -> Response:

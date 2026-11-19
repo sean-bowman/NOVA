@@ -2,7 +2,7 @@
 
 '''
 
-The Design tab's pieces beyond the schema: the cross-field checks, the wall alloy's sampled
+The Design form's pieces beyond the schema: the cross-field checks, the wall alloy's sampled
 properties and the radiative extension material's store entry.
 
 Both front ends use them, so they raise the same problems in the same words: the web front end
