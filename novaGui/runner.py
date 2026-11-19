@@ -19,6 +19,10 @@ Before the first run the loader:
 
 While a run reports its progress as events, NOVA draws no tqdm bars, so none reach the log.
 
+A warning the run raises through Python's warnings module (NOVA's own, and numpy's or scipy's) is
+written to the log as Python would print it, and sent as a message of its own, so a front end can
+count and list a run's warnings rather than leave them in the log.
+
 Every run writes all of NOVA's outputs, figures and data files alike, into the
 staging folder, where the front end's views read them. An export copies the ones chosen
 to the output folder. A staging folder belongs to one session of a front end and is
@@ -35,6 +39,7 @@ import json
 import time
 import shutil
 import tempfile
+import warnings
 import importlib
 import threading
 import traceback
@@ -72,6 +77,24 @@ htmlFiles = {
     'temperatureField': 'temperatureFieldInteractive.html',
     'plume':          'plumeStructureInteractive.html',
 }
+
+def warningRelay(messageQueue):
+
+    '''
+
+    A `warnings.showwarning` that puts each warning on the queue twice: as the log line Python
+    would print, and as ('warning', {'category', 'message', 'where'}), `where` the file name and
+    line that raised it.
+
+    '''
+
+    def show(message, category, filename, lineno, file = None, line = None):
+        text = str(message)
+        messageQueue.put(('log', warnings.formatwarning(text, category, filename, lineno, line).rstrip()))
+        messageQueue.put(('warning', {'category': getattr(category, '__name__', str(category)), 'message': text,
+                                      'where': f'{os.path.basename(str(filename))}:{lineno}'}))
+
+    return show
 
 def stagingFolder() -> str:
 
@@ -185,6 +208,7 @@ class PipelineRunner:
         ('log', str)                        a line of run output
         ('status', (state, detail))         state in {'running','done','error'}
         ('stage', dict)                     a NOVA.progress event
+        ('warning', dict)                   a warning the run raised: category, message, where
         ('result', RunResult)               terminal, always the last message
 
     `stageHook`, when set, is called as `stageHook(nozzle, event)` with each progress event, on the
@@ -268,7 +292,9 @@ class PipelineRunner:
                     except Exception as exc:               # noqa: BLE001 -- the run matters more than the hook
                         self._queue.put(('log', f'stage hook failed: {type(exc).__name__}: {exc}'))
 
-            with novaProgress.reporting(report):
+            # The filters stay as they are; only where a shown warning goes changes
+            with novaProgress.reporting(report), warnings.catch_warnings():
+                warnings.showwarning = warningRelay(self._queue)
                 nozzle.generateNozzle(configPath = configPath)
 
             sys.stdout.flush()

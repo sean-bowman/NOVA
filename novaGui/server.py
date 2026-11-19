@@ -41,6 +41,13 @@ run in progress answers /views and /views/{key}/interactive with the figures its
 settled, once the worker has sent them. `compare` draws a second kept run over a line plot, and
 `baseline` sets a second run's table beside the first (novaGui.analysis.compareTables).
 
+A view's figure is built once per run, view, palette mode and compared run, and kept while its run
+is kept (`keptFigureBytes` of them, the least recently drawn going first), compressed as well as
+whole, so switching views, the grid and a popped-out window draw from memory after the first
+time. Every other response is compressed as it goes out when the browser accepts it. A filled flow
+field is 1.5 to 2.5 MB of JSON and goes out at about a third of that; the event stream and the PNGs
+are sent as they are.
+
 Everything else is the built front end (novaGui/frontend/dist), with index.html for any path
 that is not a file, so a reload on a client route still opens the app. index.html goes out with
 the saved theme mode already on its root element, so the first paint is in the right palette.
@@ -61,12 +68,16 @@ Date:   11/16/2026
 
 # Standard library imports
 import asyncio
+import collections
 import contextlib
+import gzip
 import json
 import os
+import threading
 
 # Third-party imports
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -90,6 +101,7 @@ brandFiles = {
 }
 
 modes = ('dark', 'light')
+keptFigureBytes = 160 * 2 ** 20     # [B] the figure JSON kept for drawing again
 
 def _mode(value: str) -> str:
 
@@ -125,6 +137,9 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
 
     app = FastAPI(title = 'NOVA', docs_url = '/api/docs', openapi_url = '/api/openapi.json', lifespan = lifespan)
     app.state.session = session if session is not None else RunSession()
+    # Level 5 compresses a field figure to about a quarter in a few tens of milliseconds; level 9
+    # takes several times as long for a few percent more
+    app.add_middleware(GZipMiddleware, minimum_size = 1000, compresslevel = 5)
 
     schemaCache = {}
 
@@ -315,28 +330,86 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
                 'elapsedSec': record.elapsedSec if finished else None,
                 'config': record.config if finished else None, 'partial': False}
 
+    # (runId, partial, key, mode, compare, baseline): (figure JSON as bytes, the same gzipped)
+    figureCache = collections.OrderedDict()
+    figureLock = threading.Lock()
+    app.state.figureCache = figureCache
+
+    def _drawnFigure(cacheKey: tuple, build):
+
+        '''
+
+        A figure's JSON and its gzipped bytes from the cache, or built, compressed and kept. Figures
+        of runs no longer kept, and a run's partial figures once it has ended, are dropped as others
+        are kept.
+
+        '''
+
+        with figureLock:
+            if cacheKey in figureCache:
+                figureCache.move_to_end(cacheKey)
+                return figureCache[cacheKey]
+        figure = build()
+        if figure is None:
+            return None
+        whole = figure.encode('utf-8')
+        drawn = (whole, gzip.compress(whole, compresslevel = 5))
+        session = app.state.session
+        running = session.state['runId'] if session.busy else None
+        with figureLock:
+            figureCache[cacheKey] = drawn
+            kept = set(session.runs)
+            for stale in [entry for entry in figureCache
+                          if (entry[1] and entry[0] != running) or (not entry[1] and entry[0] not in kept)
+                          or (entry[4] is not None and entry[4] not in kept)]:
+                if stale != cacheKey:
+                    del figureCache[stale]
+            while len(figureCache) > 1 and sum(len(a) + len(b) for a, b in figureCache.values()) > keptFigureBytes:
+                figureCache.popitem(last = False)
+        return drawn
+
+    def _figureResponse(request: Request, drawn: tuple) -> Response:
+
+        '''The figure gzipped for a browser that accepts it, which the compression middleware leaves as it is.'''
+
+        whole, packed = drawn
+        if 'gzip' in request.headers.get('accept-encoding', '').lower():
+            return Response(packed, media_type = 'application/json',
+                            headers = {'Content-Encoding': 'gzip', 'Vary': 'Accept-Encoding'})
+        return Response(whole, media_type = 'application/json', headers = {'Vary': 'Accept-Encoding'})
+
     @app.get('/api/views/{key}/interactive')
-    def interactiveView(key: str, mode: str = 'dark', run: int | None = None, compare: int | None = None) -> Response:
+    def interactiveView(request: Request, key: str, mode: str = 'dark', run: int | None = None,
+                        compare: int | None = None) -> Response:
 
         mode = _mode(mode)
         if _running(run):
-            figure = views.partialFigure(app.state.session.partialFigure(run, key), key, mode)
+            description = app.state.session.partialFigure(run, key)
+            figure = _drawnFigure((run, True, key, mode, None, None),
+                                  lambda: views.partialFigure(description, key, mode)) if description is not None else None
             if figure is None:
                 raise HTTPException(404, f'{key} is not drawn until run {run} finishes')
-            return Response(figure, media_type = 'application/json')
+            return _figureResponse(request, figure)
 
         record = _record(run)
-        nozzle = _nozzle(record.runId)
-        other = None
-        labels = (f'run {record.runId}', 'the compared run')
-        if compare is not None and compare != record.runId:
-            other = _nozzle(compare)
-            baseline = app.state.session.baseline
-            labels = (f'run {record.runId}', f'run {compare}, baseline' if compare == baseline else f'run {compare}')
-        figure = views.interactiveFigure(nozzle, key, mode, compare = other, labels = labels)
+        against = compare if compare is not None and compare != record.runId else None
+
+        def build():
+            nozzle = _nozzle(record.runId)
+            other = None
+            labels = (f'run {record.runId}', 'the compared run')
+            if against is not None:
+                other = _nozzle(against)
+                baseline = app.state.session.baseline
+                labels = (f'run {record.runId}', f'run {against}, baseline' if against == baseline else f'run {against}')
+            return views.interactiveFigure(nozzle, key, mode, compare = other, labels = labels)
+
+        # The compared run's label names it the baseline or not, so the baseline is part of the key
+        baseline = app.state.session.baseline if against is not None else None
+        figure = _drawnFigure((record.runId, False, key, mode, against, baseline), build)
         if figure is None:
             raise HTTPException(404, f'{key} has no interactive rendering for this run')
-        return Response(figure, media_type = 'application/json')
+        return _figureResponse(request, figure)
 
     @app.get('/api/views/{key}/static')
     def staticView(key: str, mode: str = 'dark', run: int | None = None, width: int = Query(900, ge = 100, le = 8000),

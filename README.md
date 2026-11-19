@@ -134,7 +134,7 @@ Every field carries an (i) marker. Hovering it gives the field's meaning.
 
 **Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
 
-When the contour stage ends, about a minute in, the result pane draws the new run's contour, near-wall state and flow fields while cooling and the plume still run; the rest of its views, its table and its outputs follow when it finishes. A strip under the pane's header says which run the pane shows, and once the form is edited, it names each field that differs from the config that run ran, with its value then and now.
+When the contour stage ends, about a minute in, the result pane draws the new run's contour, near-wall state and flow fields while cooling and the plume still run; the rest of its views, its table and its outputs follow when it finishes. The warnings a run raises are counted in the run bar, which opens the log on a click, and listed under the pane's header for whichever run it shows. A strip under the pane's header says which run the pane shows, and once the form is edited, it names each field that differs from the config that run ran, with its value then and now.
 
 ![Run in progress](docs/images/novaGui/generate.png)
 
@@ -168,13 +168,13 @@ The channel mesh, the revolved contour and the volutes are 3D views at full reso
 | --- | --- |
 | ![Channel mesh](docs/images/novaGui/viewChannelMesh.png) | ![Revolved contour](docs/images/novaGui/viewRevolved.png) |
 
-**Grid** draws four views at once, and the views drawn along the nozzle axis share one cursor and one zoom: the mouse over any of them marks the same station on all, the cooling plots read their values there, and a zoom along the axis on one zooms the rest. The wall temperature, the heat flux and the coolant state at the throat read off in one look. The pop-out button opens the figure or the grid in a window of its own, for a second monitor, which follows the latest run.
+**Grid** draws four views at once, and the views drawn along the nozzle axis share one cursor and one zoom: the mouse over any of them marks the same station on all, the contour, near-wall and cooling plots read their values there, and a zoom along the axis on one zooms the rest. The wall temperature, the heat flux and the coolant state at the throat read off in one look. The pop-out button opens the figure or the grid in a window of its own, for a second monitor, which follows the latest run.
 
 ![Grid of views along the nozzle axis](docs/images/novaGui/grid.png)
 
 ### Runs and the baseline
 
-The server keeps the last eight finished runs. The run menu at the left of the pane's header shows any of them, by number, name, thrust and Isp; it follows the latest run until another is picked, and a new run sets it back to following. **Baseline** picks the run the shown one is compared against, and that run is kept however many follow it. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
+The server keeps the last eight finished runs. The run menu at the left of the pane's header shows any of them, by number, name, thrust, Isp and run time; it follows the latest run until another is picked, and a new run sets it back to following. **Baseline** picks the run the shown one is compared against, and that run is kept however many follow it. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
 
 ![A run over its baseline](docs/images/novaGui/compare.png)
 
@@ -202,7 +202,7 @@ The sun and moon button in the header switches between the dark and light modes 
 | --- | --- |
 | ![Design form, light](docs/images/novaGui/designLight.png) | ![Plume, light](docs/images/novaGui/viewPlumeLight.png) |
 
-[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
+[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds, and [docs/guiRoadmap.md](docs/guiRoadmap.md) lists the GUI work still open. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
 
 ## Configuration reference
 

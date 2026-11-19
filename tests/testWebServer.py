@@ -559,6 +559,104 @@ def testAShowcaseJacketsHeadlineReadsItsLimitAndPasses():
     assert float(numbers['dropUp']['value']) * {'MPa': 1e6, 'kPa': 1e3}[numbers['dropUp']['unit']] == pytest.approx(drop, rel = 2e-3)
 
 #--------------------------------------------------------------------------------------------------------------------------#
+# -- Warnings, the figure cache and compression -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testTheRunnerRelaysAWarningToTheLogAndAsItsOwnMessage():
+    import queue as queueModule
+    import warnings
+    from novaGui.runner import warningRelay
+    messages = queueModule.Queue()
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+        warnings.showwarning = warningRelay(messages)
+        warnings.warn('the card has no editable field', UserWarning)
+    (logKind, line), (kind, warning) = messages.get_nowait(), messages.get_nowait()
+    assert logKind == 'log' and 'UserWarning' in line and 'the card has no editable field' in line
+    assert kind == 'warning' and warning['category'] == 'UserWarning'
+    assert warning['message'] == 'the card has no editable field' and warning['where'].startswith('testWebServer.py:')
+
+class _EndedProcess:
+    '''A worker that has already ended, for driving the session's pump by hand.'''
+    exitcode = 0
+    def is_alive(self):
+        return False
+    def join(self, timeout = None):
+        return None
+
+def testTheSessionCountsEachWarningOnceAndKeepsThemWithTheRun():
+    '''
+    A run's warnings are kept once per category and message with how many times each came, sent
+    as they arrive, and kept with the finished run for the run list.
+    '''
+    import queue as queueModule
+    session = RunSession()
+    events = []
+    session._publish = lambda event: events.append(event) or RunSession._publish(session, event)
+    try:
+        messages = queueModule.Queue()
+        repeated = {'category': 'RuntimeWarning', 'message': 'invalid value in divide', 'where': 'chamber.py:420'}
+        for payload in (repeated, {'category': 'UserWarning', 'message': 'card unchanged', 'where': 'ceaInterface.py:429'},
+                        repeated):
+            messages.put(('warning', payload))
+        messages.put(('result', {'ok': True, 'runName': 'warned', 'elapsedSec': 1.0}))
+        session.state['runId'] = 31
+        session._drain(_EndedProcess(), messages, 31)
+        expected = [{**repeated, 'count': 2},
+                    {'category': 'UserWarning', 'message': 'card unchanged', 'where': 'ceaInterface.py:429', 'count': 1}]
+        assert session.record(31).warnings == expected
+        assert session.runList()['runs'][0]['warnings'] == expected
+        sent = [event for event in events if event['type'] == 'warning']
+        assert len(sent) == 3 and sent[-1] == {'type': 'warning', 'runId': 31, 'warnings': expected}
+    finally:
+        session.shutdown()
+
+def testAFigureIsBuiltOnceAndSentCompressed(client, finishedRun, monkeypatch):
+    '''
+    A view's figure is built once per run, view and mode and drawn from memory after; a figure of a
+    run that is no longer kept is dropped; the response is gzipped for a browser that accepts it.
+    '''
+    from novaGui import views
+    built = []
+    def interactiveFigure(nozzle, key, mode, compare = None, labels = ()):
+        built.append((key, mode))
+        return '{"data": [], "layout": {"title": "' + 'x' * 4000 + '"}}'
+    monkeypatch.setattr(views, 'interactiveFigure', interactiveFigure)
+    route = '/api/views/contour/interactive'
+    first = client.get(route, params = {'run': finishedRun.runId, 'mode': 'dark'}, headers = {'Accept-Encoding': 'gzip'})
+    assert first.status_code == 200 and first.headers.get('content-encoding') == 'gzip'
+    assert first.json()['layout']['title'] == 'x' * 4000
+    client.get(route, params = {'run': finishedRun.runId, 'mode': 'dark'})
+    client.get(route, params = {'run': finishedRun.runId, 'mode': 'light'})
+    assert built == [('contour', 'dark'), ('contour', 'light')]
+    cache = client.app.state.figureCache
+    assert {entry[0] for entry in cache} == {finishedRun.runId}
+
+    other = RunRecord(next(_runIds), {'ok': True, 'runName': 'otherEngine', 'elapsedSec': 1.0, 'picklePath': 'held in memory'})
+    other._nozzle = _nozzleStandIn()
+    session = client.app.state.session
+    session.adopt(other)
+    session.forget(finishedRun.runId)
+    try:
+        client.get(route, params = {'run': other.runId, 'mode': 'dark'})
+        assert {entry[0] for entry in cache} == {other.runId}
+    finally:
+        session.forget(other.runId)
+        session.adopt(finishedRun)
+
+def testTheContourAndNearWallHoverAlongTheAxis():
+    '''The browser's axial cursor reads the contour's radius at its station: those views hover along x.'''
+    import json
+    from NOVA import figures
+    from novaGui import views
+    contour = json.loads(views.interactiveFigure(_nozzleStandIn(), 'contour', 'dark'))
+    assert contour['layout']['hovermode'] == 'x unified'
+    description = figures.ContourFigure(x = np.linspace(-0.2, 1.0, 40), r = np.linspace(0.09, 0.3, 40), throatX = 0.0,
+                                        throatRadius = 0.05, exitRadius = 0.3, length = 1.2)
+    assert json.loads(views.partialFigure(description, 'contour', 'light'))['layout']['hovermode'] == 'x unified'
+    assert 'contour' in views.alongAxisHover and 'mach' not in views.alongAxisHover
+
+#--------------------------------------------------------------------------------------------------------------------------#
 # -- A run still going -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
@@ -580,7 +678,8 @@ def testARunInProgressServesTheFiguresItsContourSettled(client):
         figure = client.get('/api/views/contour/interactive', params = {'run': 4242, 'mode': 'light'})
         assert figure.status_code == 200 and figure.json()['data'][0]['name'] == 'Wall contour'
         assert client.get('/api/views/mach/interactive', params = {'run': 4242}).status_code == 404
-        assert session.runList()['running'] == {'runId': 4242, 'config': {'filename': 'liveEngine'}, 'views': ['contour']}
+        assert session.runList()['running'] == {'runId': 4242, 'config': {'filename': 'liveEngine'}, 'views': ['contour'],
+                                                'warnings': []}
     finally:
         session._process, session.state['runId'], session._runConfig, session.partial = saved
 

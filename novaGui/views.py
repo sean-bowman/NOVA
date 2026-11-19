@@ -25,6 +25,10 @@ does alone.
 While a run is going, the views its contour stage settles draw from the figure descriptions the
 worker sent (`partialFigure`), through the same renderers as the finished run's.
 
+The contour and the near-wall state hover along the axis here (`alongAxisHover`), as the cooling
+plots do, so the browser's axial cursor reads the wall radius and the gas state at its station. In
+NOVA's own HTML they hover to the nearest point.
+
 The Matplotlib plume title tells a legacy Tkinter user that its "Open interactive" button shows
 the correlated structure beyond the march. Here the same figure, saved as a PNG, says the interactive
 view does.
@@ -54,6 +58,9 @@ sourceOverrides = {
     'channelMesh': '3D assembly, full mesh',
     'volute':      '3D assembly, full mesh',
 }
+
+# Views that hover along the axis in the browser, where NOVA's own figures hover to the nearest point
+alongAxisHover = frozenset({'contour', 'nearWall'})
 
 # Line plots along the nozzle axis, which can draw a second run over the first
 comparableViews = frozenset({'contour', 'nearWall', 'passes', 'jacketTemperatures', 'coolantFlow', 'coolantProperties',
@@ -248,9 +255,21 @@ def interactiveFigure(nozzle, key: str, mode: str, compare = None, labels: tuple
             other = _render(builder, figures, compare, mode)
             if other is not None:
                 _overlay(figure, other, *labels)
-        # The pane sizes the figure; a fixed size from the builder would stop it filling the pane
-        figure.update_layout(width = None, height = None, autosize = True)
+        _forBrowser(figure, key)
         return figure.to_json()
+
+def _forBrowser(figure, key: str) -> None:
+
+    '''
+
+    Size a figure to its pane, and hover along the axis where `alongAxisHover` names the view: the
+    pane sizes the figure, so a fixed size from the builder would stop it filling the pane.
+
+    '''
+
+    figure.update_layout(width = None, height = None, autosize = True)
+    if key in alongAxisHover:
+        figure.update_layout(hovermode = 'x unified')
 
 def partialFigure(description, key: str, mode: str) -> str | None:
 
@@ -272,7 +291,7 @@ def partialFigure(description, key: str, mode: str) -> str | None:
         figure = render(figures, description)
         if figure is None:
             return None
-        figure.update_layout(width = None, height = None, autosize = True)
+        _forBrowser(figure, key)
         return figure.to_json()
 
 class HeadlessPane:

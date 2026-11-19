@@ -172,6 +172,14 @@ export interface RunProgressFields {
     stages: RunStage[];
 }
 
+/** A warning a run raised, once per category and message, with how many times it came. */
+export interface RunWarning {
+    category: string;             // 'UserWarning', 'RuntimeWarning'
+    message: string;
+    where: string;                // the file and line that raised it: 'ceaInterface.py:409'
+    count: number;
+}
+
 /** The views a running run's contour stage settled, which draw before the run finishes. */
 export interface PartialRun {
     runId: number;
@@ -187,6 +195,7 @@ export interface RunSnapshot extends RunProgressFields {
     result: RunSummary | null;
     partial: PartialRun | null;
     baseline: number | null;
+    warnings: RunWarning[];       // the run in progress, or the last one started
 }
 
 export type RunEvent =
@@ -195,6 +204,7 @@ export type RunEvent =
     | { type: 'status'; state: RunStateName; detail: string; runId?: number | null }
     | ({ type: 'progress' } & RunProgressFields)
     | ({ type: 'partial' } & PartialRun)
+    | { type: 'warning'; runId: number; warnings: RunWarning[] }
     | ({ type: 'result' } & RunSummary)
     | { type: 'runs'; baseline: number | null }
     | ({ type: 'settings' } & Settings);
@@ -207,13 +217,14 @@ export interface RunEntry {
     headline: string;             // thrust, delivered Isp, propellants
     finishedAt: number;           // [s] epoch
     config: Config | null;
+    warnings: RunWarning[];
 }
 
 export interface RunList {
     runs: RunEntry[];             // newest first
     baseline: number | null;
     latest: number | null;        // the latest good run
-    running: { runId: number; config: Config | null; views: string[] } | null;
+    running: { runId: number; config: Config | null; views: string[]; warnings: RunWarning[] } | null;
 }
 
 export interface ViewSpec {
