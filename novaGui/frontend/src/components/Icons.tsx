@@ -220,3 +220,12 @@ export function ChartIcon({ className }: IconProps) {
         </svg>
     );
 }
+
+export function WarningIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.3 4.6 2.9 17.4a2 2 0 0 0 1.7 3h14.8a2 2 0 0 0 1.7-3L13.7 4.6a2 2 0 0 0-3.4 0z" />
+            <path d="M12 9.5v4.5M12 17.2v.1" />
+        </svg>
+    );
+}

@@ -1,7 +1,8 @@
 /* ========================================
    RUN BAR
-   Generate and Cancel, the stage stepper, the run's elapsed time, and the buttons for the stage
-   list and the run log; the log drawer sits above it.
+   Generate and Cancel, the stage stepper, the run's elapsed time, the count of the warnings the
+   run has raised, and the buttons for the stage list and the run log; the log drawer sits above
+   it. The warning count opens the log, where each warning sits among the output around it.
 
    NOVA reports its progress as events (NOVA.progress), which the server folds into a stage tree
    (novaGui.progress.RunProgress). The stepper draws one segment per top-level stage of the run's
@@ -15,7 +16,7 @@
 
 import { useEffect, useRef } from 'react';
 
-import { PlayIcon, StopIcon } from '../components/Icons';
+import { PlayIcon, StopIcon, WarningIcon } from '../components/Icons';
 import type { RunStage } from '../types';
 import { StagePanel } from './StagePanel';
 import { formatClock, runClockNow, runElapsed, shownState, stageElapsed, stageTime, type ShownState } from './stageText';
@@ -147,6 +148,12 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
                 <span className="run-clock-main">{clockMain}</span>
                 <span className="run-clock-sub">{clockSub}</span>
             </div>
+            {run.warnings.length > 0 && (
+                <button type="button" className="button button-quiet run-warnings" onClick={onToggleLog}
+                        title={run.warnings.map((warning) => `${warning.message} (${warning.where}${warning.count > 1 ? `, ${warning.count} times` : ''})`).join('\n')}>
+                    <WarningIcon /> {run.warnings.length === 1 ? '1 warning' : `${run.warnings.length} warnings`}
+                </button>
+            )}
             {!run.connected && <span className="badge badge-error" title="The NOVA server is not answering">offline</span>}
             <button type="button" className={`button ${stagesOpen ? 'is-pressed' : ''}`} onClick={onToggleStages}
                     aria-expanded={stagesOpen} disabled={run.stages.length === 0} title="Every stage of the run, with its time">

@@ -979,16 +979,6 @@ select.input option {
     font-weight: 600;
 }
 
-.result-meta {
-    flex: 1 1 0;
-    min-width: 0;
-    overflow: hidden;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .result-status {
     display: flex;
     align-items: flex-start;
@@ -1797,6 +1787,30 @@ select.input option {
 
 .result-status.is-baseline {
     align-items: center;
+}
+
+.result-status.is-caution {
+    background: color-mix(in srgb, var(--yellow) 10%, var(--bg));
+    border-color: color-mix(in srgb, var(--yellow) 40%, var(--border));
+}
+
+.result-status.is-caution .icon {
+    color: var(--yellow);
+}
+
+.warning-text {
+    min-width: 0;
+}
+
+.warning-list {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.run-warnings {
+    color: var(--yellow);
 }
 
 /* The dashed stroke the baseline's lines are drawn in */

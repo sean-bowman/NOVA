@@ -26,6 +26,10 @@ compared against; it stays however many runs follow it. A run that drops out of 
 staging folder with it. A kept run unpickles its Nozzle on first use, and only the `keptNozzles`
 runs drawn from most recently keep theirs in memory.
 
+The warnings a run raises (novaGui.runner.warningRelay) are collected as it goes, one entry per
+distinct warning with the number of times it came, and kept with the run, so the browser can count
+them in the run bar and list them for whichever run it shows.
+
 When a run's contour stage ends, the worker sends the figure descriptions that stage settles (the
 contour, the near-wall state, the three flow fields and the revolved wall). The session keeps them
 as the running run's partial result, so the browser can draw them while cooling and the plume
@@ -46,6 +50,8 @@ Events, as JSON objects:
         `t` is the run's own clock [s] at its latest event; `stages` is RunProgress.stageList, whose
         expected times come from run `expectedRun`
     {'type': 'partial', 'runId': int, 'views': [view keys]}
+    {'type': 'warning', 'runId': int, 'warnings': [{'category', 'message', 'where', 'count'}]}
+        every warning of the run so far
     {'type': 'result', 'runId': int, 'ok': bool, 'runName': str, 'elapsedSec': float, 'error': str}
     {'type': 'runs', 'baseline': int | None}      the kept runs or the baseline changed
     {'type': 'settings', ...}                       saved preferences changed (novaGui.settings)
@@ -95,9 +101,10 @@ class RunRecord:
 
     '''
 
-    def __init__(self, runId: int, summary: dict, config: dict = None):
+    def __init__(self, runId: int, summary: dict, config: dict = None, warnings: list = None):
 
         self.runId = runId
+        self.warnings = [dict(entry) for entry in warnings] if warnings else []
         self.config = dict(config) if config is not None else None
         self.ok = bool(summary.get('ok'))
         self.runName = summary.get('runName', '')
@@ -146,7 +153,8 @@ class RunRecord:
         '''The run as the run list shows it.'''
 
         return {'runId': self.runId, 'runName': self.runName, 'elapsedSec': self.elapsedSec,
-                'headline': self.headline, 'finishedAt': self.finishedAt, 'config': self.config}
+                'headline': self.headline, 'finishedAt': self.finishedAt, 'config': self.config,
+                'warnings': self.warnings}
 
 class RunSession:
 
@@ -169,7 +177,7 @@ class RunSession:
 
         self.state = {'state': 'idle', 'detail': '', 'fraction': 0.0, 'ceiling': 0.0, 'label': '',
                       'stageDetail': '', 'stages': [], 'runId': None, 'startedAt': None, 't': 0.0,
-                      'expectedRun': None}
+                      'expectedRun': None, 'warnings': []}
         self._progress = RunProgress()        # the current run's stages, folded from its events
         self._stageHistory = {}               # [s] top-level stage times of the last finished run
         self._lastStages = []                 # the last finished run's stage tree
@@ -224,6 +232,22 @@ class RunSession:
                        'ceiling': float(ceiling), 'label': label, 'stageDetail': self._progress.detail,
                        'stages': self._progress.stageList()})
 
+    def _addWarning(self, payload: dict, runId: int) -> None:
+
+        '''Count a warning against the run, once per category and message, and send the run's list.'''
+
+        warning = {'category': str(payload.get('category', 'Warning')), 'message': str(payload.get('message', '')),
+                   'where': str(payload.get('where', ''))}
+        found = self.state['warnings']
+        same = next((entry for entry in found
+                     if (entry['category'], entry['message']) == (warning['category'], warning['message'])), None)
+        if same is not None:
+            same['count'] += 1
+        else:
+            found = found + [{**warning, 'count': 1}]
+            self.state['warnings'] = found
+        self._publish({'type': 'warning', 'runId': runId, 'warnings': [dict(entry) for entry in found]})
+
     def _drain(self, process, eventQueue, runId: int) -> None:
 
         '''
@@ -257,6 +281,8 @@ class RunSession:
             elif kind == 'stage':
                 if self._progress.apply(payload):
                     self._publishProgress()
+            elif kind == 'warning':
+                self._addWarning(payload, runId)
             elif kind == 'partial':
                 figures = dict(payload.get('figures') or {})
                 if figures:
@@ -277,7 +303,7 @@ class RunSession:
             if summary.get('traceback'):
                 self._publish({'type': 'log', 'line': summary['traceback']})
 
-        record = RunRecord(runId, summary, self._runConfig)
+        record = RunRecord(runId, summary, self._runConfig, self.state['warnings'])
         if record.ok:
             self._stageHistory = self._progress.durations()
             self._lastStages = self._progress.stageList()
@@ -343,7 +369,7 @@ class RunSession:
             self.log.clear()
             self.partial = None
             self._runConfig = dict(config)
-            self.state.update(runId = runId, startedAt = time.time())
+            self.state.update(runId = runId, startedAt = time.time(), warnings = [])
             self._publish({'type': 'status', 'state': 'running', 'detail': 'starting worker'})
             self._progress = RunProgress(self._stageHistory, label = 'starting worker', previous = self._lastStages)
             self._publishProgress()
@@ -465,7 +491,7 @@ class RunSession:
         Returns:
         --------
         dict : {'runs': [RunRecord.entry], 'baseline': int | None, 'latest': int | None,
-            'running': {'runId', 'config', 'views'} | None}
+            'running': {'runId', 'config', 'views', 'warnings'} | None}
 
         '''
 
@@ -478,7 +504,8 @@ class RunSession:
         if self.busy and runId is not None:
             partial = self.partial
             views = list(partial['figures']) if partial and partial['runId'] == runId else []
-            running = {'runId': runId, 'config': self._runConfig, 'views': views}
+            running = {'runId': runId, 'config': self._runConfig, 'views': views,
+                       'warnings': [dict(entry) for entry in self.state['warnings']]}
         return {'runs': runs, 'baseline': baseline, 'latest': latest, 'running': running}
 
     def partialFigure(self, runId: int, key: str):

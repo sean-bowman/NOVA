@@ -12,7 +12,8 @@
    What the pane shows can fall behind the form, so a strip under its header says so: while a
    run is going, which run the pane shows; after a run was cancelled or failed, that the pane kept
    the run before; and once the form is edited, which fields differ from the config the shown run
-   ran. A second strip names the fields that differ between the shown run and the baseline.
+   ran. A second strip names the fields that differ between the shown run and the baseline, and a
+   third lists the warnings the shown run raised, each once with the number of times it came.
    Sean Bowman [11/19/2026]
    ======================================== */
 
@@ -21,15 +22,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { ResultsTable } from '../analyze/ResultsTable';
 import { DownloadIcon, InfoIcon } from '../components/Icons';
-import { formatClock } from '../run/stageText';
 import type { RunView } from '../run/useRunEvents';
-import type { Config, Mode, ResultTable, Schema } from '../types';
+import type { Config, Mode, ResultTable, RunWarning, Schema } from '../types';
 import { FigureView, type FigureLayout } from '../view/FigureView';
 import { changesSince, type FieldChange } from './changes';
 import { RunSelect } from './RunSelect';
 import type { RunsView } from './useRuns';
 
 const changesListed = 3;        // changes named in a strip; the rest are counted, and all are in its tooltip
+const warningsListed = 3;       // warnings listed in their strip; the rest are counted, and all are in its tooltip
 
 interface ResultPaneProps {
     runs: RunsView;
@@ -39,6 +40,12 @@ interface ResultPaneProps {
     config: Config;
     onExport: () => void;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
+}
+
+/** A warning as its strip lists it: the message, where it was raised, and how often. */
+export function warningText(warning: RunWarning): string {
+    const times = warning.count > 1 ? `, ${warning.count} times` : '';
+    return `${warning.message} (${warning.category}, ${warning.where}${times})`;
 }
 
 function changeText(change: FieldChange): string {
@@ -138,14 +145,8 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
         baselineText = `Run ${shown} is the baseline the other runs are compared against.`;
     }
 
-    // The run's time and its headline: thrust, delivered Isp, propellants
-    let meta = '';
-    if (partial) {
-        meta = 'running, contour stage done';
-    } else if (shownEntry) {
-        meta = [`finished in ${formatClock(shownEntry.elapsedSec)}`, ...shownEntry.headline.split(/\s{2,}/).filter(Boolean)]
-            .join(' · ');
-    }
+    // The warnings of the run shown: the run in progress keeps them in the event stream's state
+    const shownWarnings: RunWarning[] = partial ? run.warnings : (shownEntry?.warnings ?? []);
 
     const openView = useCallback((key: string) => {
         setSelected(key);
@@ -160,7 +161,7 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
         <section className="result-pane card" aria-label="Result">
             <header className="result-head">
                 <RunSelect runs={runs} />
-                <span className="muted result-meta" title={meta}>{meta}</span>
+                <span className="toolbar-spacer" />
                 <label className="baseline-pick">
                     <span className="muted">Baseline</span>
                     <select className="input baseline-select" aria-label="Baseline run" value={baseline ?? ''}
@@ -194,6 +195,24 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onNotify
                      title={baselineChanges.length > changesListed ? baselineChanges.map(changeText).join('\n') : undefined}>
                     <span className="baseline-key" aria-hidden="true" />
                     <span>{baselineText}</span>
+                </div>
+            )}
+            {shownWarnings.length > 0 && shown !== null && (
+                <div className="result-status is-caution" role="status"
+                     title={shownWarnings.length > warningsListed ? shownWarnings.map(warningText).join('\n') : undefined}>
+                    <InfoIcon />
+                    <div className="warning-text">
+                        <span>
+                            Run {shown} raised {shownWarnings.length === 1 ? 'a warning' : `${shownWarnings.length} warnings`}
+                            {partial ? ' so far' : ''}; the run log has them in place.
+                        </span>
+                        <ul className="warning-list">
+                            {shownWarnings.slice(0, warningsListed).map((warning) => (
+                                <li key={`${warning.category}:${warning.message}`}>{warningText(warning)}</li>
+                            ))}
+                            {shownWarnings.length > warningsListed && <li>and {shownWarnings.length - warningsListed} more</li>}
+                        </ul>
+                    </div>
                 </div>
             )}
             <div className="result-content" hidden={showing !== 'figure'}>
