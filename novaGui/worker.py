@@ -17,8 +17,9 @@ system when the process ends, so a cancelled run does not block the next one.
 
 On success the worker pickles the Nozzle to `novaGuiResult.pkl` in the run's output folder,
 after generateNozzle has returned, so the pickle carries every attribute the run set. The
-server unpickles it to draw the views. The result also carries the headline of the run's result
-table (novaGui.analysis), so the server can list the run without unpickling it.
+server unpickles it to draw the views. The result also carries the summary line of the run's result
+table and its headline numbers (novaGui.analysis), so the server can list the run, and set it in a
+trade sweep's table, without unpickling it.
 
 When the contour stage ends, the worker takes the figure descriptions that stage settles
 (novaGui.plotting.contourStageViews) off the Nozzle, on the run's own thread while NOVA waits, and
@@ -31,8 +32,8 @@ Messages put on the queue:
     ('status', (state, detail))
     ('stage', dict)         a NOVA.progress event
     ('partial', dict)       {'stage': 'contour', 'figures': {view key: figure description}}
-    ('result', dict)        terminal: ok, runName, outputDir, picklePath, elapsedSec, headline, error,
-                            traceback
+    ('result', dict)        terminal: ok, runName, outputDir, picklePath, elapsedSec, headline, numbers,
+                            error, traceback; `numbers` is [{'key', 'label', 'value', 'unit', 'tone'}]
 
 Author: Sean Bowman
 Date:   11/16/2026
@@ -98,11 +99,13 @@ def runPipeline(config: dict, outputDir: str, mode: str, eventQueue) -> None:
             'picklePath': '',
             'elapsedSec': payload.elapsedSec,
             'headline':   '',
+            'numbers':    [],
             'error':      payload.error,
             'traceback':  payload.traceback,
         }
         if payload.ok:
             summary['headline'] = _headline(payload.nozzle)
+            summary['numbers'] = headlineNumbers(payload.nozzle)
             summary['picklePath'] = _pickleNozzle(payload.nozzle, outputDir, eventQueue)
         eventQueue.put(('result', summary))
         break
@@ -143,6 +146,21 @@ def _headline(nozzle) -> str:
         return resultRows(nozzle)[0]
     except Exception:                                      # noqa: BLE001 -- the list shows the run without it
         return ''
+
+def headlineNumbers(nozzle) -> list:
+
+    '''
+
+    The result pane's headline numbers (novaGui.analysis.headline) as text in display units,
+    without the parts only the pane draws, or [] if they fail.
+
+    '''
+
+    try:
+        from novaGui.analysis import headline
+        return [{key: item[key] for key in ('key', 'label', 'value', 'unit', 'tone')} for item in headline(nozzle)]
+    except Exception:                                      # noqa: BLE001 -- the run stands without them
+        return []
 
 def _pickleNozzle(nozzle, outputDir: str, eventQueue) -> str:
 

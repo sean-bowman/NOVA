@@ -4,7 +4,8 @@
 '''
 
 One window's runs: starting a worker process, relaying its messages to the browser, cancelling
-it, and keeping the finished runs the result pane can show and compare.
+it, queueing the runs that wait their turn, and keeping the finished runs the result pane can show
+and compare, with the trade sweeps they belong to.
 
 A run is a child process (novaGui.worker). A pump thread drains its queue and turns each message
 into an event dictionary; every event is kept in the session's state (status, progress, recent
@@ -33,6 +34,20 @@ and count up across launches. The store's limits decide which unnamed runs go as
 a cancelled or failed run's folder goes as soon as the run ends. Without a store, runs write into
 the staging folder below, the session keeps the last `keptRuns` of them, and a run that drops out
 of the list takes its staging folder with it.
+
+Runs go one at a time. A run asked for while another is going joins the queue and starts when the
+runs before it end, whether they finish, fail or are cancelled; RocketCEA's machine-wide lock
+serializes the CEA solves of concurrent runs anyway, so the queue costs no speed. Cancel stops the
+run in progress and the queue goes on, or stops the run and empties the queue; a queued run can
+also be taken out alone.
+
+A trade sweep (novaGui.sweeps) queues one run per point. The session keeps each sweep with its
+points' states and runs, in the run store when there is one, and a sweep's runs carry its id and
+their point's index. They stay however many runs follow, as named runs do, until the sweep is
+deleted; deleting a sweep takes its queued points and its runs, except the runs that were named or
+are the baseline. A sweep whose window closed with points still to run lists them cancelled, and
+can queue them again. The worker records each finished run's headline numbers
+(novaGui.analysis.headline), so a sweep's table reads them without unpickling its runs.
 
 The warnings a run raises (novaGui.runner.warningRelay) are collected as it goes, one entry per
 distinct warning with the number of times it came, and kept with the run, so the browser can count
@@ -63,6 +78,9 @@ Events, as JSON objects:
     {'type': 'result', 'runId': int, 'ok': bool, 'runName': str, 'elapsedSec': float, 'error': str}
     {'type': 'runs', 'baseline': int | None}      the kept runs, a run's name or note, or the baseline
                                                     changed
+    {'type': 'queue', 'queue': [{'queueId', 'label', 'runName', 'sweepId', 'point'}]}
+                                                    the runs waiting their turn, in order
+    {'type': 'sweeps'}                              a sweep was added or deleted, or a point's state moved
     {'type': 'settings', ...}                       saved preferences changed (novaGui.settings)
     {'type': 'snapshot', ...}                       sent once on connect: the whole state
 
@@ -87,6 +105,7 @@ import time
 # Local imports
 from .progress import RunProgress
 from . import runStore
+from . import sweeps as sweepModel
 from . import worker
 
 keptRuns = 8         # finished runs a session without a store keeps, besides the baseline
@@ -108,14 +127,14 @@ class RunRecord:
 
     '''
 
-    A finished run: its summary from the worker, the config it ran, its name and note, and the
-    Nozzle once something asks for it. `folder` is its run store folder, or None for a run the
-    store does not hold.
+    A finished run: its summary from the worker, the config it ran, its name and note, its
+    headline numbers, and the Nozzle once something asks for it. `folder` is its run store folder,
+    or None for a run the store does not hold. `sweep` is {'sweepId', 'index'} for a sweep's run.
 
     '''
 
     def __init__(self, runId: int, summary: dict, config: dict = None, warnings: list = None,
-                 folder: str | None = None):
+                 folder: str | None = None, sweep: dict | None = None):
 
         self.runId = runId
         self.warnings = [dict(entry) for entry in warnings] if warnings else []
@@ -132,6 +151,12 @@ class RunRecord:
         self.title = str(summary.get('title') or '')        # the name given to the run, '' for none
         self.note = str(summary.get('note') or '')
         self.bytes = int(summary.get('bytes') or 0)         # [B] its files, in the store
+        # The result pane's headline numbers, as text in display units: {'key', 'label', 'value', 'unit', 'tone'}
+        numbers = summary.get('numbers')
+        self.numbers = [dict(entry) for entry in numbers if isinstance(entry, dict)] if isinstance(numbers, list) else []
+        sweep = sweep if sweep is not None else summary.get('sweep')
+        self.sweep = ({'sweepId': int(sweep['sweepId']), 'index': int(sweep['index'])}
+                      if isinstance(sweep, dict) and 'sweepId' in sweep and 'index' in sweep else None)
         self.folder = folder
         self.loadError = ''                                 # why its pickle did not load
         self._nozzle = None
@@ -154,8 +179,9 @@ class RunRecord:
         '''The run as the store saves it.'''
 
         return {'runName': self.runName, 'title': self.title, 'note': self.note, 'elapsedSec': self.elapsedSec,
-                'headline': self.headline, 'finishedAt': self.finishedAt, 'config': self.config,
-                'warnings': self.warnings, 'outputDir': self.outputDir, 'picklePath': self.picklePath}
+                'headline': self.headline, 'numbers': self.numbers, 'sweep': self.sweep, 'finishedAt': self.finishedAt,
+                'config': self.config, 'warnings': self.warnings, 'outputDir': self.outputDir,
+                'picklePath': self.picklePath}
 
     def nozzle(self):
 
@@ -198,15 +224,38 @@ class RunRecord:
         '''The run as the run list shows it.'''
 
         return {'runId': self.runId, 'runName': self.runName, 'title': self.title, 'note': self.note,
-                'elapsedSec': self.elapsedSec, 'headline': self.headline, 'finishedAt': self.finishedAt,
-                'config': self.config, 'warnings': self.warnings, 'bytes': self.bytes,
-                'saved': self.folder is not None}
+                'elapsedSec': self.elapsedSec, 'headline': self.headline, 'numbers': self.numbers,
+                'sweep': self.sweep, 'finishedAt': self.finishedAt, 'config': self.config,
+                'warnings': self.warnings, 'bytes': self.bytes, 'saved': self.folder is not None}
+
+class QueuedRun:
+
+    '''
+
+    A run waiting its turn: the config it will run, the palette mode of its figures, the label the
+    queue shows, and for a sweep's point (sweepId, point index).
+
+    '''
+
+    def __init__(self, queueId: int, config: dict, mode: str, label: str, sweep: tuple | None = None):
+
+        self.queueId = queueId
+        self.config = dict(config)
+        self.mode = mode
+        self.label = label
+        self.sweep = sweep
+
+    def entry(self) -> dict:
+
+        return {'queueId': self.queueId, 'label': self.label, 'runName': str(self.config.get('filename') or ''),
+                'sweepId': self.sweep[0] if self.sweep else None, 'point': self.sweep[1] if self.sweep else None}
 
 class RunSession:
 
     '''
 
-    Starts, relays and cancels runs, one at a time.
+    Starts, relays and cancels runs, one at a time from a queue, and keeps the finished runs and
+    the trade sweeps.
 
     '''
 
@@ -214,12 +263,16 @@ class RunSession:
     def __init__(self, logLines: int = 4000, store: runStore.RunStore | None = None):
 
         self._lock = threading.Lock()
+        self._storeLock = threading.Lock()     # one writer of sweep files at a time; taken before _lock
         self._context = multiprocessing.get_context('spawn')
         self._process = None
         self._queue = None
         self._pump = None
         self._cancelled = False
+        self._closing = False
         self._runCount = 0
+        self._queueCount = 0
+        self._sweepCount = 0
 
         self.state = {'state': 'idle', 'detail': '', 'fraction': 0.0, 'ceiling': 0.0, 'label': '',
                       'stageDetail': '', 'stages': [], 'runId': None, 'startedAt': None, 't': 0.0,
@@ -229,6 +282,9 @@ class RunSession:
         self._lastStages = []                 # the last finished run's stage tree
         self._lastRunId = None                # the run both of those come from
         self._runConfig = None                # the config of the run in progress
+        self._runSweep = None                 # (sweepId, point index) of the run in progress, for a sweep's
+        self.queue = collections.deque()       # QueuedRun, in the order they start
+        self.sweeps = collections.OrderedDict()   # sweepId: sweep (novaGui.sweeps.build), oldest first
         self.log = collections.deque(maxlen = logLines)
         self.result = None                     # the last good RunRecord, else the last that ended
         self.runs = collections.OrderedDict()  # runId: RunRecord, the kept finished runs, oldest first
@@ -248,6 +304,12 @@ class RunSession:
                 self.runs[record.runId] = record
             self.result = next(reversed(self.runs.values()), None)
             self.baseline = store.baseline if store.baseline in self.runs else None
+            for sweep in store.sweeps():
+                self._restoreSweep(sweep)
+            # A run whose sweep the store no longer holds is a run of its own, under the store's limits
+            for record in self.runs.values():
+                if record.sweep is not None and record.sweep['sweepId'] not in self.sweeps:
+                    record.sweep = None
 
         os.makedirs(stagingRoot(), exist_ok = True)
         atexit.register(self.shutdown)
@@ -303,6 +365,164 @@ class RunSession:
             found = found + [{**warning, 'count': 1}]
             self.state['warnings'] = found
         self._publish({'type': 'warning', 'runId': runId, 'warnings': [dict(entry) for entry in found]})
+
+    def _restoreSweep(self, sweep: dict) -> None:
+
+        '''
+
+        Keep a sweep the store saved. Its points still queued or running when the last window
+        closed did not run; they read cancelled, and can be queued again.
+
+        '''
+
+        stopped = False
+        for point in sweep['points']:
+            if point.get('state') in ('queued', 'running'):
+                reason = 'NOVA closed while it ran' if point['state'] == 'running' else 'NOVA closed before it ran'
+                point.update(state = 'cancelled', runId = None, error = reason)
+                stopped = True
+        self.sweeps[sweep['sweepId']] = sweep
+        if stopped:
+            self.store.saveSweep(sweep)
+
+    def _queueEvent(self) -> None:
+
+        with self._lock:
+            entries = [item.entry() for item in self.queue]
+        self._publish({'type': 'queue', 'queue': entries})
+
+    def _settle(self, changes: list) -> None:
+
+        '''
+
+        Move sweep points to new states, save their sweeps and tell the browser.
+
+        Parameters:
+        -----------
+        changes : list
+            ((sweepId, index), state, runId, error) for each point; a point of a sweep since deleted
+            is passed over.
+
+        '''
+
+        touched = {}
+        with self._lock:
+            for (sweepId, index), state, runId, error in changes:
+                sweep = self.sweeps.get(sweepId)
+                if sweep is None or not 0 <= index < len(sweep['points']):
+                    continue
+                sweep['points'][index].update(state = state, runId = runId, error = error)
+                touched[sweepId] = sweep
+        if not touched:
+            return
+        self._saveSweeps(list(touched.values()))
+        self._publish({'type': 'sweeps'})
+
+    def _spawn(self, config: dict, outputDir: str, mode: str, runId: int) -> tuple:
+
+        '''A worker process for one run and the queue it reports on, not yet started.'''
+
+        eventQueue = self._context.Queue()
+        process = self._context.Process(target = worker.runPipeline, name = f'novaRun{runId}',
+                                        args = (dict(config), outputDir, mode, eventQueue), daemon = True)
+        return process, eventQueue
+
+    def _startLocked(self, config: dict, mode: str, sweep: tuple | None) -> int:
+
+        '''Start a run in a new worker process; the caller holds the lock and has checked none is running.'''
+
+        if self.store is not None:
+            runId, outputDir = self.store.claim()
+        else:
+            self._runCount += 1
+            runId = self._runCount
+            outputDir = os.path.join(stagingRoot(), f'run{runId}')
+            shutil.rmtree(outputDir, ignore_errors = True)
+            os.makedirs(outputDir, exist_ok = True)
+
+        self._cancelled = False
+        self._process, self._queue = self._spawn(config, outputDir, mode, runId)
+        self.log.clear()
+        self.partial = None
+        self._runConfig = dict(config)
+        self._runSweep = sweep
+        self.state.update(runId = runId, startedAt = time.time(), warnings = [])
+        self._publish({'type': 'status', 'state': 'running', 'detail': 'starting worker'})
+        self._progress = RunProgress(self._stageHistory, label = 'starting worker', previous = self._lastStages)
+        self._publishProgress()
+        self._process.start()
+
+        self._pump = threading.Thread(target = self._drain, args = (self._process, self._queue, runId),
+                                      name = f'novaPump{runId}', daemon = True)
+        self._pump.start()
+        return runId
+
+    def _advance(self) -> tuple | None:
+
+        '''
+
+        Start the next queued run when none is running.
+
+        Returns:
+        --------
+        tuple or None : (queueId, runId) of the run started
+
+        '''
+
+        with self._lock:
+            if self._process is not None or not self.queue or self._closing:
+                return None
+            item = self.queue.popleft()
+            runId = self._startLocked(item.config, item.mode, item.sweep)
+            # Marked under the lock, so a run that ends at once cannot be marked done first
+            sweep = self.sweeps.get(item.sweep[0]) if item.sweep is not None else None
+            if sweep is not None:
+                sweep['points'][item.sweep[1]].update(state = 'running', runId = runId, error = '')
+        self._queueEvent()
+        if sweep is not None:
+            self._saveSweeps([sweep])
+            self._publish({'type': 'sweeps'})
+        return item.queueId, runId
+
+    def _saveSweeps(self, sweeps: list) -> None:
+
+        '''
+
+        Write sweeps to the store, one writer at a time, each as it stands. A sweep since deleted is
+        passed over, and nothing is written once the session has shut down. A write that fails is
+        logged, so the run's pump thread carries on.
+
+        '''
+
+        if self.store is None:
+            return
+        with self._storeLock:
+            for sweep in sweeps:
+                with self._lock:
+                    if self._closing or self.sweeps.get(sweep['sweepId']) is not sweep:
+                        continue
+                    content = {**sweep, 'points': [dict(point) for point in sweep['points']]}
+                try:
+                    self.store.saveSweep(content)
+                except OSError as exc:
+                    self._publish({'type': 'log', 'line': f'sweep {sweep["sweepId"]} could not be saved: {exc}'})
+
+    def _queuePoints(self, sweep: dict, indices: list) -> None:
+
+        '''Queue a sweep's points, in order, and start the first if nothing is running.'''
+
+        with self._lock:
+            for index in indices:
+                point = sweep['points'][index]
+                point.update(state = 'queued', runId = None, error = '')
+                self._queueCount += 1
+                self.queue.append(QueuedRun(self._queueCount, sweepModel.pointConfig(sweep, point),
+                                            sweep.get('mode', 'dark'), sweepModel.pointLabel(sweep, point),
+                                            (sweep['sweepId'], index)))
+        self._saveSweeps([sweep])
+        self._publish({'type': 'sweeps'})
+        if self._advance() is None:
+            self._queueEvent()
 
     def _removeFiles(self, record: RunRecord) -> None:
 
@@ -369,7 +589,9 @@ class RunSession:
                 self._publish({'type': 'log', 'line': summary['traceback']})
 
         folder = self.store.folder(runId) if self.store is not None else None
-        record = RunRecord(runId, summary, self._runConfig, self.state['warnings'], folder = folder)
+        sweep = self._runSweep
+        record = RunRecord(runId, summary, self._runConfig, self.state['warnings'], folder = folder,
+                           sweep = {'sweepId': sweep[0], 'index': sweep[1]} if sweep is not None else None)
         if not record.ok and folder is not None:
             self.store.remove(runId)
             record.folder = None
@@ -382,14 +604,22 @@ class RunSession:
             # A cancelled or failed run leaves the last good result in place for the views
             if record.ok or self.result is None or not self.result.ok:
                 self.result = record
-            self._process = None
-            self._queue = None
         if record.ok:
             self.adopt(record)
+        if sweep is not None:
+            pointState = 'done' if record.ok else ('cancelled' if state == 'cancelled' else 'failed')
+            self._settle([(sweep, pointState, runId if record.ok else None, '' if record.ok else record.error)])
 
         detail = f'{record.elapsedSec:.1f} s' if record.ok else record.error
         self._publish({'type': 'status', 'state': state, 'detail': detail})
         self._publish({'type': 'result', **record.summary()})
+
+        # The run counts as going until its end is told, so the next run's events follow its own
+        with self._lock:
+            self._process = None
+            self._queue = None
+            self._runSweep = None
+        self._advance()
 
     # -- Public Methods -- #
     @property
@@ -397,11 +627,19 @@ class RunSession:
 
         return self._process is not None
 
+    @property
+    def idle(self) -> bool:
+
+        '''No run going and none queued, read together, so a run passing from the queue to its process never reads as neither.'''
+
+        with self._lock:
+            return self._process is None and not self.queue
+
     def start(self, config: dict, mode: str = 'dark') -> int:
 
         '''
 
-        Start a run in a new worker process.
+        Start a run in a new worker process now, ahead of the queue.
 
         Parameters:
         -----------
@@ -423,53 +661,216 @@ class RunSession:
         with self._lock:
             if self._process is not None:
                 raise RuntimeError('a run is already in progress')
+            return self._startLocked(config, mode, None)
 
-            if self.store is not None:
-                runId, outputDir = self.store.claim()
-            else:
-                self._runCount += 1
-                runId = self._runCount
-                outputDir = os.path.join(stagingRoot(), f'run{runId}')
-                shutil.rmtree(outputDir, ignore_errors = True)
-                os.makedirs(outputDir, exist_ok = True)
-
-            self._cancelled = False
-            self._queue = self._context.Queue()
-            self._process = self._context.Process(target = worker.runPipeline, name = f'novaRun{runId}',
-                                                  args = (dict(config), outputDir, mode, self._queue),
-                                                  daemon = True)
-            self.log.clear()
-            self.partial = None
-            self._runConfig = dict(config)
-            self.state.update(runId = runId, startedAt = time.time(), warnings = [])
-            self._publish({'type': 'status', 'state': 'running', 'detail': 'starting worker'})
-            self._progress = RunProgress(self._stageHistory, label = 'starting worker', previous = self._lastStages)
-            self._publishProgress()
-            self._process.start()
-
-            self._pump = threading.Thread(target = self._drain, args = (self._process, self._queue, runId),
-                                          name = f'novaPump{runId}', daemon = True)
-            self._pump.start()
-
-        return runId
-
-    def cancel(self) -> bool:
+    def submit(self, config: dict, mode: str = 'dark', label: str = '') -> dict:
 
         '''
 
-        Terminate the running worker. Returns False when nothing is running.
+        Queue a run: it starts now when nothing is running, else when the runs before it end.
+
+        Parameters:
+        -----------
+        config : dict
+            The complete config, in backend values.
+        mode : str
+            'dark' or 'light', for the figures the run saves.
+        label : str
+            What the queue calls it; by default its config's filename.
+
+        Returns:
+        --------
+        dict : {'queueId': int, 'runId': int | None, 'position': int}. A run that started has its
+            id and position 0; a queued one has no id yet, and its place in the queue from 1.
 
         '''
 
         with self._lock:
-            process = self._process
-            if process is None:
-                return False
-            self._cancelled = True
+            self._queueCount += 1
+            item = QueuedRun(self._queueCount, config, mode, label or str(config.get('filename') or 'the form'))
+            self.queue.append(item)
+        started = self._advance()
+        if started is not None and started[0] == item.queueId:
+            return {'queueId': item.queueId, 'runId': started[1], 'position': 0}
+        self._queueEvent()
+        with self._lock:
+            position = next((place for place, queued in enumerate(self.queue, 1) if queued is item), 0)
+        return {'queueId': item.queueId, 'runId': None, 'position': position}
 
+    def unqueue(self, queueId: int) -> bool:
+
+        '''
+
+        Take a run out of the queue before it starts; a sweep's point reads cancelled. Returns False
+        when the run is not queued.
+
+        '''
+
+        with self._lock:
+            item = next((queued for queued in self.queue if queued.queueId == queueId), None)
+            if item is None:
+                return False
+            self.queue.remove(item)
+        self._queueEvent()
+        if item.sweep is not None:
+            self._settle([(item.sweep, 'cancelled', None, 'taken out of the queue')])
+        return True
+
+    def cancel(self, everything: bool = False) -> bool:
+
+        '''
+
+        Terminate the running worker; the queue then starts its next run. With `everything`, the
+        queue empties first, its sweep points reading cancelled. Returns False when there was
+        nothing to stop.
+
+        '''
+
+        dropped = []
+        with self._lock:
+            if everything:
+                dropped = list(self.queue)
+                self.queue.clear()
+            process = self._process
+            if process is not None:
+                self._cancelled = True
+
+        if dropped:
+            self._queueEvent()
+            self._settle([(item.sweep, 'cancelled', None, 'cancelled before it ran') for item in dropped
+                          if item.sweep is not None])
+        if process is None:
+            return bool(dropped)
         self._publish({'type': 'log', 'line': 'run cancelled'})
         process.terminate()
         return True
+
+    # -- Sweeps -- #
+    def addSweep(self, sweep: dict, mode: str = 'dark') -> dict:
+
+        '''
+
+        Keep a sweep that novaGui.sweeps.build laid out, and queue its points in order.
+
+        Returns:
+        --------
+        dict : the sweep, with its id
+
+        '''
+
+        with self._lock:
+            if self.store is not None:
+                sweepId = self.store.claimSweep()
+            else:
+                self._sweepCount += 1
+                sweepId = self._sweepCount
+            sweep = {**sweep, 'sweepId': sweepId, 'mode': mode}
+            self.sweeps[sweepId] = sweep
+        self._queuePoints(sweep, [point['index'] for point in sweep['points']])
+        return sweep
+
+    def resumeSweep(self, sweepId: int) -> int:
+
+        '''
+
+        Queue a sweep's cancelled points again. Returns how many were queued.
+
+        Raises:
+        -------
+        KeyError : if the sweep is not kept
+
+        '''
+
+        with self._lock:
+            sweep = self.sweeps[sweepId]
+            indices = [point['index'] for point in sweep['points'] if point['state'] == 'cancelled']
+        if indices:
+            self._queuePoints(sweep, indices)
+        return len(indices)
+
+    def deleteSweep(self, sweepId: int) -> list:
+
+        '''
+
+        Delete a sweep: its queued points leave the queue, its run in progress is cancelled, and its
+        runs are deleted, except a named run or the baseline, which stays as a run of its own.
+
+        Returns:
+        --------
+        list : the ids of the runs deleted
+
+        Raises:
+        -------
+        KeyError : if the sweep is not kept
+
+        '''
+
+        with self._lock:
+            self.sweeps.pop(sweepId)
+            dropped = [item for item in self.queue if item.sweep is not None and item.sweep[0] == sweepId]
+            for item in dropped:
+                self.queue.remove(item)
+            process = self._process if self._runSweep is not None and self._runSweep[0] == sweepId else None
+            if process is not None:
+                self._cancelled = True
+            members = [record for record in self.runs.values()
+                       if record.sweep is not None and record.sweep['sweepId'] == sweepId]
+        if dropped:
+            self._queueEvent()
+        if process is not None:
+            self._publish({'type': 'log', 'line': 'run cancelled: its sweep was deleted'})
+            process.terminate()
+
+        deleted = []
+        for record in members:
+            if record.title or record.runId == self.baseline:
+                record.sweep = None
+                if self.store is not None and record.folder is not None:
+                    record.bytes = self.store.save(record.runId, record.stored())
+                continue
+            self.forget(record.runId)
+            self._removeFiles(record)
+            deleted.append(record.runId)
+        if self.store is not None:
+            with self._storeLock:
+                self.store.removeSweep(sweepId)
+        self._publish({'type': 'runs', 'baseline': self.baseline})
+        self._publish({'type': 'sweeps'})
+        return deleted
+
+    def sweepList(self) -> dict:
+
+        '''
+
+        The kept sweeps, newest first, each with its points' states and their runs' headline
+        numbers (novaGui.sweeps.table), and the limits on a new sweep.
+
+        '''
+
+        with self._lock:
+            kept = [{**sweep, 'points': [dict(point) for point in sweep['points']]}
+                    for sweep in reversed(self.sweeps.values())]
+            records = dict(self.runs)
+        return {'sweeps': [sweepModel.table(sweep, records) for sweep in kept],
+                'maxPoints': sweepModel.maxPoints, 'maxSeries': sweepModel.maxSeries}
+
+    def sweepFigure(self, sweepId: int, numberKey: str, mode: str) -> str | None:
+
+        '''
+
+        One headline number of a sweep against its first field (novaGui.sweeps.figure).
+
+        Raises:
+        -------
+        KeyError : if the sweep is not kept
+
+        '''
+
+        with self._lock:
+            sweep = self.sweeps[sweepId]
+            sweep = {**sweep, 'points': [dict(point) for point in sweep['points']]}
+            records = dict(self.runs)
+        return sweepModel.figure(sweep, records, numberKey, mode)
 
     def adopt(self, record: RunRecord) -> None:
 
@@ -478,7 +879,8 @@ class RunSession:
         Keep a finished run in the list, as the latest, and save it to the store when it is one of
         the store's. Runs then drop out, except the baseline: with a store, the unnamed runs past
         its limits (novaGui.runStore.pruned), oldest first; without one, the oldest past `keptRuns`.
-        A run that drops out takes its folder with it.
+        A run that drops out takes its folder with it. A sweep's runs stay, as named runs do, until
+        the sweep is deleted.
 
         '''
 
@@ -491,13 +893,13 @@ class RunSession:
             if self.result is None or not self.result.ok or self.result.runId <= record.runId:
                 self.result = record
             if self.store is not None:
-                kept = [(runId, bool(entry.title), entry.bytes) for runId, entry in self.runs.items()]
+                kept = [(runId, bool(entry.title) or entry.sweep is not None, entry.bytes)
+                        for runId, entry in self.runs.items()]
                 for runId in runStore.pruned(kept, self.baseline, record.runId):
                     dropped.append(self.runs.pop(runId))
             else:
-                while sum(1 for runId in self.runs if runId != self.baseline) > keptRuns:
-                    oldest = next(runId for runId in self.runs if runId != self.baseline)
-                    dropped.append(self.runs.pop(oldest))
+                loose = [runId for runId, entry in self.runs.items() if runId != self.baseline and entry.sweep is None]
+                dropped += [self.runs.pop(runId) for runId in loose[:max(0, len(loose) - keptRuns)]]
             self._drawn = [kept for kept in self._drawn if kept not in dropped]
         for old in dropped:
             self._removeFiles(old)
@@ -676,7 +1078,9 @@ class RunSession:
         '''
 
         partial = self.partial
-        return {'type': 'snapshot', **self.state, 'log': list(self.log),
+        with self._lock:
+            queued = [item.entry() for item in self.queue]
+        return {'type': 'snapshot', **self.state, 'log': list(self.log), 'queue': queued,
                 'result': self.result.summary() if self.result is not None else None,
                 'partial': {'runId': partial['runId'], 'views': list(partial['figures'])} if partial else None,
                 'baseline': self.baseline}
@@ -703,10 +1107,17 @@ class RunSession:
 
         '''
 
-        Stop any run, with its store folder, and remove this server's staging folder.
+        Empty the queue, stop any run with its store folder, and remove this server's staging
+        folder. A sweep's points still to run read cancelled when the store next opens. A sweep
+        save in progress finishes first, and none starts after, so the store is left as it stands.
 
         '''
 
+        with self._lock:
+            self._closing = True
+            self.queue.clear()
+        with self._storeLock:
+            pass
         process = self._process
         if process is not None and process.is_alive():
             self._cancelled = True

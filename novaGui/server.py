@@ -19,11 +19,20 @@ Routes, all under /api:
     GET  /materials/extension       an extension material's store entry: the note and the fill, ?name=
     GET  /runs                      the kept runs, newest first, the baseline, the run in progress, and
                                     the run store's folder and limits
-    POST /runs                      start a run: {'config': {...}, 'mode': 'dark'|'light'}
+    POST /runs                      queue a run, which starts now if none is going: {'config': {...},
+                                    'mode': 'dark'|'light'}
     PUT  /runs/baseline             make a kept run the baseline: {'runId': int | None}
     PATCH /runs/{runId}             name a kept run or write its note: {'title': str, 'note': str}, either
     DELETE /runs/{runId}            delete a kept run and its files
-    POST /runs/cancel               terminate the running worker
+    POST /runs/cancel               terminate the running worker; {'all': true} empties the queue first
+    DELETE /queue/{queueId}         take a run out of the queue
+    GET  /sweeps                    the trade sweeps, newest first, each point with its run's headline
+                                    numbers (novaGui.sweeps)
+    POST /sweeps                    queue a sweep: {'name', 'config', 'mode', 'fields': [{'key', 'unit', 'values'}]}
+    POST /sweeps/{sweepId}/resume   queue a sweep's cancelled points again
+    DELETE /sweeps/{sweepId}        delete a sweep, its queued points and its runs, except named runs and
+                                    the baseline
+    GET  /sweeps/{sweepId}/figure   one headline number against the swept field, ?number=&mode=
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
     GET  /views                     the view list, the keys a run produced, and that run's id, name,
@@ -94,6 +103,7 @@ from . import assetFolder
 from . import design
 from . import outputs
 from . import schemaJson
+from . import sweeps
 from . import validationStatus
 from . import views
 from . import settings as guiSettings
@@ -263,6 +273,17 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
         return record.entry()
 
+    def _forgetDrawn(runIds: list) -> None:
+
+        '''Drop deleted runs' figures and tables, and the figures they were drawn over.'''
+
+        gone = set(runIds)
+        with figureLock:
+            for stale in [entry for entry in figureCache if entry[0] in gone or entry[4] in gone]:
+                del figureCache[stale]
+        for runId in gone:
+            tables.pop(runId, None)
+
     @app.delete('/api/runs/{runId}')
     def deleteRun(runId: int) -> dict:
 
@@ -270,11 +291,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             app.state.session.delete(runId)
         except KeyError as exc:
             raise HTTPException(404, f'run {runId} is not kept') from exc
-        # Its figures and its table go with it, and so do the figures it was drawn over
-        with figureLock:
-            for stale in [entry for entry in figureCache if runId in (entry[0], entry[4])]:
-                del figureCache[stale]
-        tables.pop(runId, None)
+        _forgetDrawn([runId])
         return {'deleted': runId}
 
     @app.post('/api/runs')
@@ -285,16 +302,72 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         if not isinstance(config, dict):
             raise HTTPException(400, 'the body must carry a config object')
         mode = _mode(body.get('mode', 'dark'))
-        try:
-            runId = app.state.session.start(config, mode)
-        except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        return {'runId': runId}
+        return app.state.session.submit(config, mode)
 
     @app.post('/api/runs/cancel')
-    def cancelRun() -> dict:
+    async def cancelRun(request: Request) -> dict:
 
-        return {'cancelled': app.state.session.cancel()}
+        body = await request.body()
+        try:
+            loaded = json.loads(body) if body else {}
+        except ValueError as exc:
+            raise HTTPException(400, 'the body must be JSON') from exc
+        everything = isinstance(loaded, dict) and loaded.get('all') is True
+        return {'cancelled': app.state.session.cancel(everything)}
+
+    @app.delete('/api/queue/{queueId}')
+    def unqueue(queueId: int) -> dict:
+
+        if not app.state.session.unqueue(queueId):
+            raise HTTPException(404, f'nothing queued as {queueId}')
+        return {'unqueued': queueId}
+
+    # -- Trade sweeps -- #
+    @app.get('/api/sweeps')
+    def sweepList() -> dict:
+
+        return app.state.session.sweepList()
+
+    @app.post('/api/sweeps')
+    async def addSweep(request: Request) -> dict:
+
+        body = await request.json()
+        mode = _mode(body.get('mode', 'dark') if isinstance(body, dict) else 'dark')
+        try:
+            sweep = sweeps.build(body)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        added = app.state.session.addSweep(sweep, mode)
+        return next(entry for entry in app.state.session.sweepList()['sweeps'] if entry['sweepId'] == added['sweepId'])
+
+    @app.post('/api/sweeps/{sweepId}/resume')
+    def resumeSweep(sweepId: int) -> dict:
+
+        try:
+            return {'queued': app.state.session.resumeSweep(sweepId)}
+        except KeyError as exc:
+            raise HTTPException(404, f'sweep {sweepId} is not kept') from exc
+
+    @app.delete('/api/sweeps/{sweepId}')
+    def deleteSweep(sweepId: int) -> dict:
+
+        try:
+            deleted = app.state.session.deleteSweep(sweepId)
+        except KeyError as exc:
+            raise HTTPException(404, f'sweep {sweepId} is not kept') from exc
+        _forgetDrawn(deleted)
+        return {'deleted': sweepId, 'runs': deleted}
+
+    @app.get('/api/sweeps/{sweepId}/figure')
+    def sweepFigure(sweepId: int, number: str, mode: str = 'dark') -> Response:
+
+        try:
+            figure = app.state.session.sweepFigure(sweepId, number, _mode(mode))
+        except KeyError as exc:
+            raise HTTPException(404, f'sweep {sweepId} is not kept') from exc
+        if figure is None:
+            raise HTTPException(404, f'no run of sweep {sweepId} has reported {number!r} yet')
+        return Response(figure, media_type = 'application/json')
 
     @app.get('/api/runs/state')
     def runState() -> dict:

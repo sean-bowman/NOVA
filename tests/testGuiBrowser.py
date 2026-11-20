@@ -6,7 +6,12 @@ The GUI's front end in a browser: the run menu, a run's name and note, putting a
 into the form, deleting a run, the baseline drawn under a line plot, the grid's shared cursor and
 zoom along the nozzle axis, the headline numbers and a row that opens its figure, the section
 outline, a problem written under its field, the warnings of a run, the export previews, a figure
-popped out into its own window, and compressed figure responses.
+popped out into its own window, compressed figure responses, a trade sweep's plot and table, the
+sweep dialog's request, and the run queue.
+
+The sweep view reads the showcase runs as the points of a sweep the test lays out; the sweep
+dialog's request is caught before it reaches the server, and the queue holds runs that never
+start, so no test makes a run.
 
 The GUI's server starts in this process, keeping three showcase cooling runs as if they had just
 run, so no run is made; Playwright's Chromium drives the built front end. The tests read the
@@ -36,10 +41,11 @@ if root not in sys.path:
 pytest.importorskip('fastapi')
 syncApi = pytest.importorskip('playwright.sync_api')
 
-from novaGui import analysis, configSchema
+from novaGui import analysis, configSchema, sweeps
 from novaGui.__main__ import _freePort, _serve, _waitUntilStarted
 from novaGui.server import createApp, frontendDist
-from novaGui.session import RunRecord, RunSession
+from novaGui.session import QueuedRun, RunRecord, RunSession
+from novaGui.worker import headlineNumbers
 
 showcaseFolder = os.path.join(root, 'featureShowcase', 'coolingRuns')
 outputsFolder = os.path.join(root, 'featureShowcase', 'showcaseBaseOutputs')
@@ -69,9 +75,10 @@ def served():
             config = {**configSchema.defaultConfig(), **json.load(handle)}
         picklePath = os.path.join(showcaseFolder, name + '.pkl')
         with open(picklePath, 'rb') as handle:
-            headline = analysis.resultRows(pickle.load(handle))[0]
+            nozzle = pickle.load(handle)
         record = RunRecord(runId, {'ok': True, 'runName': name, 'picklePath': picklePath, 'outputDir': outputsFolder,
-                                   'elapsedSec': 240.0 + 30.0 * runId, 'headline': headline},
+                                   'elapsedSec': 240.0 + 30.0 * runId, 'headline': analysis.resultRows(nozzle)[0],
+                                   'numbers': headlineNumbers(nozzle)},
                            config = config, warnings = [keptWarning] if runId == len(showcaseRuns) else None)
         session.adopt(record)
     app = createApp(session = session)
@@ -332,3 +339,110 @@ def testAFigurePopsOutIntoItsOwnWindow(window):
     popout.wait_for_selector('.popout .run-select')
     _drawn(popout, 1)
     assert 'popout=figure' in popout.url and popout.title().startswith('NOVA -- Computed contour')
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Trade sweeps and the run queue -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+@pytest.fixture
+def sweptRuns(served):
+    '''The three showcase runs as the done points of a four-point chamber pressure sweep, the last failed.'''
+    app, _ = served
+    session = app.state.session
+    sweep = sweeps.build({'name': '', 'config': session.record(1).config, 'fields': [
+        {'key': 'chamberPressure', 'unit': 'MPa', 'values': [5.0e6, 6.0e6, 7.0e6, 8.0e6]}]})
+    sweep = {**sweep, 'sweepId': 1, 'mode': 'dark'}
+    for runId in (1, 2, 3):
+        sweep['points'][runId - 1].update(state = 'done', runId = runId)
+        session.record(runId).sweep = {'sweepId': 1, 'index': runId - 1}
+    sweep['points'][3].update(state = 'failed', error = 'the contour solve did not converge')
+    session.sweeps[1] = sweep
+    session.publish({'type': 'sweeps'})
+    session.publish({'type': 'runs', 'baseline': session.baseline})
+    yield sweep
+    session.sweeps.clear()
+    for runId in (1, 2, 3):
+        session.record(runId).sweep = None
+    session.publish({'type': 'sweeps'})
+    session.publish({'type': 'runs', 'baseline': session.baseline})
+
+def testASweepPlotsItsPointsAndARowShowsItsRun(window, sweptRuns):
+    '''
+    The Sweep view plots a headline number against the swept field, a failed point a gap, and lists
+    the points with their runs' numbers and the failed point's reason. A row shows its run, and the
+    run menu groups the sweep's runs by point.
+    '''
+    window.locator('.result-head .segmented button', has_text = 'Sweep').click()
+    window.wait_for_selector('.sweep-plot .main-svg', timeout = drawMs)
+    plotted = window.evaluate('() => document.querySelector(".sweep-plot .js-plotly-plot").data[0]')
+    assert plotted['x'] == [5, 6, 7, 8] and plotted['y'][3] is None and plotted['customdata'] == [1, 2, 3, None]
+    assert window.inner_text('.sweep-progress') == '3 of 4 done, 1 failed'
+    rows = window.locator('.sweep-point')
+    assert rows.count() == 4 and rows.nth(3).locator('.sweep-state').inner_text() == 'failed'
+    assert window.inner_text('.sweep-error-row .sweep-error') == 'the contour solve did not converge'
+    window.wait_for_selector('.sweep-table th .validation-badge')
+    assert window.locator('.sweep-table th.is-plotted').text_content().startswith('Delivered Isp [s]')
+
+    rows.nth(1).click()
+    window.wait_for_function('document.querySelector(".run-select").value === "2"')
+    assert 'is-shown' in rows.nth(1).get_attribute('class')
+    group = window.locator('.run-select optgroup')
+    assert group.get_attribute('label') == 'Sweep: Chamber pressure sweep'
+    assert [text.split(' · ')[:2] for text in group.locator('option').all_inner_texts()] == \
+        [['Run 1', 'point 1, 5 MPa'], ['Run 2', 'point 2, 6 MPa'], ['Run 3', 'point 3, 7 MPa']]
+
+def testTheSweepDialogSendsItsValuesInBackendUnits(window):
+    '''
+    The dialog spaces a range evenly in the unit shown and sends the values in SI; a second field
+    with more values than the plot draws lines is refused before anything is sent.
+    '''
+    sent = []
+
+    def catch(route):
+        sent.append(json.loads(route.request.post_data))
+        route.fulfill(status = 200, content_type = 'application/json',
+                      body = json.dumps({'sweepId': 99, 'name': 'Chamber pressure sweep', 'points': [{}, {}, {}]}))
+
+    window.route('**/api/sweeps', lambda route: catch(route) if route.request.method == 'POST' else route.continue_())
+    window.locator('.run-bar button', has_text = 'Sweep').click()
+    dialog = window.locator('.sweep-dialog')
+    dialog.wait_for()
+    assert dialog.locator('.sweep-field').first.input_value() == 'chamberPressure'
+    window.fill('[aria-label="Chamber pressure from"]', '6')
+    window.fill('[aria-label="Chamber pressure to"]', '8')
+    window.fill('[aria-label="Chamber pressure count"]', '3')
+    assert dialog.locator('.sweep-values').first.inner_text() == '6, 7, 8 MPa'
+
+    dialog.get_by_role('button', name = 'Against a second field').click()
+    window.fill('[aria-label="O/F ratio count"]', '7')
+    assert 'takes at most 6 values' in dialog.locator('[role="alert"]').inner_text()
+    assert dialog.get_by_role('button', name = 'Queue 21 runs').is_disabled()
+    dialog.get_by_role('button', name = 'Remove').click()
+
+    dialog.get_by_role('button', name = 'Queue 3 runs').click()
+    window.wait_for_selector('.sweep-dialog', state = 'detached')
+    assert len(sent) == 1
+    assert sent[0]['fields'] == [{'key': 'chamberPressure', 'unit': 'MPa', 'values': [6.0e6, 7.0e6, 8.0e6]}]
+    assert sent[0]['config']['filename'] and sent[0]['mode'] == 'dark'
+    assert 'Chamber pressure sweep queued' in window.inner_text('.toasts')
+
+def testAQueuedRunCanBeTakenOutOfTheQueue(window, served):
+    '''The run bar counts the queued runs; the queue lists them and takes one out on request.'''
+    app, _ = served
+    session = app.state.session
+    config = session.record(1).config
+    session.queue.extend([QueuedRun(901, config, 'dark', 'first queued'), QueuedRun(902, config, 'dark', 'second queued')])
+    session.publish({'type': 'queue', 'queue': [item.entry() for item in session.queue]})
+    try:
+        window.wait_for_selector('.run-queued')
+        assert window.inner_text('.run-queued') == '2 queued'
+        window.locator('.run-queued').click()
+        assert window.locator('.queue-label').all_inner_texts() == ['first queued', 'second queued']
+        window.get_by_role('button', name = 'Take first queued out of the queue').click()
+        window.wait_for_function('document.querySelectorAll(".queue-row").length === 1')
+        assert [item.queueId for item in session.queue] == [902]
+        window.keyboard.press('Escape')
+        window.wait_for_selector('.queue-panel', state = 'detached')
+    finally:
+        session.queue.clear()
+        session.publish({'type': 'queue', 'queue': []})
