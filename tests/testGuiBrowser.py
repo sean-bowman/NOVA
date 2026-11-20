@@ -280,6 +280,30 @@ def testTheHeadlineLeadsTheTableAndARowOpensItsFigure(window):
     window.wait_for_timeout(500)
     assert window.input_value('.figure-toolbar > .view-select') == 'coolantFlow'
 
+def testAResultsValidationOpensItsRecords(window):
+    '''
+    Each headline number and section carries its validation status; a badge opens the models
+    behind it, and a model's record shows the passage its status stands on, the quote marked.
+    '''
+    window.locator('.result-head .segmented button', has_text = 'Table').click()
+    window.wait_for_selector('.headline-item .validation-badge')
+    sections = window.eval_on_selector_all('.section-head-row', 'rows => rows.map(r => [r.querySelector(".section-title").textContent, '
+                                                               '(r.querySelector(".validation-badge") || {}).textContent])')
+    labels = dict(sections)
+    assert labels['Chamber'] == 'Validated' and labels['Sizing'] == 'Cross-checked'
+    assert labels['Combustion Chamber'] == 'By construction'
+    window.locator('.headline-item', has_text = 'Contour length').locator('.validation-badge').click()
+    dialog = window.locator('.validation-dialog')
+    dialog.wait_for()
+    assert dialog.locator('h2').inner_text() == 'Contour length'
+    assert dialog.locator('.validation-model-name').all_inner_texts() == ['Contour and exit plane (method of characteristics)']
+    dialog.get_by_role('button', name = 'Show the record').click()
+    window.wait_for_selector('.validation-passage mark')
+    assert window.inner_text('.validation-passage mark') == 'This is a cross-check, not a validation.'
+    window.keyboard.press('Escape')
+    window.wait_for_selector('.validation-dialog', state = 'detached')
+    assert window.locator('.result-pane').is_visible()
+
 def testTheOutlineJumpsAndAProblemIsWrittenUnderItsField(window):
     window.locator('.outline-item', has_text = 'Volutes').click()
     window.wait_for_timeout(900)

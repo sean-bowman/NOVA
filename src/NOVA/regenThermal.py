@@ -41,6 +41,11 @@ temperatures lie inside the band the unknown coolant state and roughness span. T
 than the tolerances stated before the comparison, so it is a sensitivity-bounded comparison, not
 a validation: docs/reports/carlileQuentmeyer_2026-09-22.md and tests/testRegenValidation.py.
 
+**The pressure drop is unvalidated against hardware.** It is the friction loss on the Swamee-Jain
+factor plus a bend loss from each station's turn angle and radius (`findKFactor`), and no measured
+jacket pressure drop has been compared with it here. The friction factor's agreement with Colebrook
+is checked in tests/testRegenThermal.py; the bend loss is not checked against a measurement.
+
 **Roughness is bounded by measurement, and two datasets disagree about where the bound is.**
 Roughness raises the friction factor, and the pressure drop with it, under every option in
 COOLANTROUGHNESSMODELS. What it may do to the heat transfer is the choice. The default is

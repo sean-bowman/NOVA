@@ -9,14 +9,13 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 | Item | Title | Effort | Depends on |
 | --- | --- | --- | --- |
 | [G1](#g1-trade-sweeps-with-a-run-queue) | Trade sweeps with a run queue | Large | G2, built |
-| [G3](#g3-validation-status-on-the-results) | Validation status on the results | Medium | |
 | [G5](#g5-the-jacket-profile-while-the-circuit-iterates) | The jacket profile while the circuit iterates | Medium | |
 | [G6](#g6-run-report) | Run report | Medium | |
 | [G7](#g7-retire-the-tkinter-front-end) | Retire the Tkinter front end | Medium | a decision |
 | [G8](#g8-install-without-node) | Install without Node | Medium | |
 | [G9](#g9-the-methalox-extension-stage) | The methalox extension stage | Investigation | |
 
-G1 is next: the runs it queues are saved as they finish (G2), so a sweep of several five-minute runs outlasts the window. G3 stands alone and can go at any point.
+G1 is next: the runs it queues are saved as they finish (G2), so a sweep of several five-minute runs outlasts the window.
 
 ### G1. Trade sweeps with a run queue
 
@@ -26,14 +25,6 @@ NOVA's main use is trade studies, and today each point of a study is one press o
 - **The queue.** Runs go one at a time. RocketCEA's machine-wide lock (`nova.lock`) serializes the CEA solves of concurrent runs anyway, so a queue costs no speed. Generate during a run adds to the queue rather than refusing; the run bar shows the queue's length and Cancel offers this run or the rest.
 - **The result.** A sweep table, one row per run, with the swept inputs and the headline numbers (`analysis.headline`), and a plot of any headline number against a swept value. A sweep's runs carry its name, so the run menu can group them.
 - **Where it goes.** The session holds a queue of configs and starts the next when a run ends (`session.RunSession._drain`). The run store drops unnamed runs past 24 (`runStore.unnamedRuns`), so a sweep's runs need its name, or need to count against the limit as one, or a large sweep pushes out its own first runs.
-
-### G3. Validation status on the results
-
-The table and the headline numbers show values with no sign of how far each can be trusted. The plume section already reports its own bound ("Within the trusted bound"); nothing else does.
-
-- A mapping in `novaGui`, from each model behind a result (the gas-side heat transfer, the contour solve, the near-wall state, the plume march, the coolant pressure drop) to its validation status: the reference and the error against it in percent, or "unvalidated" with the reason no reference applies.
-- A badge on each headline number and each table section, its tooltip giving the reference, and a link to the validation document it comes from (`docs/NozzleContourValidation.md`, the cooling and boundary layer documents, `validation/`).
-- The statuses must come from the validation records, not be written into the GUI by hand, or they drift from them. A small machine-readable summary kept beside the validation documents, read by both the documents' tables and the GUI, avoids that.
 
 ### G5. The jacket profile while the circuit iterates
 
@@ -67,3 +58,4 @@ The methalox booster example (`src/NOVA/assets/examples/methaloxBooster.json`) s
 | #4 | Kept runs and a baseline; the contour drawn before a run ends; the grid with one cursor and zoom along the axis; the pop-out window; interactive-only views with Save PNG and filled flow fields; the section outline; problems written under their fields; headline numbers; rows that open their figure; export previews |
 | #5 | The contour and near-wall state hover along the axis; figures cached and gzipped; a run's warnings counted in the run bar and listed in the result pane; the run time and headline in the run menu; a browser test of the front end (`tests/testGuiBrowser.py`) |
 | #6 | G2, saved and named runs: a run store (`novaGui.runStore`) kept between launches, run ids that never repeat, a name and note per run, delete, and limits on unnamed runs. G4, edit from a kept run: in the run's details, and in the strip that names the form's changes |
+| #7 | G3, validation status on the results: `docs/validationStatus.json` summarizes each model's status from its records, quoting them word for word, held by `tests/testValidationStatus.py`; a badge on each headline number and section reads as the weakest model behind it and opens the passages of its records; `docs/validationStatus.md` is the same summary as one table |

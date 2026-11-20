@@ -71,6 +71,7 @@ Run events (log lines, progress, status, a running run's settled figures, its wa
 | `coolingFigures` | Plotly figures for the nine cooling views |
 | `views` | Each view rendered for the browser: plotly JSON, with a second run drawn over a line plot or from a running run's settled figures, or the Matplotlib drawing as PNG |
 | `analysis` | The result table, its headline numbers, the figure that shows each row, and two runs' tables side by side |
+| `validationStatus` | The validation status of each headline number and table section, read from `docs/validationStatus.json`, and the passages of the records each status stands on |
 | `outputs` | The output categories, and listing, previewing (an STL read into vertices and triangles), copying and opening a run's files |
 | `themeColors`, `paletteCss` | The palette in both modes with its Matplotlib styling, and the stylesheet written from it |
 | `settings`, `backend` | The saved theme mode and form width, and lazy access to NOVA's figures and material store |
@@ -123,6 +124,12 @@ The run bar draws the tree as a stepper, one segment per top-level stage of the 
 Stages opens the stage list: every stage and sub-stage with its time, and the passes of a convergent loop, each with the values it reports. The coolant circuit lists its two legs' outlet temperatures and the up leg's change per pass, so the circuit can be watched settling. Until this run reaches them, the list carries the sub-stages the last finished run took, as pending with that run's times, and a running loop says how many passes that run took. The contour solve's evaluations are too many to list; its sub-stage shows their count and the latest design Mach and residual.
 
 The legacy Tkinter window keeps one bar over the same model: each stage spans a share of the bar in proportion to the same times, the label names the running stage and its iteration or loop (`Cooling channels, pass 4`), and between events the bar eases toward the running stage's end.
+
+## Validation status
+
+`docs/validationStatus.json` summarizes the validation status of every model behind a reported result: the status, the reference, the result in numbers, what would close the gap, and the records it comes from, each with a passage quoted word for word. `validationStatus.annotate` puts a badge on each headline number and section of a run's table: the models behind it (`sectionModelIds`, `headlineModelIds`), with the gas-side model resolved from the run's `gasSideAxialModel` and the multi-pass circuit and chamber film included only where the run has them, and the weakest of their statuses, so a number reads as no stronger than its least trusted model. `GET /api/validation/{model}` returns a model with the paragraphs of its records that carry its quotes, which the badge's dialog shows with the quote marked.
+
+The GUI decides no status. A record that changes its numbers or its verdict fails `tests/testValidationStatus.py` until the summary is read against it again, and `docs/validationStatus.md`, the same summary as one table, is written from the JSON by `python -m novaGui.validationStatus --write`.
 
 ## Views
 
@@ -178,9 +185,11 @@ The wall material panel reads `src/NOVA/materials.py` directly (numpy only, no C
 
 The cooling figure tests cross-check each plotly builder against the Matplotlib drawer it ports: every labelled series the drawer plots must appear in the plotly figure under the same name with the same values, and the panels the drawer leaves unlabelled must carry the jacket solve's arrays. They read the showcase cooling runs in `featureShowcase/coolingRuns/`, which are local outputs that git ignores, and skip without them.
 
-It also covers the warning relay and the session's count of a run's warnings, the figure cache and its compression, and the views that hover along the axis.
+It also covers the warning relay and the session's count of a run's warnings, the figure cache and its compression, the views that hover along the axis, and the validation status on each section and headline number with the route that returns a model's records.
 
-`tests/testGuiBrowser.py` drives the built front end in Playwright's Chromium against a server that keeps the showcase runs as if they had just run: the run menu, a run's name and note, Edit from a run, deleting a run, the baseline drawn under a line plot, a run's warnings, the grid's shared cursor and zoom, compressed figure responses, the headline numbers and a row that opens its figure, the section outline and a problem under its field, the export previews and a popped-out window. Each test fails on a console error. It takes about a minute, and skips without the showcase runs and their outputs, Playwright and its Chromium, or the built front end.
+`tests/testValidationStatus.py` holds the summary to its records: every quoted passage is still in its record, every model is complete, the summary table is current, every section and headline number the table can produce has models behind it, a badge reads as its weakest model, and the models follow what the run used. It needs no run and takes under a second.
+
+`tests/testGuiBrowser.py` drives the built front end in Playwright's Chromium against a server that keeps the showcase runs as if they had just run: the run menu, a run's name and note, Edit from a run, deleting a run, the baseline drawn under a line plot, a run's warnings, the grid's shared cursor and zoom, compressed figure responses, the headline numbers and a row that opens its figure, a validation badge opening its record, the section outline and a problem under its field, the export previews and a popped-out window. Each test fails on a console error. It takes about a minute, and skips without the showcase runs and their outputs, Playwright and its Chromium, or the built front end.
 
 `tests/testProgress.py` covers the progress events and `RunProgress`; `tests/testGuiSchema.py` imports every module of both front ends headless and holds the schema to the shipped configuration.
 
