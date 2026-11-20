@@ -4,7 +4,8 @@
    and the result pane side by side with a splitter between them, and the run bar with its stage
    stepper. The config lives here in backend values (SI), so the form edits it and the run bar
    sends it as it stands. An entry that does not parse blocks a run; a cross-field problem asks
-   first, as the legacy Tkinter form does.
+   first, as the legacy Tkinter form does. Generate during a run queues the form behind it, and
+   Sweep queues a trade sweep (SweepDialog), which then opens in the result pane's Sweep view.
 
    The form's width is dragged on the splitter, or moved with the arrow keys on it, and is kept
    between launches with the theme mode (novaGui.settings). A double click returns it to the
@@ -26,7 +27,9 @@ import { ResultPane } from './result/ResultPane';
 import { LogDrawer, RunBar } from './run/RunBar';
 import { useRunEvents } from './run/useRunEvents';
 import { useRuns } from './result/useRuns';
-import type { Config, FormState, Mode, RunEntry, RunSummary, Schema } from './types';
+import { SweepDialog } from './sweep/SweepDialog';
+import { useSweeps } from './sweep/useSweeps';
+import type { Config, FormState, Mode, RunEntry, RunSummary, Schema, Submitted, Sweep } from './types';
 
 const defaultFormWidth = 540;   // [px]
 const minFormWidth = 380;       // [px]
@@ -56,6 +59,8 @@ export function App() {
     const [stagesOpen, setStagesOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [aboutOpen, setAboutOpen] = useState(false);
+    const [sweepOpen, setSweepOpen] = useState(false);
+    const [focusSweep, setFocusSweep] = useState<{ sweepId: number; at: number } | null>(null);
     const [confirmProblems, setConfirmProblems] = useState<string[] | null>(null);
     const [toasts, setToasts] = useState<Toast[]>([]);
     const [loadError, setLoadError] = useState('');
@@ -133,11 +138,13 @@ export function App() {
 
     const run = useRunEvents(onResult);
     const runs = useRuns(run, 'latest', (title, message) => notify('error', title, message));
+    const sweeps = useSweeps(run, (title, message) => notify('error', title, message));
     // A run still going has nothing to export yet; Export offers the latest finished run instead
     const exportRun = runs.partial ? (runs.list?.latest ?? null) : runs.shown;
     const running = run.state === 'running';
     const errorList = Object.values(errors);
-    const canGenerate = schema !== null && !running && errorList.length === 0 && run.connected;
+    // A run going does not block: the form queues behind it
+    const canGenerate = schema !== null && errorList.length === 0 && run.connected;
     const blockReason = errorList.length > 0 ? `Fix first: ${errorList[0]}` : (!run.connected ? 'The NOVA server is not answering' : '');
 
     // The stage list opens as a run starts; closing it holds until the next run
@@ -151,8 +158,18 @@ export function App() {
 
     const startRun = useCallback(() => {
         setConfirmProblems(null);
-        api.startRun(config, mode).catch((error: Error) => notify('error', 'Run did not start', error.message));
-    }, [config, mode, notify]);
+        api.startRun(config, mode)
+            .then((placed: Submitted) => {
+                if (placed.position === 0) {
+                    // A run started from the form is followed; one queued leaves the pane as it is
+                    runs.choose('latest');
+                } else {
+                    const ahead = placed.position === 1 ? 'the run going ends' : `the run going and ${placed.position - 1} queued before it end`;
+                    notify('info', 'Queued', `${String(config.filename || 'The form')} runs when ${ahead}.`);
+                }
+            })
+            .catch((error: Error) => notify('error', 'Run did not start', error.message));
+    }, [config, mode, notify, runs.choose]);
 
     const generate = useCallback(() => {
         if (!canGenerate) {
@@ -169,9 +186,22 @@ export function App() {
         startRun();
     }, [canGenerate, errorList, formState.problems, notify, startRun]);
 
-    const cancel = useCallback(() => {
-        api.cancelRun().catch((error: Error) => notify('error', 'Cancel failed', error.message));
+    const cancel = useCallback((everything: boolean) => {
+        api.cancelRun(everything).catch((error: Error) => notify('error', 'Cancel failed', error.message));
     }, [notify]);
+
+    const unqueue = useCallback((queueIds: number[]) => {
+        Promise.all(queueIds.map((queueId) => api.unqueue(queueId)))
+            .catch((error: Error) => notify('error', 'Not taken out of the queue', error.message));
+    }, [notify]);
+
+    const sweepQueued = useCallback((sweep: Sweep) => {
+        notify('info', `${sweep.name} queued`, `${sweep.points.length} runs, one at a time`);
+        setFocusSweep({ sweepId: sweep.sweepId, at: Date.now() });
+    }, [notify]);
+
+    const latestEntry = runs.entry(runs.list?.latest ?? null);
+    const lastRun = latestEntry ? { seconds: latestEntry.elapsedSec, bytes: latestEntry.bytes } : null;
 
     // -- Config files -- //
     const loadExample = useCallback((name: string) => {
@@ -360,14 +390,22 @@ export function App() {
                      title="Drag to resize the form; double-click for the default width"
                      onPointerDown={onSplitterDown} onPointerMove={onSplitterMove} onPointerUp={onSplitterUp}
                      onPointerCancel={onSplitterUp} onKeyDown={onSplitterKey} onDoubleClick={resetWidth} />
-                <ResultPane runs={runs} mode={mode} run={run} schema={schema} config={config}
+                <ResultPane runs={runs} mode={mode} run={run} schema={schema} config={config} sweeps={sweeps} focusSweep={focusSweep}
                             onExport={() => setExportOpen(true)} onEditFrom={editFrom} onNotify={notify} />
             </main>
 
             {logOpen && <LogDrawer lines={run.log} />}
             <RunBar run={run} canGenerate={canGenerate} blockReason={blockReason} logOpen={logOpen} stagesOpen={stagesOpen}
-                    onGenerate={generate} onCancel={cancel} onToggleLog={() => setLogOpen((open) => !open)}
-                    onToggleStages={() => setStagesOpen((open) => !open)} />
+                    onGenerate={generate} onSweep={() => setSweepOpen(true)} onCancel={cancel} onUnqueue={unqueue}
+                    onToggleLog={() => setLogOpen((open) => !open)} onToggleStages={() => setStagesOpen((open) => !open)} />
+
+            {sweepOpen && schema && (
+                <SweepDialog schema={schema} config={config} hidden={formState.hidden} problems={formState.problems}
+                             blockReason={errorList.length > 0 ? `Fix the form first: ${errorList[0]}` : blockReason}
+                             mode={mode} lastRun={lastRun}
+                             limits={{ maxPoints: sweeps?.maxPoints ?? 64, maxSeries: sweeps?.maxSeries ?? 6 }}
+                             onQueued={sweepQueued} onClose={() => setSweepOpen(false)} onNotify={notify} />
+            )}
 
             <div className="toasts" aria-live="polite">
                 {toasts.map((toast) => (
@@ -428,9 +466,10 @@ export function App() {
                         <p>
                             Web front end for the NOVA suite. Design a nozzle in the form on the left and Generate it:
                             the contour, cooling, heat transfer and plume pipeline runs in a worker process, and the
-                            run bar steps through its stages. The pane on the right shows any of the saved runs, as
-                            figures or as a results table, against a baseline run when one is chosen, and Export
-                            copies a run's outputs to keep.
+                            run bar steps through its stages. Generate during a run queues the form behind it, and
+                            Sweep queues one run per value of a field. The pane on the right shows any of the saved
+                            runs, as figures or as a results table, against a baseline run when one is chosen, and a
+                            sweep as a plot and a table of its points; Export copies a run's outputs to keep.
                         </p>
                         <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one, Escape close.</p>
                         <div className="modal-actions">

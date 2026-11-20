@@ -2,15 +2,18 @@
    RUN EVENTS
    The run session as React state, fed by the server's event stream. The stream opens with a
    snapshot, so a reload or a reconnect mid-run picks up where the run is. Besides the run itself
-   it carries the figures a running run has settled, the warnings it has raised, a count that moves
-   whenever the kept runs or the baseline change, and the theme mode last saved from any window.
+   it carries the figures a running run has settled, the warnings it has raised, the runs queued
+   behind it, a count that moves whenever the kept runs or the baseline change and one that moves
+   whenever a trade sweep does, and the theme mode last saved from any window.
    Sean Bowman [11/16/2026]
    ======================================== */
 
 import { useEffect, useRef, useState } from 'react';
 
 import { subscribeRunEvents } from '../api';
-import type { Mode, PartialRun, RunEvent, RunProgressFields, RunStage, RunStateName, RunSummary, RunWarning } from '../types';
+import type {
+    Mode, PartialRun, QueueEntry, RunEvent, RunProgressFields, RunStage, RunStateName, RunSummary, RunWarning,
+} from '../types';
 
 const maxLogLines = 4000;
 
@@ -34,13 +37,15 @@ export interface RunView {
     partial: PartialRun | null;   // the running run's settled figures
     warnings: RunWarning[];       // the warnings of the run in progress, or the last one started
     runsVersion: number;          // moves when the kept runs or the baseline change
+    sweepsVersion: number;        // moves when a sweep is added or deleted, or a point's state moves
+    queue: QueueEntry[];          // the runs waiting their turn, in order
     savedMode: Mode | null;       // the theme mode last saved from any window
 }
 
 const initial: RunView = {
     state: 'idle', detail: '', runId: null, fraction: 0, ceiling: 0, label: '', stageDetail: '', stages: [],
     expectedRun: null, runClock: 0, progressAt: 0, startedAt: null, endedAt: null, log: [], result: null,
-    connected: false, partial: null, warnings: [], runsVersion: 0, savedMode: null,
+    connected: false, partial: null, warnings: [], runsVersion: 0, sweepsVersion: 0, queue: [], savedMode: null,
 };
 
 function progressOf(event: RunProgressFields): Partial<RunView> {
@@ -58,6 +63,7 @@ function reduce(previous: RunView, event: RunEvent): RunView {
                 ...previous, ...progressOf(event), state: event.state, detail: event.detail,
                 startedAt: event.startedAt, endedAt: null, log: event.log.slice(-maxLogLines), result: event.result,
                 partial: event.partial ?? null, warnings: event.warnings ?? [], runsVersion: previous.runsVersion + 1,
+                sweepsVersion: previous.sweepsVersion + 1, queue: event.queue ?? [],
             };
         case 'log': {
             const log = previous.log.length >= maxLogLines ? previous.log.slice(1 - maxLogLines) : previous.log.slice();
@@ -88,6 +94,10 @@ function reduce(previous: RunView, event: RunEvent): RunView {
         }
         case 'runs':
             return { ...previous, runsVersion: previous.runsVersion + 1 };
+        case 'queue':
+            return { ...previous, queue: event.queue };
+        case 'sweeps':
+            return { ...previous, sweepsVersion: previous.sweepsVersion + 1 };
         case 'settings':
             return { ...previous, savedMode: event.themeMode };
         default:

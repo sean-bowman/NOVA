@@ -186,6 +186,15 @@ export interface PartialRun {
     views: string[];
 }
 
+/** A run waiting its turn (novaGui.session.QueuedRun.entry). */
+export interface QueueEntry {
+    queueId: number;
+    label: string;                // its config's filename, or a sweep's point
+    runName: string;
+    sweepId: number | null;
+    point: number | null;         // the sweep point's index, from 0
+}
+
 export interface RunSnapshot extends RunProgressFields {
     type: 'snapshot';
     state: RunStateName;
@@ -196,6 +205,7 @@ export interface RunSnapshot extends RunProgressFields {
     partial: PartialRun | null;
     baseline: number | null;
     warnings: RunWarning[];       // the run in progress, or the last one started
+    queue: QueueEntry[];
 }
 
 export type RunEvent =
@@ -207,7 +217,25 @@ export type RunEvent =
     | { type: 'warning'; runId: number; warnings: RunWarning[] }
     | ({ type: 'result' } & RunSummary)
     | { type: 'runs'; baseline: number | null }
+    | { type: 'queue'; queue: QueueEntry[] }
+    | { type: 'sweeps' }
     | ({ type: 'settings' } & Settings);
+
+/** Where a run asked for went: started (position 0, with its id) or queued (its place from 1). */
+export interface Submitted {
+    queueId: number;
+    runId: number | null;
+    position: number;
+}
+
+/** One of a run's headline numbers as the worker records it (novaGui.worker.headlineNumbers). */
+export interface RunNumber {
+    key: string;
+    label: string;
+    value: string;                // text, in the unit given
+    unit: string;
+    tone: '' | 'warn';
+}
 
 /** A kept finished run, as the run list carries it (novaGui.session.RunRecord.entry). */
 export interface RunEntry {
@@ -217,11 +245,64 @@ export interface RunEntry {
     note: string;
     elapsedSec: number;
     headline: string;             // thrust, delivered Isp, propellants
+    numbers: RunNumber[];         // the headline numbers, [] for a run saved before they were recorded
+    sweep: { sweepId: number; index: number } | null;
     finishedAt: number;           // [s] epoch
     config: Config | null;
     warnings: RunWarning[];
     bytes: number;                // [B] its files in the run store, 0 for a run held in memory
     saved: boolean;               // the run store holds it
+}
+
+export type SweepPointState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+
+/** A field a sweep varies, its values in backend values and as the table shows them. */
+export interface SweepField {
+    key: string;
+    label: string;
+    kind: FieldKind;
+    dimension: string | null;
+    unit: string;                 // the display unit its values were entered in
+    values: ConfigValue[];
+    texts: string[];
+}
+
+export interface SweepPoint {
+    index: number;
+    at: number[];                 // the index of its value in each field
+    values: Record<string, ConfigValue>;
+    texts: string[];
+    state: SweepPointState;
+    runId: number | null;
+    error: string;
+    kept: boolean;                // its run is still kept
+    numbers: Record<string, { text: string; value: number | null; tone: '' | 'warn' }>;
+}
+
+/** A trade sweep as its table reads it (novaGui.sweeps.table). */
+export interface Sweep {
+    sweepId: number;
+    name: string;
+    createdAt: number;            // [s] epoch
+    config: Config;
+    fields: SweepField[];
+    numbers: { key: string; label: string; unit: string }[];
+    counts: Record<SweepPointState, number>;
+    points: SweepPoint[];
+}
+
+export interface SweepList {
+    sweeps: Sweep[];              // newest first
+    maxPoints: number;
+    maxSeries: number;
+}
+
+/** A sweep as the dialog asks for it: values in backend values, entered in `unit`. */
+export interface SweepRequest {
+    name: string;
+    config: Config;
+    mode: Mode;
+    fields: { key: string; unit: string; values: ConfigValue[] }[];
 }
 
 /** The run store the server keeps runs in between launches (novaGui.runStore). */

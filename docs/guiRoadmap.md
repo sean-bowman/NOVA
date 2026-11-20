@@ -8,23 +8,11 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 
 | Item | Title | Effort | Depends on |
 | --- | --- | --- | --- |
-| [G1](#g1-trade-sweeps-with-a-run-queue) | Trade sweeps with a run queue | Large | G2, built |
 | [G5](#g5-the-jacket-profile-while-the-circuit-iterates) | The jacket profile while the circuit iterates | Medium | |
 | [G6](#g6-run-report) | Run report | Medium | |
 | [G7](#g7-retire-the-tkinter-front-end) | Retire the Tkinter front end | Medium | a decision |
 | [G8](#g8-install-without-node) | Install without Node | Medium | |
 | [G9](#g9-the-methalox-extension-stage) | The methalox extension stage | Investigation | |
-
-G1 is next: the runs it queues are saved as they finish (G2), so a sweep of several five-minute runs outlasts the window.
-
-### G1. Trade sweeps with a run queue
-
-NOVA's main use is trade studies, and today each point of a study is one press of Generate, made by hand after the last run finishes.
-
-- **The sweep.** Pick a field, give it a list of values (chamber pressure at 6, 7, 8 and 9 MPa) or a range and a count, and the GUI queues one run per value. Two fields swept against each other make a grid.
-- **The queue.** Runs go one at a time. RocketCEA's machine-wide lock (`nova.lock`) serializes the CEA solves of concurrent runs anyway, so a queue costs no speed. Generate during a run adds to the queue rather than refusing; the run bar shows the queue's length and Cancel offers this run or the rest.
-- **The result.** A sweep table, one row per run, with the swept inputs and the headline numbers (`analysis.headline`), and a plot of any headline number against a swept value. A sweep's runs carry its name, so the run menu can group them.
-- **Where it goes.** The session holds a queue of configs and starts the next when a run ends (`session.RunSession._drain`). The run store drops unnamed runs past 24 (`runStore.unnamedRuns`), so a sweep's runs need its name, or need to count against the limit as one, or a large sweep pushes out its own first runs.
 
 ### G5. The jacket profile while the circuit iterates
 
@@ -59,3 +47,4 @@ The methalox booster example (`src/NOVA/assets/examples/methaloxBooster.json`) s
 | #5 | The contour and near-wall state hover along the axis; figures cached and gzipped; a run's warnings counted in the run bar and listed in the result pane; the run time and headline in the run menu; a browser test of the front end (`tests/testGuiBrowser.py`) |
 | #6 | G2, saved and named runs: a run store (`novaGui.runStore`) kept between launches, run ids that never repeat, a name and note per run, delete, and limits on unnamed runs. G4, edit from a kept run: in the run's details, and in the strip that names the form's changes |
 | #7 | G3, validation status on the results: `docs/validationStatus.json` summarizes each model's status from its records, quoting them word for word, held by `tests/testValidationStatus.py`; a badge on each headline number and section reads as the weakest model behind it and opens the passages of its records; `docs/validationStatus.md` is the same summary as one table |
+| #8 | G1, trade sweeps with a run queue: Generate during a run queues the form, Cancel stops the run alone or the queue with it, and a queued run can be taken out; a sweep (`novaGui.sweeps`) varies one field over a range or a list, or two as a grid, queues one run per point, goes on past a failed point, and keeps its runs until it is deleted; the Sweep view plots a headline number against the swept field and tabulates the points with each number's validation status |

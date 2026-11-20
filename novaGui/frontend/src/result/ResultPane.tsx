@@ -4,7 +4,7 @@
    run they come from, the baseline it is compared against, and the Export button.
 
    The run list holds the runs the server keeps. The pane follows the latest until another run is
-   picked, and a new run puts it back to following; while a run is going, the pane shows its
+   picked, and Generate puts it back to following; while a run is going, the pane shows its
    contour and flow fields once its contour stage has settled them. The baseline is any kept run:
    the line plots draw it dashed under the shown run, and the table sets its values and the change
    from them beside the shown run's.
@@ -19,6 +19,9 @@
 
    The pencil beside the run menu opens the shown run's details (RunDetails): its name and note,
    the baseline, putting its config into the form, and deleting it.
+
+   The Sweep view shows a trade sweep (SweepView): its plot and the table of its points, from which
+   a click shows a point's run. A sweep just queued opens in it.
    Sean Bowman [11/19/2026]
    ======================================== */
 
@@ -28,7 +31,8 @@ import { api } from '../api';
 import { ResultsTable } from '../analyze/ResultsTable';
 import { DownloadIcon, InfoIcon, PencilIcon } from '../components/Icons';
 import type { RunView } from '../run/useRunEvents';
-import type { Config, Mode, ResultTable, RunEntry, RunWarning, Schema } from '../types';
+import { SweepView } from '../sweep/SweepView';
+import type { Config, Mode, ResultTable, RunEntry, RunWarning, Schema, SweepList } from '../types';
 import { FigureView, type FigureLayout } from '../view/FigureView';
 import { changesSince, type FieldChange } from './changes';
 import { RunDetails } from './RunDetails';
@@ -44,6 +48,8 @@ interface ResultPaneProps {
     run: RunView;
     schema: Schema | null;
     config: Config;
+    sweeps: SweepList | null;
+    focusSweep: { sweepId: number; at: number } | null;   // a sweep to open in the Sweep view, and when it was asked for
     onExport: () => void;
     onEditFrom: (entry: RunEntry) => void;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
@@ -94,8 +100,9 @@ function statusOf(run: RunView, runs: RunsView, changes: FieldChange[]): { text:
     return parts.length > 0 ? { tone: 'warn', text: parts.join(' ') } : null;
 }
 
-export function ResultPane({ runs, mode, run, schema, config, onExport, onEditFrom, onNotify }: ResultPaneProps) {
-    const [showing, setShowing] = useState<'figure' | 'table'>('figure');
+export function ResultPane({ runs, mode, run, schema, config, sweeps, focusSweep, onExport, onEditFrom, onNotify }: ResultPaneProps) {
+    const [showing, setShowing] = useState<'figure' | 'table' | 'sweep'>('figure');
+    const [sweepShown, setSweepShown] = useState<number | null>(null);
     const [detailsFor, setDetailsFor] = useState<number | null>(null);
     const [selected, setSelected] = useState('contour');
     const [layout, setLayout] = useState<FigureLayout>('single');
@@ -156,6 +163,14 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onEditFr
     // The warnings of the run shown: the run in progress keeps them in the event stream's state
     const shownWarnings: RunWarning[] = partial ? run.warnings : (shownEntry?.warnings ?? []);
 
+    // A sweep just queued opens in the Sweep view
+    useEffect(() => {
+        if (focusSweep) {
+            setSweepShown(focusSweep.sweepId);
+            setShowing('sweep');
+        }
+    }, [focusSweep]);
+
     const openView = useCallback((key: string) => {
         setSelected(key);
         setLayout('single');
@@ -172,7 +187,7 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onEditFr
     return (
         <section className="result-pane card" aria-label="Result">
             <header className="result-head">
-                <RunSelect runs={runs} />
+                <RunSelect runs={runs} sweeps={sweeps} />
                 <button type="button" className="icon-button" disabled={!shownEntry || partial}
                         aria-label={shownEntry ? `Details of run ${shownEntry.runId}` : 'Run details'}
                         title={shownEntry ? `Run ${shownEntry.runId}: name, note, baseline, edit from it, delete` : 'No finished run shown'}
@@ -196,6 +211,11 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onEditFr
                             onClick={() => setShowing('figure')}>Figure</button>
                     <button type="button" className={showing === 'table' ? 'is-selected' : ''} aria-pressed={showing === 'table'}
                             onClick={() => setShowing('table')}>Table</button>
+                    <button type="button" className={showing === 'sweep' ? 'is-selected' : ''} aria-pressed={showing === 'sweep'}
+                            disabled={!sweeps || sweeps.sweeps.length === 0}
+                            title={sweeps && sweeps.sweeps.length > 0 ? 'A trade sweep: its plot and the table of its points'
+                                                                      : 'No trade sweep yet: Sweep in the run bar queues one'}
+                            onClick={() => setShowing('sweep')}>Sweep</button>
                 </div>
                 <button type="button" className="button" onClick={onExport} title="Copy a run's outputs to a folder">
                     <DownloadIcon /> Export
@@ -258,6 +278,11 @@ export function ResultPane({ runs, mode, run, schema, config, onExport, onEditFr
                 <ResultsTable table={table} loading={tableLoading} error={tableError} available={available}
                               emptyText={partial ? `The table fills when run ${shown} finishes.` : 'Generate a nozzle to fill this table.'}
                               onOpenView={openView} onNotify={onNotify} />
+            </div>
+            <div className="result-content" hidden={showing !== 'sweep'}>
+                {showing === 'sweep' && (
+                    <SweepView list={sweeps} runs={runs} mode={mode} chosen={sweepShown} onChoose={setSweepShown} onNotify={onNotify} />
+                )}
             </div>
             {detailsEntry && (
                 <RunDetails key={detailsEntry.runId} entry={detailsEntry} baseline={baseline} store={list?.store ?? null}

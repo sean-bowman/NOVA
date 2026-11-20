@@ -25,6 +25,10 @@ The store keeps every named run and the baseline. Unnamed runs go oldest first o
 more than `unnamedRuns` of them, or once the store holds more than `storeBytes`; the run that has
 just finished always stays (`pruned`). A run's outputs take 8 to 17 MB.
 
+A trade sweep (novaGui.sweeps) is kept as `sweeps/sweep<id>.json`: its name, the config it starts
+from, the fields it sweeps and each point's state and run. Sweep ids count up across launches the
+way run ids do, held in `store.json` as `lastSweepId`; creating the sweep's file claims its id.
+
 The store lives in `%LOCALAPPDATA%\\NOVA\\runs` on Windows and `~/.local/share/NOVA/runs`
 elsewhere; NOVA_RUN_STORE names another folder. It is the user's own folder, and the server
 unpickles the Nozzle each run saved there, as it does a run of its own.
@@ -47,8 +51,10 @@ storeBytes = 2 * 2 ** 30         # [B] the store's size past which unnamed runs 
 staleHours = 12.0                # [h] age at which an unfinished run's folder is collected
 recordName = 'run.json'
 indexName = 'store.json'
+sweepFolderName = 'sweeps'
 recordVersion = 1
 _runFolder = re.compile(r'^run(\d+)$')
+_sweepFile = re.compile(r'^sweep(\d+)\.json$')
 
 def storeRoot() -> str:
 
@@ -145,10 +151,12 @@ class RunStore:
             index = {}
         if not isinstance(index, dict):
             index = {}
-        lastRunId = index.get('lastRunId')
-        baseline = index.get('baseline')
-        return {'lastRunId': lastRunId if isinstance(lastRunId, int) and not isinstance(lastRunId, bool) else 0,
-                'baseline': baseline if isinstance(baseline, int) and not isinstance(baseline, bool) else None}
+        def whole(value) -> bool:
+            return isinstance(value, int) and not isinstance(value, bool)
+
+        lastRunId, lastSweepId, baseline = index.get('lastRunId'), index.get('lastSweepId'), index.get('baseline')
+        return {'lastRunId': lastRunId if whole(lastRunId) else 0, 'lastSweepId': lastSweepId if whole(lastSweepId) else 0,
+                'baseline': baseline if whole(baseline) else None}
 
     def _writeJson(self, path: str, content: dict) -> None:
 
@@ -177,6 +185,21 @@ class RunStore:
         matches = [_runFolder.match(entry) for entry in entries]
         return sorted(int(match.group(1)) for match in matches
                       if match and os.path.isdir(os.path.join(self.root, match.group(0))))
+
+    def _sweepIds(self) -> list:
+
+        '''The ids of every sweep file, in order.'''
+
+        try:
+            entries = os.listdir(os.path.join(self.root, sweepFolderName))
+        except OSError:
+            return []
+        matches = [_sweepFile.match(entry) for entry in entries]
+        return sorted(int(match.group(1)) for match in matches if match)
+
+    def _sweepPath(self, sweepId: int) -> str:
+
+        return os.path.join(self.root, sweepFolderName, f'sweep{int(sweepId)}.json')
 
     def _inside(self, folder: str, relative) -> str:
 
@@ -303,6 +326,66 @@ class RunStore:
                 removed.append(runId)
 
         return removed
+
+    def claimSweep(self) -> int:
+
+        '''
+
+        The next sweep id, past every id given out before. Creating its file claims it; `saveSweep`
+        fills it.
+
+        '''
+
+        os.makedirs(os.path.join(self.root, sweepFolderName), exist_ok = True)
+        sweepId = max([self._index()['lastSweepId']] + self._sweepIds()[-1:]) + 1
+        while True:
+            try:
+                with open(self._sweepPath(sweepId), 'x', encoding = 'utf-8'):
+                    pass
+                break
+            except FileExistsError:
+                sweepId += 1
+        self._updateIndex(lastSweepId = max(sweepId, self._index()['lastSweepId']))
+
+        return sweepId
+
+    def saveSweep(self, sweep: dict) -> None:
+
+        '''Write a sweep to its file.'''
+
+        os.makedirs(os.path.join(self.root, sweepFolderName), exist_ok = True)
+        self._writeJson(self._sweepPath(sweep['sweepId']), {**sweep, 'version': recordVersion})
+
+    def sweeps(self) -> list:
+
+        '''
+
+        Every sweep in the store, oldest first. A file that does not read, or that a server has
+        claimed and not yet written, is passed over.
+
+        '''
+
+        found = []
+        for sweepId in self._sweepIds():
+            try:
+                with open(self._sweepPath(sweepId), encoding = 'utf-8') as handle:
+                    content = json.load(handle)
+            except (OSError, ValueError):
+                continue
+            if isinstance(content, dict) and isinstance(content.get('points'), list) and isinstance(content.get('fields'), list):
+                content['sweepId'] = sweepId
+                found.append(content)
+
+        return found
+
+    def removeSweep(self, sweepId: int) -> None:
+
+        '''Delete a sweep's file; its runs are the session's to remove.'''
+
+        try:
+            os.remove(self._sweepPath(sweepId))
+        except OSError:
+            pass
 
     @property
     def baseline(self) -> int | None:

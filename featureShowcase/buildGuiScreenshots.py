@@ -12,9 +12,11 @@ steps the result pane through its views, the results table, the validation of it
 the export dialog with a preview.
 It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
 of a run drawn over its baseline, the table beside it, the second run's details with a name and a
-note, and the grid of views along the nozzle axis in a popped-out window. The light-mode pictures use the theme switch, which saves the theme
-preference; the preferences found at the start, the form's width among them, are written back at
-the end. The runs go to a run store in a temporary folder, removed at the end, so they number from
+note, and the grid of views along the nozzle axis in a popped-out window. Last it queues a trade
+sweep of the chamber pressure from the sweep dialog, three runs, and photographs the dialog, the
+queue while the sweep runs, and the finished sweep's plot and table. The light-mode pictures use
+the theme switch, which saves the theme preference; the preferences found at the start, the form's
+width among them, are written back at the end. The runs go to a run store in a temporary folder, removed at the end, so they number from
 1 and the user's own store is left alone; the details picture names the default store folder in its
 place.
 
@@ -24,7 +26,7 @@ It needs the web extra, the built front end and Playwright with its Chromium:
     python -m playwright install chromium
     cd novaGui/frontend && npm install && npm run build && cd ../..
 
-Run it from the NOVA root. Each of the two runs takes about five minutes, because the shipped
+Run it from the NOVA root. Each of the five runs takes about five minutes, because the shipped
 nozzle builds a full cooling jacket, its outlet volute and the marched plume:
 
     python featureShowcase/buildGuiScreenshots.py
@@ -68,6 +70,7 @@ runTitleShown = '8 MPa chamber'                # the second run's name in the de
 runNoteShown = 'Chamber pressure up from 6.9 MPa, against run 1 as the baseline.'
 storeFolderShown = r'%LOCALAPPDATA%\NOVA\runs'   # the store folder the details picture names
 runTimeoutMs = 20 * 60 * 1000                  # [ms] longest wait for the run to finish
+sweepPressures = ('6', '8', '3')               # [MPa] the sweep's chamber pressures: from, to, and how many
 figureTimeoutMs = 120 * 1000                   # [ms] longest wait for one view to draw
 
 # The export dialog's output folder in the pictures, in place of the folder of whoever runs this
@@ -314,6 +317,38 @@ def photograph(page: Page, base: str, storeFolder: str) -> None:
     capture(window, 'grid')
     window.close()
     page.locator('.figure-toolbar .segmented button', has_text = 'One').click()
+
+    # -- A trade sweep of the chamber pressure, queued from the dialog -- #
+    page.locator('.run-bar button', has_text = 'Sweep').click()
+    page.wait_for_selector('.sweep-dialog')
+    for end, value in zip(('from', 'to', 'count'), sweepPressures):
+        page.fill(f'[aria-label="Chamber pressure {end}"]', value)
+    page.wait_for_timeout(400)
+    capture(page, 'sweepDialog')
+    page.get_by_role('button', name = 'Queue 3 runs').click()
+    page.wait_for_selector('.sweep-dialog', state = 'detached')
+
+    # The queue while the sweep's first point runs, over the sweep view the new sweep opens in
+    page.wait_for_selector('.run-queued', timeout = figureTimeoutMs)
+    for close in page.locator('.toast-close').all():
+        close.click()
+    page.locator('.run-queued').click()
+    page.wait_for_selector('.queue-panel')
+    page.wait_for_timeout(600)
+    capture(page, 'queue')
+    page.keyboard.press('Escape')
+
+    # The finished sweep: the delivered Isp against the chamber pressure, and the points' table
+    page.wait_for_function("document.querySelector('.sweep-progress')?.textContent === '3 of 3 done'",
+                           timeout = 3 * runTimeoutMs)
+    page.keyboard.press('Escape')
+    for close in page.locator('.toast-close').all():
+        close.click()
+    page.wait_for_selector('.sweep-plot .main-svg', timeout = figureTimeoutMs)
+    page.wait_for_selector('.sweep-table th .validation-badge', timeout = figureTimeoutMs)
+    page.wait_for_timeout(1500)
+    capture(page, 'sweep')
+    page.locator('.result-head .segmented button', has_text = 'Figure').click()
 
     # -- Light mode -- #
     page.get_by_role('button', name = re.compile('Switch to the light theme')).click()

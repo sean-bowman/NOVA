@@ -8,7 +8,7 @@
 
 import type {
     Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, MeshPreview, Mode, ResultTable, RunEntry,
-    RunEvent, RunList, Schema, Settings, ValidationDetail, ViewIndex, WallSample,
+    RunEvent, RunList, Schema, Settings, Submitted, Sweep, SweepList, SweepRequest, ValidationDetail, ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -63,8 +63,15 @@ export const api = {
     describeRun: (runId: number, fields: { title?: string; note?: string }) =>
         request<RunEntry>(`/api/runs/${runId}`, jsonBody('PATCH', fields)),
     deleteRun: (runId: number) => request<{ deleted: number }>(`/api/runs/${runId}`, { method: 'DELETE' }),
-    startRun: (config: Config, mode: Mode) => request<{ runId: number }>('/api/runs', jsonBody('POST', { config, mode })),
-    cancelRun: () => request<{ cancelled: boolean }>('/api/runs/cancel', { method: 'POST' }),
+    startRun: (config: Config, mode: Mode) => request<Submitted>('/api/runs', jsonBody('POST', { config, mode })),
+    cancelRun: (all = false) => request<{ cancelled: boolean }>('/api/runs/cancel', jsonBody('POST', { all })),
+    unqueue: (queueId: number) => request<{ unqueued: number }>(`/api/queue/${queueId}`, { method: 'DELETE' }),
+    sweeps: () => request<SweepList>('/api/sweeps'),
+    addSweep: (sweep: SweepRequest) => request<Sweep>('/api/sweeps', jsonBody('POST', sweep)),
+    resumeSweep: (sweepId: number) => request<{ queued: number }>(`/api/sweeps/${sweepId}/resume`, { method: 'POST' }),
+    deleteSweep: (sweepId: number) => request<{ deleted: number; runs: number[] }>(`/api/sweeps/${sweepId}`, { method: 'DELETE' }),
+    sweepFigure: (sweepId: number, number: string, mode: Mode) =>
+        request<{ data: object[]; layout: Record<string, unknown> }>(`/api/sweeps/${sweepId}/figure${query({ number, mode })}`),
     views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),
     interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(`/api/views/${key}/interactive${query({ mode, run, compare })}`),

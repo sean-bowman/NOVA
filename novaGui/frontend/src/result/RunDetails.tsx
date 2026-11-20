@@ -2,8 +2,9 @@
    RUN DETAILS
    One kept run in a dialog: its name and note, what it ran and when, and what can be done with it.
    The name and the note are saved as they lose focus, and when the dialog closes; Enter in the
-   name saves it too. A named run stays in the run store however many runs follow it, where an
-   unnamed one goes once the store is past its limits.
+   name saves it too. A named run stays in the run store however many runs follow it, as a trade
+   sweep's run does until its sweep is deleted, where an unnamed one goes once the store is past
+   its limits.
 
    Edit from this run puts the config the run ran into the Design form, so the form reads as that
    run did and the status strip names no changes until a field is edited. The baseline button makes
@@ -45,8 +46,9 @@ function storeText(entry: RunEntry, store: RunStoreInfo | null): string {
         return 'This server keeps its runs in memory; they go when it closes.';
     }
     const where = entry.saved ? `Saved in ${store.folder}.` : 'Kept in memory, not in the run store.';
-    return `${where} Named runs and the baseline stay. Unnamed runs go oldest first past ${store.unnamedRuns} of them, `
-        + `or past ${formatSize(store.byteLimit)} in all; the store holds ${formatSize(store.bytes)}.`;
+    const sweep = entry.sweep ? ` It is point ${entry.sweep.index + 1} of a trade sweep, and stays until the sweep is deleted.` : '';
+    return `${where}${sweep} Named runs, sweep runs and the baseline stay. Unnamed runs go oldest first past `
+        + `${store.unnamedRuns} of them, or past ${formatSize(store.byteLimit)} in all; the store holds ${formatSize(store.bytes)}.`;
 }
 
 export function RunDetails({ entry, baseline, store, onEditFrom, onBaseline, onClose, onNotify }: RunDetailsProps) {

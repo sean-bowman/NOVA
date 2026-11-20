@@ -1,8 +1,13 @@
 /* ========================================
    RUN BAR
-   Generate and Cancel, the stage stepper, the run's elapsed time, the count of the warnings the
-   run has raised, and the buttons for the stage list and the run log; the log drawer sits above
-   it. The warning count opens the log, where each warning sits among the output around it.
+   Generate, Sweep and Cancel, the stage stepper, the run's elapsed time, the runs queued behind
+   it, the count of the warnings the run has raised, and the buttons for the stage list and the
+   run log; the log drawer sits above it. The warning count opens the log, where each warning sits
+   among the output around it.
+
+   During a run Generate becomes Queue: the form joins the queue and runs when the runs before it
+   end. The queued count opens the queue, where a run can be taken out before it starts. With runs
+   queued, Cancel asks whether to stop the run alone, so the queue goes on, or the queue with it.
 
    NOVA reports its progress as events (NOVA.progress), which the server folds into a stage tree
    (novaGui.progress.RunProgress). The stepper draws one segment per top-level stage of the run's
@@ -14,10 +19,10 @@
    Sean Bowman [11/16/2026]
    ======================================== */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { PlayIcon, StopIcon, WarningIcon } from '../components/Icons';
-import type { RunStage } from '../types';
+import { CloseIcon, PlayIcon, StopIcon, SweepIcon, WarningIcon } from '../components/Icons';
+import type { QueueEntry, RunStage } from '../types';
 import { StagePanel } from './StagePanel';
 import { formatClock, runClockNow, runElapsed, shownState, stageElapsed, stageTime, type ShownState } from './stageText';
 import { useTicker, type RunView } from './useRunEvents';
@@ -31,9 +36,69 @@ interface RunBarProps {
     logOpen: boolean;
     stagesOpen: boolean;
     onGenerate: () => void;
-    onCancel: () => void;
+    onSweep: () => void;
+    onCancel: (everything: boolean) => void;
+    onUnqueue: (queueIds: number[]) => void;
     onToggleLog: () => void;
     onToggleStages: () => void;
+}
+
+/** A small panel above the run bar that closes on Escape or a click outside it. */
+function Popover({ className, label, onClose, children }: { className: string; label: string; onClose: () => void; children: ReactNode }) {
+    const box = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const onDown = (event: MouseEvent) => {
+            if (box.current && !box.current.contains(event.target as Node)) {
+                onClose();
+            }
+        };
+        const onKey = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                event.stopPropagation();
+                onClose();
+            }
+        };
+        // The click that opened the panel has finished by the time this listens
+        const timer = window.setTimeout(() => document.addEventListener('mousedown', onDown), 0);
+        document.addEventListener('keydown', onKey, true);
+        return () => {
+            window.clearTimeout(timer);
+            document.removeEventListener('mousedown', onDown);
+            document.removeEventListener('keydown', onKey, true);
+        };
+    }, [onClose]);
+    return <div ref={box} className={`card run-popover ${className}`} role="dialog" aria-label={label}>{children}</div>;
+}
+
+function QueuePanel({ queue, onUnqueue, onClose }: { queue: QueueEntry[]; onUnqueue: (queueIds: number[]) => void; onClose: () => void }) {
+    return (
+        <Popover className="queue-panel" label="Run queue" onClose={onClose}>
+            <div className="stage-panel-head">
+                <span className="stage-panel-title">Queue</span>
+                <span className="muted">{queue.length === 1 ? 'one run, after the run going' : `${queue.length} runs, in this order`}</span>
+                <span className="toolbar-spacer" />
+                <button type="button" className="button button-quiet button-small" onClick={() => onUnqueue(queue.map((entry) => entry.queueId))}
+                        title="Take every run out of the queue; the run going carries on">
+                    Clear
+                </button>
+                <button type="button" className="icon-button" aria-label="Close the queue" onClick={onClose}><CloseIcon /></button>
+            </div>
+            <ol className="queue-list">
+                {queue.map((entry, place) => (
+                    <li key={entry.queueId} className="queue-row">
+                        <span className="queue-place">{place + 1}</span>
+                        <span className="queue-label" title={entry.label}>
+                            {entry.sweepId !== null && <SweepIcon />} {entry.label}
+                        </span>
+                        <button type="button" className="icon-button" aria-label={`Take ${entry.label} out of the queue`}
+                                onClick={() => onUnqueue([entry.queueId])}>
+                            <CloseIcon />
+                        </button>
+                    </li>
+                ))}
+            </ol>
+        </Popover>
+    );
 }
 
 /** [-] How full a segment is. */
@@ -108,9 +173,26 @@ function Stepper({ run, clock }: { run: RunView; clock: number }) {
     );
 }
 
-export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onGenerate, onCancel, onToggleLog,
-                         onToggleStages }: RunBarProps) {
+export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onGenerate, onSweep, onCancel, onUnqueue,
+                         onToggleLog, onToggleStages }: RunBarProps) {
     const running = run.state === 'running';
+    const [queueOpen, setQueueOpen] = useState(false);
+    const [cancelOpen, setCancelOpen] = useState(false);
+    const queued = run.queue.length;
+    const closeQueue = useCallback(() => setQueueOpen(false), []);
+    const closeCancel = useCallback(() => setCancelOpen(false), []);
+
+    useEffect(() => {
+        if (queued === 0) {
+            setQueueOpen(false);
+            setCancelOpen(false);
+        }
+    }, [queued]);
+    useEffect(() => {
+        if (!running) {
+            setCancelOpen(false);
+        }
+    }, [running]);
     const now = useTicker(running);
     const clock = runClockNow(run, now);
 
@@ -133,16 +215,22 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
 
     return (
         <div className={`run-bar state-${run.state}`}>
-            {running ? (
-                <button type="button" className="button button-danger" onClick={onCancel} title="Stop the run">
+            {running && (
+                <button type="button" className="button button-danger" aria-expanded={queued > 0 ? cancelOpen : undefined}
+                        onClick={() => (queued > 0 ? setCancelOpen((open) => !open) : onCancel(false))}
+                        title={queued > 0 ? 'Stop the run, or the run and the queue' : 'Stop the run'}>
                     <StopIcon /> Cancel
                 </button>
-            ) : (
-                <button type="button" className="button button-primary" onClick={onGenerate} disabled={!canGenerate}
-                        title={canGenerate ? 'Generate the nozzle  Ctrl+R' : blockReason}>
-                    <PlayIcon /> Generate
-                </button>
             )}
+            <button type="button" className={`button ${running ? '' : 'button-primary'}`} onClick={onGenerate} disabled={!canGenerate}
+                    title={canGenerate ? (running ? 'Queue the form: it runs when the runs before it end  Ctrl+R' : 'Generate the nozzle  Ctrl+R')
+                                       : blockReason}>
+                <PlayIcon /> {running ? 'Queue' : 'Generate'}
+            </button>
+            <button type="button" className="button" onClick={onSweep} disabled={!run.connected}
+                    title="A trade sweep: one run per value of a field, or of two fields against each other">
+                <SweepIcon /> Sweep
+            </button>
             <Stepper run={run} clock={clock} />
             <div className="run-clock">
                 <span className="run-clock-main">{clockMain}</span>
@@ -154,6 +242,13 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
                     <WarningIcon /> {run.warnings.length === 1 ? '1 warning' : `${run.warnings.length} warnings`}
                 </button>
             )}
+            {queued > 0 && (
+                <button type="button" className={`button button-quiet run-queued ${queueOpen ? 'is-pressed' : ''}`}
+                        aria-expanded={queueOpen} onClick={() => setQueueOpen((open) => !open)}
+                        title={run.queue.map((entry, place) => `${place + 1}. ${entry.label}`).join('\n')}>
+                    {queued} queued
+                </button>
+            )}
             {!run.connected && <span className="badge badge-error" title="The NOVA server is not answering">offline</span>}
             <button type="button" className={`button ${stagesOpen ? 'is-pressed' : ''}`} onClick={onToggleStages}
                     aria-expanded={stagesOpen} disabled={run.stages.length === 0} title="Every stage of the run, with its time">
@@ -163,6 +258,25 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
                 {logOpen ? 'Hide log' : 'Show log'}
             </button>
             {stagesOpen && run.stages.length > 0 && <StagePanel run={run} clock={clock} onClose={onToggleStages} />}
+            {queueOpen && queued > 0 && <QueuePanel queue={run.queue} onUnqueue={onUnqueue} onClose={closeQueue} />}
+            {cancelOpen && running && queued > 0 && (
+                <Popover className="cancel-menu" label="Cancel" onClose={closeCancel}>
+                    <button type="button" className="cancel-choice" onClick={() => {
+                        setCancelOpen(false);
+                        onCancel(false);
+                    }}>
+                        <strong>Cancel run {run.runId}</strong>
+                        <span className="muted">The queue goes on with its next run.</span>
+                    </button>
+                    <button type="button" className="cancel-choice" onClick={() => {
+                        setCancelOpen(false);
+                        onCancel(true);
+                    }}>
+                        <strong>Cancel run {run.runId} and the {queued} queued</strong>
+                        <span className="muted">Nothing runs after it; a sweep's points read not run.</span>
+                    </button>
+                </Popover>
+            )}
         </div>
     );
 }

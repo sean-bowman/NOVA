@@ -132,7 +132,7 @@ Every field carries an (i) marker. Hovering it gives the field's meaning.
 
 ### Generate
 
-**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. During a run Generate becomes **Queue**: the form joins the queue and runs when the runs before it end, so several designs can be lined up and left to run. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes about five minutes.
 
 When the contour stage ends, about a minute in, the result pane draws the new run's contour, near-wall state and flow fields while cooling and the plume still run; the rest of its views, its table and its outputs follow when it finishes. The warnings a run raises are counted in the run bar, which opens the log on a click, and listed under the pane's header for whichever run it shows. A strip under the pane's header says which run the pane shows, and once the form is edited, it names each field that differs from the config that run ran, with its value then and now.
 
@@ -174,9 +174,9 @@ The channel mesh, the revolved contour and the volutes are 3D views at full reso
 
 ### Runs and the baseline
 
-Finished runs are saved, so they are still there the next time the GUI opens, and each keeps its number. The run menu at the left of the pane's header shows any of them, by number, name, thrust, Isp and run time; it follows the latest run until another is picked, and a new run sets it back to following. **Baseline** picks the run the shown one is compared against. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
+Finished runs are saved, so they are still there the next time the GUI opens, and each keeps its number. The run menu at the left of the pane's header shows any of them, by number, name, thrust, Isp and run time; it follows the latest run until another is picked, and Generate sets it back to following. **Baseline** picks the run the shown one is compared against. The line plots draw the baseline dashed under the shown run, in the same colors, and a second strip names the fields that differ between the two configs.
 
-The pencil beside the run menu opens the shown run's details: a name, which the run menu shows in place of the config's filename, a free-text note, the baseline, **Edit from this run**, and **Delete run**. Edit from this run puts the config that run ran back into the Design form, so iterating from an earlier design takes one click; when the form differs from the run shown, the strip under the header that names the changed fields offers the same button. Named runs and the baseline are kept however many runs follow; unnamed runs go oldest first past 24 of them or 2 GB in all. The runs are saved under `%LOCALAPPDATA%\NOVA\runs` (`~/.local/share/NOVA/runs` elsewhere), or the folder `NOVA_RUN_STORE` names.
+The pencil beside the run menu opens the shown run's details: a name, which the run menu shows in place of the config's filename, a free-text note, the baseline, **Edit from this run**, and **Delete run**. Edit from this run puts the config that run ran back into the Design form, so iterating from an earlier design takes one click; when the form differs from the run shown, the strip under the header that names the changed fields offers the same button. Named runs, a sweep's runs and the baseline are kept however many runs follow; unnamed runs go oldest first past 24 of them or 2 GB in all. The runs are saved under `%LOCALAPPDATA%\NOVA\runs` (`~/.local/share/NOVA/runs` elsewhere), or the folder `NOVA_RUN_STORE` names.
 
 ![A run's details](docs/images/novaGui/runDetails.png)
 
@@ -195,6 +195,18 @@ Each headline number and section carries a badge saying how far it can be truste
 Beside a baseline, each value carries the baseline's value and the change from it, the shown run minus the baseline, with the percent change; a value that did not move reads blank.
 
 ![Results table against the baseline](docs/images/novaGui/tableCompare.png)
+
+### Trade sweeps
+
+**Sweep** in the run bar queues one run per value of a field: chamber pressure from 6 to 8 MPa in three values, or a list, in the unit picked beside it, or the options of a choice or a switch. A second field makes a grid, every value of the first against each of the second. The dialog counts the runs and estimates their time and size from the latest run's. The runs go one at a time; the run bar counts the ones queued, the queue takes any of them out before it starts, and Cancel stops the run alone or the queue with it. A point whose run fails keeps its reason and the sweep goes on.
+
+![The sweep dialog](docs/images/novaGui/sweepDialog.png)
+
+![The queue during a sweep](docs/images/novaGui/queue.png)
+
+The result pane's **Sweep** view plots any headline number against the swept field, one line per value of a second field, and tabulates the points: the swept values, the run, its state and the run's headline numbers, each column with its validation status. A click on a row or a point shows that run. A sweep's runs are grouped under its name in the run menu and kept until the sweep is deleted, and a sweep whose window closed before it finished can run the rest.
+
+![A sweep's plot and table](docs/images/novaGui/sweep.png)
 
 ### Export
 

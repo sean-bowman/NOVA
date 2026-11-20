@@ -3,8 +3,9 @@
    The runs the server keeps (novaGui.session), which of them a window shows, the view index of
    that run, and the baseline the others are compared against.
 
-   A window follows the latest run until a run is picked from the list, and a new run puts it back
-   to following. Following, it shows a run still going once that run's contour stage has settled
+   A window follows the latest run until a run is picked from the list, and Generate puts it back
+   to following; a queued run that starts later leaves a picked run shown, so reading an earlier
+   point of a sweep is not cut short as the next point starts. Following, it shows a run still going once that run's contour stage has settled
    the contour and the flow fields, and the latest finished run before then. A picked run that drops
    out of the server's list gives way to the latest.
    Sean Bowman [11/19/2026]
@@ -48,15 +49,6 @@ export function useRuns(run: RunView, initialChoice: RunChoice = 'latest',
             .then((loaded) => request === listRequest.current && setList(loaded))
             .catch((failure: Error) => errorHandler.current?.('Runs unavailable', failure.message));
     }, [run.runsVersion, run.state, run.result, partialKey]);
-
-    // -- A new run puts the window back to following -- //
-    const wasRunning = useRef(run.state === 'running');
-    useEffect(() => {
-        if (run.state === 'running' && !wasRunning.current) {
-            setChoice('latest');
-        }
-        wasRunning.current = run.state === 'running';
-    }, [run.state]);
 
     // -- The run shown -- //
     const running = list?.running ?? null;

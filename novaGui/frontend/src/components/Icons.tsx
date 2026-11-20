@@ -221,6 +221,18 @@ export function ChartIcon({ className }: IconProps) {
     );
 }
 
+/** Points along a line: a trade sweep, one run per point. */
+export function SweepIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5.5 17.5 12 12l6.5-5.5" strokeDasharray="0.1 3.4" />
+            <circle cx="5.5" cy="17.5" r="2" fill="currentColor" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" />
+            <circle cx="18.5" cy="6.5" r="2" fill="currentColor" />
+        </svg>
+    );
+}
+
 export function WarningIcon({ className }: IconProps) {
     return (
         <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
