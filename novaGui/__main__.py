@@ -10,8 +10,9 @@ Start the NOVA GUI's server and open the front end.
     python -m novaGui --api         the API alone on port 8765, for the Vite dev server
 
 The server listens on 127.0.0.1 at a free port, except in --api mode, where the Vite dev
-server's proxy expects 8765. Closing the window stops the server, terminates any run in
-progress and removes the session's staging folder. In --browser and --api mode, Ctrl+C does.
+server's proxy expects 8765. Closing the window stops the server and terminates any run in
+progress, removing its folder; the finished runs stay in the run store (novaGui.runStore) for the
+next launch. In --browser and --api mode, Ctrl+C does.
 
 Run results go to multiprocessing workers started with 'spawn', which re-import this module in
 each child; the `__main__` guard keeps a child from starting a server of its own.

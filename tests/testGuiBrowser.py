@@ -2,10 +2,11 @@
 
 '''
 
-The GUI's front end in a browser: the run menu, the baseline drawn under a line plot, the grid's
-shared cursor and zoom along the nozzle axis, the headline numbers and a row that opens its
-figure, the section outline, a problem written under its field, the warnings of a run, the export
-previews, a figure popped out into its own window, and compressed figure responses.
+The GUI's front end in a browser: the run menu, a run's name and note, putting a run's config back
+into the form, deleting a run, the baseline drawn under a line plot, the grid's shared cursor and
+zoom along the nozzle axis, the headline numbers and a row that opens its figure, the section
+outline, a problem written under its field, the warnings of a run, the export previews, a figure
+popped out into its own window, and compressed figure responses.
 
 The GUI's server starts in this process, keeping three showcase cooling runs as if they had just
 run, so no run is made; Playwright's Chromium drives the built front end. The tests read the
@@ -141,6 +142,65 @@ def testTheRunMenuListsTheKeptRunsNewestFirst(window):
     assert options[0].startswith('Latest: run 3') and '100 kN' in options[0]
     assert [option.split(' ')[1] for option in options[1:]] == ['3', '2', '1']
     assert 'NOVANozzle' in options[1] and '5:30' in options[1]
+
+def _details(page) -> None:
+    '''Open the shown run's details.'''
+    page.locator('.result-head .icon-button[aria-label^="Details of run"]').click()
+    page.wait_for_selector('.run-details')
+
+def testARunTakesANameAndANote(window, served):
+    '''The name shows in the run menu and the note in its tooltip; both hold when the details open again.'''
+    app, _ = served
+    try:
+        _details(window)
+        assert window.input_value('.run-details input') == '' and window.inner_text('.run-details h2') == 'Run 3'
+        window.fill('.run-details input', '  Shipped   nozzle ')
+        window.fill('.run-details textarea', 'The single pass jacket for comparison.')
+        window.keyboard.press('Escape')
+        window.wait_for_selector('.run-details', state = 'detached')
+        window.wait_for_function('document.querySelector(".run-select option[value=\'3\']").textContent.includes("Shipped nozzle")')
+        assert window.locator('.run-select option[value="3"]').inner_text().startswith('Run 3 · Shipped nozzle · 100 kN')
+        assert window.get_attribute('.run-select', 'title').endswith('The single pass jacket for comparison.')
+        assert (app.state.session.record(3).title, app.state.session.record(3).note) == \
+            ('Shipped nozzle', 'The single pass jacket for comparison.')
+        _details(window)
+        assert window.input_value('.run-details input') == 'Shipped nozzle'
+    finally:
+        app.state.session.describe(3, title = '', note = '')
+
+def testEditFromARunPutsItsConfigInTheForm(window):
+    '''
+    Showing a run whose config differs from the form offers to put it back; afterwards the form
+    reads as that run did, so the strip names no changes.
+    '''
+    window.select_option('.run-select', '1')
+    strip = window.locator('.result-status.is-warn')
+    strip.wait_for()
+    assert 'changed since it ran' in strip.inner_text()
+    strip.get_by_role('button', name = 'Edit from run 1').click()
+    window.wait_for_selector('.result-status.is-warn', state = 'detached')
+    assert "Run 1's config is in the form" in window.inner_text('.toasts')
+
+def testADeletedRunLeavesTheMenu(window, served):
+    '''Delete asks once more, then the run leaves the menu and the pane goes back to the latest.'''
+    app, _ = served
+    session = app.state.session
+    picklePath = os.path.join(showcaseFolder, showcaseRuns[0] + '.pkl')
+    session.adopt(RunRecord(4, {'ok': True, 'runName': 'throwaway', 'picklePath': picklePath, 'elapsedSec': 60.0},
+                            config = session.record(1).config))
+    try:
+        window.wait_for_selector('.run-select option[value="4"]', state = 'attached')
+        window.select_option('.run-select', '4')
+        _details(window)
+        window.get_by_role('button', name = 'Delete run').click()
+        assert window.inner_text('.run-details-confirm').startswith('Delete run 4 and its files?')
+        window.locator('.run-details-confirm .button-danger').click()
+        window.wait_for_selector('.run-details', state = 'detached')
+        window.wait_for_selector('.run-select option[value="4"]', state = 'detached')
+        assert session.record(4) is None and window.input_value('.run-select') == 'latest'
+        assert window.locator('.run-select option').first.inner_text().startswith('Latest: run 3')
+    finally:
+        session.forget(4)
 
 def testTheBaselineDrawsDashedUnderALinePlot(window):
     window.select_option('.baseline-select', '1')

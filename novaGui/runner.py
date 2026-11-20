@@ -14,8 +14,8 @@ Before the first run the loader:
   - forces the Matplotlib Agg backend and applies the GUI palette (themeColors) so
     NOVA's saved figures match the rest of the window,
   - stops plotly.offline.plot from opening a browser tab,
-  - sends the outputs to the session's staging folder rather than to wherever NOVA
-    would put them.
+  - sends the outputs to the folder the front end gives the run rather than to wherever
+    NOVA would put them.
 
 While a run reports its progress as events, NOVA draws no tqdm bars, so none reach the log.
 
@@ -23,10 +23,12 @@ A warning the run raises through Python's warnings module (NOVA's own, and numpy
 written to the log as Python would print it, and sent as a message of its own, so a front end can
 count and list a run's warnings rather than leave them in the log.
 
-Every run writes all of NOVA's outputs, figures and data files alike, into the
-staging folder, where the front end's views read them. An export copies the ones chosen
-to the output folder. A staging folder belongs to one session of a front end and is
-removed when it closes; `clearStaging` removes any a crashed session left behind.
+Every run writes all of NOVA's outputs, figures and data files alike, into the folder
+the front end gives it, where the front end's views read them. An export copies the ones
+chosen to the output folder. The web front end gives each run a folder in its run store
+(novaGui.runStore), kept between launches. The legacy Tkinter front end uses a staging
+folder, which belongs to one session of it and is removed when it closes; `clearStaging`
+removes any a crashed session left behind.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -349,7 +351,7 @@ class PipelineRunner:
         from NOVA import palette as figurePalette
         figurePalette.setFigureMode(themeColors.mode)
 
-        # Send outputs to the staging folder rather than to wherever the nearest .git
+        # Send outputs to the run's folder rather than to wherever the nearest .git
         # happens to be.
         nozzleClass._getOutputRoot = lambda self, _base = outputBaseDir: _base
 

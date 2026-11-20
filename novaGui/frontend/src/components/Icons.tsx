@@ -229,3 +229,13 @@ export function WarningIcon({ className }: IconProps) {
         </svg>
     );
 }
+
+/** A pencil: name a run or write its note. */
+export function PencilIcon({ className }: IconProps) {
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.8 4.7a1.9 1.9 0 0 1 2.7 0l1.8 1.8a1.9 1.9 0 0 1 0 2.7L9.6 18.9l-4.6 1.1 1.1-4.6z" />
+            <path d="M13.2 6.3l4.5 4.5" />
+        </svg>
+    );
+}

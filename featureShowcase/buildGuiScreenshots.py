@@ -10,10 +10,12 @@ with, which is the shipped nozzle, photographs the stage stepper and the stage l
 coolant circuit iterates, with the run's contour already in the result pane, and once the run ends
 steps the result pane through its views, the results table and the export dialog with a preview.
 It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
-of a run drawn over its baseline, the table beside it, and the grid of views along the nozzle axis
-in a popped-out window. The light-mode pictures use the theme switch, which saves the theme
+of a run drawn over its baseline, the table beside it, the second run's details with a name and a
+note, and the grid of views along the nozzle axis in a popped-out window. The light-mode pictures use the theme switch, which saves the theme
 preference; the preferences found at the start, the form's width among them, are written back at
-the end.
+the end. The runs go to a run store in a temporary folder, removed at the end, so they number from
+1 and the user's own store is left alone; the details picture names the default store folder in its
+place.
 
 It needs the web extra, the built front end and Playwright with its Chromium:
 
@@ -36,6 +38,7 @@ Author: Sean Bowman
 import os
 import re
 import sys
+import tempfile
 import threading
 
 here = os.path.dirname(os.path.abspath(__file__))
@@ -52,12 +55,17 @@ from playwright.sync_api import Page, sync_playwright
 from novaGui import runner
 from novaGui import settings as guiSettings
 from novaGui.__main__ import _freePort, _serve, _waitUntilStarted
+from novaGui.runStore import RunStore
 from novaGui.server import createApp, frontendDist
+from novaGui.session import RunSession
 
 outputFolder = os.path.join(root, 'docs', 'images', 'novaGui')
 viewport = {'width': 1480, 'height': 940}      # [px] the desktop window's opening size
 popoutViewport = {'width': 1920, 'height': 1080}   # [px] a popped-out window on a second monitor
 comparedPressure = '8000000'                   # [Pa] the second run's chamber pressure
+runTitleShown = '8 MPa chamber'                # the second run's name in the details picture
+runNoteShown = 'Chamber pressure up from 6.9 MPa, against run 1 as the baseline.'
+storeFolderShown = r'%LOCALAPPDATA%\NOVA\runs'   # the store folder the details picture names
 runTimeoutMs = 20 * 60 * 1000                  # [ms] longest wait for the run to finish
 figureTimeoutMs = 120 * 1000                   # [ms] longest wait for one view to draw
 
@@ -192,9 +200,9 @@ def finished(page: Page) -> None:
     for close in page.locator('.toast-close').all():
         close.click()
 
-def photograph(page: Page, base: str) -> None:
+def photograph(page: Page, base: str, storeFolder: str) -> None:
 
-    '''Drive the window through the run and every picture.'''
+    '''Drive the window through the run and every picture. `storeFolder` is the temporary run store.'''
 
     errors = []
     page.on('console', lambda message: message.type == 'error' and errors.append(message.text))
@@ -269,6 +277,19 @@ def photograph(page: Page, base: str) -> None:
     page.wait_for_timeout(800)
     capture(page, 'tableCompare')
 
+    # The second run's details, named and with a note, over the table
+    page.locator('.result-head .icon-button[aria-label^="Details of run"]').click()
+    page.wait_for_selector('.run-details')
+    page.fill('.run-details input', runTitleShown)
+    page.fill('.run-details textarea', runNoteShown)
+    page.locator('.run-details h2').click()
+    page.wait_for_timeout(600)
+    page.evaluate('([actual, shown]) => { const note = document.querySelector(".run-details-store"); '
+                  'note.textContent = note.textContent.replace(actual, shown); }', [storeFolder, storeFolderShown])
+    capture(page, 'runDetails')
+    page.keyboard.press('Escape')
+    page.wait_for_selector('.run-details', state = 'detached')
+
     # The grid of views along the axis, popped out onto a second monitor, with the cursor on the throat region
     page.locator('.result-head .segmented button', has_text = 'Figure').click()
     page.locator('.figure-toolbar .segmented button', has_text = 'Grid').click()
@@ -307,8 +328,9 @@ def build() -> None:
     guiSettings.save({**savedSettings, 'themeMode': 'dark', 'formWidth': None})
 
     runner.clearStaging()
-    app = createApp()
-    session = app.state.session
+    storeFolder = tempfile.TemporaryDirectory(prefix = 'novaScreenshotRuns')
+    session = RunSession(store = RunStore(storeFolder.name))
+    app = createApp(session = session)
     port = _freePort()
     server = _serve(app, port)
     thread = threading.Thread(target = server.run, name = 'novaServer', daemon = True)
@@ -320,13 +342,14 @@ def build() -> None:
             browser = playwright.chromium.launch()
             page = browser.new_context(viewport = viewport, device_scale_factor = 1).new_page()
             try:
-                photograph(page, f'http://127.0.0.1:{port}/')
+                photograph(page, f'http://127.0.0.1:{port}/', storeFolder.name)
             finally:
                 browser.close()
     finally:
         server.should_exit = True
         thread.join(timeout = 5.0)
         session.shutdown()
+        storeFolder.cleanup()
         guiSettings.save(savedSettings)
 
 if __name__ == '__main__':

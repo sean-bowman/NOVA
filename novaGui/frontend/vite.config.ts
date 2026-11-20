@@ -1,6 +1,6 @@
 /* ========================================
    VITE CONFIGURATION
-   The dev server proxies /api to the NOVA API started with `python -m novaWeb --api`.
+   The dev server proxies /api to the NOVA API started with `python -m novaGui --api`.
    The build lands in dist/, which the NOVA server serves.
    Sean Bowman [11/16/2026]
    ======================================== */

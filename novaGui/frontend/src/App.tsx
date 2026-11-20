@@ -26,7 +26,7 @@ import { ResultPane } from './result/ResultPane';
 import { LogDrawer, RunBar } from './run/RunBar';
 import { useRunEvents } from './run/useRunEvents';
 import { useRuns } from './result/useRuns';
-import type { Config, FormState, Mode, RunSummary, Schema } from './types';
+import type { Config, FormState, Mode, RunEntry, RunSummary, Schema } from './types';
 
 const defaultFormWidth = 540;   // [px]
 const minFormWidth = 380;       // [px]
@@ -182,6 +182,15 @@ export function App() {
             })
             .catch((error: Error) => notify('error', 'Example not loaded', error.message));
     }, [notify, replaceConfig]);
+
+    // A kept run's config, over the defaults for any field added since it ran
+    const editFrom = useCallback((entry: RunEntry) => {
+        if (!entry.config) {
+            return;
+        }
+        replaceConfig({ ...(schema?.defaults ?? {}), ...entry.config });
+        notify('info', `Run ${entry.runId}'s config is in the form`, entry.title || entry.runName);
+    }, [schema, notify, replaceConfig]);
 
     const resetConfig = useCallback(() => {
         if (schema) {
@@ -352,7 +361,7 @@ export function App() {
                      onPointerDown={onSplitterDown} onPointerMove={onSplitterMove} onPointerUp={onSplitterUp}
                      onPointerCancel={onSplitterUp} onKeyDown={onSplitterKey} onDoubleClick={resetWidth} />
                 <ResultPane runs={runs} mode={mode} run={run} schema={schema} config={config}
-                            onExport={() => setExportOpen(true)} onNotify={notify} />
+                            onExport={() => setExportOpen(true)} onEditFrom={editFrom} onNotify={notify} />
             </main>
 
             {logOpen && <LogDrawer lines={run.log} />}
@@ -419,7 +428,7 @@ export function App() {
                         <p>
                             Web front end for the NOVA suite. Design a nozzle in the form on the left and Generate it:
                             the contour, cooling, heat transfer and plume pipeline runs in a worker process, and the
-                            run bar steps through its stages. The pane on the right shows any of the recent runs, as
+                            run bar steps through its stages. The pane on the right shows any of the saved runs, as
                             figures or as a results table, against a baseline run when one is chosen, and Export
                             copies a run's outputs to keep.
                         </p>
