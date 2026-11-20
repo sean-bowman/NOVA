@@ -16,6 +16,10 @@ active palette mode (themeColors). A drawer draws into a pane, as novaGui.plotti
                            Nusselt numbers
     drawFilm               the film along the wall, its effectiveness and the temperatures it sets
     drawExtension          the extension's wall temperature against its limit, and its heat balance
+    drawCircuit            the coolant's paths on the half section
+    drawPasses             each pass's coolant and hot wall
+    drawCircuitIterations  the hot wall and coolant at every pass of a multi-pass circuit's outer
+                           iteration, earlier passes fading
 
 The jacket views read `Nozzle.channelThermalResults`, the station arrays of the jacket solve, in
 station order from the injector face aft. The film views read the regen section's film arrays and
@@ -757,4 +761,142 @@ def drawPasses(pane, nozzle) -> None:
     _legend(coolantAxes)
     _legend(wallAxes)
     _throat(nozzle, (coolantAxes, wallAxes))
+    pane.redraw()
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- The circuit's outer iteration -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+# The circuits whose outer iteration is drawn, by key, with what a figure calls each, in drawing order
+iterationLoops = (('jacket', 'jacket'), ('extension', 'extension circuit'))
+
+def legStyle(loopKey: str, leg: str) -> tuple:
+
+    '''
+
+    A leg's color name in the palette and whether it is dashed, as the passes view draws it: the
+    jacket's down leg blue and its up leg copper, the extension circuit's legs purple, down dashed.
+
+    '''
+
+    if loopKey == 'extension':
+        return 'purple', leg == 'down'
+
+    return ('blue' if leg == 'down' else 'accent'), False
+
+def iterationAlpha(position: int, count: int) -> float:
+
+    '''The opacity of a pass's lines: the latest solid, the earlier ones fading with age.'''
+
+    if position >= count - 1:
+        return 1.0
+
+    return 0.25 + 0.4 * position / max(1, count - 1)
+
+def iterationDescription(nozzle) -> dict:
+
+    '''
+
+    Every pass of each multi-pass circuit the run solved, as the iteration figures draw them, or
+    None when no circuit iterated.
+
+    A running run's description is built in the same form from the circuit's profile events
+    (novaGui.session), so a run still going and a finished run draw through the same renderers:
+
+        {'loops': [{'key', 'label', 'iterations': [{'index', 'change' [K] or None,
+                    'legs': [{'leg', 'x' [m], 'wall' [K], 'coolant' [K]}, ...]}, ...]}, ...],
+         'limit': wall temperature limit [K] or None, 'throatX': [m] or None}
+
+    '''
+
+    extension = getattr(nozzle, 'extensionCircuitSolution', None)
+    solutions = {'jacket': getattr(nozzle, 'coolantCircuitSolution', None),
+                 'extension': getattr(extension, 'circuit', None) if extension is not None else None}
+    loops = []
+    for key, label in iterationLoops:
+        # A circuit solved before its passes were kept has none, and draws nothing here
+        iterations = getattr(solutions[key], 'iterationProfiles', None) if solutions[key] is not None else None
+        if iterations:
+            loops.append({'key': key, 'label': label, 'iterations': list(iterations)})
+    if not loops:
+        return None
+
+    limit = getattr(nozzle, 'maxWallTemperature', None)
+    wallX, wallR = _array(nozzle, 'xNozzleWall'), _array(nozzle, 'rNozzleWall')
+    throatX = float(wallX[int(np.argmin(wallR))]) if wallX.size >= 2 and wallR.size == wallX.size else None
+
+    return {'loops': loops, 'limit': float(limit) if limit else None, 'throatX': throatX}
+
+def iterationThroat(description: dict):
+
+    '''The throat's axial position where it lies on a circuit drawn, else None: an extension circuit lies past it.'''
+
+    throatX = description.get('throatX')
+    if throatX is None:
+        return None
+    x = np.concatenate([np.asarray(leg['x'], dtype = float) for loop in description['loops']
+                        for entry in loop['iterations'] for leg in entry['legs']])
+    x = x[np.isfinite(x)]
+
+    return float(throatX) if x.size and float(np.min(x)) <= float(throatX) <= float(np.max(x)) else None
+
+def iterationSummary(description: dict) -> str:
+
+    '''
+
+    Each circuit's passes and its last change, for a title: 'jacket, 7 passes, last change 0.027 K'.
+
+    '''
+
+    parts = []
+    for loop in description['loops']:
+        iterations = loop['iterations']
+        count = len(iterations)
+        change = iterations[-1].get('change') if count else None
+        text = f'{loop["label"]}, {count} pass{"es" if count != 1 else ""}'
+        parts.append(text + (f', last change {change:.3g} K' if change is not None else ''))
+
+    return '; '.join(parts)
+
+def drawCircuitIterations(pane, nozzle) -> None:
+
+    '''
+
+    The hot wall and the coolant along the wall at every pass of each multi-pass circuit's outer
+    iteration, the latest solid and the earlier ones fading, so where the circuit was still moving
+    reads off the axis.
+
+    '''
+
+    description = iterationDescription(nozzle)
+    if description is None:
+        pane.message('This run has no multi-pass circuit, so no circuit iterated.')
+        return
+
+    wallAxes, coolantAxes = _panels(pane, 2, heightRatios = (1.2, 1.0))
+    for loop in description['loops']:
+        count = len(loop['iterations'])
+        for position, entry in enumerate(loop['iterations']):
+            latest = position == count - 1
+            for leg in entry['legs']:
+                colorName, dashed = legStyle(loop['key'], leg['leg'])
+                style = dict(color = getattr(themeColors, colorName), alpha = iterationAlpha(position, count),
+                             linewidth = 1.8 if latest else 1.2, linestyle = '--' if dashed else '-')
+                label = f'{loop["label"]} {leg["leg"]}, pass {entry["index"]}' if latest else None
+                x = np.asarray(leg['x'], dtype = float)
+                wallAxes.plot(x, np.asarray(leg['wall'], dtype = float), label = label, **style)
+                coolantAxes.plot(x, np.asarray(leg['coolant'], dtype = float), **style)
+    if description['limit']:
+        wallAxes.axhline(description['limit'], color = themeColors.red, linewidth = 1.0, linestyle = '--',
+                         label = f'Wall limit {description["limit"]:.0f} K')
+    wallAxes.set_ylabel('Hot wall temperature [K]')
+    coolantAxes.set_ylabel('Coolant temperature [K]')
+    coolantAxes.set_xlabel('Nozzle axis [m]')
+    wallAxes.set_title(f'Each pass of the circuit, earlier passes fading\n{iterationSummary(description)}',
+                       color = themeColors.text, fontsize = 10)
+    _legend(wallAxes)
+    throatX = iterationThroat(description)
+    if throatX is not None:
+        for ax in (wallAxes, coolantAxes):
+            ax.axvline(throatX, color = themeColors.textDim, linewidth = 0.8, linestyle = ':', zorder = 0)
     pane.redraw()

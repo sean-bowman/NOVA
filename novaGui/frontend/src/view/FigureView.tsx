@@ -8,6 +8,9 @@
    the grid the wall temperature, the heat flux and the coolant state read off at one station.
    Beside a baseline run, the line plots draw the baseline dashed over the shown run.
 
+   While a run goes on, the circuit iteration view draws its coolant circuit's passes as each one
+   ends, the latest solid and the earlier ones fading.
+
    Save PNG saves the Matplotlib drawing of the view (novaGui.plotting, thermalPlots), the
    picture NOVA's saved figures use, at the pane's size. Pop out opens the figures in a window of
    their own, for a second monitor; it follows the latest run, or keeps to the run it was opened
@@ -33,6 +36,7 @@ const saveRatio = 2;            // [-] pixels per CSS pixel of a saved PNG
 const coolingGrid = ['contour', 'jacketTemperatures', 'heatFlux', 'coolantFlow'];
 const flowGrid = ['contour', 'nearWall', 'mach', 'pressure'];
 const threeD = new Set(['channelMesh', 'revolved', 'volute']);
+const liveView = 'circuitIterations';      // the view a running run draws again at each circuit pass
 
 interface FigureViewProps {
     index: ViewIndex | null;
@@ -41,6 +45,7 @@ interface FigureViewProps {
     selected: string;
     layout: FigureLayout;
     runChoice: RunChoice;            // what a popped-out window follows
+    liveRevision?: number;           // the running run's circuit passes so far, for its live view
     initialGrid?: string[];
     onSelect: (key: string) => void;
     onLayout: (layout: FigureLayout) => void;
@@ -95,8 +100,8 @@ function ViewSelect({ views, available, value, onChange, compact = false }: {
     );
 }
 
-export function FigureView({ index, mode, compare, selected, layout, runChoice, initialGrid, onSelect, onLayout,
-                             onNotify }: FigureViewProps) {
+export function FigureView({ index, mode, compare, selected, layout, runChoice, initialGrid, liveRevision, onSelect,
+                             onLayout, onNotify }: FigureViewProps) {
     const [gridKeys, setGridKeys] = useState<string[]>(initialGrid ?? []);
     const [saving, setSaving] = useState('');
     const link = useMemo(() => new AxialLink(), []);
@@ -158,8 +163,9 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
             return <div className="figure-pane"><div className="figure-overlay figure-message">{spec?.label ?? 'This view'} was not produced by this run.</div></div>;
         }
         const against = compareFor(key);
+        const revision = partial && key === liveView ? liveRevision : undefined;
         return <PlotlyFigure key={`${key}-${runId}-${partial}-${against}`} viewKey={key} mode={mode} runId={runId}
-                             compare={against} link={link} scrollZoom={!inGrid} />;
+                             compare={against} link={link} scrollZoom={!inGrid} revision={revision} />;
     };
 
     const spec = specOf(selected);

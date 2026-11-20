@@ -10,7 +10,7 @@ legacy Tkinter front end reads too. Each view renders one or both of two ways:
 
     interactive   a plotly figure as JSON, drawn in the browser by plotly.js at full resolution,
                   from the builder novaGui.plotting.interactiveBuilders names for the view, or for
-                  the nine cooling views from novaGui.coolingFigures
+                  the ten cooling views from novaGui.coolingFigures
     static        the Matplotlib drawing (novaGui.plotting, novaGui.thermalPlots), rendered
                   headless to PNG at the browser pane's size and pixel ratio
 
@@ -23,7 +23,8 @@ second run's fills, markers, shapes and labels are left out, so the first run's 
 does alone.
 
 While a run is going, the views its contour stage settles draw from the figure descriptions the
-worker sent (`partialFigure`), through the same renderers as the finished run's.
+worker sent (`partialFigure`), through the same renderers as the finished run's. So does the circuit
+iteration view, from the passes the session has kept so far (coolingFigures.describedBuilders).
 
 The contour and the near-wall state hover along the axis here (`alongAxisHover`), as the cooling
 plots do, so the browser's axial cursor reads the wall radius and the gas state at its station. In
@@ -121,6 +122,7 @@ def _staticDrawers() -> dict:
         'plume':              (plotting.drawPlume,),
         'circuit':            (thermal.drawCircuit,),
         'passes':             (thermal.drawPasses,),
+        'circuitIterations':  (thermal.drawCircuitIterations,),
         'wallMap':            (thermal.drawWallMap,),
         'jacketTemperatures': (thermal.drawJacketTemperatures,),
         'coolantFlow':        (thermal.drawCoolantFlow,),
@@ -276,14 +278,20 @@ def partialFigure(description, key: str, mode: str) -> str | None:
     '''
 
     A view of a run still going, as plotly JSON, drawn from the figure description its contour stage
-    settled (novaGui.plotting.figureDescriptions), or None.
+    settled (novaGui.plotting.figureDescriptions) or from the circuit's passes so far
+    (novaGui.coolingFigures.describedBuilders), or None.
 
     '''
 
-    plotting, backend = _module('plotting'), _module('backend')
-    if key not in plotting.figureDescriptions or description is None:
+    plotting, backend, cooling = _module('plotting'), _module('backend'), _module('coolingFigures')
+    if description is None:
         return None
-    _, render = plotting.figureDescriptions[key]
+    if key in plotting.figureDescriptions:
+        _, render = plotting.figureDescriptions[key]
+    elif key in cooling.describedBuilders:
+        render = cooling.describedBuilders[key]
+    else:
+        return None
 
     with renderLock:
         figures = backend.figuresModule()

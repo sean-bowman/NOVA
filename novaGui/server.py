@@ -111,7 +111,7 @@ from . import validationStatus
 from . import views
 from . import settings as guiSettings
 from .runStore import RunStore
-from .session import RunSession
+from .session import RunSession, iterationView
 
 frontendDist = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend', 'dist')
 
@@ -502,8 +502,11 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
 
         mode = _mode(mode)
         if _running(run):
-            description = app.state.session.partialFigure(run, key)
-            figure = _drawnFigure((run, True, key, mode, None, None),
+            session = app.state.session
+            description = session.partialFigure(run, key)
+            # The circuit view grows a pass at a time, so each pass's figure is kept under its own name
+            drawnKey = f'{key}@{session.partialRevision(run)}' if key == iterationView else key
+            figure = _drawnFigure((run, True, drawnKey, mode, None, None),
                                   lambda: views.partialFigure(description, key, mode)) if description is not None else None
             if figure is None:
                 raise HTTPException(404, f'{key} is not drawn until run {run} finishes')

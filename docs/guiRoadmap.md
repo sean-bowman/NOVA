@@ -8,13 +8,8 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 
 | Item | Title | Effort | Depends on |
 | --- | --- | --- | --- |
-| [G5](#g5-the-jacket-profile-while-the-circuit-iterates) | The jacket profile while the circuit iterates | Medium | |
 | [G7](#g7-retire-the-tkinter-front-end) | Retire the Tkinter front end | Medium | a decision |
 | [G8](#g8-install-without-node) | Install without Node | Medium | |
-
-### G5. The jacket profile while the circuit iterates
-
-The stage list shows each coolant circuit pass's outlet temperatures and change, which says the circuit is converging but not where along the wall it is still moving. Each pass could also send its hot wall temperature profile and its coolant temperature profile along the axis, and the result pane could draw them pass over pass, the latest solid and the earlier ones fading, while the run continues. The worker already has a stage hook on the run's own thread (`runner.PipelineRunner.stageHook`); the profiles would ride on the circuit's `iteration` events or a message of their own, a few kilobytes per pass.
 
 ### G7. Retire the Tkinter front end
 
@@ -40,3 +35,4 @@ The GUI needs `npm install && npm run build` in `novaGui/frontend` before its fi
 | #8 | G1, trade sweeps with a run queue: Generate during a run queues the form, Cancel stops the run alone or the queue with it, and a queued run can be taken out; a sweep (`novaGui.sweeps`) varies one field over a range or a list, or two as a grid, queues one run per point, goes on past a failed point, and keeps its runs until it is deleted; the Sweep view plots a headline number against the swept field and tabulates the points with each number's validation status |
 | #10 | G6, reports: a run's report, alone or against its baseline, and a sweep's, each one HTML file (`novaGui.report`) with the headline numbers and their validation status, the inputs that differ from the shipped nozzle, the result table or the sweep's points and plot, the figures as PNGs in both modes, the warnings, a validation section and the config; saved from the Export dialog and the Sweep view |
 | #11 | G9, the methalox extension stage. Of its 729 s, about 690 went to building the REFPROP library object again on each of the stage's 23,000 property calls, about 30 ms a call against 0.6 ms for the property itself. `fluidProperties.refpropLibrary` builds it once a process: every result is the same bit for bit, the extension circuit takes 41 s in place of 733 s, and the whole example 106 s. What is left is the circuit's 14 outer iterations of two sizing marches each, converging at a ratio of 0.52 an iteration. A multi-pass circuit draws its heat transfer figure once, of its up pass, and the extension circuit draws none, so the exported figure is the chamber jacket's |
+| #12 | G5, the jacket profile while the circuit iterates: each pass of a multi-pass coolant circuit's outer iteration sends both legs' hot wall and coolant along the wall (`NOVA.progress.profiles`) and the circuit solution keeps them; the Circuit iterations view draws them pass over pass, the latest solid and the earlier ones fading, live while the run goes on and from the finished run after |

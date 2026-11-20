@@ -31,7 +31,8 @@ Messages put on the queue:
     ('log', str)
     ('status', (state, detail))
     ('stage', dict)         a NOVA.progress event
-    ('partial', dict)       {'stage': 'contour', 'figures': {view key: figure description}}
+    ('partial', dict)       {'stage': 'contour', 'figures': {view key: figure description},
+                            'throatX': the throat's axial position [m] or None}
     ('result', dict)        terminal: ok, runName, outputDir, picklePath, elapsedSec, headline, numbers,
                             error, traceback; `numbers` is [{'key', 'label', 'value', 'unit', 'tone'}]
 
@@ -133,9 +134,21 @@ def _contourHook(eventQueue):
             if data is not None:
                 figures[key] = data
         if figures:
-            eventQueue.put(('partial', {'stage': 'contour', 'figures': figures}))
+            eventQueue.put(('partial', {'stage': 'contour', 'figures': figures, 'throatX': _throatX(nozzle)}))
 
     return hook
+
+def _throatX(nozzle) -> float | None:
+
+    '''The throat's axial position [m], where the circuit view marks it while the run goes on, or None.'''
+
+    try:
+        import numpy as np
+        wallX = np.asarray(nozzle.xNozzleWall, dtype = float)
+        wallR = np.asarray(nozzle.rNozzleWall, dtype = float)
+        return float(wallX[int(np.argmin(wallR))]) if wallX.size >= 2 and wallR.size == wallX.size else None
+    except Exception:                                      # noqa: BLE001 -- the view draws without it
+        return None
 
 def _headline(nozzle) -> str:
 

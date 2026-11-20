@@ -54,6 +54,7 @@ views = (
     ViewSpec('plume', 'Plume', 'Plume', 'chamber, nozzle and marched plume as one field', 'plume', 'plume'),
     ViewSpec('circuit', 'Cooling', 'Coolant circuit', 'drawn from the jacket, extension and film solves'),
     ViewSpec('passes', 'Cooling', 'Coolant per pass', 'drawn from the coupled passes'),
+    ViewSpec('circuitIterations', 'Cooling', 'Circuit iterations', 'every pass of the outer iteration, earlier ones fading'),
     ViewSpec('wallMap', 'Cooling', 'Jacket on the wall', jacketSource, None, 'heatTransfer'),
     ViewSpec('jacketTemperatures', 'Cooling', 'Temperatures', jacketSource, None, 'heatTransfer'),
     ViewSpec('coolantFlow', 'Cooling', 'Coolant flow', jacketSource, None, 'heatTransfer'),
@@ -121,6 +122,7 @@ def availableViews(nozzle, outputs: dict) -> set:
         'circuit':            jacket,
         'passes':             lambda: (getattr(nozzle, 'coolantCircuitSolution', None) is not None
                                        or getattr(nozzle, 'extensionCircuitSolution', None) is not None),
+        'circuitIterations':  lambda: thermalPlots.iterationDescription(nozzle) is not None,
         'wallMap':            jacket,
         'jacketTemperatures': jacket,
         'coolantFlow':        jacket,

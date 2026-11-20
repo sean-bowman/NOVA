@@ -159,6 +159,7 @@ class ViewTab(ttk.Frame):
             'plume':              (drawPlume,),
             'circuit':            (thermalPlots.drawCircuit,),
             'passes':             (thermalPlots.drawPasses,),
+            'circuitIterations':  (thermalPlots.drawCircuitIterations,),
             'wallMap':            (thermalPlots.drawWallMap,),
             'jacketTemperatures': (thermalPlots.drawJacketTemperatures,),
             'coolantFlow':        (thermalPlots.drawCoolantFlow,),

@@ -137,6 +137,39 @@ class TestIterationMetrics:
                                         'text': None, 'missing': None}
         json.dumps(events[0], allow_nan = False)
 
+class TestIterationProfiles:
+
+    def testTheyArriveAsListsAndAreAlwaysValidJson(self):
+
+        '''Arrays go as lists of floats with None where not finite; strings stay; metrics as an iteration's.'''
+
+        events, reporting = record()
+        with reporting:
+            with progress.stage('circuit', 'Coolant circuit'):
+                progress.profiles(2, [{'leg': 'down', 'x': np.array([0.0, 0.5]), 'wall': [700.0, np.nan]},
+                                      {'leg': 'up', 'x': (0.0, 0.5), 'wall': np.array([650.0, np.inf])}],
+                                  {'change': np.float64(1.25), 'tolerance': 0.05}, name = 'pass')
+
+        event = events[1]
+        assert {key: event[key] for key in ('type', 'path', 'name', 'index')} == {
+            'type': 'profiles', 'path': 'circuit', 'name': 'pass', 'index': 2}
+        assert event['metrics'] == {'change': 1.25, 'tolerance': 0.05}
+        assert event['profiles'] == [{'leg': 'down', 'x': [0.0, 0.5], 'wall': [700.0, None]},
+                                     {'leg': 'up', 'x': [0.0, 0.5], 'wall': [650.0, None]}]
+        json.dumps(event, allow_nan = False)
+
+    def testWithoutAReporterNothingIsSent(self):
+
+        assert progress.profiles(1, [{'leg': 'up', 'x': [0.0]}]) is None
+
+    def testTheModelLeavesThemOut(self):
+
+        '''A profiles event is the circuit view's, not the stage tree's: the model ignores it.'''
+
+        model = RunProgress()
+        model.apply(plan)
+        assert not model.apply(event('profiles', 0.0, path = '', name = 'pass', index = 1, metrics = {}, profiles = []))
+
 class TestTheListener:
 
     def testOneThatFailsDoesNotStopTheRun(self):

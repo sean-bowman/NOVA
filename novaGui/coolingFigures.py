@@ -2,7 +2,7 @@
 
 '''
 
-Plotly renderings of the nine cooling views, for the browser.
+Plotly renderings of the ten cooling views, for the browser.
 
 Each builder draws the same quantities as its Matplotlib counterpart in novaGui.thermalPlots, from
 the same arrays on the Nozzle and with the same titles, colors and annotations, and reads them
@@ -12,6 +12,8 @@ wall under a barrier coating). What plotly adds is reading values by hovering, a
     circuit             the coolant's paths on the half section: families, manifolds, turnaround,
                         split, extension circuit, radiation-cooled shell and film slots
     passes              each pass's coolant and hot wall
+    circuitIterations   the hot wall and coolant at every pass of a multi-pass circuit's outer
+                        iteration, earlier passes fading; drawn live while the circuit settles
     wallMap             the jacket on the wall, hot wall and coolant colored by temperature
     jacketTemperatures  the hot wall against its limit and the gas driving it; the coolant warming
     coolantFlow         coolant pressure, velocity and Mach number
@@ -911,10 +913,73 @@ def passes(figures, nozzle):
 
     return figure
 
+def plotIterations(figures, description: dict):
+
+    '''
+
+    The hot wall and the coolant along the wall at every pass of each multi-pass circuit's outer
+    iteration, the latest solid and the earlier ones fading, from a description in the form
+    `thermalPlots.iterationDescription` gives. A running run's description comes from its profile
+    events and grows a pass at a time, so the figure keeps the reader's zoom as it is drawn again.
+
+    '''
+
+    if not description or not description.get('loops'):
+        return None
+    colors = _colors(figures)
+
+    figure = make_subplots(rows = 2, cols = 1, shared_xaxes = True, vertical_spacing = 0.07, row_heights = [0.55, 0.45])
+    spans = []
+    for loop in description['loops']:
+        count = len(loop['iterations'])
+        for position, entry in enumerate(loop['iterations']):
+            latest = position == count - 1
+            for leg in entry['legs']:
+                colorName, dashed = thermalPlots.legStyle(loop['key'], leg['leg'])
+                color = _rgba(colors[colorName], thermalPlots.iterationAlpha(position, count))
+                name = f'{loop["label"]} {leg["leg"]}'
+                x = np.asarray(leg['x'], dtype = float)
+                spans.append(x)
+                for row, values in ((1, leg['wall']), (2, leg['coolant'])):
+                    figure.add_trace(go.Scatter(
+                        x = x, y = np.asarray(values, dtype = float), mode = 'lines',
+                        name = f'{name}, pass {entry["index"]}', legendgroup = f'{loop["key"]}-{leg["leg"]}',
+                        showlegend = latest and row == 1,
+                        line = dict(color = color, width = 2.0 if latest else 1.2, dash = 'dash' if dashed else None),
+                        hovertemplate = f'{name}, pass {entry["index"]}<br>x %{{x:.4f}} m<br>%{{y:.1f}} K<extra></extra>'),
+                        row = row, col = 1)
+    if description.get('limit'):
+        limit = float(description['limit'])
+        figure.add_trace(_level(np.concatenate(spans), limit, f'Wall limit {limit:.0f} K', colors['red']), row = 1, col = 1)
+    throatX = thermalPlots.iterationThroat(description)
+    if throatX is not None:
+        for row in (1, 2):
+            figure.add_vline(x = throatX, line = dict(color = colors['textDim'], width = 1, dash = 'dot'), layer = 'below',
+                             row = row, col = 1)
+
+    _style(figure, colors, f'Each pass of the circuit, earlier passes fading<br>'
+                           f'<sup>{thermalPlots.iterationSummary(description)}</sup>', hovermode = 'closest')
+    figure.update_yaxes(title_text = 'Hot wall temperature [K]', row = 1, col = 1)
+    figure.update_yaxes(title_text = 'Coolant temperature [K]', row = 2, col = 1)
+    figure.update_xaxes(title_text = 'Nozzle axis [m]', row = 2, col = 1)
+    # Above the plot, where no pass's line runs under it
+    figure.update_layout(legend = dict(orientation = 'h', x = 1.0, xanchor = 'right', y = 1.01, yanchor = 'bottom',
+                                       **_legendStyle(colors)),
+                         margin_t = 96, uirevision = 'circuitIterations')
+
+    return figure
+
+def circuitIterations(figures, nozzle):
+
+    '''Every pass of each multi-pass circuit's outer iteration, from the finished run's circuit solutions.'''
+
+    return plotIterations(figures, thermalPlots.iterationDescription(nozzle))
+
 # View key -> builder, the keys of novaGui.viewCatalog.views
 builders = {
     'circuit':            circuit,
     'passes':             passes,
+    'circuitIterations':  circuitIterations,
     'wallMap':            wallMap,
     'jacketTemperatures': jacketTemperatures,
     'coolantFlow':        coolantFlow,
@@ -922,4 +987,10 @@ builders = {
     'heatFlux':           heatFlux,
     'film':               film,
     'extension':          extension,
+}
+
+# View key -> builder of a running run's figure from a description the session keeps, where a view
+# draws before its run finishes from something other than the contour stage
+describedBuilders = {
+    'circuitIterations': plotIterations,
 }

@@ -184,6 +184,7 @@ export interface RunWarning {
 export interface PartialRun {
     runId: number;
     views: string[];
+    revision?: number;            // the circuit passes the run has kept, in a snapshot
 }
 
 /** A run waiting its turn (novaGui.session.QueuedRun.entry). */
@@ -214,6 +215,7 @@ export type RunEvent =
     | { type: 'status'; state: RunStateName; detail: string; runId?: number | null }
     | ({ type: 'progress' } & RunProgressFields)
     | ({ type: 'partial' } & PartialRun)
+    | { type: 'iterations'; runId: number; revision: number }
     | { type: 'warning'; runId: number; warnings: RunWarning[] }
     | ({ type: 'result' } & RunSummary)
     | { type: 'runs'; baseline: number | null }

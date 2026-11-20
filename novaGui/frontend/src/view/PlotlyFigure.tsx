@@ -6,6 +6,10 @@
 
    A figure drawn along the nozzle axis joins the pane's axial link (axialLink.ts): the mouse
    over it moves one cursor across every linked figure, and a zoom along the axis zooms them all.
+
+   A figure of a running run that grows as the run goes on (the coolant circuit's passes) takes a
+   revision: each new one fetches the figure again and draws it over the last in place, keeping
+   the reader's zoom, with no loading overlay between.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -33,6 +37,7 @@ interface PlotlyFigureProps {
     compare?: number | null;        // a second run drawn over a line plot
     link?: AxialLink;
     scrollZoom?: boolean;           // the wheel zooms; off where it scrolls a grid of figures
+    revision?: number;              // a live figure's revision: each new one draws it again
 }
 
 /** The plotly graph element and the internals the cursor reads. */
@@ -58,7 +63,7 @@ function rangeOf(update: Record<string, unknown>, name: string): [number, number
     return undefined;
 }
 
-export function PlotlyFigure({ viewKey, mode, runId, compare = null, link, scrollZoom = true }: PlotlyFigureProps) {
+export function PlotlyFigure({ viewKey, mode, runId, compare = null, link, scrollZoom = true, revision }: PlotlyFigureProps) {
     const host = useRef<HTMLDivElement>(null);
     const cursor = useRef<HTMLDivElement>(null);
     const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -69,9 +74,10 @@ export function PlotlyFigure({ viewKey, mode, runId, compare = null, link, scrol
     useEffect(() => {
         let cancelled = false;
         const element = host.current;
-        setStatus('loading');
+        // A live figure's next revision draws over the one shown, without the loading overlay
+        setStatus((current) => (revision !== undefined && current === 'ready' ? current : 'loading'));
 
-        Promise.all([loadPlotly(), api.interactiveFigure(viewKey, mode, runId, compare)])
+        Promise.all([loadPlotly(), api.interactiveFigure(viewKey, mode, runId, compare, revision)])
             .then(([Plotly, figure]) => {
                 if (cancelled || !element) {
                     return;
@@ -101,7 +107,7 @@ export function PlotlyFigure({ viewKey, mode, runId, compare = null, link, scrol
         return () => {
             cancelled = true;
         };
-    }, [viewKey, mode, runId, compare, scrollZoom]);
+    }, [viewKey, mode, runId, compare, scrollZoom, revision]);
 
     // plotly.js's own responsive mode follows the window only. The pane also changes size when the
     // form beside it is dragged wider or a hidden pane is shown, so the figure follows the pane.
