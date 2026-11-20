@@ -214,6 +214,12 @@ A run writes its outputs into its own folder in the run store, not to the output
 
 ![Export dialog](docs/images/novaGui/export.png)
 
+### Reports
+
+**Save report** in the Export dialog writes the shown run's report as one HTML file, against the baseline when one is chosen, and **Save report** in the Sweep view writes the sweep's; the button beside each opens it in a window. A run's report carries the headline numbers with their validation status, the inputs that differ from the shipped nozzle, the whole result table, the contour, near-wall, jacket temperature and plume figures, the run's warnings, a validation section for every model behind its numbers, and the config to rerun it. A sweep's report carries the swept fields, each headline number plotted against them and its range, and the table of points. The file opens offline, names no folder on the machine that wrote it, and prints as a light page.
+
+![A run's report](docs/images/novaGui/report.png)
+
 ### Light mode
 
 The sun and moon button in the header switches between the dark and light modes of the Engineering Flat Metal palette, and the choice persists between sessions with the form's width.

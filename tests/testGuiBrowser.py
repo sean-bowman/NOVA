@@ -332,6 +332,33 @@ def testTheExportDialogPreviewsAnImageAndASurface(window):
     window.wait_for_selector('.output-preview canvas', timeout = drawMs)
     assert window.inner_text('.preview-note').endswith('triangles')
 
+def _savedReport(page, scope) -> tuple:
+    '''Press Save report inside `scope` and read the file it downloads: (file name, page text).'''
+    with page.expect_download(timeout = drawMs) as saving:
+        scope.get_by_role('button', name = 'Save report').click()
+    download = saving.value
+    with open(download.path(), encoding = 'utf-8') as handle:
+        return download.suggested_filename, handle.read()
+
+def testTheExportDialogSavesTheRunsReportAgainstTheBaseline(window):
+    '''Save report in the Export dialog writes the shown run's report, beside the baseline when there is one.'''
+    window.select_option('.baseline-select', '1')
+    window.wait_for_selector('.result-status.is-baseline')
+    window.locator('.result-head .button', has_text = 'Export').click()
+    window.wait_for_selector('.export-dialog .output-category-row')
+    name, page = _savedReport(window, window.locator('.export-dialog'))
+    assert name == 'NOVANozzleRun3VsRun1Report.html'
+    assert 'NOVA run report' in page and 'against run 1 (novaSinglePass) as the baseline' in page
+    assert '<img class="figure-dark" src="data:image/png;base64,' in page
+    assert window.locator('.toasts').inner_text().startswith('Report saved')
+
+def testTheSweepViewSavesTheSweepsReport(window, sweptRuns):
+    window.locator('.result-head .segmented button', has_text = 'Sweep').click()
+    window.wait_for_selector('.sweep-plot .main-svg', timeout = drawMs)
+    name, page = _savedReport(window, window.locator('.sweep-toolbar'))
+    assert name == 'ChamberPressureSweep1Report.html'
+    assert 'NOVA trade sweep report' in page and 'the contour solve did not converge' in page
+
 def testAFigurePopsOutIntoItsOwnWindow(window):
     with window.context.expect_page() as popped:
         window.get_by_role('button', name = 'Pop out').click()

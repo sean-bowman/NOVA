@@ -148,6 +148,43 @@ export async function staticFigure(key: string, mode: Mode, run: number | null, 
     return { blob: await response.blob() };
 }
 
+/** The route of a run's report, against a baseline when one is given. */
+export function runReportPath(run: number, baseline: number | null): string {
+    return `/api/report${query({ run, baseline })}`;
+}
+
+/** The route of a sweep's report. */
+export function sweepReportPath(sweepId: number): string {
+    return `/api/sweeps/${sweepId}/report`;
+}
+
+/** A page this server writes, such as a report, as a blob; the server's reason when it refuses. */
+export async function fetchPage(path: string): Promise<Blob> {
+    const response = await fetch(path);
+    if (!response.ok) {
+        let message = `${response.status} ${response.statusText}`;
+        try {
+            const body = await response.json();
+            if (body && typeof body.detail === 'string') {
+                message = body.detail;
+            }
+        } catch {
+            // The status line is the message
+        }
+        throw new ApiError(response.status, message);
+    }
+    return response.blob();
+}
+
+/** A name as one word for a file, the first word as typed: 'Chamber pressure sweep' to 'ChamberPressureSweep'. */
+export function fileStem(text: string, fallback = 'nova'): string {
+    const words = text.split(/[^A-Za-z0-9]+/).filter(Boolean);
+    if (words.length === 0) {
+        return fallback;
+    }
+    return words.map((word, at) => (at === 0 ? word : word[0].toUpperCase() + word.slice(1))).join('');
+}
+
 /** Save a blob as a download. */
 export function saveBlob(blob: Blob, fileName: string): void {
     const link = document.createElement('a');

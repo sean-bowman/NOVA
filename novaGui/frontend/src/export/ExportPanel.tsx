@@ -8,20 +8,23 @@
    In the desktop window Browse opens the native folder picker; in a browser the folder is typed.
 
    An image, an STL surface or a text file previews beside the list (OutputPreview.tsx), and the
-   images carry a thumbnail in their row.
+   images carry a thumbnail in their row. Save report writes the run's report as one HTML file
+   (ReportButtons.tsx), against the baseline when the pane has one.
    Sean Bowman [11/17/2026]
    ======================================== */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { api, exportFileUrl, windowBridge } from '../api';
+import { api, exportFileUrl, runReportPath, windowBridge } from '../api';
 import { ChevronIcon, EyeIcon, FolderIcon } from '../components/Icons';
 import type { ExportIndex, ExportTarget, Mode, OutputFile } from '../types';
 import { formatSize } from './fileSize';
 import { OutputPreview } from './OutputPreview';
+import { ReportButtons } from '../report/ReportButtons';
 
 interface ExportPanelProps {
     runId: number | null;
+    baseline: number | null;      // the run the report sets beside this one, or null
     mode: Mode;
     formName: string;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
@@ -47,7 +50,7 @@ function Check({ state, label, onToggle }: { state: CheckState; label: string; o
     );
 }
 
-export function ExportPanel({ runId, mode, formName, onNotify }: ExportPanelProps) {
+export function ExportPanel({ runId, baseline, mode, formName, onNotify }: ExportPanelProps) {
     const [index, setIndex] = useState<ExportIndex | null>(null);
     const [baseDir, setBaseDir] = useState('');
     const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -58,6 +61,8 @@ export function ExportPanel({ runId, mode, formName, onNotify }: ExportPanelProp
     const [busy, setBusy] = useState(false);
     const [preview, setPreview] = useState<OutputFile | null>(null);
     const [bridgeReady, setBridgeReady] = useState(() => windowBridge() !== null);
+    const reportRun = index?.runId ?? null;
+    const reportAgainst = baseline !== null && baseline !== reportRun ? baseline : null;
     const uncheckedRef = useRef(unchecked);
     uncheckedRef.current = unchecked;
 
@@ -312,6 +317,10 @@ export function ExportPanel({ runId, mode, formName, onNotify }: ExportPanelProp
             </div>
 
             <div className="export-actions">
+                <ReportButtons path={reportRun !== null ? runReportPath(reportRun, reportAgainst) : null}
+                               fileName={`${index?.runName || 'novaRun'}Run${reportRun}${reportAgainst !== null ? `VsRun${reportAgainst}` : ''}Report.html`}
+                               title={reportRun !== null ? `Run ${reportRun}${reportAgainst !== null ? ` against run ${reportAgainst}` : ''}` : 'The run'}
+                               onNotify={onNotify} />
                 <span className="export-status muted">{status}</span>
                 <button type="button" className="button" onClick={openFolder} disabled={!target?.exists}
                         title="Open the folder the export writes to">
