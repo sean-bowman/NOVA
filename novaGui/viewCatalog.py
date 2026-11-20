@@ -130,7 +130,9 @@ def availableViews(nozzle, outputs: dict) -> set:
         'extension':          lambda: thermalPlots.extensionSolved(nozzle),
         'channelMesh':        lambda: np.ndim(getattr(nozzle, 'xChannel', None)) == 2 and has('xChannel'),
         'revolved':     lambda: has('xNozzleWall'),
-        'volute':       lambda: on('makeInletVolute') or on('makeOutletVolute'),
+        # A volute is built only with the cooling channels, so the built object, not the flag
+        'volute':       lambda: (getattr(nozzle, 'inletVolute', None) is not None
+                                 or getattr(nozzle, 'outletVolute', None) is not None),
     }
 
     available = set()

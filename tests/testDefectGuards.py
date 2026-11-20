@@ -318,6 +318,30 @@ def testAConeRunsTheWholeContourWithoutAnExtension(tmp_path):
     assert nozzle.xExtension is None or len(nozzle.xExtension) == 0
     assert nozzle.performance is not None
 
+def testVolutesAskedForWithoutChannelsAreNeitherBuiltNorWritten(tmp_path):
+
+    '''
+
+    A volute is grown onto the cooling channels. With the channels off and both volutes asked for,
+    the run builds none, writes its outputs without a volute surface, and has no volute figure:
+    the export and the figure read the built volute, not the flag that asks for one, so neither
+    reaches for a mesh that was never made.
+
+    '''
+
+    from NOVA.figures import volutesFigure
+
+    nozzle = runConfiguration(tmp_path, divergingSectionType = 'cone', regenTruncationType = 'none',
+                              makeCoolingChannels = False, makeInletVolute = True, makeOutletVolute = True,
+                              makeRadiativeExtension = False, filmCooling = False, export = True)
+    written = os.listdir(nozzle.dataFolder)
+
+    assert (nozzle.makeInletVolute, nozzle.makeOutletVolute) == ('on', 'on')
+    assert nozzle.inletVolute is None and nozzle.outletVolute is None
+    assert any(name.endswith('Performance.json') for name in written)
+    assert not any('Volute' in name for name in written)
+    assert volutesFigure(nozzle) is None
+
 def testAChamberTooNarrowForItsConvergingArcsIsRefused(tmp_path):
 
     # The chamber fillet and the throat arc would overlap and fold the wall back on itself

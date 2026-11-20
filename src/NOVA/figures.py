@@ -1430,7 +1430,9 @@ def volutesFigure(nozzle):
 
     '''
 
-    if nozzle.makeInletVolute != 'on' and nozzle.makeOutletVolute != 'on':
+    # A volute is built only onto the cooling channels; the flags ask for one, the objects say it was built
+    inlet, outlet = getattr(nozzle, 'inletVolute', None), getattr(nozzle, 'outletVolute', None)
+    if inlet is None and outlet is None:
         return None
 
     # The representative channel, rolled a quarter turn to the orientation the outlet volute's
@@ -1462,9 +1464,9 @@ def volutesFigure(nozzle):
                                 showscale = False))
 
     colors = _stationColors(nozzle.numCSVolute)
-    if nozzle.makeInletVolute == 'on':
+    if inlet is not None:
         _addVoluteBranch(figure, nozzle, 'Inlet', 'inletVolute', colors)
-    if nozzle.makeOutletVolute == 'on':
+    if outlet is not None:
         _addVoluteBranch(figure, nozzle, 'Outlet', 'outletVolute', colors)
 
     figure.update_layout(
