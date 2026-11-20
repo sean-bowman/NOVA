@@ -239,3 +239,27 @@ export function PencilIcon({ className }: IconProps) {
         </svg>
     );
 }
+
+/**
+ * A validation status, so it never reads by color alone: a check for validated, a wave for the
+ * statuses between (calibrated, compared, cross-checked), a bar for unvalidated, and an equals
+ * sign for a value that holds by construction.
+ */
+export function ValidationIcon({ status, className }: IconProps & { status: string }) {
+    let mark;
+    if (status === 'validated') {
+        mark = <path d="m8 12.3 2.7 2.7L16.2 9.4" />;
+    } else if (status === 'unvalidated') {
+        mark = <path d="M8.4 12h7.2" />;
+    } else if (status === 'construction') {
+        mark = <path d="M8.6 10.3h6.8M8.6 13.7h6.8" />;
+    } else {
+        mark = <path d="M7.8 12.8c1.4-2 2.8-2 4.2 0s2.8 2 4.2 0" />;
+    }
+    return (
+        <svg {...svgProps(className)} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="8.6" />
+            {mark}
+        </svg>
+    );
+}

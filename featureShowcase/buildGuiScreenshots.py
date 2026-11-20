@@ -8,7 +8,8 @@ The GUI's server starts in this process on a free port, and Playwright's Chromiu
 front end at the desktop window's size. The script presses Generate on the form the window opens
 with, which is the shipped nozzle, photographs the stage stepper and the stage list while the
 coolant circuit iterates, with the run's contour already in the result pane, and once the run ends
-steps the result pane through its views, the results table and the export dialog with a preview.
+steps the result pane through its views, the results table, the validation of its peak hot wall and
+the export dialog with a preview.
 It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
 of a run drawn over its baseline, the table beside it, the second run's details with a name and a
 note, and the grid of views along the nozzle axis in a popped-out window. The light-mode pictures use the theme switch, which saves the theme
@@ -251,6 +252,16 @@ def photograph(page: Page, base: str, storeFolder: str) -> None:
     page.wait_for_selector('.result-table')
     page.wait_for_timeout(800)
     capture(page, 'table')
+
+    # The peak hot wall's validation: the models behind it, and the record of the first
+    page.locator('.headline-item', has_text = 'Peak hot wall').locator('.validation-badge').click()
+    page.wait_for_selector('.validation-dialog')
+    page.locator('.validation-model').first.get_by_role('button', name = 'Show the record').click()
+    page.wait_for_selector('.validation-passage mark')
+    page.wait_for_timeout(500)
+    capture(page, 'validation')
+    page.keyboard.press('Escape')
+    page.wait_for_selector('.validation-dialog', state = 'detached')
 
     page.locator('.result-head .button', has_text = 'Export').click()
     page.wait_for_selector('.export-dialog .export-list')

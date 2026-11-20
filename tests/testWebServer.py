@@ -689,8 +689,27 @@ def testTheAnalysisRouteSetsTheBaselineBeside(client, finishedRun):
         assert (thrust['cells'], thrust['baseline'], thrust['change']) == (['100000'], ['90000'], ['+10000 (+11 %)'])
         alone = client.get('/api/analysis', params = {'run': finishedRun.runId}).json()
         assert alone['baselineRun'] is None and 'baseline' not in alone['sections'][0]['rows'][0]
+        # The comparison keeps the shown run's validation status on each section and number
+        assert table['sections'][0]['validation'] == alone['sections'][0]['validation']
     finally:
         client.app.state.session.forget(other.runId)
+
+def testTheTableCarriesEachResultsValidationStatus(client, finishedRun):
+    '''
+    Every section and headline number carries the weakest status among the models behind it, and
+    a model's route returns the passages of its records with the quote in each.
+    '''
+    table = client.get('/api/analysis', params = {'run': finishedRun.runId}).json()
+    sections = {section['title']: section['validation'] for section in table['sections']}
+    assert all(badge is not None for badge in sections.values())
+    assert sections['Chamber']['status'] == 'validated'
+    assert sections['Sizing']['status'] == 'crossCheck'
+    assert sections['Performance: 1D estimate and delivered']['status'] == 'unvalidated'
+    assert {number['key']: number['validation']['status'] for number in table['headline']}['length'] == 'crossCheck'
+    model = client.get('/api/validation/contour').json()
+    assert model['status'] == 'crossCheck' and model['record'] == 'validation/openFoam/README.md'
+    assert all(passage['quote'] in passage['text'] for passage in model['passages'])
+    assert client.get('/api/validation/notAModel').status_code == 404
 
 def testEveryRowNamesAFigureOnlyWhereOneShowsIt():
     table = analysis.resultTable(_nozzleStandIn())

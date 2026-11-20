@@ -30,7 +30,10 @@ Routes, all under /api:
                                     time and config, or why its saved result does not load, ?run=
     GET  /views/{key}/interactive   a view's plotly figure JSON, ?mode=&run=&compare=
     GET  /views/{key}/static        a view's Matplotlib PNG, ?mode=&run=&width=&height=&ratio=
-    GET  /analysis                  a run's result table (novaGui.analysis), ?run=&baseline=
+    GET  /analysis                  a run's result table (novaGui.analysis), ?run=&baseline=, each headline
+                                    number and section with its validation status (novaGui.validationStatus)
+    GET  /validation/{model}        a model's validation status and the passages of its records that
+                                    carry it
     GET  /export                    the output categories, the default output folder, a run's files,
                                     ?run=
     GET  /export/target             the folder an export writes to, ?base=&name=
@@ -91,6 +94,7 @@ from . import assetFolder
 from . import design
 from . import outputs
 from . import schemaJson
+from . import validationStatus
 from . import views
 from . import settings as guiSettings
 from .runStore import RunStore
@@ -466,7 +470,8 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
 
         if record.runId not in tables:
             try:
-                table = analysis.resultTable(_nozzle(record.runId))
+                nozzle = _nozzle(record.runId)
+                table = validationStatus.annotate(analysis.resultTable(nozzle), nozzle)
             except HTTPException:
                 raise
             except Exception as exc:                       # noqa: BLE001 -- report the table's failure
@@ -490,6 +495,16 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             table = analysis.compareTables(table, _table(_record(baseline)))
         return {'runId': record.runId, 'runName': record.runName,
                 'baselineRun': baseline if baseline is not None and baseline != record.runId else None, **table}
+
+    # -- Validation status -- #
+    @app.get('/api/validation/{model}')
+    def validationModel(model: str) -> dict:
+
+        summary = validationStatus.load()
+        found = validationStatus.passages(model, summary)
+        if found is None:
+            raise HTTPException(404, f'no validation status for {model!r}')
+        return {**validationStatus.badge([model], summary)['models'][0], 'passages': found}
 
     # -- Export -- #
     def _finishedRun(run: int | None):

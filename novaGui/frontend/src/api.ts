@@ -8,7 +8,7 @@
 
 import type {
     Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, MeshPreview, Mode, ResultTable, RunEntry,
-    RunEvent, RunList, Schema, Settings, ViewIndex, WallSample,
+    RunEvent, RunList, Schema, Settings, ValidationDetail, ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -69,6 +69,7 @@ export const api = {
     interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(`/api/views/${key}/interactive${query({ mode, run, compare })}`),
     analysis: (run: number | null, baseline: number | null) => request<ResultTable>(`/api/analysis${query({ run, baseline })}`),
+    validationModel: (model: string) => request<ValidationDetail>(`/api/validation/${encodeURIComponent(model)}`),
     exportIndex: (run: number | null) => request<ExportIndex>(`/api/export${query({ run })}`),
     exportTarget: (base: string, name: string) => request<ExportTarget>(`/api/export/target${query({ base, name })}`),
     exportText: (run: number | null, name: string) =>

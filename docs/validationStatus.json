@@ -1,0 +1,238 @@
+{
+    "about": "The validation status of each model behind NOVA's reported results, summarized from the validation records it cites. Each quote is copied from its record, and tests/testValidationStatus.py fails when a record no longer carries it. docs/validationStatus.md is written from this file by python -m novaGui.validationStatus --write.",
+    "statuses": {
+        "validated": {
+            "label": "Validated",
+            "meaning": "Reproduces a closed form, reference data, a published benchmark or hardware data, with the error quantified and inside its acceptance criterion."
+        },
+        "calibrated": {
+            "label": "Calibrated",
+            "meaning": "Fitted to a reference, so the agreement with it is by construction; trusted only as far as the reference reaches."
+        },
+        "compared": {
+            "label": "Compared",
+            "meaning": "Compared with measured data, but the error is outside the acceptance criterion or the comparison spans a band wider than its tolerance."
+        },
+        "crossCheck": {
+            "label": "Cross-checked",
+            "meaning": "Agrees with an independent tool that is itself unvalidated: consistent, not shown correct."
+        },
+        "unvalidated": {
+            "label": "Unvalidated",
+            "meaning": "No reference applies or the one available fails; the record names the sanity checks run in its place."
+        },
+        "construction": {
+            "label": "By construction",
+            "meaning": "Geometry or accounting on the inputs rather than a physical model; tests hold its identities."
+        }
+    },
+    "models": {
+        "cea": {
+            "name": "Combustion thermochemistry (NASA CEA)",
+            "status": "validated",
+            "reference": "NASA CEA output, through RocketCEA",
+            "result": "Every state is CEA's own. The interface reproduces CEA's Prandtl number from its specific heat, viscosity and conductivity exactly at every station, and recovers the chamber pressure from rho R T exactly.",
+            "sources": [
+                {"path": "docs/ceaInterface.md", "quote": "Recomputing Prandtl as `Cp * mu / k` reproduces CEA's own reported Prandtl number exactly, at every station."},
+                {"path": "src/NOVA/turbineExhaust.py", "quote": "CEA is the validated part."}
+            ]
+        },
+        "throatSizing": {
+            "name": "Throat sizing and discharge coefficient",
+            "status": "validated",
+            "reference": "Kliegel and Levine's transonic discharge coefficient; CEA's equilibrium characteristic velocity",
+            "result": "The throat is sized with Kliegel and Levine's coefficient, which an inviscid finite-volume solution reproduces to 0.01 percent, and agrees with CEA's characteristic velocity to 0.02 percent.",
+            "sources": [
+                {"path": "docs/NozzleContourValidation.md", "quote": "The throat sizing agrees with CEA's equilibrium characteristic velocity to 0.02 percent"},
+                {"path": "validation/openFoam/README.md", "quote": "NOVA sizes its throat with the same coefficient, so its design mass flow carries that reference's support."}
+            ]
+        },
+        "contour": {
+            "name": "Contour and exit plane (method of characteristics)",
+            "status": "crossCheck",
+            "reference": "Inviscid finite-volume solution of the shipped nozzle (OpenFOAM), extrapolated to zero cell size",
+            "result": "Thrust per unit mass flow within 0.05 percent and exit-plane mass flow 0.83 percent low. The flowfield is not validated point by point: no tabulated axisymmetric bell solution is available as a reference.",
+            "gap": "A measured wall pressure and mass flow from a contoured nozzle of known throat geometry, run through both solutions.",
+            "sources": [
+                {"path": "validation/openFoam/README.md", "quote": "This is a cross-check, not a validation."},
+                {"path": "docs/NozzleContourValidation.md", "quote": "puts NOVA's thrust per unit mass flow within 0.05 percent and its exit-plane mass flow 0.83 percent low"},
+                {"path": "docs/NozzleContourValidation.md", "quote": "The flowfield itself, point by point: no source in the reference set publishes a tabulated axisymmetric solution for a rocket bell"}
+            ]
+        },
+        "friction": {
+            "name": "Boundary layer friction debit",
+            "status": "unvalidated",
+            "reference": "NASA RP-1104's friction allowance, a design value rather than a measurement",
+            "result": "The effective Fanning factor over the diverging section is 0.003854 against RP-1104's 0.003, a ratio of 1.29. The friction closure has not been compared with a measured profile.",
+            "sources": [
+                {"path": "docs/NozzleContourValidation.md", "quote": "What remains unvalidated is the friction closure against a measured profile"},
+                {"path": "docs/NozzleContourValidation.md", "quote": "On the worked contour NOVA's effective factor over the diverging section is 0.003854, a ratio of 1.29"}
+            ]
+        },
+        "deliveredPerformance": {
+            "name": "Delivered thrust and impulse",
+            "status": "unvalidated",
+            "reference": "None for an absolute value: kinetics is not modeled",
+            "result": "The exit-plane integral is verified against the one-dimensional closed form. With no kinetic losses the delivered thrust coefficient cannot be compared with a delivered engine's specific impulse.",
+            "sources": [
+                {"path": "src/NOVA/performance.py", "quote": "The delivered integral is verified against that closed form."},
+                {"path": "docs/NozzleContourValidation.md", "quote": "kinetics is not, so the thrust coefficient still cannot be compared directly with a delivered engine specific impulse"}
+            ]
+        },
+        "chamberGeometry": {
+            "name": "Chamber sizing",
+            "status": "construction",
+            "reference": "The definition of characteristic length",
+            "result": "Characteristic length is chamber volume over throat area, and the volume reported is the volume drawn; the tests hold it to machine precision.",
+            "sources": [
+                {"path": "src/NOVA/chamber.py", "quote": "The chamber sizing is arithmetic against a definition."}
+            ]
+        },
+        "gasSideUniform": {
+            "name": "Gas-side heat transfer, Bartz",
+            "status": "compared",
+            "reference": "Correlation constants measured in NASA TN D-2832; Test 024 of the MSFC 40k calorimeter",
+            "result": "Implemented as NASA SP-125's worked example gives it. Against the measured constants it runs 20 to 40 percent high at the throat and about right over the barrel; on Test 024 it runs the throat 38 percent high against the barrel.",
+            "sources": [
+                {"path": "src/NOVA/gasSideHeatTransfer.py", "quote": "On that evidence a uniform constant is 20 to 40 percent high at the throat and about right over the barrel."},
+                {"path": "docs/NozzleCooling.md", "quote": "where Bartz runs it 38 percent high"}
+            ]
+        },
+        "gasSideMeasured": {
+            "name": "Gas-side heat transfer, measured axial shape",
+            "status": "calibrated",
+            "reference": "NASA TN D-2832, one LOX/GH2 chamber",
+            "result": "Bartz's level with the axial shape TN D-2832 measured, normalized to the barrel: it takes 41 percent off the throat. A calibration from one engine and one injector.",
+            "sources": [
+                {"path": "docs/NozzleCooling.md", "quote": "It is a calibration from one engine and one injector rather than a correlation"},
+                {"path": "docs/NozzleCooling.md", "quote": "takes 41 percent off the throat"}
+            ]
+        },
+        "gasSideIevlev": {
+            "name": "Gas-side heat transfer, Ievlev's integral method",
+            "status": "compared",
+            "reference": "Test 024 of the MSFC 40k calorimeter",
+            "result": "On the test's own wall temperature it runs the throat 20 percent high against the barrel, where Bartz runs it 38 percent high.",
+            "sources": [
+                {"path": "docs/NozzleCooling.md", "quote": "it runs the throat 20 percent high against the barrel, where Bartz runs it 38 percent high"}
+            ]
+        },
+        "coolantSide": {
+            "name": "Coolant-side heat transfer",
+            "status": "compared",
+            "reference": "Carlile and Quentmeyer, NASA TM-105679 (13 throat wall temperatures); hydrogen coefficients of NASA TN D-7207",
+            "result": "All 13 measured wall temperatures lie inside the band the unreported coolant state and roughness span, but the bands are wider than the tolerances set before the comparison. Against TN D-7207 the default roughness model runs 1.4 to 1.8 times high.",
+            "sources": [
+                {"path": "src/NOVA/regenThermal.py", "quote": "so it is a sensitivity-bounded comparison, not a validation"},
+                {"path": "src/NOVA/regenThermal.py", "quote": "the default runs 1.4 to 1.8 times high"}
+            ]
+        },
+        "pressureDrop": {
+            "name": "Coolant pressure drop",
+            "status": "unvalidated",
+            "reference": "None: no measured jacket pressure drop",
+            "result": "Friction on the Swamee-Jain factor, within 2.8 percent of Colebrook, plus a bend loss from each station's turn. Neither has been compared with a measured jacket.",
+            "sources": [
+                {"path": "src/NOVA/regenThermal.py", "quote": "The pressure drop is unvalidated against hardware."},
+                {"path": "src/NOVA/regenThermal.py", "quote": "which is within 2.8 percent of Colebrook"}
+            ]
+        },
+        "turnaround": {
+            "name": "Turnaround loss",
+            "status": "unvalidated",
+            "reference": "Handbook loss coefficients for a sudden expansion and a sharp entrance",
+            "result": "Held to its closed form; the true loss of a compact turn is higher by the interaction of the two losses, which no source here quantifies.",
+            "sources": [
+                {"path": "src/NOVA/turnaround.py", "quote": "The turnaround loss is unvalidated against a rocket manifold."}
+            ]
+        },
+        "coolantCircuit": {
+            "name": "Multi-pass coolant circuit",
+            "status": "unvalidated",
+            "reference": "None: no measured multi-pass jacket",
+            "result": "Each pass inherits the single-pass status, and the coupling is held to its identities. The rib conductance runs 2 to 40 percent above a two-dimensional conduction solve of the web.",
+            "sources": [
+                {"path": "src/NOVA/coolantCircuit.py", "quote": "Unvalidated as a circuit."},
+                {"path": "src/NOVA/coolantCircuit.py", "quote": "The rib conductance runs 2 to 40 percent above a two-dimensional conduction solve"}
+            ]
+        },
+        "extensionCircuit": {
+            "name": "Extension coolant circuit",
+            "status": "unvalidated",
+            "reference": "None: no measured separately cooled extension",
+            "result": "Each pass inherits the single-pass march's status; a one-pass circuit reproduces the chamber march on the extension's stations.",
+            "sources": [
+                {"path": "src/NOVA/extensionCircuit.py", "quote": "No measurement of a separately cooled extension is available here."}
+            ]
+        },
+        "filmChamber": {
+            "name": "Film cooling in the chamber",
+            "status": "unvalidated",
+            "reference": "Hatch and Papell (NASA TN D-130) and the entrainment model of NASA SP-8124, each outside its fitted conditions",
+            "result": "The two closures disagree widely: on the LOX/LH2 reference engine the correlation gives a peak driving temperature of 3228 K and the entrainment model 2548 K.",
+            "sources": [
+                {"path": "src/NOVA/filmCooling.py", "quote": "Neither is validated at rocket conditions and the spread between them is a fair statement of how well film cooling is known here."},
+                {"path": "src/NOVA/filmCooling.py", "quote": "the correlation gives a peak driving temperature of 3228 K and the entrainment model 2548 K"}
+            ]
+        },
+        "extensionFilm": {
+            "name": "Films over the extension",
+            "status": "unvalidated",
+            "reference": "None: no measured extension wall temperature under a film",
+            "result": "Neither film closure is validated at rocket conditions, and no measured extension under a turbine exhaust or dumped hydrogen film is available. The method's identities are held by the tests.",
+            "sources": [
+                {"path": "src/NOVA/extensionFilm.py", "quote": "Unvalidated on an extension."}
+            ]
+        },
+        "radiativeExtension": {
+            "name": "Radiation-cooled extension",
+            "status": "unvalidated",
+            "reference": "None for the grey-gas, grey-wall exchange or the supplied emissivities",
+            "result": "The solver is verified: it converges at observed order 2.000 against a manufactured solution and closes its energy balance. The radiation model and the emissivities it is given are not validated.",
+            "sources": [
+                {"path": "src/NOVA/radiativeCooling.py", "quote": "The extension solver is verified, not validated."},
+                {"path": "src/NOVA/radiativeCooling.py", "quote": "the conduction operator converges at observed order 2.000 against a manufactured sine solution"}
+            ]
+        },
+        "gasGenerator": {
+            "name": "Gas generator and turbine exhaust",
+            "status": "unvalidated",
+            "reference": "The F-1 gas generator's published temperature",
+            "result": "CEA's equilibrium puts the F-1 gas generator at 1252 K, 17.8 percent above the 1063 K published, from graphite and methane a real generator does not form. No hydrogen gas generator has a complete published case.",
+            "sources": [
+                {"path": "src/NOVA/turbineExhaust.py", "quote": "Fuel-rich hydrocarbon gas generator states are unvalidated and run hot."},
+                {"path": "src/NOVA/turbineExhaust.py", "quote": "CEA at 6.65 MPa gives 1252 K, 17.8 percent high"},
+                {"path": "src/NOVA/turbineExhaust.py", "quote": "so they too are unvalidated against hardware"}
+            ]
+        },
+        "flowAccounting": {
+            "name": "Engine flow accounting",
+            "status": "construction",
+            "reference": "Its own identities",
+            "result": "The flow accounting is arithmetic on the flows the run sets, held to its identities by the tests.",
+            "sources": [
+                {"path": "docs/regenCoolingArchitectures.md", "quote": "The flow accounting is arithmetic, held to its identities in `tests/testFlowAccounting.py`."}
+            ]
+        },
+        "plumeMarch": {
+            "name": "Plume march",
+            "status": "unvalidated",
+            "reference": "NASA TR R-6 table II, the one published interior field",
+            "result": "It fails TR R-6 table II: the center-line wave is over-predicted by 7.8 percent of its amplitude rms and does not converge with resolution. It agrees with an inviscid finite-volume jet inside its reach, which is a cross-check, and holds mass to better than half a percent over two lip radii at a lip ratio near one.",
+            "sources": [
+                {"path": "experimental/plumeDevelopmentState.md", "quote": "The center-line wave is over-predicted by 7.8 per cent of its own amplitude rms, the error does not converge with resolution"},
+                {"path": "validation/openFoam/plume.md", "quote": "The case is a cross-check between two unvalidated tools, not a validation."},
+                {"path": "experimental/plumeDevelopmentState.md", "quote": "Two lip radii, at a lip ratio near one, to better than half a per cent and converging."}
+            ]
+        },
+        "plumeCorrelations": {
+            "name": "Plume structure correlations",
+            "status": "unvalidated",
+            "reference": "Correlations fitted to other jets",
+            "result": "The shock cell length, Mach disk and reflection positions are fits to measurements or simulations that NOVA applies outside the conditions they were fitted to.",
+            "sources": [
+                {"path": "validation/openFoam/plume.md", "quote": "each is a fit to measurements or simulations, which NOVA applies outside the conditions they were fitted to"}
+            ]
+        }
+    }
+}

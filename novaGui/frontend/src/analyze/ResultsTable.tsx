@@ -14,6 +14,9 @@
    Beside a baseline run, each value carries the baseline's value and the change from it, the
    shown run minus the baseline; a value that did not move reads blank. Rows only the baseline
    has follow at the end of their section.
+
+   Each headline number and section carries its validation status (ValidationBadge): the weakest
+   status among the models behind it, which opens the references and the records.
    Sean Bowman [11/17/2026]
    ======================================== */
 
@@ -21,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChartIcon, CopyIcon, DownloadIcon, InfoIcon, NozzleGlyph, SearchIcon } from '../components/Icons';
 import type { HeadlineNumber, ResultRow, ResultSection, ResultTable } from '../types';
+import { ValidationBadge } from './ValidationBadge';
 
 interface ResultsTableProps {
     table: ResultTable | null;
@@ -127,15 +131,17 @@ function Headline({ numbers, baselineRun, available, onOpenView }: {
                         )}
                     </>
                 );
-                return opens ? (
-                    <button key={number.key} type="button" role="listitem"
-                            className={`headline-number is-link ${number.tone === 'warn' ? 'is-warn' : ''}`}
-                            onClick={() => onOpenView(number.view!)} title="Open the figure that shows it">
-                        {body}
-                    </button>
-                ) : (
-                    <div key={number.key} role="listitem" className={`headline-number ${number.tone === 'warn' ? 'is-warn' : ''}`}>
-                        {body}
+                return (
+                    <div key={number.key} role="listitem" className={`headline-item ${number.tone === 'warn' ? 'is-warn' : ''}`}>
+                        {opens ? (
+                            <button type="button" className="headline-number is-link"
+                                    onClick={() => onOpenView(number.view!)} title="Open the figure that shows it">
+                                {body}
+                            </button>
+                        ) : (
+                            <div className="headline-number">{body}</div>
+                        )}
+                        <ValidationBadge info={number.validation} subject={number.label} />
                     </div>
                 );
             })}
@@ -212,13 +218,16 @@ export function ResultsTable({ table, loading, error, emptyText, available, onOp
             const valueColumns = section.columns?.length ?? (split ? 3 : 1);
             return (
                 <section key={section.title} className={`card section ${open ? 'is-open' : ''}`}>
-                    <button type="button" className="section-header" aria-expanded={open}
-                            onClick={() => setClosed((previous) => ({ ...previous, [section.title]: !previous[section.title] }))}>
-                        <NozzleGlyph className="section-glyph" />
-                        <span className="section-title">{section.title}</span>
-                        {section.baselineOnly && <span className="badge">only in run {baselineRun}</span>}
-                        <span className="section-count">{section.rows.length}</span>
-                    </button>
+                    <div className="section-head-row">
+                        <button type="button" className="section-header" aria-expanded={open}
+                                onClick={() => setClosed((previous) => ({ ...previous, [section.title]: !previous[section.title] }))}>
+                            <NozzleGlyph className="section-glyph" />
+                            <span className="section-title">{section.title}</span>
+                            {section.baselineOnly && <span className="badge">only in run {baselineRun}</span>}
+                            <span className="section-count">{section.rows.length}</span>
+                        </button>
+                        <ValidationBadge info={section.validation} subject={section.title} />
+                    </div>
                     <div className="section-body result-body" hidden={!open}>
                         <table className={`result-table ${baselineRun !== null ? 'is-compared' : ''}`}>
                             <colgroup>

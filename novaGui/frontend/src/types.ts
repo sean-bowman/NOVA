@@ -281,11 +281,42 @@ export interface ResultRow {
     baselineOnly?: boolean;       // a row only the baseline has
 }
 
+export type ValidationStatusName = 'validated' | 'calibrated' | 'compared' | 'crossCheck' | 'unvalidated' | 'construction';
+
+/** One model behind a reported result, as docs/validationStatus.json records it. */
+export interface ValidationModel {
+    id: string;
+    name: string;
+    status: ValidationStatusName;
+    label: string;                // 'Cross-checked'
+    reference: string;
+    result: string;
+    gap: string;                  // what would close it, '' where the record names nothing
+    record: string;               // the record it comes from first, repository relative
+}
+
+/**
+ * How far a headline number or a section can be trusted (novaGui.validationStatus.badge): the
+ * weakest status among the models behind it, and each of them.
+ */
+export interface ValidationBadgeInfo {
+    status: ValidationStatusName;
+    label: string;
+    meaning: string;
+    models: ValidationModel[];
+}
+
+/** A model with the passages of its records that carry its status. */
+export interface ValidationDetail extends ValidationModel {
+    passages: { path: string; quote: string; text: string }[];
+}
+
 export interface ResultSection {
     title: string;
     columns: string[] | null;
     rows: ResultRow[];
     baselineOnly?: boolean;
+    validation?: ValidationBadgeInfo | null;
 }
 
 /** One of the numbers drawn above the table (novaGui.analysis.headline). */
@@ -299,6 +330,7 @@ export interface HeadlineNumber {
     view: string | null;
     baseline?: string | null;
     change?: string | null;
+    validation?: ValidationBadgeInfo | null;
 }
 
 export interface ResultTable {

@@ -186,6 +186,10 @@ The pencil beside the run menu opens the shown run's details: a name, which the 
 
 **Table** in the result pane's header swaps the figure for the numbers behind it, in one table: sizing, the combustion chamber, delivered performance beside the 1D estimates, CEA thermochemistry at the chamber and throat, the cooling summary and each coolant pass, and the plume's lip pressure ratio, march reach and mass continuity error. The numbers a design is judged by first head it: delivered Isp and thrust, contour length, exit diameter, the peak hot wall against its limit, and each pass's pressure drop. A row or a headline number that a figure shows opens that figure. The table filters by name, copies as tab-separated text and saves as CSV.
 
+Each headline number and section carries a badge saying how far it can be trusted: Validated, Calibrated, Compared, Cross-checked or Unvalidated, or By construction for geometry and accounting. A number reads as the weakest status among the models behind it, as the run used them: the gas-side model it selected, the multi-pass circuit and the chamber film only where it has them. A click on the badge lists those models, each with the reference it was put against and the result in numbers, and shows the passage of the validation record its status stands on. The statuses are summarized in [docs/validationStatus.md](docs/validationStatus.md).
+
+![Validation of a headline number](docs/images/novaGui/validation.png)
+
 ![Results table](docs/images/novaGui/table.png)
 
 Beside a baseline, each value carries the baseline's value and the change from it, the shown run minus the baseline, with the percent change; a value that did not move reads blank.
@@ -650,6 +654,7 @@ Baselines are written to `tests/baselines/` and are carried in the repository, s
 - [Nozzle Contour](docs/NozzleContour.md) -- MOC contour generation: nomenclature, Sauer transonic analysis, characteristics, process flow.
 - [Nozzle Contour Methods](docs/NozzleContourMethods.md) -- the contour families, what each optimizes, how other axisymmetric MOC implementations differ, and where this one sits.
 - [Nozzle Contour Validation](docs/NozzleContourValidation.md) -- what the contour generator is checked against, the defects that check found, and an explicit statement of what is and is not validated.
+- [Validation Status](docs/validationStatus.md) -- one table of every model behind NOVA's reported results: its status, the reference, the result in numbers, and the records it stands on.
 - [Contour Families Report](docs/reports/contourFamilies_2026-09-15.html) -- the three families, the throat and transonic models, the boundary layer and the internal shock, with the plots behind each number.
 - [arcSpline Overshoot at a Corner](docs/reports/arcSplineOvershoot_2026-09-08.md) -- why the arc-length resampler used to invent geometry outside its own input, what replaced it, and how far the contour moved.
 - [Contour Verification and Assessment](docs/reports/nozzleContourEffort_2026-09-06.md) -- the narrative of that effort end to end, phase by phase, with the figures. Rendered as a standalone [HTML report](docs/reports/nozzleContourEffort_2026-09-06.html).
