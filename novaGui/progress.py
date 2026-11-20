@@ -32,18 +32,19 @@ Date:   08/28/2026
 '''
 
 # Nominal top-level stage times [s]: the median over the shipped nozzle and the five example
-# configurations, each run with every output written, on one desktop (Ryzen 7 2700X, 11/18/2026).
+# configurations, each run with every output written, on one desktop (Ryzen 7 2700X, 11/20/2026).
 # They set the shares of a window's first run only; later runs use the last run's own times. The
-# spread behind a median can be wide: a multi-pass circuit's cooling stage ran 255 to 345 s against
-# 20 to 34 s single pass, and the methalox booster's extension 729 s against a 9 s median.
+# spread behind a median can be wide: a multi-pass circuit's cooling stage ran 14 to 24 s against
+# 2.4 to 3.1 s single pass, and the methalox booster's two-pass extension circuit 43 s against a
+# 1.5 s median.
 nominalStageTimes = {
-    'contour':     55.0,
-    'cooling':     30.0,
+    'contour':     54.0,
+    'cooling':     3.0,
     'volutes':     0.06,
-    'extension':   9.4,
+    'extension':   1.5,
     'performance': 0.1,
-    'plume':       6.2,
-    'outputs':     2.2,
+    'plume':       6.1,
+    'outputs':     2.3,
 }
 defaultStageTime = 5.0      # [s] a stage the table does not name
 shortestShare = 0.3         # [s] the least time a stage is weighted with, so each shows on the bar
