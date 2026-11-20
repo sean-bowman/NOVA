@@ -433,7 +433,8 @@ export function App() {
                                 <CloseIcon />
                             </button>
                         </div>
-                        <ExportPanel runId={exportRun} mode={mode} formName={String(config.filename || '')} onNotify={notify} />
+                        <ExportPanel runId={exportRun} baseline={runs.baseline} mode={mode} formName={String(config.filename || '')}
+                                     onNotify={notify} />
                     </div>
                 </div>
             )}
@@ -469,7 +470,8 @@ export function App() {
                             run bar steps through its stages. Generate during a run queues the form behind it, and
                             Sweep queues one run per value of a field. The pane on the right shows any of the saved
                             runs, as figures or as a results table, against a baseline run when one is chosen, and a
-                            sweep as a plot and a table of its points; Export copies a run's outputs to keep.
+                            sweep as a plot and a table of its points; Export copies a run's outputs to keep, and
+                            Save report writes a run's or a sweep's report as one HTML file to send.
                         </p>
                         <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one, Escape close.</p>
                         <div className="modal-actions">

@@ -12,7 +12,7 @@ steps the result pane through its views, the results table, the validation of it
 the export dialog with a preview.
 It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
 of a run drawn over its baseline, the table beside it, the second run's details with a name and a
-note, and the grid of views along the nozzle axis in a popped-out window. Last it queues a trade
+note, its report against the first, and the grid of views along the nozzle axis in a popped-out window. Last it queues a trade
 sweep of the chamber pressure from the sweep dialog, three runs, and photographs the dialog, the
 queue while the sweep runs, and the finished sweep's plot and table. The light-mode pictures use
 the theme switch, which saves the theme preference; the preferences found at the start, the form's
@@ -303,6 +303,14 @@ def photograph(page: Page, base: str, storeFolder: str) -> None:
     capture(page, 'runDetails')
     page.keyboard.press('Escape')
     page.wait_for_selector('.run-details', state = 'detached')
+
+    # The second run's report against the first, as the Export dialog saves it, opened on its own
+    report = page.context.new_page()
+    report.goto(f'{base}api/report?run=2&baseline=1')
+    report.wait_for_selector('.summary-card')
+    report.wait_for_timeout(500)
+    capture(report, 'report')
+    report.close()
 
     # The grid of views along the axis, popped out onto a second monitor, with the cursor on the throat region
     page.locator('.result-head .segmented button', has_text = 'Figure').click()

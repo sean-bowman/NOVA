@@ -1192,7 +1192,8 @@ select.input option {
 }
 
 /* -- Export dialog -- */
-.export-dialog {
+/* Two classes, so its width and padding hold over the generic .modal rule further down */
+.modal.export-dialog {
     display: flex;
     flex-direction: column;
     width: min(980px, 94vw);
@@ -2316,6 +2317,13 @@ select.input option {
 
 .validation-dialog > .validation-source {
     font-size: 11.5px;
+}
+
+/* -- Report buttons: Save report and the window beside it -- */
+.report-buttons {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
 }
 
 /* -- The run queue: the queued count, its panel, and Cancel's two choices -- */

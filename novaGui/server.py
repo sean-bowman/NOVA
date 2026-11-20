@@ -33,6 +33,8 @@ Routes, all under /api:
     DELETE /sweeps/{sweepId}        delete a sweep, its queued points and its runs, except named runs and
                                     the baseline
     GET  /sweeps/{sweepId}/figure   one headline number against the swept field, ?number=&mode=
+    GET  /sweeps/{sweepId}/report   the sweep's report as one HTML file (novaGui.report)
+    GET  /report                    a run's report as one HTML file, ?run=&baseline= (novaGui.report)
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
     GET  /views                     the view list, the keys a run produced, and that run's id, name,
@@ -102,6 +104,7 @@ from . import analysis
 from . import assetFolder
 from . import design
 from . import outputs
+from . import report
 from . import schemaJson
 from . import sweeps
 from . import validationStatus
@@ -568,6 +571,38 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             table = analysis.compareTables(table, _table(_record(baseline)))
         return {'runId': record.runId, 'runName': record.runName,
                 'baselineRun': baseline if baseline is not None and baseline != record.runId else None, **table}
+
+    # -- Reports -- #
+    @app.get('/api/report')
+    def runReport(run: int | None = None, baseline: int | None = None) -> HTMLResponse:
+
+        record = _finishedRun(run)
+        nozzle = _nozzle(record.runId)
+        table = {**_table(record), 'runId': record.runId, 'baselineRun': None}
+        other = None
+        if baseline is not None and baseline != record.runId:
+            other = _record(baseline)
+            table = {**analysis.compareTables(table, _table(other)), 'runId': record.runId, 'baselineRun': other.runId}
+        page = report.runReport(record, nozzle, table, views.availableViews(record), baseline = other)
+        return HTMLResponse(page, headers = {'Cache-Control': 'no-store'})
+
+    @app.get('/api/sweeps/{sweepId}/report')
+    def sweepReport(sweepId: int) -> HTMLResponse:
+
+        session = app.state.session
+        table = next((entry for entry in session.sweepList()['sweeps'] if entry['sweepId'] == sweepId), None)
+        if table is None:
+            raise HTTPException(404, f'sweep {sweepId} is not kept')
+        # One finished run of the sweep says which models its numbers come from
+        sampleTable, sampleNozzle = None, None
+        sample = next((point['runId'] for point in table['points'] if point['kept']), None)
+        if sample is not None:
+            try:
+                sampleTable, sampleNozzle = _table(_record(sample)), _nozzle(sample)
+            except HTTPException:
+                pass
+        page = report.sweepReport(table, dict(session.runs), sampleTable, sampleNozzle)
+        return HTMLResponse(page, headers = {'Cache-Control': 'no-store'})
 
     # -- Validation status -- #
     @app.get('/api/validation/{model}')

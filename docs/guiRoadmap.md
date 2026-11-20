@@ -9,7 +9,6 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 | Item | Title | Effort | Depends on |
 | --- | --- | --- | --- |
 | [G5](#g5-the-jacket-profile-while-the-circuit-iterates) | The jacket profile while the circuit iterates | Medium | |
-| [G6](#g6-run-report) | Run report | Medium | |
 | [G7](#g7-retire-the-tkinter-front-end) | Retire the Tkinter front end | Medium | a decision |
 | [G8](#g8-install-without-node) | Install without Node | Medium | |
 | [G9](#g9-the-methalox-extension-stage) | The methalox extension stage | Investigation | |
@@ -17,10 +16,6 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 ### G5. The jacket profile while the circuit iterates
 
 The stage list shows each coolant circuit pass's outlet temperatures and change, which says the circuit is converging but not where along the wall it is still moving. Each pass could also send its hot wall temperature profile and its coolant temperature profile along the axis, and the result pane could draw them pass over pass, the latest solid and the earlier ones fading, while the run continues. The worker already has a stage hook on the run's own thread (`runner.PipelineRunner.stageHook`); the profiles would ride on the circuit's `iteration` events or a message of their own, a few kilobytes per pass.
-
-### G6. Run report
-
-A report of one run, or of a run against its baseline, to send to someone without the GUI: the inputs that differ from the shipped nozzle, the headline numbers, the result table, the key figures as static drawings, and the run's warnings, as one HTML file in the report palette. The pieces exist: `analysis.resultTable`, `analysis.compareTables`, the static drawers behind Save PNG, and the run's config and warnings.
 
 ### G7. Retire the Tkinter front end
 
@@ -48,3 +43,4 @@ The methalox booster example (`src/NOVA/assets/examples/methaloxBooster.json`) s
 | #6 | G2, saved and named runs: a run store (`novaGui.runStore`) kept between launches, run ids that never repeat, a name and note per run, delete, and limits on unnamed runs. G4, edit from a kept run: in the run's details, and in the strip that names the form's changes |
 | #7 | G3, validation status on the results: `docs/validationStatus.json` summarizes each model's status from its records, quoting them word for word, held by `tests/testValidationStatus.py`; a badge on each headline number and section reads as the weakest model behind it and opens the passages of its records; `docs/validationStatus.md` is the same summary as one table |
 | #8 | G1, trade sweeps with a run queue: Generate during a run queues the form, Cancel stops the run alone or the queue with it, and a queued run can be taken out; a sweep (`novaGui.sweeps`) varies one field over a range or a list, or two as a grid, queues one run per point, goes on past a failed point, and keeps its runs until it is deleted; the Sweep view plots a headline number against the swept field and tabulates the points with each number's validation status |
+| #10 | G6, reports: a run's report, alone or against its baseline, and a sweep's, each one HTML file (`novaGui.report`) with the headline numbers and their validation status, the inputs that differ from the shipped nozzle, the result table or the sweep's points and plot, the figures as PNGs in both modes, the warnings, a validation section and the config; saved from the Export dialog and the Sweep view |

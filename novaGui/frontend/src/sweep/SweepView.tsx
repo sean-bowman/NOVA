@@ -9,19 +9,20 @@
    result table of one of the sweep's runs, so the sweep's numbers say how far they can be trusted
    as the result pane's headline does.
 
-   A sweep whose points were cancelled, or whose window closed before they ran, can queue them
-   again. Delete takes the sweep, its queued points and its runs, except a run that was named or is
+   Save report writes the sweep's report as one HTML file (ReportButtons.tsx). A sweep whose points
+   were cancelled, or whose window closed before they ran, can queue them again. Delete takes the sweep, its queued points and its runs, except a run that was named or is
    the baseline.
    Sean Bowman [11/20/2026]
    ======================================== */
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 
-import { api } from '../api';
+import { api, fileStem, sweepReportPath } from '../api';
 import { ValidationBadge } from '../analyze/ValidationBadge';
 import { formatClock } from '../run/stageText';
 import type { RunsView } from '../result/useRuns';
 import type { Mode, Sweep, SweepList, SweepPoint, ValidationBadgeInfo } from '../types';
+import { ReportButtons } from '../report/ReportButtons';
 import { loadPlotly } from '../view/PlotlyFigure';
 
 interface SweepViewProps {
@@ -210,6 +211,8 @@ export function SweepView({ list, runs, mode, chosen, onChoose, onNotify }: Swee
                         Run the {sweep.counts.cancelled} not run
                     </button>
                 )}
+                <ReportButtons path={sweepReportPath(sweep.sweepId)} fileName={`${fileStem(sweep.name, 'nova').replace(/Sweep$/, '')}Sweep${sweep.sweepId}Report.html`}
+                               title={sweep.name} onNotify={onNotify} />
                 <button type="button" className="button button-quiet" onClick={() => setConfirming(true)}>Delete sweep</button>
             </div>
             {confirming && (
