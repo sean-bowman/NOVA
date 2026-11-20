@@ -52,6 +52,9 @@ try:
 except:
     print(f'Uh oh, ctREFPROP isn\'t found. You won\'t be able to call REFPROP. You can to pip install that with \'pip install -U ctREFPROP\'.')
 
+# The process's REFPROP library and its mass base SI unit enum, built on the first call (refpropLibrary)
+_refprop = {}
+
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Property accessors -- #
 #--------------------------------------------------------------------------------------------------------------------------#
@@ -115,6 +118,45 @@ def checkREFPROPResult(result, species: str, inputTypes: str, outputTypes: str,
                           f'{REFPROPMARKERS[float(value)]}. The marker it returns in that slot '
                           f'reads as a property if it is not checked for.',
                 species = species, errorCode = errorCode, requested = outputTypes)
+
+def refpropLibrary() -> tuple:
+
+    '''
+
+    The process's REFPROP library, and the enum of its mass base SI units.
+
+    Built on the first call and kept. Building the library object searches the REFPROP folder for
+    its DLL, test-loads every DLL it finds there, and wraps some 140 of the DLL's functions, which
+    takes about 30 ms: some fifty times the property evaluation it serves. Windows loads a DLL
+    once per process, so every library object drives the same DLL and the same fluid state inside
+    it, and one object serves every call alike. Each process (a GUI run's worker, for one) builds
+    its own.
+
+    Returns:
+    --------
+    tuple
+        (REFPROP library, mass base SI unit enum).
+
+    Raises:
+    -------
+    Exception
+        If REFPROP is at neither of the folders searched.
+
+    '''
+
+    if not _refprop:
+        # The user's folder first, then Program Files (x86)
+        rootUsers           = os.path.expanduser('~') + '\\REFPROP'
+        rootProgramFilesx86 = 'C:\\Program Files (x86)\\REFPROP'
+        root = next((folder for folder in (rootUsers, rootProgramFilesx86) if os.path.exists(folder)), None)
+        if root is None:
+            raise Exception(f'Uh oh, REFPROP isn\'t found at Users\\%YOURUSERNAME%\\REFPROP or C:\\Program Files (x86)\\REFPROP')
+        library = REFPROPFunctionLibrary(root)
+        library.SETPATHdll(root)
+        _refprop['library'] = library
+        _refprop['units'] = library.GETENUMdll(0, 'MASS BASE SI').iEnum
+
+    return _refprop['library'], _refprop['units']
 
 def refWrap(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: float, inputTypeSecond: float, mixtureRatio: list[float] = [1.0], units: bool = False) -> float | list[float] | str | list[str]:
 
@@ -223,28 +265,12 @@ def refWrap(species: str, inputTypes: str, outputTypes: str, inputTypeFirst: flo
 
     '''
 
-    # Define location where REFPROP is stored and let the dll know
-    rootUsers                = os.path.expanduser('~') + '\\REFPROP'
-    rootProgramFilesx86      = 'C:\\Program Files (x86)\\REFPROP'
-    REFPROPinUsers           = os.path.exists(rootUsers)
-    REFPROPinProgramFilesx86 = os.path.exists(rootProgramFilesx86)
-
-    if (REFPROPinUsers is False) and (REFPROPinProgramFilesx86 is False):
-        raise Exception(f'Uh oh, REFPROP isn\'t found at Users\\%YOURUSERNAME%\\REFPROP or C:\\Program Files (x86)\\REFPROP')
-
-    # Will default to User directory even if both are True because if statements check top-down
-    if REFPROPinUsers is True:
-        RP = REFPROPFunctionLibrary(rootUsers)
-        RP.SETPATHdll(rootUsers)
-    elif REFPROPinProgramFilesx86 is True:
-        RP = REFPROPFunctionLibrary(rootProgramFilesx86)
-        RP.SETPATHdll(rootProgramFilesx86)
+    RP, iUnits = refpropLibrary()
 
     # Separate the outputs and count them
     outputTypesSplit = outputTypes.split(" ")
     numOutputs = len(outputTypesSplit)
 
-    iUnits = RP.GETENUMdll(0,"MASS BASE SI").iEnum # Setting units to Mass Base SI
     iMass = 1                                      # 0: molar fractions; 1: mass fractions (for mixtures)
     iFlag = 0                                      # 0: don't call SATSPLN; 1: call SATSPLN
 

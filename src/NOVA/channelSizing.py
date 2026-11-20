@@ -2029,15 +2029,37 @@ def solveChannelRadii(state, geometry, thermal):
     # says what jacket it built before it says why that jacket is not usable.
     checkCoolantExitState(state)
 
-    # Heat transfer plots, on the same switch the thermal model's own figures answer to. The
-    # title says which mode drew them, because a wall that sits below its limit means a converged
-    # bound in one and a profile in the other.
-    if thermal.plotsEnabled == 'on' or thermal.export == 'on':
-        titleFlare = (', manual profile results' if state.channelSizingMode == 'manual'
-                      else ', dcr( ) results')
-        drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
-                              results=heatTransferPlots, family=state.channelType,
-                              titleFlare=titleFlare, xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
-                              wallTemperatureLimit=state.maxWallTemperature)
+    drawSizingFigure(state, thermal, heatTransferPlots)
 
     return state
+
+def drawSizingFigure(state, thermal, results: dict) -> None:
+
+    '''
+
+    The heat transfer figure of a sized jacket, on the switches the thermal model's own figures
+    answer to.
+
+    The title says which mode drew it, because a wall that sits below its limit means a converged
+    bound in one and a profile in the other. A multi-pass circuit solves its passes with the
+    switches off and draws the pass it reports once, when its outer iteration has settled.
+
+    Parameters:
+    -----------
+    state : ChannelSizingState
+        The sized jacket.
+    thermal : RegenThermalContext
+        Where the figure goes, and whether it is drawn.
+    results : dict
+        The sizing march's station results.
+
+    '''
+
+    if thermal.plotsEnabled != 'on' and thermal.export != 'on':
+        return
+    titleFlare = (', manual profile results' if state.channelSizingMode == 'manual'
+                  else ', dcr( ) results')
+    drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
+                          results=results, family=state.channelType,
+                          titleFlare=titleFlare, xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
+                          wallTemperatureLimit=state.maxWallTemperature)
