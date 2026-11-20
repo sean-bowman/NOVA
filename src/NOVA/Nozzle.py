@@ -2156,6 +2156,9 @@ class Nozzle:
                 with progress.stage('volutes', 'Volutes'):
                     self.generateRegenVolutes()
 
+        elif self.volutesRequested():
+            print('No volute is built: a volute is grown onto the cooling channels, and the channels are off.')
+
         # -- Turbine Exhaust, the Films Over the Extension and the Radiation-Cooled Extension -- #
 
         # Each solve returns at once when its own inputs are absent, so the block always runs; it is

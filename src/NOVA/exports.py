@@ -118,8 +118,9 @@ def exportData(nozzle, filename: str = 'default'):
         with open(filename[:-4] + 'Performance.json', 'w', encoding = 'utf-8', newline = '\n') as handle:
             json.dump(nozzle.performance.toDict(), handle, indent = 2)
 
-    # Volutes
-    if nozzle.makeInletVolute == 'on':
+    # Volutes. A volute is grown onto the cooling channels, so one is built only with them; the
+    # volute object, not the flag that asks for it, says whether there is one to write.
+    if getattr(nozzle, 'inletVolute', None) is not None:
         print(f'Exporting Inlet Volute Surface Mesh to .stl')
         py2cad(filename[:-4] + 'InletVolute.stl', nozzle.xInletVolute, nozzle.yInletVolute, nozzle.zInletVolute)
         if nozzle.inletVolute.wallThickness is not None:
@@ -131,7 +132,7 @@ def exportData(nozzle, filename: str = 'default'):
             py2cad(filename[:-4] + 'InletVolutePrintSupportsUpper.stl', nozzle.xInletVoluteSupportUpper, nozzle.yInletVoluteSupportUpper, nozzle.zInletVoluteSupportUpper)
             if nozzle.inletVolute.circlePrintability == 'thick':
                 py2cad(filename[:-4] + 'InletVolutePrintSupportsLower.stl', nozzle.xInletVoluteSupportLower, nozzle.yInletVoluteSupportLower, nozzle.zInletVoluteSupportLower)
-    if nozzle.makeOutletVolute == 'on':
+    if getattr(nozzle, 'outletVolute', None) is not None:
         print(f'Exporting Outlet Volute Surface Mesh to .stl')
         py2cad(filename[:-4] + 'OutletVolute.stl', nozzle.xOutletVolute, nozzle.yOutletVolute, nozzle.zOutletVolute)
         if nozzle.outletVolute.wallThickness is not None:

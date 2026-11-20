@@ -231,8 +231,10 @@ def testTheViewTabOffersOnlyWhatARunProduced():
     assert availableViews(None, {}) == set()
     contourOnly = types.SimpleNamespace(xNozzleWall = np.linspace(0, 1, 10), nozzleNearWallMachNumber = np.ones(10),
                                         allXPoints = [np.zeros((3, 3))], xChannel = np.array([]),
-                                        channelWallTemperature = np.array([]), makeInletVolute = 'off',
-                                        makeOutletVolute = 'off', nozzlePlumeStructure = None)
+                                        channelWallTemperature = np.array([]), nozzlePlumeStructure = None,
+                                        # Both volutes asked for, none built: there are no channels to grow them on
+                                        makeInletVolute = 'on', makeOutletVolute = 'on', inletVolute = None,
+                                        outletVolute = None)
     available = availableViews(contourOnly, {'figures': {}})
     assert {'contour', 'nearWall', 'mach', 'pressure', 'temperature', 'revolved'} <= available
     cooling = {'wallMap', 'jacketTemperatures', 'coolantFlow', 'coolantProperties', 'heatFlux', 'film', 'extension'}
@@ -240,7 +242,7 @@ def testTheViewTabOffersOnlyWhatARunProduced():
 
     cooled = types.SimpleNamespace(**{**vars(contourOnly), 'xChannel': np.zeros((40, 60)),
                                       'channelThermalResults': {'xHotWall3D': np.linspace(0, 1, 60)},
-                                      'makeOutletVolute': 'on', 'nozzlePlumeStructure': object(),
+                                      'outletVolute': object(), 'nozzlePlumeStructure': object(),
                                       'filmCooling': 'on', 'xRegenNozzle': np.linspace(0, 1, 60),
                                       'regenSectionFilmEffectiveness': np.ones(60),
                                       'radiativeExtensionSolution': object(),

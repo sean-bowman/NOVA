@@ -409,7 +409,7 @@ Solves the wall temperature of an uncooled extension beyond the jacket. Needs a 
 
 | Field                                                | Unit | Meaning                                                                             |
 | ------------------------------------------------------ | ---- | ------------------------------------------------------------------------------------ |
-| `makeInletVolute`, `makeOutletVolute`             | --   | Build the inlet manifold and the outlet manifold                                    |
+| `makeInletVolute`, `makeOutletVolute`             | --   | Build the inlet manifold and the outlet manifold onto the cooling channels; with `makeCoolingChannels` off, neither is built |
 | `numCSVolute`, `numCSPointsVolute`               | --   | Cross sections swept around each volute, and points per cross section              |
 | `voluteRelativeRoll`                               | deg  | Roll offset between the inlet and outlet volutes                                    |
 | `voluteScrollType`                                 | --   | `ring` or `cutwater`                                                                 |
