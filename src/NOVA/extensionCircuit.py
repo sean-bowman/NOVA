@@ -51,6 +51,7 @@ Author: Sean Bowman
 '''
 
 import copy
+import dataclasses
 from dataclasses import dataclass
 from typing import Any
 
@@ -332,6 +333,9 @@ def solveExtensionCircuit(state: ExtensionCircuitState, thermal) -> ExtensionCir
 
     stations = extensionCircuitSpan(state.xExtension, state.rExtension, state.nozzleScalingFactor,
                                     float(state.extensionCircuitEndAreaRatio))
+    # The heat transfer figure is the chamber jacket's, written under one name; drawn here, the
+    # extension circuit's passes would write over it
+    thermal = dataclasses.replace(thermal, plotsEnabled = 'off', export = 'off')
     template = state.channelSizingSolution
     geometry = ChannelGeometryInputs(
         numCrossSections = len(stations), numCSPointsChannel = int(state.numCSPointsChannel or 24),

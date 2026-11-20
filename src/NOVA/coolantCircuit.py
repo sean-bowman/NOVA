@@ -59,13 +59,14 @@ Author: Sean Bowman
 '''
 
 import copy
+import dataclasses
 from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 
 from . import progress
-from .channelSizing import solveChannelRadii
+from .channelSizing import drawSizingFigure, solveChannelRadii
 from .errors import ConvergenceFailureError, InvalidInputError, createErrorContext
 from .fluidProperties import fluidProps
 from .geometryTools import sizedThroatRadius
@@ -362,6 +363,9 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
 
     Solve a one-and-a-half-pass or two-pass jacket.
 
+    The passes are solved with the figure switches off, and the up pass, the one the jacket reports,
+    is drawn once when the outer iteration has settled.
+
     Parameters:
     -----------
     base : ChannelSizingState
@@ -419,6 +423,9 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
                               pitchCount, float(base.coolantInitialTemperature),
                               float(base.coolantInitialPressure))
 
+    # Drawn in the loop, the figure would be written again on every outer pass
+    quiet = dataclasses.replace(thermal, plotsEnabled = 'off', export = 'off')
+
     history, upResults, downState, upState, ring = [], None, None, None, None
     downRise, upRise = None, None
     for iteration in range(1, maxIterations + 1):
@@ -432,7 +439,7 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
                         np.asarray(upResults['coolantConvectiveHeatTransferCoef'])[downStations],
                         np.asarray(upState.channelRadius)[downStations])
         with progress.stage('down', 'Down pass'):
-            downState = _solvePass(downTemplate, geometry, thermal, *neighbor, downFaces, downRise)
+            downState = _solvePass(downTemplate, geometry, quiet, *neighbor, downFaces, downRise)
         downResults = downState.channelThermalResults
         downMid, downRise = stationTemperatures(downResults['temperature'], 'coflow',
                                                 float(downState.coolantInitialTemperature))
@@ -475,7 +482,7 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         neighborRadius[downStations] = np.asarray(downState.channelRadius)
         previous = None if upResults is None else np.asarray(upResults['temperature']).copy()
         with progress.stage('up', 'Up pass'):
-            upState = _solvePass(upTemplate, geometry, thermal,
+            upState = _solvePass(upTemplate, geometry, quiet,
                                  neighborTemperature if ribExchange else None, neighborCoefficient,
                                  neighborRadius, upFaces, upRise)
         upResults = upState.channelThermalResults
@@ -502,6 +509,8 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
                        f'slowly; more passes or a looser tolerance close it.'),
             context = createErrorContext(circuit = circuit, history = history),
             iterations = maxIterations, tolerance = tolerance, residual = history[-1])
+
+    drawSizingFigure(upState, thermal, upResults)
 
     return CircuitSolution(
         circuit    = circuit,

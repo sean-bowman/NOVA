@@ -266,3 +266,20 @@ def testEachOuterPassIsReportedAndTheReportChangesNothing(jacket, twoPassApart):
     assert metrics['downOutletTemperature'] == float(circuit.down.state.coolantExitTemperature)
     assert circuit.coolantExitTemperature == twoPassApart.coolantExitTemperature
     assert circuit.coolantExitPressure == twoPassApart.coolantExitPressure
+
+def testAMultiPassJacketDrawsItsUpPassOnce(jacket, monkeypatch):
+
+    '''Drawn in the loop, the figure would be written on every outer pass; it is drawn once, of the up pass.'''
+
+    import dataclasses
+
+    from NOVA import channelSizing
+
+    _, base, geometry, thermal = jacket
+    drawn = []
+    monkeypatch.setattr(channelSizing, 'drawRegenHeatTransfer', lambda context, **kwargs: drawn.append(kwargs))
+    circuit = solveCoolantCircuit(copy.deepcopy(base), geometry, dataclasses.replace(thermal, export = 'on'),
+                                  'twoPass', material = 'GRCop-42')
+
+    assert circuit.iterations > 1 and len(drawn) == 1
+    assert drawn[0]['nChannel'] == circuit.up.channelCount and drawn[0]['results'] is circuit.up.results

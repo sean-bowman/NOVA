@@ -22,6 +22,11 @@ skipped for a phase request; the error code is not.
 The guard is tested against a stand-in result object so it runs on a machine with no REFPROP
 license, and then against REFPROP itself where one is installed.
 
+**One library per process.** Building the REFPROP library object takes some fifty times the call it
+serves, so refWrap builds it once and keeps it. The DLL is loaded once per process whichever object
+loads it, so the kept object answers as one built for the call would, which is held bit for bit on
+calls that switch the loaded fluid between them.
+
 Author: Sean Bowman
 
 '''
@@ -161,3 +166,27 @@ class TestAgainstREFPROP:
             refWrap('Hydrogen', 'TP', 'D VIS', -500.0, 1.2e7)
 
         assert raised.value.context['errorCode'] > 0
+
+    @pytest.mark.skipif(not installed, reason = reason)
+    def testOneLibraryServesEveryCallAsAFreshOneWould(self):
+
+        '''The library is built once per process, and answers bit for bit as one built for the call.'''
+
+        from ctREFPROP.ctREFPROP import REFPROPFunctionLibrary
+        from NOVA.fluidProperties import refpropLibrary, refWrap
+
+        library, units = refpropLibrary()
+        assert refpropLibrary()[0] is library and refpropLibrary()[1] == units
+
+        # Fluids interleaved, so REFPROP changes the fluid it has loaded between calls
+        dll = library.dll._name
+        calls = [('Methane', 'TP', 'D VIS TCX Cp', 150.0, 2.0e7), ('Hydrogen', 'TP', 'D VIS', 100.0, 1.2e7),
+                 ('Methane', 'PH', 'T', 1.5e7, 5.0e5), ('Oxygen', 'TP', 'D Cp', 120.0, 5.0e6),
+                 ('Hydrogen', 'TP', 'Cp', 300.0, 1.0e7)]
+        for species, inputs, outputs, first, second in calls:
+            fresh = REFPROPFunctionLibrary(dll)
+            fresh.SETPATHdll(os.path.dirname(dll))
+            freshUnits = fresh.GETENUMdll(0, 'MASS BASE SI').iEnum
+            result = fresh.REFPROPdll(species, inputs, outputs, freshUnits, 1, 0, first, second, [1.0])
+            value = refWrap(species, inputs, outputs, first, second)
+            assert (value if isinstance(value, list) else [value]) == list(result.Output[0:len(outputs.split(' '))])

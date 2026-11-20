@@ -97,3 +97,19 @@ class TestTheCircuitRefusals:
         with pytest.raises(InvalidInputError, match = 'carries no more'):
             runConfiguration(tmp_path, **{**CIRCUIT, 'extensionCircuitOutlet': 'return',
                                           'extensionCoolantMassFlow': 1.0, 'extensionFilmSlots': []})
+
+def testTheExtensionCircuitLeavesTheJacketsFigureAlone(dumpCooled, tmp_path, monkeypatch):
+
+    '''The heat transfer figure is the chamber jacket's, written under one name; the extension circuit draws nothing over it.'''
+
+    from NOVA import channelSizing
+    from NOVA.extensionCircuit import solveExtensionCircuit
+    from NOVA.regenThermal import RegenThermalContext
+
+    drawn = []
+    monkeypatch.setattr(channelSizing, 'drawRegenHeatTransfer', lambda context, **kwargs: drawn.append(kwargs))
+    thermal = RegenThermalContext(material = dumpCooled.material, dataFolder = str(tmp_path),
+                                  plotsEnabled = 'on', export = 'on')
+    solution = solveExtensionCircuit(dumpCooled.extensionCircuitState(), thermal)
+
+    assert solution.sizing.channelThermalResults is not None and drawn == []
