@@ -323,6 +323,8 @@ def testTheOutlineJumpsAndAProblemIsWrittenUnderItsField(window):
 def testTheExportDialogPreviewsAnImageAndASurface(window):
     window.locator('.result-head .button', has_text = 'Export').click()
     window.wait_for_selector('.export-dialog .output-category-row')
+    # The dialog takes its own width, so the list keeps its names beside a preview
+    assert window.locator('.export-dialog').bounding_box()['width'] > 900
     window.locator('.output-category-row', has = window.get_by_text('Figures', exact = True)).click()
     window.wait_for_selector('.output-thumb')
     window.locator('.output-file-row .output-preview-button').first.click()
