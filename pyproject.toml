@@ -28,8 +28,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The front end (novaGui): its server and the desktop window. The React app builds with Node
-# (novaGui/frontend).
+# The front end (novaGui): its server and the desktop window. The built React app ships in
+# novaGui/frontend/dist; Node is needed only to change it.
 web = ['fastapi>=0.110', 'uvicorn>=0.29', 'pywebview>=5.0']
 # REFPROP-backed fluid properties, which need a licensed REFPROP installation.
 refprop = ['ctREFPROP>=0.10.5']
@@ -39,14 +39,24 @@ refprop = ['ctREFPROP>=0.10.5']
 # chromium`).
 screenshots = ['kaleido>=0.2', 'playwright>=1.40']
 
+# `nova-gui` opens the GUI in its window with no console. The install has to be editable
+# (`pip install -e .[web]`): the GUI reads the checkout's docs/ and src/NOVA/assets/ and exports
+# to its runs/ folder.
+[project.gui-scripts]
+nova-gui = 'novaGui.__main__:main'
+
 [tool.setuptools]
-package-dir = { '' = 'src' }
+# NOVA lives under src/; the GUI package sits at the repository root
+package-dir = { '' = 'src', 'novaGui' = 'novaGui' }
 
 [tool.setuptools.packages.find]
-where = ['src']
+where = ['src', '.']
+include = ['NOVA*', 'novaGui*']
 
 [tool.setuptools.package-data]
 NOVA = ['assets/*.json', 'assets/*.csv', 'assets/*.npz', 'assets/examples/*.json']
+# The window icon, the plume marks and the built front end
+novaGui = ['assets/*.png', 'assets/*.ico', 'assets/icon/*.png', 'frontend/dist/*', 'frontend/dist/assets/*']
 
 [tool.pytest.ini_options]
 testpaths = ['tests']

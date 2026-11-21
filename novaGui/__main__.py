@@ -5,7 +5,8 @@
 
 Start the NOVA GUI's server and open the front end.
 
-    python -m novaGui               desktop window (pywebview hosting WebView2)
+    nova-gui                        desktop window (pywebview hosting WebView2), no console
+    python -m novaGui               the same window, from a console
     python -m novaGui --browser     the system browser instead of a window
     python -m novaGui --api         the API alone on port 8765, for the Vite dev server
 
@@ -23,9 +24,18 @@ button uses, and `openWindow`, which opens a figure in a window of its own for a
 Those windows close with the main one. A browser has no such bridge: the Export dialog then takes
 a typed folder alone, and a figure pops out into a browser window instead.
 
-Under pythonw (novaGui.bat) there is no console: sys.stdout and sys.stderr are None, and
-uvicorn's log setup fails on them. The launcher then writes both to `<temp>/NOVA/novaGui.log`,
-replaced at each launch, which also keeps the traceback of a failed start.
+`nova-gui` is the launcher pip writes from the gui-scripts entry point in pyproject.toml. It
+runs under pythonw, which has no console: sys.stdout and sys.stderr are None, and uvicorn's log
+setup fails on them. The launcher then writes both to `<temp>/NOVA/novaGui.log`, replaced at each
+launch, which also keeps the traceback of a failed start.
+
+The GUI runs from a checkout, installed editable (`pip install -e .[web]`). A regular install
+carries the package without the checkout files it reads, and the launcher stops with a message
+naming them.
+
+On Windows the process takes an app id of its own before the window opens. The taskbar groups a
+window under its process's app id, pythonw's by default, and shows that app's icon; under NOVA's id
+the window gets a taskbar button with the icon pywebview gives the window (`assets/nova.ico`).
 
 Author: Sean Bowman
 Date:   11/16/2026
@@ -170,6 +180,15 @@ def main(argv: list | None = None) -> int:
     _consoleOrLogFile()
     options = parser.parse_args(argv)
 
+    from . import missingCheckoutFiles, repositoryRoot
+
+    missing = missingCheckoutFiles()
+    if missing:
+        names = ', '.join(missing)
+        print(f'novaGui runs from a NOVA checkout installed with `pip install -e .[web]`; {repositoryRoot} '
+              f'lacks {names}.', file = sys.stderr)
+        return 1
+
     # Before anything imports NOVA: write figures, open no windows or browser tabs
     os.environ.setdefault('NOVA_HEADLESS', '1')
 
@@ -206,6 +225,14 @@ def main(argv: list | None = None) -> int:
 
     import webview
 
+    from . import assetFolder
+
+    # An app id of NOVA's own, before any window opens, so the taskbar shows NOVA's icon, not pythonw's
+    if sys.platform == 'win32':
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('NOVA.Gui')
+
     thread = threading.Thread(target = server.run, name = 'novaServer', daemon = True)
     thread.start()
     if not _waitUntilStarted(server):
@@ -222,7 +249,9 @@ def main(argv: list | None = None) -> int:
     bridge._window.events.closed += bridge._closeOthers
     # Downloads carry saved configs out of the window
     webview.settings['ALLOW_DOWNLOADS'] = True
-    webview.start()
+    # pywebview documents `icon` for GTK and Qt, but its Windows window reads it too (6.x); without
+    # it every window shows the interpreter's icon
+    webview.start(icon = os.path.join(assetFolder, 'nova.ico'))
 
     server.should_exit = True
     thread.join(timeout = 5.0)

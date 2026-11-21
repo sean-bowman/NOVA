@@ -109,11 +109,12 @@ from NOVA import gasDynamics, materials, fluidProps
 
 ```bash
 pip install -e .[web]
-python -m novaGui               # desktop window
+nova-gui                        # desktop window, no console
+python -m novaGui               # the same window, from a console
 python -m novaGui --browser     # the system browser instead
 ```
 
-On Windows, `novaGui.bat` launches it with no console window and writes startup output to `%TEMP%\NOVA\novaGui.log`.
+The install writes the `nova-gui` launcher (`nova-gui.exe` on Windows) into the environment's `Scripts` or `bin` folder. It starts from any folder, and with no console it writes startup output to `%TEMP%\NOVA\novaGui.log`. The install has to be editable: the GUI reads the checkout's `docs/` and `src/NOVA/assets/` and exports to its `runs/` folder.
 
 ### Design
 

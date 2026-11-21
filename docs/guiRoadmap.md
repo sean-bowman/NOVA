@@ -6,7 +6,24 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 
 ## Open
 
-No GUI work is open. A new item takes the next number, G10.
+| Item | Title | Effort | Depends on |
+| --- | --- | --- | --- |
+| [G11](#g11-a-standalone-windows-build) | A standalone Windows build | Large | A user without Python |
+
+A new item takes the next number, G12.
+
+### G11. A standalone Windows build
+
+The GUI needs a Python environment with NOVA installed from a checkout. A frozen build (PyInstaller, as a folder: the packages it would carry take about 430 MB in the development environment, which one file would unpack to the temp folder at every launch) would run it on a machine with no Python, for someone who wants the GUI alone. It would ship as a GitHub Release file from a Windows CI job, not in the repository. What it takes:
+
+- `multiprocessing.freeze_support()` first in `main`, or each run's 'spawn' worker opens the GUI again.
+- RocketCEA's compiled Fortran, its data files (`thermo.lib`, `trans.lib`) and the gfortran runtime DLLs, collected by hand.
+- REFPROP cannot ship under its license. The build falls back to CoolProp unless the machine has REFPROP installed.
+- The checkout files the GUI reads carried in the bundle (`docs/validationStatus.json` and the records it quotes, `src/NOVA/assets/NOVANozzle.json`), and exports moved from the checkout's `runs/` to a user folder. The writable state already lives outside the package: the run store in `%LOCALAPPDATA%\NOVA\runs`, settings in `~/.config/NOVA`, run folders in the temp folder, CEA files in `~/RocketCEA`.
+- A test that holds the release to the source, as `tests/testFrontendBuild.py` holds `dist/`.
+- Code signing. Unsigned, the exe meets a SmartScreen warning on first run, some antivirus tools flag PyInstaller builds, and company IT often blocks it outright.
+
+It waits on a user who needs it. For a user inside a company, signing is part of the item from the start.
 
 ---
 
@@ -27,3 +44,4 @@ No GUI work is open. A new item takes the next number, G10.
 | #12 | G5, the jacket profile while the circuit iterates: each pass of a multi-pass coolant circuit's outer iteration sends both legs' hot wall and coolant along the wall (`NOVA.progress.profiles`) and the circuit solution keeps them; the Circuit iterations view draws them pass over pass, the latest solid and the earlier ones fading, live while the run goes on and from the finished run after |
 | #13 | G7, the Tkinter front end retired (11/20/2026): `legacy/` is removed, with what the shared modules carried for it alone: the run bar's fraction and ceiling in `RunProgress`, the plume title rewording (the drawer says the interactive view directly), the Matplotlib redraw of the 3D views, `themeColors.styleFigure`, its session staging folder (the server collects a crashed server's own) and the nozzle outline asset; the tests that drew through its pane draw on the static renderer's |
 | #14 | G8, install without Node: the repository carries the built front end (`novaGui/frontend/dist`), so a checkout and `pip install -e .[web]` run the GUI; the build stamps a hash of its sources (`dist/buildStamp.json`) and `tests/testFrontendBuild.py` fails when the sources move past it or the build holds an asset nothing loads; `.gitattributes` keeps `dist/` byte for byte and out of diffs |
+| #15 | G10, the `nova-gui` launcher: `novaGui` joins the installed package with its icons, marks and built front end as package data, and the gui-scripts entry point `nova-gui` (`nova-gui.exe` on Windows) opens the window with no console from any folder, in place of `novaGui.bat` and its fixed interpreter path. The window takes an app id of its own and `assets/nova.ico`, so its taskbar button carries NOVA's icon. The launcher stops with a message when the package is not in a checkout, whose validation summary and shipped configuration the GUI reads; `tests/testPackaging.py` builds the wheel and checks what it holds |
