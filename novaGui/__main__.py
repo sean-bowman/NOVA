@@ -186,8 +186,10 @@ def main(argv: list | None = None) -> int:
     url = f'http://127.0.0.1:{port}/'
 
     if not options.api and not os.path.isfile(os.path.join(frontendDist, 'index.html')):
-        print('The front end is not built. Run `npm install` and `npm run build` in novaGui/frontend, '
-              'or start the API with --api and the Vite dev server with `npm run dev`.', file = sys.stderr)
+        print('The built front end, novaGui/frontend/dist, is missing. It ships with the repository: '
+              '`git checkout -- novaGui/frontend/dist` restores it, `npm install` and `npm run build` in '
+              'novaGui/frontend rebuild it, or start the API with --api and the Vite dev server with '
+              '`npm run dev`.', file = sys.stderr)
         return 1
 
     if options.api or options.browser:

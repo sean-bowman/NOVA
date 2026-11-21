@@ -6,13 +6,7 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 
 ## Open
 
-| Item | Title | Effort | Depends on |
-| --- | --- | --- | --- |
-| [G8](#g8-install-without-node) | Install without Node | Medium | |
-
-### G8. Install without Node
-
-The GUI needs `npm install && npm run build` in `novaGui/frontend` before its first launch, so a user without Node cannot run it. Shipping the built front end with the package (a release artifact, or the built `dist/` included in the wheel) removes that step; a one-file bundle of the server, the built front end and pywebview would remove the Python install as well.
+No GUI work is open. A new item takes the next number, G10.
 
 ---
 
@@ -32,3 +26,4 @@ The GUI needs `npm install && npm run build` in `novaGui/frontend` before its fi
 | #11 | G9, the methalox extension stage. Of its 729 s, about 690 went to building the REFPROP library object again on each of the stage's 23,000 property calls, about 30 ms a call against 0.6 ms for the property itself. `fluidProperties.refpropLibrary` builds it once a process: every result is the same bit for bit, the extension circuit takes 41 s in place of 733 s, and the whole example 106 s. What is left is the circuit's 14 outer iterations of two sizing marches each, converging at a ratio of 0.52 an iteration. A multi-pass circuit draws its heat transfer figure once, of its up pass, and the extension circuit draws none, so the exported figure is the chamber jacket's |
 | #12 | G5, the jacket profile while the circuit iterates: each pass of a multi-pass coolant circuit's outer iteration sends both legs' hot wall and coolant along the wall (`NOVA.progress.profiles`) and the circuit solution keeps them; the Circuit iterations view draws them pass over pass, the latest solid and the earlier ones fading, live while the run goes on and from the finished run after |
 | #13 | G7, the Tkinter front end retired (11/20/2026): `legacy/` is removed, with what the shared modules carried for it alone: the run bar's fraction and ceiling in `RunProgress`, the plume title rewording (the drawer says the interactive view directly), the Matplotlib redraw of the 3D views, `themeColors.styleFigure`, its session staging folder (the server collects a crashed server's own) and the nozzle outline asset; the tests that drew through its pane draw on the static renderer's |
+| #14 | G8, install without Node: the repository carries the built front end (`novaGui/frontend/dist`), so a checkout and `pip install -e .[web]` run the GUI; the build stamps a hash of its sources (`dist/buildStamp.json`) and `tests/testFrontendBuild.py` fails when the sources move past it or the build holds an asset nothing loads; `.gitattributes` keeps `dist/` byte for byte and out of diffs |

@@ -54,6 +54,8 @@ src/*.egg-info/
 *.egg-info/
 build/
 dist/
+# except the GUI's built front end, which the repository carries so the GUI runs without Node
+!novaGui/frontend/dist/
 
 # Licensed reference PDFs kept locally, not redistributed
 docs/scaling-techniques-for-design-development-and-test-2004.pdf
@@ -63,6 +65,5 @@ docs/scaling-techniques-for-design-development-and-test-2004.pdf
 validation/coolingCircuits/**/*.pkl
 validation/coolingCircuits/**/*.json
 
-# The GUI's React app: npm packages and the Vite build, which `npm run build` recreates
+# The GUI's React app's npm packages, which `npm install` recreates
 novaGui/frontend/node_modules/
-novaGui/frontend/dist/
