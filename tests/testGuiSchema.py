@@ -4,7 +4,7 @@
 
 The GUI package against what it has to hold without a display.
 
-`novaGui.bat` launches through `pythonw`, which has no console, so a module that fails to import
+The `nova-gui` launcher runs under `pythonw`, which has no console, so a module that fails to import
 closes the launcher without a word. Every module of `novaGui` is therefore imported here, where the
 traceback is visible. The Design form builds the config it hands a run from `novaGui.configSchema`
 alone, and that module states that it carries every key of the shipped configuration exactly once;

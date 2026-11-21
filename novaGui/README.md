@@ -6,16 +6,18 @@ The package also holds every piece of a front end that is not drawing widgets: t
 
 ## Launch
 
-From the repository root:
+Install the checkout editable with the `web` extra, which brings FastAPI, uvicorn and pywebview. pywebview uses the WebView2 runtime that ships with Windows 11.
 
 ```bash
-python -m novaGui               # desktop window (pywebview hosting WebView2)
+pip install -e .[web]
+nova-gui                        # desktop window (pywebview hosting WebView2), no console
+python -m novaGui               # the same window, from a console
 python -m novaGui --browser     # the system browser instead
 ```
 
-On Windows, `novaGui.bat` at the repository root double-clicks to launch with no console window. Without a console the launcher writes its output to `%TEMP%\NOVA\novaGui.log`, replaced at each launch, so a failed start leaves its traceback there.
+`nova-gui` is the launcher pip writes from the `gui-scripts` entry point in `pyproject.toml`: `nova-gui.exe` in the environment's `Scripts` folder on Windows. It starts from any folder, and Start or the taskbar can pin it. The window it opens takes a taskbar button of its own with NOVA's icon (`assets/nova.ico`). It runs under `pythonw`, so it writes its output to `%TEMP%\NOVA\novaGui.log`, replaced at each launch, and a failed start leaves its traceback there.
 
-The Python side needs FastAPI, uvicorn and pywebview: `pip install -e .[web]`. pywebview uses the WebView2 runtime that ships with Windows 11.
+The install has to be editable. The GUI reads the checkout's validation summary (`docs/validationStatus.json`) and shipped configuration (`src/NOVA/assets/NOVANozzle.json`), and exports to its `runs/` folder. A regular install carries the package without them, and the launcher stops with a message naming what is missing.
 
 ## Build
 
