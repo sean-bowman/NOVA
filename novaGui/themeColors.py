@@ -114,18 +114,6 @@ def applyMatplotlib() -> None:
     if module is not None:
         module.rcParams.update(matplotlibRcParams())
 
-def styleFigure(fig) -> None:
-
-    '''
-
-    Recolor an existing Matplotlib figure and all of its axes to the active mode.
-
-    '''
-
-    fig.patch.set_facecolor(surface)
-    for ax in fig.get_axes():
-        styleAxes(ax)
-
 def styleAxes(ax) -> None:
 
     '''

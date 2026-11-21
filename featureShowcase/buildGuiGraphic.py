@@ -23,7 +23,6 @@ One solve feeds every image, all written to `novaGui/assets/`:
     icon/icon<N>.png       vertical, nozzle at the top and plume running down, one square frame per
                            icon size, each drawn at its own size so its lines stay visible
     nova.ico               the same frames in one Windows icon file, for shortcuts
-    nozzleOutline.json     the wall, normalized, which the GUI's section markers are drawn from
 
 The images carry no axes, title or color bar. They are drawn in the Engineering Flat Metal palette
 (NOVA.palette): the Mach field in its steel ramp, the wall in aged copper and the plume boundary in
@@ -56,7 +55,6 @@ root = os.path.dirname(here)
 sys.path.insert(0, os.path.join(root, 'src'))
 sys.path.insert(0, here)
 
-import json
 
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -256,28 +254,6 @@ def render(scene: dict, size: tuple, orientation: str, reach: float, wallWidth: 
 # -- The images -- #
 #----------------------------------------------------------------------#
 
-def writeOutline(scene: dict, path: str, points: int = 80) -> None:
-
-    '''
-
-    Write the wall, injector face to lip, normalized so the length runs 0 to 1 and the lip radius
-    is 1, resampled to evenly spaced axial points, with the length in lip radii so a drawing of it
-    can keep the nozzle's proportions.
-
-    '''
-
-    wallX, wallR = np.asarray(scene['wallX']), np.asarray(scene['wallR'])
-    inside = wallX <= 0.0
-    axial = (wallX[inside] - wallX[inside].min()) / (0.0 - wallX[inside].min())
-    order = np.argsort(axial)
-    stations = np.linspace(0.0, 1.0, points)
-    radius = np.interp(stations, axial[order], wallR[inside][order])
-    with open(path, 'w', encoding = 'utf-8') as handle:
-        json.dump({'description': 'NOVA nozzle wall, injector face to lip; axial 0 to 1, lip radius 1',
-                   'lengthInLipRadii': round(float(-wallX[inside].min()), 5),
-                   'points': [[round(float(a), 5), round(float(r), 5)] for a, r in zip(stations, radius)]},
-                  handle, indent = 1)
-
 def horizontalSize(scene: dict, height: int, reach: float) -> tuple:
 
     '''The width a horizontal image needs at a given height to show the scene edge to edge.'''
@@ -327,24 +303,16 @@ def build() -> list:
         frame.save(written[-1])
         frames.append(frame)
 
-    # BMP entries rather than PNG, because Tk's own .ico reader parses the bitmap header
+    # BMP entries rather than PNG: every .ico reader parses them
     written.append(os.path.join(assetFolder, 'nova.ico'))
     frames[-1].save(written[-1], format = 'ICO', sizes = [(size, size) for size in ICONSIZES],
                     append_images = frames[:-1], bitmap_format = 'bmp')
-
-    # The wall from the injector face to the lip, axial 0 to 1 and the lip radius 1, for the section
-    # markers the GUI draws at the heading font's size
-    written.append(os.path.join(assetFolder, 'nozzleOutline.json'))
-    writeOutline(scene, written[-1])
 
     print(f'  lip static pressure {scene["lipPressure"]:.0f} Pa, ambient {scene["ambient"]:.0f} Pa '
           f'at lip ratio {LIPRATIO:.2f}')
     print(f'  mass continuity error {scene["drift"]:+.2f} % at {REACH:.0f} lip radii')
     print(f'  Mach {scene["levels"][0]:.2f} to {scene["levels"][-1]:.2f}')
     for path in written:
-        if path.endswith('.json'):
-            print(f'  wrote {os.path.relpath(path, root)}')
-            continue
         with Image.open(path) as image:
             print(f'  wrote {os.path.relpath(path, root)}, {image.size[0]} x {image.size[1]} px')
 

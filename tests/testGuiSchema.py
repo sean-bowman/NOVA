@@ -2,15 +2,14 @@
 
 '''
 
-The GUI packages against what they have to hold without a display.
+The GUI package against what it has to hold without a display.
 
-`novaGui.bat` and `legacy/novaTk.bat` launch through `pythonw`, which has no console, so a module
-of either front end that fails to import closes the launcher without a word. Every module of
-`novaGui` and `legacy.novaTk` is therefore imported here, where the traceback is visible. The configuration tab builds the dictionary it hands the runner from
-`novaGui.configSchema` alone, and that module states that it carries every key of the shipped
-configuration exactly once; a key the backend reads and the schema lacks never reaches a GUI run.
-The window icon and the banner mark are images the GUI loads by path, so their files are checked
-too. None of these checks needs a Tk root.
+`novaGui.bat` launches through `pythonw`, which has no console, so a module that fails to import
+closes the launcher without a word. Every module of `novaGui` is therefore imported here, where the
+traceback is visible. The Design form builds the config it hands a run from `novaGui.configSchema`
+alone, and that module states that it carries every key of the shipped configuration exactly once;
+a key the backend reads and the schema lacks never reaches a GUI run. The window icon and the
+banner mark are images the GUI loads by path, so their files are checked too.
 
 Author: Sean Bowman
 
@@ -29,14 +28,12 @@ if root not in sys.path:
     sys.path.insert(0, root)
 
 import novaGui
-import legacy.novaTk
-from novaGui import configSchema
+from novaGui import assetFolder, configSchema
 
-# The entry points run the application when imported
-entryModules = {'novaGui.__main__', 'legacy.novaTk.__main__', 'legacy.novaTk.run'}
+# The entry point runs the application when imported
+entryModules = {'novaGui.__main__'}
 
-guiModules = sorted(name for package, prefix in ((novaGui, 'novaGui.'), (legacy.novaTk, 'legacy.novaTk.'))
-                    for _, name, _ in pkgutil.walk_packages(package.__path__, prefix)
+guiModules = sorted(name for _, name, _ in pkgutil.walk_packages(novaGui.__path__, 'novaGui.')
                     if name not in entryModules)
 
 @pytest.mark.parametrize('moduleName', guiModules)
@@ -83,20 +80,23 @@ def testTheRunnerLoadsNovaAndRedirectsItsOutput(tmp_path):
 
 def testTheBrandingImagesShipAtEverySizeOnATransparentGround():
     '''
-    Every icon frame the window hands Tk exists at its own size, the Windows icon file carries all
-    of them, and the icons and the banner mark are transparent at the corner, so they sit on the
-    taskbar and the header rather than on a painted square.
+    Every icon frame is drawn at its own size, the Windows icon file carries all of them, and the
+    icons and the banner marks are transparent at the corner, so they sit on the taskbar and the
+    header rather than on a painted square.
     '''
     from PIL import Image
-    from legacy.novaTk import branding
-    for size in branding.iconSizes:
-        with Image.open(os.path.join(branding.assetFolder, 'icon', f'icon{size}.png')) as image:
+    folder = os.path.join(assetFolder, 'icon')
+    sizes = sorted(int(name[len('icon'):-len('.png')]) for name in os.listdir(folder) if name.endswith('.png'))
+    assert 64 in sizes, 'the server serves the 64 px icon as the page icon'
+    for size in sizes:
+        with Image.open(os.path.join(folder, f'icon{size}.png')) as image:
             assert image.size == (size, size)
             assert image.mode == 'RGBA' and image.getpixel((0, 0))[3] == 0
-    with Image.open(os.path.join(branding.assetFolder, 'plumeBanner.png')) as image:
-        assert image.mode == 'RGBA' and image.getpixel((0, 0))[3] == 0
-    with Image.open(os.path.join(branding.assetFolder, 'nova.ico')) as image:
-        assert set(image.info['sizes']) == {(size, size) for size in branding.iconSizes}
+    for banner in ('plumeBanner.png', 'plumeBannerLight.png'):
+        with Image.open(os.path.join(assetFolder, banner)) as image:
+            assert image.mode == 'RGBA' and image.getpixel((0, 0))[3] == 0
+    with Image.open(os.path.join(assetFolder, 'nova.ico')) as image:
+        assert set(image.info['sizes']) == {(size, size) for size in sizes}
 
 def testAFreshFormIsTheShippedNozzle():
     '''
@@ -106,13 +106,6 @@ def testAFreshFormIsTheShippedNozzle():
     with open(configSchema.shippedConfigPath, encoding = 'utf-8') as handle:
         shipped = {key: value for key, value in json.load(handle).items() if not key.startswith('_')}
     assert configSchema.defaultConfig() == shipped
-
-def testSwitchesAreReadByMeaningNotByTruthiness():
-    '''NOVA writes switches as 'on' and 'off', and an 'off' has to load as off.'''
-    from legacy.novaTk.widgets import FieldRow
-    for value, expected in (('off', False), ('on', True), ('Off', False), ('true', True), ('false', False),
-                            (True, True), (False, False), (None, False), (0, False), (1, True)):
-        assert FieldRow._asBool(value) is expected, value
 
 def testTheLengthFractionCanCarryTheOptimizeRequest():
     '''A text length fraction asks the backend to search for the best one, so the field keeps text.'''

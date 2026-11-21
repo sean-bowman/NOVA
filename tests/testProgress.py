@@ -1,7 +1,7 @@
 
 '''
 
-Tests for the run progress events (NOVA.progress) and the model both front ends fold them with
+Tests for the run progress events (NOVA.progress) and the model the GUI folds them with
 (novaGui.progress.RunProgress).
 
 The reporter's own behavior is held on small blocks: nesting and paths, a stage that raises, the
@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 
 from NOVA import progress
-from novaGui.progress import RunProgress, keptIterations, loadingCeiling
+from novaGui.progress import RunProgress, keptIterations, nominalStageTimes
 
 repositoryRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -316,7 +316,7 @@ class TestAReportedRun:
         assert first is not None
         assert np.array_equal(np.asarray(first, dtype = float), np.asarray(second, dtype = float), equal_nan = True)
 
-# -- The model the front ends fold events with -- #
+# -- The model the GUI folds events with -- #
 
 def event(kind: str, t: float, **fields) -> dict:
 
@@ -340,28 +340,32 @@ class TestTheModel:
 
         model = RunProgress()
 
-        assert model.summary() == (0.0, loadingCeiling, 'loading NOVA')
+        assert model.label == 'loading NOVA' and model.stageList() == []
         assert RunProgress(label = 'starting worker').label == 'starting worker'
 
-    def testTheLastRunsTimesShareOutTheBar(self):
+    def testTheLastRunsTimesWeightTheStagesAndTheNominalOnesTheFirstRun(self):
 
         model = RunProgress(history = {'contour': 1.0, 'cooling': 9.0})
         model.apply(plan)
         model.apply(start(0.0, 'contour', 'Contour'))
 
-        fraction, ceiling, label = model.summary()
-        assert fraction == pytest.approx(loadingCeiling)
-        assert ceiling == pytest.approx(loadingCeiling + 0.1 * (1.0 - loadingCeiling))
-        assert label == 'Contour'
+        assert {stage['key']: stage['weight'] for stage in model.stageList()} == {'contour': 1.0, 'cooling': 9.0}
+        assert model.label == 'Contour'
 
-    def testAStepInATopLevelStageMovesTheBar(self):
+        first = RunProgress()
+        first.apply(plan)
+        assert {stage['key']: stage['weight'] for stage in first.stageList()} == {
+            'contour': nominalStageTimes['contour'], 'cooling': nominalStageTimes['cooling']}
+
+    def testAStepInATopLevelStageFillsIt(self):
 
         model = RunProgress(history = {'contour': 1.0, 'cooling': 1.0})
         model.apply(plan)
         model.apply(start(0.0, 'contour', 'Contour'))
         model.apply(event('step', 1.0, path = 'contour', label = None, done = 5, total = 10))
 
-        assert model.fraction == pytest.approx(loadingCeiling + 0.25 * (1.0 - loadingCeiling))
+        contour, cooling = model.stageList()
+        assert contour['fraction'] == pytest.approx(0.5) and cooling['fraction'] is None
         assert model.label == 'Contour, 50%'
 
     def testTheLabelCountsTheIterationInProgress(self):
@@ -475,21 +479,16 @@ class TestTheModel:
         model.apply(start(0.0, 'contour.diverging', 'Diverging section'))
         model.apply(event('iteration', 1.0, path = 'contour.diverging', name = 'evaluation', index = 1, metrics = {}))
 
-        # The same iteration number again leaves the bar and its label alone but adds to the list
+        # The same iteration number again leaves the label alone but adds to the list
         assert model.apply(event('iteration', 2.0, path = 'contour.diverging', name = 'evaluation', index = 1,
                                  metrics = {}))
 
-    def testARealRunEndsFullAndNeverRunsBackward(self, reducedRuns):
+    def testARealRunEndsWithEveryStageDone(self, reducedRuns):
 
         model = RunProgress()
-        fractions = []
         for item in reducedRuns[0]:
             model.apply(item)
-            assert model.ceiling >= model.fraction
-            fractions.append(model.fraction)
 
-        assert fractions == sorted(fractions)
-        assert model.fraction == 1.0
         assert all(stage['state'] == 'done' for stage in model.stageList())
         assert set(model.durations()) == {'contour', 'cooling', 'performance'}
 

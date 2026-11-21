@@ -37,7 +37,7 @@ export function MaterialPanel({ material, units, visible }: MaterialPanelProps) 
     const [sample, setSample] = useState<WallSample | null>(null);
     const [error, setError] = useState('');
 
-    // The temperature in kelvin, or 300 K while the entry is not a number, as the legacy Tkinter panel reads it
+    // The temperature in kelvin, or 300 K, room temperature, while the entry is not a number
     const typed = Number(text.trim());
     const temperatureK = text.trim() !== '' && Number.isFinite(typed) ? toSI(units, typed, 'temperature', unit) : 300;
     const name = material || 'GRCop-42';

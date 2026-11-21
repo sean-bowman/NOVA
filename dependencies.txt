@@ -21,18 +21,18 @@ CoolProp>=8.0
 ctREFPROP>=0.10.5
 
 # -- Plotting -- #
-# Matplotlib is required. It draws every figure NOVA saves as a PNG and every
-# plot embedded in the GUI, because it is the only backend that renders into a
-# Tk canvas. Plotly is required too. It draws the interactive HTML companion
-# beside every figure and the 3D channel-mesh, jacket and volute views, which
-# have no Matplotlib equivalent.
+# Matplotlib is required. It draws every figure NOVA saves as a PNG and the
+# drawings the GUI's Save PNG writes. Plotly is required too. It draws the
+# interactive HTML companion beside every figure, every view the GUI shows, and
+# the 3D channel-mesh, jacket and volute views, which have no Matplotlib
+# equivalent.
 matplotlib>=3.10
 plotly>=5.0
 
 # -- GUI -- #
-# tkinter ships with CPython. Pillow draws the GUI's rounded controls, icons and banner;
-# Matplotlib already depends on it, so it is listed for the GUI's direct import.
-pillow>=9.1
+# The GUI (novaGui) is a browser window over a local server. Its packages are the
+# `web` extra in pyproject.toml (pip install -e .[web]), and its front end builds
+# with Node.
 
 # -- Units -- #
 # The registry behind NOVA/units.py. Every conversion factor and physical constant in the

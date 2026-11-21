@@ -165,8 +165,6 @@ export interface RunProgressFields {
     runId: number | null;
     t: number;                    // [s] the run's own clock at its latest event
     expectedRun: number | null;   // the run whose times the stages expect
-    fraction: number;
-    ceiling: number;
     label: string;
     stageDetail: string;
     stages: RunStage[];

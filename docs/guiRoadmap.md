@@ -8,12 +8,7 @@ The work open on NOVA's GUI (`novaGui/`), with what each item is for, what it wo
 
 | Item | Title | Effort | Depends on |
 | --- | --- | --- | --- |
-| [G7](#g7-retire-the-tkinter-front-end) | Retire the Tkinter front end | Medium | a decision |
 | [G8](#g8-install-without-node) | Install without Node | Medium | |
-
-### G7. Retire the Tkinter front end
-
-`novaGui` now does everything `legacy/novaTk` does. Keeping the legacy window costs code the shared modules carry for it alone, for example the plume title rewording (`views.staticTextOverrides`) and the bar fraction and ceiling `progress.RunProgress.summary` computes for the legacy window's single bar, and the tests of both front ends. Retiring it takes a decision and a date: from then on, `legacy/` is removed, and the shared modules drop what only it reads.
 
 ### G8. Install without Node
 
@@ -36,3 +31,4 @@ The GUI needs `npm install && npm run build` in `novaGui/frontend` before its fi
 | #10 | G6, reports: a run's report, alone or against its baseline, and a sweep's, each one HTML file (`novaGui.report`) with the headline numbers and their validation status, the inputs that differ from the shipped nozzle, the result table or the sweep's points and plot, the figures as PNGs in both modes, the warnings, a validation section and the config; saved from the Export dialog and the Sweep view |
 | #11 | G9, the methalox extension stage. Of its 729 s, about 690 went to building the REFPROP library object again on each of the stage's 23,000 property calls, about 30 ms a call against 0.6 ms for the property itself. `fluidProperties.refpropLibrary` builds it once a process: every result is the same bit for bit, the extension circuit takes 41 s in place of 733 s, and the whole example 106 s. What is left is the circuit's 14 outer iterations of two sizing marches each, converging at a ratio of 0.52 an iteration. A multi-pass circuit draws its heat transfer figure once, of its up pass, and the extension circuit draws none, so the exported figure is the chamber jacket's |
 | #12 | G5, the jacket profile while the circuit iterates: each pass of a multi-pass coolant circuit's outer iteration sends both legs' hot wall and coolant along the wall (`NOVA.progress.profiles`) and the circuit solution keeps them; the Circuit iterations view draws them pass over pass, the latest solid and the earlier ones fading, live while the run goes on and from the finished run after |
+| #13 | G7, the Tkinter front end retired (11/20/2026): `legacy/` is removed, with what the shared modules carried for it alone: the run bar's fraction and ceiling in `RunProgress`, the plume title rewording (the drawer says the interactive view directly), the Matplotlib redraw of the 3D views, `themeColors.styleFigure`, its session staging folder (the server collects a crashed server's own) and the nozzle outline asset; the tests that drew through its pane draw on the static renderer's |

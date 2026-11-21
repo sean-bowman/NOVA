@@ -22,8 +22,6 @@ export interface RunView {
     state: RunStateName;
     detail: string;
     runId: number | null;         // the run in progress, or the last one started
-    fraction: number;
-    ceiling: number;
     label: string;
     stageDetail: string;          // every open stage, with its iteration or loop
     stages: RunStage[];
@@ -45,7 +43,7 @@ export interface RunView {
 }
 
 const initial: RunView = {
-    state: 'idle', detail: '', runId: null, fraction: 0, ceiling: 0, label: '', stageDetail: '', stages: [],
+    state: 'idle', detail: '', runId: null, label: '', stageDetail: '', stages: [],
     expectedRun: null, runClock: 0, progressAt: 0, startedAt: null, endedAt: null, log: [], result: null,
     connected: false, partial: null, iterationRevision: 0, warnings: [], runsVersion: 0, sweepsVersion: 0, queue: [],
     savedMode: null,
@@ -53,7 +51,7 @@ const initial: RunView = {
 
 function progressOf(event: RunProgressFields): Partial<RunView> {
     return {
-        runId: event.runId, fraction: event.fraction, ceiling: event.ceiling, label: event.label,
+        runId: event.runId, label: event.label,
         stageDetail: event.stageDetail ?? '', stages: event.stages ?? [], expectedRun: event.expectedRun ?? null,
         runClock: event.t ?? 0, progressAt: performance.now(),
     };
@@ -79,7 +77,7 @@ function reduce(previous: RunView, event: RunEvent): RunView {
                 ...previous, state: event.state, detail: event.detail, runId: event.runId ?? previous.runId,
                 ...(event.state === 'running' && previous.state !== 'running'
                     ? {
-                        startedAt: Date.now() / 1000, endedAt: null, fraction: 0, ceiling: 0, label: '', stages: [],
+                        startedAt: Date.now() / 1000, endedAt: null, label: '', stages: [],
                         runClock: 0, log: [], partial: null, iterationRevision: 0, warnings: [],
                     }
                     : {}),

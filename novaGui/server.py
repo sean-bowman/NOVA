@@ -70,9 +70,9 @@ Everything else is the built front end (novaGui/frontend/dist), with index.html 
 that is not a file, so a reload on a client route still opens the app. index.html goes out with
 the saved theme mode already on its root element, so the first paint is in the right palette.
 
-Preferences are kept in `%APPDATA%/NOVA/guiSettings.json` (novaGui.settings), the file the legacy
-Tkinter front end reads too, so a mode chosen in either front end opens the other in it. A save is
-sent to every window on the event stream, so a figure popped out into a second window follows the
+Preferences are kept in `%APPDATA%/NOVA/guiSettings.json` (novaGui.settings), so the next launch
+opens in the theme mode and form width last chosen. A save is sent to every window on the event
+stream, so a figure popped out into a second window follows the
 theme mode of the first.
 
 The server binds to 127.0.0.1 only. It runs NOVA on whatever config it is sent, unpickles its
@@ -189,7 +189,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             app.state.session.publish({'type': 'settings', **current})
         return current
 
-    # -- Brand images, from the Tkinter front end's assets -- #
+    # -- Brand images, from novaGui/assets -- #
     @app.get('/api/brand/{name}')
     def brand(name: str) -> FileResponse:
 
