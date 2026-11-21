@@ -1,0 +1,24 @@
+# The versions of NOVA's dependencies the desktop app is built with: the ones the test suite passes
+# with in the development environment, so a release runs what was tested. pyproject.toml gives the
+# ranges NOVA accepts; this file picks one point in them. Update it when the development
+# environment moves to new versions and the suite passes there.
+#
+#   pip install .[web,refprop] -r packaging/requirements.txt -c packaging/constraints.txt
+CoolProp==8.0.0
+ctREFPROP==0.10.5
+fastapi==0.162.5
+joblib==1.5.3
+matplotlib==3.10.3
+numpy==2.2.6
+pandas==2.3.0
+Pint==0.24.4
+plotly==6.2.0
+pydantic==2.14.3
+pythonnet==3.1.0
+pywebview==6.2.1
+rocketcea==1.2.3
+scipy==1.15.3
+starlette==1.7.0
+sympy==1.14.0
+tqdm==4.65.0
+uvicorn==0.54.0

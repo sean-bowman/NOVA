@@ -35,7 +35,9 @@ naming them.
 
 On Windows the process takes an app id of its own before the window opens. The taskbar groups a
 window under its process's app id, pythonw's by default, and shows that app's icon; under NOVA's id
-the window gets a taskbar button with the icon pywebview gives the window (`assets/nova.ico`).
+the window gets a taskbar button with the icon pywebview gives the window (`assets/nova.ico`). The
+standalone build (packaging/) skips this: NOVA.exe carries the icon itself, and an id of its own
+would part the window from a pinned NOVA.exe.
 
 Author: Sean Bowman
 Date:   11/16/2026
@@ -228,7 +230,7 @@ def main(argv: list | None = None) -> int:
     from . import assetFolder
 
     # An app id of NOVA's own, before any window opens, so the taskbar shows NOVA's icon, not pythonw's
-    if sys.platform == 'win32':
+    if sys.platform == 'win32' and not getattr(sys, 'frozen', False):
         import ctypes
 
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('NOVA.Gui')

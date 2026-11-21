@@ -1,0 +1,5 @@
+# The standalone build's tools, pinned so a release builds the same way each time. NOVA's own
+# dependencies come from pyproject.toml at the versions in constraints.txt:
+#   pip install .[web,refprop] -r packaging/requirements.txt -c packaging/constraints.txt
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.10
