@@ -6,8 +6,8 @@
 Structured progress events for a NOVA run.
 
 A front end that follows a run installs a reporter with `reporting(emit)` around
-`generateNozzle`. The pipeline calls `plan`, `stage`, `track` and `iteration` at its stage
-boundaries and inside its long loops, and each call hands one event dictionary to `emit`. With
+`generateNozzle`. The pipeline calls `plan`, `stage`, `track`, `iteration` and `profiles` at its
+stage boundaries and inside its long loops, and each call hands one event dictionary to `emit`. With
 no reporter installed every call does nothing, except `track`, which draws the tqdm bar a
 terminal user expects.
 
@@ -40,6 +40,13 @@ monotonic clock. `path` is the dotted keys of the open stages, outermost first: 
         One finished iteration of an iterative solve inside the innermost open stage, numbered
         from 1. `name` says what an iteration is ('pass', 'evaluation'). `metrics` holds the
         scalars that show the solve converging, keyed by name, SI units.
+
+    {'type': 'profiles', 't', 'path', 'name', 'index', 'metrics', 'profiles': [{...}, ...]}
+        What one finished iteration settled on along the wall, sent after its iteration event:
+        each profile a dict of strings, scalars and lists of floats, SI units, a non-finite value
+        None. A multi-pass coolant circuit sends one per leg, each with its axial positions and
+        its hot wall and coolant temperatures, so a front end can draw the circuit settling. A few
+        kilobytes an iteration.
 
 ----------------------------------------------------------------------
                             Threads
@@ -282,12 +289,63 @@ def iteration(index: int, metrics: dict = None, name: str = 'iteration') -> None
     if reporter is None:
         return
 
-    scalars = {}
-    for key, value in (metrics or {}).items():
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            number = None
-        scalars[str(key)] = number if number is not None and math.isfinite(number) else None
     reporter.send({'type': 'iteration', 't': reporter.now(), 'path': reporter.path(),
-                   'name': name, 'index': int(index), 'metrics': scalars})
+                   'name': name, 'index': int(index), 'metrics': _scalars(metrics)})
+
+def profiles(index: int, entries: list, metrics: dict = None, name: str = 'iteration') -> None:
+
+    '''
+
+    Report what one finished iteration of an iterative solve settled on along the wall, inside the
+    innermost open stage. Sent after the iteration's own `iteration` event.
+
+    Parameters:
+    -----------
+    index : int
+        The iteration's number, from 1.
+    entries : list
+        One dict per profile: strings, scalars, and arrays along the wall, SI units. Arrays are
+        sent as lists of floats, with None for a non-finite value.
+    metrics : dict
+        The iteration's scalars, as its iteration event carries them.
+    name : str
+        What one iteration is, for a person: 'pass', 'evaluation'.
+
+    '''
+
+    reporter = _current.get()
+    if reporter is None:
+        return
+
+    reporter.send({'type': 'profiles', 't': reporter.now(), 'path': reporter.path(), 'name': name,
+                   'index': int(index), 'metrics': _scalars(metrics),
+                   'profiles': [{str(key): _plain(value) for key, value in profile.items()}
+                                for profile in entries]})
+
+def _number(value) -> float | None:
+
+    '''A value as a finite float, or None.'''
+
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return number if math.isfinite(number) else None
+
+def _scalars(metrics: dict | None) -> dict:
+
+    '''Metrics as finite floats by name, None for any that is not one.'''
+
+    return {str(key): _number(value) for key, value in (metrics or {}).items()}
+
+def _plain(value):
+
+    '''A profile's value as JSON takes it: a string as it is, an array as a list of floats.'''
+
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if hasattr(value, '__len__'):
+        return [_number(item) for item in value]
+
+    return _number(value)

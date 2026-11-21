@@ -165,8 +165,6 @@ export interface RunProgressFields {
     runId: number | null;
     t: number;                    // [s] the run's own clock at its latest event
     expectedRun: number | null;   // the run whose times the stages expect
-    fraction: number;
-    ceiling: number;
     label: string;
     stageDetail: string;
     stages: RunStage[];
@@ -184,6 +182,7 @@ export interface RunWarning {
 export interface PartialRun {
     runId: number;
     views: string[];
+    revision?: number;            // the circuit passes the run has kept, in a snapshot
 }
 
 /** A run waiting its turn (novaGui.session.QueuedRun.entry). */
@@ -214,6 +213,7 @@ export type RunEvent =
     | { type: 'status'; state: RunStateName; detail: string; runId?: number | null }
     | ({ type: 'progress' } & RunProgressFields)
     | ({ type: 'partial' } & PartialRun)
+    | { type: 'iterations'; runId: number; revision: number }
     | { type: 'warning'; runId: number; warnings: RunWarning[] }
     | ({ type: 'result' } & RunSummary)
     | { type: 'runs'; baseline: number | null }

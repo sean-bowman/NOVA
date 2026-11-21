@@ -3,20 +3,16 @@
 
 '''
 
-Folds the progress events a NOVA run sends (`NOVA.progress`) into what a front end shows: a
-0-1 fraction and a ceiling for the run bar, a short label naming where the run is, a longer
-detail line, and the run's stages as a two-level tree with their state, times and iterations.
+Folds the progress events a NOVA run sends (`NOVA.progress`) into what the run bar shows: a
+short label naming where the run is, a longer detail line, and the run's stages as a two-level tree
+with their state, times and iterations. The web server folds a run's events in its run session and
+sends the browser the tree, which it draws as a stage stepper and a stage list.
 
-Both front ends use it. The legacy Tkinter window folds the runner's events on its main thread and
-draws the bar; the web server folds the same events in its run session and sends the browser the
-tree, which it draws as a stage stepper and a stage list.
-
-Each top-level stage spans a share of the bar in proportion to the time it is expected to take:
-its time on the last finished run of the same window or server process when there is one, else
-the nominal time in `nominalStageTimes`. The bar sits at the start of the running stage and its
-ceiling is the stage's end. A loop that reports its steps directly in a top-level stage moves the
-bar inside that stage; elsewhere the front end eases the bar toward the ceiling between events,
-as a stage like the contour solve reports only every few seconds.
+Each top-level stage is weighted by the time it is expected to take, which sets its width on the
+stepper: its time on the last finished run of the same server process when there is one, else the
+nominal time in `nominalStageTimes`. A loop that reports its steps directly in a top-level stage
+gives that stage a fraction done; elsewhere the browser fills a stage by its elapsed time against
+the expected one, as a stage like the contour solve reports only every few seconds.
 
 The tree keeps the top-level stages and the stages one level inside them; anything deeper shows
 only in the live detail of the stage it runs in. An iteration event is kept on the stage it was
@@ -24,7 +20,7 @@ sent in, so the coolant circuit's passes sit under the circuit and the contour s
 under the diverging section. Given the last finished run's tree, a stage lists the sub-stages that
 run took, as pending with their times, until this run reaches them.
 
-The module imports nothing from NOVA, so the window opens without the scientific stack.
+The module imports nothing from NOVA, so the server starts without the scientific stack.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -32,22 +28,22 @@ Date:   08/28/2026
 '''
 
 # Nominal top-level stage times [s]: the median over the shipped nozzle and the five example
-# configurations, each run with every output written, on one desktop (Ryzen 7 2700X, 11/18/2026).
-# They set the shares of a window's first run only; later runs use the last run's own times. The
-# spread behind a median can be wide: a multi-pass circuit's cooling stage ran 255 to 345 s against
-# 20 to 34 s single pass, and the methalox booster's extension 729 s against a 9 s median.
+# configurations, each run with every output written, on one desktop (Ryzen 7 2700X, 11/20/2026).
+# They weight a server's first run only; later runs use the last run's own times. The
+# spread behind a median can be wide: a multi-pass circuit's cooling stage ran 14 to 24 s against
+# 2.4 to 3.1 s single pass, and the methalox booster's two-pass extension circuit 43 s against a
+# 1.5 s median.
 nominalStageTimes = {
-    'contour':     55.0,
-    'cooling':     30.0,
+    'contour':     54.0,
+    'cooling':     3.0,
     'volutes':     0.06,
-    'extension':   9.4,
+    'extension':   1.5,
     'performance': 0.1,
-    'plume':       6.2,
-    'outputs':     2.2,
+    'plume':       6.1,
+    'outputs':     2.3,
 }
 defaultStageTime = 5.0      # [s] a stage the table does not name
-shortestShare = 0.3         # [s] the least time a stage is weighted with, so each shows on the bar
-loadingCeiling = 0.02       # [-] the share of the bar the run spends before its plan arrives
+shortestShare = 0.3         # [s] the least time a stage is weighted with, so each shows on the stepper
 keptIterations = 50         # the most iterations a stage keeps; older ones are counted, not kept
 
 def _node(key: str, label: str) -> dict:
@@ -88,8 +84,6 @@ class RunProgress:
         self.previous = {stage['key']: stage for stage in (previous or [])}
         self.stages = []          # top-level stages, each with its sub-stages under 'children'
         self.t = 0.0              # [s] time of the latest event, from the run's own clock
-        self.fraction = 0.0       # [-] where the bar sits
-        self.ceiling = loadingCeiling
         self.label = label
         self.detail = ''
         self._nodes = {}          # the stages of the tree, by path
@@ -213,32 +207,6 @@ class RunProgress:
         if not self.stages:
             return
 
-        weights = [self._weight(stage['key']) for stage in self.stages]
-        total = sum(weights)
-        span = 1.0 - loadingCeiling
-
-        start = loadingCeiling
-        fraction, ceiling = None, None
-        for stage, weight in zip(self.stages, weights):
-            share = span * weight / total
-            if stage['state'] == 'running':
-                inner = 0.0
-                step = self._steps.get(stage['key'])
-                if step is not None and step.get('total'):
-                    inner = min(1.0, step['done'] / step['total'])
-                fraction, ceiling = start + share * inner, start + share
-                break
-            if stage['state'] == 'pending':
-                fraction = ceiling = start
-                break
-            start += share
-        if fraction is None:
-            fraction = ceiling = 1.0
-
-        # The bar never runs backward: a stage that finishes sooner than its share closes the gap
-        self.fraction = max(self.fraction, min(1.0, fraction))
-        self.ceiling = max(self.fraction, min(1.0, ceiling))
-
         running = next((stage for stage in self.stages if stage['state'] == 'running'), None)
         if running is None:
             return
@@ -269,11 +237,11 @@ class RunProgress:
 
         Returns:
         --------
-        bool : True when the bar, its label or detail, or the stage tree changed.
+        bool : True when the label, the detail or the stage tree changed.
 
         '''
 
-        before = (self.fraction, self.ceiling, self.label, self.detail)
+        before = (self.label, self.detail)
         kind = event.get('type')
         self.t = max(self.t, float(event.get('t', self.t)))
         treeChanged = kind == 'plan'
@@ -322,13 +290,7 @@ class RunProgress:
                 treeChanged = True
 
         self._recompute()
-        return treeChanged or (self.fraction, self.ceiling, self.label, self.detail) != before
-
-    def summary(self) -> tuple:
-
-        '''(fraction, ceiling, label) for a run bar.'''
-
-        return self.fraction, self.ceiling, self.label
+        return treeChanged or (self.label, self.detail) != before
 
     def stageList(self) -> list:
 
@@ -342,7 +304,7 @@ class RunProgress:
         metrics), a live `detail` of what runs below it while it runs ('Up pass 45%'), its
         expected time [s] and the expected iteration count from the last finished run, or None.
 
-        A top-level stage adds its `weight` [s], the time its share of the bar stands for; `note`,
+        A top-level stage adds its `weight` [s], the time its width on the stepper stands for; `note`,
         what it is doing ('pass 4', '45%') or, finished, how many iterations it took
         ('7 passes'); `fraction`, how far a loop reported in the stage itself has gone, or None;
         and `children`, its sub-stages. Until it finishes, its sub-stages include those the last

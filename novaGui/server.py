@@ -70,9 +70,9 @@ Everything else is the built front end (novaGui/frontend/dist), with index.html 
 that is not a file, so a reload on a client route still opens the app. index.html goes out with
 the saved theme mode already on its root element, so the first paint is in the right palette.
 
-Preferences are kept in `%APPDATA%/NOVA/guiSettings.json` (novaGui.settings), the file the legacy
-Tkinter front end reads too, so a mode chosen in either front end opens the other in it. A save is
-sent to every window on the event stream, so a figure popped out into a second window follows the
+Preferences are kept in `%APPDATA%/NOVA/guiSettings.json` (novaGui.settings), so the next launch
+opens in the theme mode and form width last chosen. A save is sent to every window on the event
+stream, so a figure popped out into a second window follows the
 theme mode of the first.
 
 The server binds to 127.0.0.1 only. It runs NOVA on whatever config it is sent, unpickles its
@@ -111,7 +111,7 @@ from . import validationStatus
 from . import views
 from . import settings as guiSettings
 from .runStore import RunStore
-from .session import RunSession
+from .session import RunSession, iterationView
 
 frontendDist = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'frontend', 'dist')
 
@@ -189,7 +189,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             app.state.session.publish({'type': 'settings', **current})
         return current
 
-    # -- Brand images, from the Tkinter front end's assets -- #
+    # -- Brand images, from novaGui/assets -- #
     @app.get('/api/brand/{name}')
     def brand(name: str) -> FileResponse:
 
@@ -502,8 +502,11 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
 
         mode = _mode(mode)
         if _running(run):
-            description = app.state.session.partialFigure(run, key)
-            figure = _drawnFigure((run, True, key, mode, None, None),
+            session = app.state.session
+            description = session.partialFigure(run, key)
+            # The circuit view grows a pass at a time, so each pass's figure is kept under its own name
+            drawnKey = f'{key}@{session.partialRevision(run)}' if key == iterationView else key
+            figure = _drawnFigure((run, True, drawnKey, mode, None, None),
                                   lambda: views.partialFigure(description, key, mode)) if description is not None else None
             if figure is None:
                 raise HTTPException(404, f'{key} is not drawn until run {run} finishes')

@@ -26,8 +26,8 @@ It needs the web extra, the built front end and Playwright with its Chromium:
     python -m playwright install chromium
     cd novaGui/frontend && npm install && npm run build && cd ../..
 
-Run it from the NOVA root. Each of the five runs takes about five minutes, because the shipped
-nozzle builds a full cooling jacket, its outlet volute and the marched plume:
+Run it from the NOVA root. Each of the five runs takes a minute and a half or so, because the
+shipped nozzle builds a full cooling jacket, its outlet volute and the marched plume:
 
     python featureShowcase/buildGuiScreenshots.py
 
@@ -84,6 +84,7 @@ viewShots = [
     ('wallMap', 'viewJacket', 1500),
     ('film', 'viewFilm', 1500),
     ('circuit', 'viewCircuit', 1500),
+    ('circuitIterations', 'viewIterations', 1500),
     ('channelMesh', 'viewChannelMesh', 6000),
     ('revolved', 'viewRevolved', 3000),
 ]

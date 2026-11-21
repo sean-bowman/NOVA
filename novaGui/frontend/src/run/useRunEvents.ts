@@ -2,7 +2,8 @@
    RUN EVENTS
    The run session as React state, fed by the server's event stream. The stream opens with a
    snapshot, so a reload or a reconnect mid-run picks up where the run is. Besides the run itself
-   it carries the figures a running run has settled, the warnings it has raised, the runs queued
+   it carries the figures a running run has settled, how many passes its coolant circuit has
+   kept (each one draws again in the circuit iteration view), the warnings it has raised, the runs queued
    behind it, a count that moves whenever the kept runs or the baseline change and one that moves
    whenever a trade sweep does, and the theme mode last saved from any window.
    Sean Bowman [11/16/2026]
@@ -21,8 +22,6 @@ export interface RunView {
     state: RunStateName;
     detail: string;
     runId: number | null;         // the run in progress, or the last one started
-    fraction: number;
-    ceiling: number;
     label: string;
     stageDetail: string;          // every open stage, with its iteration or loop
     stages: RunStage[];
@@ -35,6 +34,7 @@ export interface RunView {
     result: RunSummary | null;
     connected: boolean;
     partial: PartialRun | null;   // the running run's settled figures
+    iterationRevision: number;    // the circuit passes the running run has kept, which name its live figure
     warnings: RunWarning[];       // the warnings of the run in progress, or the last one started
     runsVersion: number;          // moves when the kept runs or the baseline change
     sweepsVersion: number;        // moves when a sweep is added or deleted, or a point's state moves
@@ -43,14 +43,15 @@ export interface RunView {
 }
 
 const initial: RunView = {
-    state: 'idle', detail: '', runId: null, fraction: 0, ceiling: 0, label: '', stageDetail: '', stages: [],
+    state: 'idle', detail: '', runId: null, label: '', stageDetail: '', stages: [],
     expectedRun: null, runClock: 0, progressAt: 0, startedAt: null, endedAt: null, log: [], result: null,
-    connected: false, partial: null, warnings: [], runsVersion: 0, sweepsVersion: 0, queue: [], savedMode: null,
+    connected: false, partial: null, iterationRevision: 0, warnings: [], runsVersion: 0, sweepsVersion: 0, queue: [],
+    savedMode: null,
 };
 
 function progressOf(event: RunProgressFields): Partial<RunView> {
     return {
-        runId: event.runId, fraction: event.fraction, ceiling: event.ceiling, label: event.label,
+        runId: event.runId, label: event.label,
         stageDetail: event.stageDetail ?? '', stages: event.stages ?? [], expectedRun: event.expectedRun ?? null,
         runClock: event.t ?? 0, progressAt: performance.now(),
     };
@@ -62,7 +63,8 @@ function reduce(previous: RunView, event: RunEvent): RunView {
             return {
                 ...previous, ...progressOf(event), state: event.state, detail: event.detail,
                 startedAt: event.startedAt, endedAt: null, log: event.log.slice(-maxLogLines), result: event.result,
-                partial: event.partial ?? null, warnings: event.warnings ?? [], runsVersion: previous.runsVersion + 1,
+                partial: event.partial ?? null, iterationRevision: event.partial?.revision ?? 0,
+                warnings: event.warnings ?? [], runsVersion: previous.runsVersion + 1,
                 sweepsVersion: previous.sweepsVersion + 1, queue: event.queue ?? [],
             };
         case 'log': {
@@ -75,8 +77,8 @@ function reduce(previous: RunView, event: RunEvent): RunView {
                 ...previous, state: event.state, detail: event.detail, runId: event.runId ?? previous.runId,
                 ...(event.state === 'running' && previous.state !== 'running'
                     ? {
-                        startedAt: Date.now() / 1000, endedAt: null, fraction: 0, ceiling: 0, label: '', stages: [],
-                        runClock: 0, log: [], partial: null, warnings: [],
+                        startedAt: Date.now() / 1000, endedAt: null, label: '', stages: [],
+                        runClock: 0, log: [], partial: null, iterationRevision: 0, warnings: [],
                     }
                     : {}),
                 ...(event.state !== 'running' && previous.state === 'running'
@@ -86,6 +88,8 @@ function reduce(previous: RunView, event: RunEvent): RunView {
             return { ...previous, ...progressOf(event) };
         case 'partial':
             return { ...previous, partial: { runId: event.runId, views: event.views } };
+        case 'iterations':
+            return event.runId === previous.runId ? { ...previous, iterationRevision: event.revision } : previous;
         case 'warning':
             return event.runId === previous.runId ? { ...previous, warnings: event.warnings } : previous;
         case 'result': {

@@ -3,8 +3,8 @@
    One row for several alternative config keys (thrust or mass flow, area ratio or exit
    pressure): an option dropdown in the label column, the value, and its unit. Each option
    keeps its own text and unit while another is chosen. Choosing an option writes its value,
-   the constants it fixes, and null to every other key the row holds, as
-   legacy.novaTk.widgets.SelectorRow does. An option in amber is one a cross-field problem names,
+   the constants it fixes, and null to every other key the row holds, so a config cannot set both
+   of a mutually exclusive pair. An option in amber is one a cross-field problem names,
    and the problem is written under the row.
    Sean Bowman [11/16/2026]
    ======================================== */

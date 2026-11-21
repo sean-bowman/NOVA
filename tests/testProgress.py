@@ -1,7 +1,7 @@
 
 '''
 
-Tests for the run progress events (NOVA.progress) and the model both front ends fold them with
+Tests for the run progress events (NOVA.progress) and the model the GUI folds them with
 (novaGui.progress.RunProgress).
 
 The reporter's own behavior is held on small blocks: nesting and paths, a stage that raises, the
@@ -26,7 +26,7 @@ import numpy as np
 import pytest
 
 from NOVA import progress
-from novaGui.progress import RunProgress, keptIterations, loadingCeiling
+from novaGui.progress import RunProgress, keptIterations, nominalStageTimes
 
 repositoryRoot = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -136,6 +136,39 @@ class TestIterationMetrics:
         assert events[0]['metrics'] == {'finite': 1.5, 'notANumber': None, 'infinite': None,
                                         'text': None, 'missing': None}
         json.dumps(events[0], allow_nan = False)
+
+class TestIterationProfiles:
+
+    def testTheyArriveAsListsAndAreAlwaysValidJson(self):
+
+        '''Arrays go as lists of floats with None where not finite; strings stay; metrics as an iteration's.'''
+
+        events, reporting = record()
+        with reporting:
+            with progress.stage('circuit', 'Coolant circuit'):
+                progress.profiles(2, [{'leg': 'down', 'x': np.array([0.0, 0.5]), 'wall': [700.0, np.nan]},
+                                      {'leg': 'up', 'x': (0.0, 0.5), 'wall': np.array([650.0, np.inf])}],
+                                  {'change': np.float64(1.25), 'tolerance': 0.05}, name = 'pass')
+
+        event = events[1]
+        assert {key: event[key] for key in ('type', 'path', 'name', 'index')} == {
+            'type': 'profiles', 'path': 'circuit', 'name': 'pass', 'index': 2}
+        assert event['metrics'] == {'change': 1.25, 'tolerance': 0.05}
+        assert event['profiles'] == [{'leg': 'down', 'x': [0.0, 0.5], 'wall': [700.0, None]},
+                                     {'leg': 'up', 'x': [0.0, 0.5], 'wall': [650.0, None]}]
+        json.dumps(event, allow_nan = False)
+
+    def testWithoutAReporterNothingIsSent(self):
+
+        assert progress.profiles(1, [{'leg': 'up', 'x': [0.0]}]) is None
+
+    def testTheModelLeavesThemOut(self):
+
+        '''A profiles event is the circuit view's, not the stage tree's: the model ignores it.'''
+
+        model = RunProgress()
+        model.apply(plan)
+        assert not model.apply(event('profiles', 0.0, path = '', name = 'pass', index = 1, metrics = {}, profiles = []))
 
 class TestTheListener:
 
@@ -283,7 +316,7 @@ class TestAReportedRun:
         assert first is not None
         assert np.array_equal(np.asarray(first, dtype = float), np.asarray(second, dtype = float), equal_nan = True)
 
-# -- The model the front ends fold events with -- #
+# -- The model the GUI folds events with -- #
 
 def event(kind: str, t: float, **fields) -> dict:
 
@@ -307,28 +340,32 @@ class TestTheModel:
 
         model = RunProgress()
 
-        assert model.summary() == (0.0, loadingCeiling, 'loading NOVA')
+        assert model.label == 'loading NOVA' and model.stageList() == []
         assert RunProgress(label = 'starting worker').label == 'starting worker'
 
-    def testTheLastRunsTimesShareOutTheBar(self):
+    def testTheLastRunsTimesWeightTheStagesAndTheNominalOnesTheFirstRun(self):
 
         model = RunProgress(history = {'contour': 1.0, 'cooling': 9.0})
         model.apply(plan)
         model.apply(start(0.0, 'contour', 'Contour'))
 
-        fraction, ceiling, label = model.summary()
-        assert fraction == pytest.approx(loadingCeiling)
-        assert ceiling == pytest.approx(loadingCeiling + 0.1 * (1.0 - loadingCeiling))
-        assert label == 'Contour'
+        assert {stage['key']: stage['weight'] for stage in model.stageList()} == {'contour': 1.0, 'cooling': 9.0}
+        assert model.label == 'Contour'
 
-    def testAStepInATopLevelStageMovesTheBar(self):
+        first = RunProgress()
+        first.apply(plan)
+        assert {stage['key']: stage['weight'] for stage in first.stageList()} == {
+            'contour': nominalStageTimes['contour'], 'cooling': nominalStageTimes['cooling']}
+
+    def testAStepInATopLevelStageFillsIt(self):
 
         model = RunProgress(history = {'contour': 1.0, 'cooling': 1.0})
         model.apply(plan)
         model.apply(start(0.0, 'contour', 'Contour'))
         model.apply(event('step', 1.0, path = 'contour', label = None, done = 5, total = 10))
 
-        assert model.fraction == pytest.approx(loadingCeiling + 0.25 * (1.0 - loadingCeiling))
+        contour, cooling = model.stageList()
+        assert contour['fraction'] == pytest.approx(0.5) and cooling['fraction'] is None
         assert model.label == 'Contour, 50%'
 
     def testTheLabelCountsTheIterationInProgress(self):
@@ -442,21 +479,16 @@ class TestTheModel:
         model.apply(start(0.0, 'contour.diverging', 'Diverging section'))
         model.apply(event('iteration', 1.0, path = 'contour.diverging', name = 'evaluation', index = 1, metrics = {}))
 
-        # The same iteration number again leaves the bar and its label alone but adds to the list
+        # The same iteration number again leaves the label alone but adds to the list
         assert model.apply(event('iteration', 2.0, path = 'contour.diverging', name = 'evaluation', index = 1,
                                  metrics = {}))
 
-    def testARealRunEndsFullAndNeverRunsBackward(self, reducedRuns):
+    def testARealRunEndsWithEveryStageDone(self, reducedRuns):
 
         model = RunProgress()
-        fractions = []
         for item in reducedRuns[0]:
             model.apply(item)
-            assert model.ceiling >= model.fraction
-            fractions.append(model.fraction)
 
-        assert fractions == sorted(fractions)
-        assert model.fraction == 1.0
         assert all(stage['state'] == 'done' for stage in model.stageList())
         assert set(model.durations()) == {'contour', 'cooling', 'performance'}
 

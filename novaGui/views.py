@@ -5,12 +5,12 @@
 
 The result pane's figures, rendered for the browser.
 
-The list of views and the test of which ones a run produced are novaGui.viewCatalog, which the
-legacy Tkinter front end reads too. Each view renders one or both of two ways:
+The list of views and the test of which ones a run produced are novaGui.viewCatalog. Each view
+renders one or both of two ways:
 
     interactive   a plotly figure as JSON, drawn in the browser by plotly.js at full resolution,
                   from the builder novaGui.plotting.interactiveBuilders names for the view, or for
-                  the nine cooling views from novaGui.coolingFigures
+                  the ten cooling views from novaGui.coolingFigures
     static        the Matplotlib drawing (novaGui.plotting, novaGui.thermalPlots), rendered
                   headless to PNG at the browser pane's size and pixel ratio
 
@@ -23,15 +23,12 @@ second run's fills, markers, shapes and labels are left out, so the first run's 
 does alone.
 
 While a run is going, the views its contour stage settles draw from the figure descriptions the
-worker sent (`partialFigure`), through the same renderers as the finished run's.
+worker sent (`partialFigure`), through the same renderers as the finished run's. So does the circuit
+iteration view, from the passes the session has kept so far (coolingFigures.describedBuilders).
 
 The contour and the near-wall state hover along the axis here (`alongAxisHover`), as the cooling
 plots do, so the browser's axial cursor reads the wall radius and the gas state at its station. In
 NOVA's own HTML they hover to the nearest point.
-
-The Matplotlib plume title tells a legacy Tkinter user that its "Open interactive" button shows
-the correlated structure beyond the march. Here the same figure, saved as a PNG, says the interactive
-view does.
 
 Figures are drawn in one palette mode at a time, and the mode lives in module globals
 (NOVA.palette for both renderers, novaGui.themeColors and Matplotlib's rcParams for the static one), so
@@ -65,11 +62,6 @@ alongAxisHover = frozenset({'contour', 'nearWall'})
 # Line plots along the nozzle axis, which can draw a second run over the first
 comparableViews = frozenset({'contour', 'nearWall', 'passes', 'jacketTemperatures', 'coolantFlow', 'coolantProperties',
                              'heatFlux', 'film', 'extension'})
-
-# Text in the shared Matplotlib drawers that names a legacy Tkinter control, and what it reads here
-staticTextOverrides = {
-    'Open interactive shows them': 'the interactive view shows them',
-}
 
 def warmUp() -> None:
 
@@ -121,6 +113,7 @@ def _staticDrawers() -> dict:
         'plume':              (plotting.drawPlume,),
         'circuit':            (thermal.drawCircuit,),
         'passes':             (thermal.drawPasses,),
+        'circuitIterations':  (thermal.drawCircuitIterations,),
         'wallMap':            (thermal.drawWallMap,),
         'jacketTemperatures': (thermal.drawJacketTemperatures,),
         'coolantFlow':        (thermal.drawCoolantFlow,),
@@ -276,14 +269,20 @@ def partialFigure(description, key: str, mode: str) -> str | None:
     '''
 
     A view of a run still going, as plotly JSON, drawn from the figure description its contour stage
-    settled (novaGui.plotting.figureDescriptions), or None.
+    settled (novaGui.plotting.figureDescriptions) or from the circuit's passes so far
+    (novaGui.coolingFigures.describedBuilders), or None.
 
     '''
 
-    plotting, backend = _module('plotting'), _module('backend')
-    if key not in plotting.figureDescriptions or description is None:
+    plotting, backend, cooling = _module('plotting'), _module('backend'), _module('coolingFigures')
+    if description is None:
         return None
-    _, render = plotting.figureDescriptions[key]
+    if key in plotting.figureDescriptions:
+        _, render = plotting.figureDescriptions[key]
+    elif key in cooling.describedBuilders:
+        render = cooling.describedBuilders[key]
+    else:
+        return None
 
     with renderLock:
         figures = backend.figuresModule()
@@ -350,23 +349,6 @@ class HeadlessPane:
 
         pass
 
-def _overrideText(figure) -> None:
-
-    '''
-
-    Reword the drawer text that names a legacy Tkinter control (staticTextOverrides) in every axes title.
-    The title's Text is edited in place, so it keeps the size and color the drawer gave it.
-
-    '''
-
-    for ax in figure.axes:
-        title = ax.title.get_text()
-        reworded = title
-        for old, new in staticTextOverrides.items():
-            reworded = reworded.replace(old, new)
-        if reworded != title:
-            ax.title.set_text(reworded)
-
 def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixelRatio: float) -> dict:
 
     '''
@@ -411,7 +393,6 @@ def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixel
         function(pane, nozzle, *arguments)
         if pane.messageText is not None:
             return {'message': pane.messageText}
-        _overrideText(pane.figure)
 
         FigureCanvasAgg(pane.figure)
         buffer = io.BytesIO()

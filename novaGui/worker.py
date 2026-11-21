@@ -6,10 +6,9 @@
 Entry point of the child process that runs one NOVA pipeline.
 
 Each run gets a fresh process, started with the 'spawn' method so nothing from the server's
-interpreter leaks into it. Inside, novaGui.runner.PipelineRunner does the run exactly as the
-legacy Tkinter front end does it (forced program flags, staging output root, headless figures,
-progress reported as events), and its messages are forwarded to the server through a
-multiprocessing queue.
+interpreter leaks into it. Inside, novaGui.runner.PipelineRunner does the run (forced program
+flags, the run's own output folder, headless figures, progress reported as events), and its
+messages are forwarded to the server through a multiprocessing queue.
 
 A separate process is what makes a run cancellable: the server terminates it. RocketCEA's
 machine-wide lock (`nova.lock`, held through msvcrt.locking) is released by the operating
@@ -31,7 +30,8 @@ Messages put on the queue:
     ('log', str)
     ('status', (state, detail))
     ('stage', dict)         a NOVA.progress event
-    ('partial', dict)       {'stage': 'contour', 'figures': {view key: figure description}}
+    ('partial', dict)       {'stage': 'contour', 'figures': {view key: figure description},
+                            'throatX': the throat's axial position [m] or None}
     ('result', dict)        terminal: ok, runName, outputDir, picklePath, elapsedSec, headline, numbers,
                             error, traceback; `numbers` is [{'key', 'label', 'value', 'unit', 'tone'}]
 
@@ -133,9 +133,21 @@ def _contourHook(eventQueue):
             if data is not None:
                 figures[key] = data
         if figures:
-            eventQueue.put(('partial', {'stage': 'contour', 'figures': figures}))
+            eventQueue.put(('partial', {'stage': 'contour', 'figures': figures, 'throatX': _throatX(nozzle)}))
 
     return hook
+
+def _throatX(nozzle) -> float | None:
+
+    '''The throat's axial position [m], where the circuit view marks it while the run goes on, or None.'''
+
+    try:
+        import numpy as np
+        wallX = np.asarray(nozzle.xNozzleWall, dtype = float)
+        wallR = np.asarray(nozzle.rNozzleWall, dtype = float)
+        return float(wallX[int(np.argmin(wallR))]) if wallX.size >= 2 and wallR.size == wallX.size else None
+    except Exception:                                      # noqa: BLE001 -- the view draws without it
+        return None
 
 def _headline(nozzle) -> str:
 

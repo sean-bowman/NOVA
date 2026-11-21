@@ -3,11 +3,10 @@
 
 '''
 
-Runs Nozzle.generateNozzle() on a background thread so the caller stays responsive during
-a multi-minute solve. NOVA's printed output and its progress events (NOVA.progress) are
-forwarded to a queue the caller drains; the front end folds the events into its run bar
-with novaGui.progress.RunProgress. The web front end runs it inside a worker process
-(novaGui.worker), the legacy Tkinter front end on a thread of its window.
+Runs Nozzle.generateNozzle() on a background thread of the worker process (novaGui.worker), which
+forwards what it reports to the server. NOVA's printed output and its progress events
+(NOVA.progress) are put on a queue the worker drains; the server folds the events into its stage
+tree with novaGui.progress.RunProgress.
 
 Before the first run the loader:
 
@@ -24,11 +23,8 @@ written to the log as Python would print it, and sent as a message of its own, s
 count and list a run's warnings rather than leave them in the log.
 
 Every run writes all of NOVA's outputs, figures and data files alike, into the folder
-the front end gives it, where the front end's views read them. An export copies the ones
-chosen to the output folder. The web front end gives each run a folder in its run store
-(novaGui.runStore), kept between launches. The legacy Tkinter front end uses a staging
-folder, which belongs to one session of it and is removed when it closes; `clearStaging`
-removes any a crashed session left behind.
+the server gives it, where the views read them: a folder in the run store (novaGui.runStore),
+kept between launches. An export copies the ones chosen to the output folder.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -40,7 +36,6 @@ import sys
 import json
 import time
 import shutil
-import tempfile
 import warnings
 import importlib
 import threading
@@ -98,36 +93,6 @@ def warningRelay(messageQueue):
 
     return show
 
-def stagingFolder() -> str:
-
-    '''
-
-    The folder this session's runs write into: one per window process, under the system's
-    temporary directory.
-
-    '''
-
-    return os.path.join(tempfile.gettempdir(), 'NOVA', f'session{os.getpid()}')
-
-def clearStaging(maxAgeHours: float = 12.0) -> None:
-
-    '''
-
-    Remove other sessions' staging folders older than `maxAgeHours`. A window that closes removes
-    its own; one that crashed leaves it behind, and this is what collects it.
-
-    '''
-
-    parent = os.path.dirname(stagingFolder())
-    if not os.path.isdir(parent):
-        return
-
-    cutoff = time.time() - 3600.0 * maxAgeHours
-    for entry in os.listdir(parent):
-        path = os.path.join(parent, entry)
-        if path != stagingFolder() and os.path.isdir(path) and os.path.getmtime(path) < cutoff:
-            shutil.rmtree(path, ignore_errors = True)
-
 class RunResult:
 
     '''
@@ -140,7 +105,7 @@ class RunResult:
 
         self.ok = False
         self.nozzle = None            # the populated Nozzle instance on success
-        self.outputDir = ''           # <name>Outputs/ directory in the staging folder
+        self.outputDir = ''           # <name>Outputs/ directory in the run's folder
         self.runName = ''             # the config's filename, which names the outputs
         self.configPath = ''          # the JSON handed to setInputs
         self.elapsedSec = 0.0

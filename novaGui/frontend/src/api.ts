@@ -73,8 +73,9 @@ export const api = {
     sweepFigure: (sweepId: number, number: string, mode: Mode) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(`/api/sweeps/${sweepId}/figure${query({ number, mode })}`),
     views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),
-    interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null) =>
-        request<{ data: object[]; layout: Record<string, unknown> }>(`/api/views/${key}/interactive${query({ mode, run, compare })}`),
+    interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null, revision?: number) =>
+        request<{ data: object[]; layout: Record<string, unknown> }>(
+            `/api/views/${key}/interactive${query({ mode, run, compare, rev: revision })}`),
     analysis: (run: number | null, baseline: number | null) => request<ResultTable>(`/api/analysis${query({ run, baseline })}`),
     validationModel: (model: string) => request<ValidationDetail>(`/api/validation/${encodeURIComponent(model)}`),
     exportIndex: (run: number | null) => request<ExportIndex>(`/api/export${query({ run })}`),

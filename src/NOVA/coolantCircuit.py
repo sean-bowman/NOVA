@@ -72,7 +72,7 @@ from .fluidProperties import fluidProps
 from .geometryTools import sizedThroatRadius
 from .turnaround import DEFAULTVELOCITYRATIO, Turnaround, sizeTurnaround
 
-__all__ = ['COOLANTCIRCUITS', 'PassSolution', 'CircuitSolution', 'passStations', 'passCounts',
+__all__ = ['COOLANTCIRCUITS', 'PassSolution', 'CircuitSolution', 'legProfile', 'passStations', 'passCounts',
            'solveCoolantCircuit']
 
 COOLANTCIRCUITS = ('singlePass', 'oneAndHalfPass', 'twoPass')
@@ -143,15 +143,19 @@ class CircuitSolution:
         Passes of the outer iteration.
     history : list
         Largest coolant temperature change at each pass of it [K].
+    iterationProfiles : list
+        What each pass of it settled on along the wall (`legProfile`), in order:
+        {'index', 'change' [K] or None for the first, 'legs': [down profile, up profile]}.
 
     '''
 
-    circuit:    str
-    down:       PassSolution
-    up:         PassSolution
-    turnaround: Turnaround
-    iterations: int
-    history:    list = field(default_factory = list)
+    circuit:           str
+    down:              PassSolution
+    up:                PassSolution
+    turnaround:        Turnaround
+    iterations:        int
+    history:           list = field(default_factory = list)
+    iterationProfiles: list = field(default_factory = list)
 
     @property
     def coolantExitTemperature(self) -> float:
@@ -194,6 +198,34 @@ class CircuitSolution:
             f'{float(self.up.state.coolantInitialTemperature):.1f} to '
             f'{float(self.up.state.coolantExitTemperature):.1f} K, {1e-6*upDrop:.3f} MPa',
             f'  rib exchange: down gains {1e-3*downRib:.2f} kW, up gains {1e-3*upRib:.2f} kW'])
+
+def legProfile(leg: str, results: dict) -> dict:
+
+    '''
+
+    One leg of the circuit along the wall, as a pass of the outer iteration left it.
+
+    Parameters:
+    -----------
+    leg : str
+        'down' or 'up'.
+    results : dict
+        The leg's station results (ChannelSizingState.channelThermalResults).
+
+    Returns:
+    --------
+    dict
+        {'leg', 'x' [m], 'wall' [K], 'coolant' [K]}: the stations' axial positions, the metal hot
+        wall the limit applies to (behind a barrier coating where there is one), and the coolant
+        leaving each station, in wall order.
+
+    '''
+
+    wall = results.get('metalWallTemperature', results['wallTemperature'])
+    return {'leg': leg,
+            'x':       np.array(results['xHotWall3D'], dtype = float),
+            'wall':    np.array(wall, dtype = float),
+            'coolant': np.array(results['temperature'], dtype = float)}
 
 def passStations(circuit: str, xWall, rWall, nozzleScalingFactor, inletAreaRatio = None) -> tuple:
 
@@ -427,6 +459,7 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
     quiet = dataclasses.replace(thermal, plotsEnabled = 'off', export = 'off')
 
     history, upResults, downState, upState, ring = [], None, None, None, None
+    iterationProfiles = []
     downRise, upRise = None, None
     for iteration in range(1, maxIterations + 1):
 
@@ -492,12 +525,19 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         history.append(change)
 
         # The first pass has no previous profile to compare against, so it reports no change
-        progress.iteration(iteration, {
+        metrics = {
             'change':                None if previous is None else change,                 # [K]
             'tolerance':             tolerance,                                            # [K]
             'downOutletTemperature': float(downState.coolantExitTemperature),              # [K]
             'upOutletTemperature':   float(upState.coolantExitTemperature),                # [K]
-        }, name = 'pass')
+        }
+        progress.iteration(iteration, metrics, name = 'pass')
+
+        # Where along the wall the pass left each leg, kept and sent, so the circuit can be watched
+        # settling station by station rather than only by its largest change
+        legs = [legProfile('down', downResults), legProfile('up', upResults)]
+        iterationProfiles.append({'index': iteration, 'change': metrics['change'], 'legs': legs})
+        progress.profiles(iteration, legs, metrics, name = 'pass')
         if not ribExchange or change < tolerance:
             break
     else:
@@ -518,4 +558,5 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         up         = PassSolution('up', upStations, upCount, totalFlow / upCount, upFaces, upState),
         turnaround = ring,
         iterations = iteration,
-        history    = history)
+        history    = history,
+        iterationProfiles = iterationProfiles)

@@ -77,7 +77,11 @@ function statusOf(run: RunView, runs: RunsView, changes: FieldChange[]): { text:
     if (run.state === 'running') {
         let text: string;
         if (runs.partial) {
-            text = `Run ${run.runId} is running. Its contour and flow fields are in; cooling, the plume and the table follow when it finishes.`;
+            text = runs.index?.available.includes('circuitIterations')
+                ? `Run ${run.runId} is running. Its contour and flow fields are in, and Circuit iterations draws its `
+                  + `coolant circuit's passes as they end; the rest follows when it finishes.`
+                : `Run ${run.runId} is running. Its contour and flow fields are in; cooling, the plume and the table `
+                  + 'follow when it finishes.';
         } else if (shown !== null && runs.choice === 'latest') {
             text = `Run ${run.runId} is running. This shows run ${shown} until its contour is in.`;
         } else if (shown !== null) {
@@ -272,7 +276,8 @@ export function ResultPane({ runs, mode, run, schema, config, sweeps, focusSweep
             )}
             <div className="result-content" hidden={showing !== 'figure'}>
                 <FigureView index={index} mode={mode} compare={against} selected={selected} layout={layout}
-                            runChoice={runs.choice} onSelect={setSelected} onLayout={setLayout} onNotify={onNotify} />
+                            runChoice={runs.choice} liveRevision={run.iterationRevision} onSelect={setSelected}
+                            onLayout={setLayout} onNotify={onNotify} />
             </div>
             <div className="result-content" hidden={showing !== 'table'}>
                 <ResultsTable table={table} loading={tableLoading} error={tableError} available={available}

@@ -267,6 +267,42 @@ def testEachOuterPassIsReportedAndTheReportChangesNothing(jacket, twoPassApart):
     assert circuit.coolantExitTemperature == twoPassApart.coolantExitTemperature
     assert circuit.coolantExitPressure == twoPassApart.coolantExitPressure
 
+def testEachOuterPassSendsAndKeepsWhereItLeftEachLeg(jacket):
+
+    '''
+
+    Every outer pass sends a profiles event after its iteration event, the down and up legs each
+    with its stations' axial positions, metal hot wall and coolant, and the solution keeps the same
+    passes; the last is the solved legs themselves.
+
+    '''
+
+    from NOVA import progress
+
+    _, base, geometry, thermal = jacket
+    events = []
+    with progress.reporting(events.append):
+        circuit = solveCoolantCircuit(copy.deepcopy(base), geometry, thermal, 'twoPass', material = 'GRCop-42')
+
+    loop = [event for event in events if event['type'] in ('iteration', 'profiles')]
+    assert [(event['type'], event['index']) for event in loop] == [
+        (kind, index) for index in range(1, circuit.iterations + 1) for kind in ('iteration', 'profiles')]
+    sent = [event for event in loop if event['type'] == 'profiles']
+    assert all(event['path'] == '' and event['name'] == 'pass' for event in sent)
+    assert sent[0]['metrics']['change'] is None and sent[-1]['metrics']['change'] == circuit.history[-1]
+
+    kept = circuit.iterationProfiles
+    assert [entry['index'] for entry in kept] == list(range(1, circuit.iterations + 1))
+    for event, entry in zip(sent, kept):
+        for sentLeg, keptLeg in zip(event['profiles'], entry['legs']):
+            assert sentLeg['leg'] == keptLeg['leg']
+            for name in ('x', 'wall', 'coolant'):
+                assert sentLeg[name] == [float(value) for value in keptLeg[name]]
+    for leg, solved in zip(kept[-1]['legs'], (circuit.down, circuit.up)):
+        assert leg['leg'] == solved.name and leg['x'].size == len(solved.stations)
+        assert np.array_equal(leg['coolant'], solved.results['temperature'])
+        assert np.array_equal(leg['wall'], solved.results.get('metalWallTemperature', solved.results['wallTemperature']))
+
 def testAMultiPassJacketDrawsItsUpPassOnce(jacket, monkeypatch):
 
     '''Drawn in the loop, the figure would be written on every outer pass; it is drawn once, of the up pass.'''

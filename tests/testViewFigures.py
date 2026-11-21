@@ -1,4 +1,4 @@
-# -- NOVA: The View Tab's Figures -- #
+# -- NOVA: The GUI's View Figures -- #
 
 '''
 
@@ -207,59 +207,61 @@ def _cooledNozzle():
 
     return nozzle
 
+def _drawn(draw, nozzle, *arguments, mode: str = 'dark'):
+
+    '''
+
+    A drawer's figure on the pane the static renderer draws into (novaGui.views.HeadlessPane), in
+    a palette mode, drawn through to pixels. The mode is put back to dark after.
+
+    '''
+
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from novaGui import themeColors, views
+
+    themeColors.bindPalette(mode)
+    try:
+        pane = views.HeadlessPane(750, 500, 1.0)
+        draw(pane, nozzle, *arguments)
+        FigureCanvasAgg(pane.figure).draw()
+    finally:
+        themeColors.bindPalette('dark')
+    return pane
+
 @pytest.mark.parametrize('name', ['drawWallMap', 'drawJacketTemperatures', 'drawCoolantFlow', 'drawCoolantProperties',
                                   'drawHeatFlux', 'drawFilm', 'drawExtension'])
-def testEveryCoolingViewDrawsInBothModes(tkRoot, name):
+def testEveryCoolingViewDrawsInBothModes(name):
     from novaGui import thermalPlots
-    from legacy.novaTk import theme
-    from legacy.novaTk.plotting import MplPane
 
-    theme.applyTheme(tkRoot, 'dark')
-    pane = MplPane(tkRoot)
     nozzle = _cooledNozzle()
     for mode in ('dark', 'light'):
-        theme.setMode(tkRoot, mode, matplotlib = False)
-        pane.render(getattr(thermalPlots, name), nozzle)
-        pane.figure.canvas.draw()
-        assert len(pane.figure.get_axes()) >= 2
+        pane = _drawn(getattr(thermalPlots, name), nozzle, mode = mode)
+        assert pane.messageText is None and len(pane.figure.get_axes()) >= 2
 
-def testUnderABarrierTheMetalIsDrawnAgainstTheLimit(tkRoot):
+def testUnderABarrierTheMetalIsDrawnAgainstTheLimit():
     from novaGui import thermalPlots
-    from legacy.novaTk import theme
-    from legacy.novaTk.plotting import MplPane
 
-    theme.applyTheme(tkRoot, 'dark')
-    pane = MplPane(tkRoot)
     nozzle = _cooledNozzle()
     results = nozzle.channelThermalResults
     results['metalWallTemperature'] = np.asarray(results['wallTemperature']) - 300.0
-    pane.render(thermalPlots.drawJacketTemperatures, nozzle)
+    pane = _drawn(thermalPlots.drawJacketTemperatures, nozzle)
     lines = {line.get_label(): line for line in pane.figure.get_axes()[0].get_lines()}
 
     assert np.array_equal(lines['Hot wall'].get_ydata(), results['metalWallTemperature'])
     assert np.array_equal(lines['Coating surface'].get_ydata(), results['wallTemperature'])
 
 @pytest.mark.parametrize('name', ['drawWallMap', 'drawFilm', 'drawExtension'])
-def testACoolingViewWithNothingToDrawSaysSo(tkRoot, name):
+def testACoolingViewWithNothingToDrawSaysSo(name):
     from novaGui import thermalPlots
-    from legacy.novaTk import theme
-    from legacy.novaTk.plotting import MplPane
 
-    theme.applyTheme(tkRoot, 'dark')
-    pane = MplPane(tkRoot)
-    pane.render(getattr(thermalPlots, name), _syntheticNozzle())
-    assert pane.figure.get_axes()[0].texts
+    assert _drawn(getattr(thermalPlots, name), _syntheticNozzle()).messageText
 
 @pytest.mark.parametrize('quantity', ['mach', 'pressure', 'temperature'])
-def testTheFieldViewDraws(tkRoot, quantity):
-    from legacy.novaTk import theme
-    from legacy.novaTk.plotting import MplPane, drawField
+def testTheFieldViewDraws(quantity):
+    from novaGui.plotting import drawField
 
-    theme.applyTheme(tkRoot, 'dark')
-    pane = MplPane(tkRoot)
-    pane.render(drawField, _syntheticNozzle(), quantity)
-    pane.figure.canvas.draw()
-    assert pane.figure.get_axes()
+    pane = _drawn(drawField, _syntheticNozzle(), quantity)
+    assert pane.messageText is None and pane.figure.get_axes()
 
 def _multiPassNozzle():
 
@@ -282,29 +284,17 @@ def _multiPassNozzle():
     return nozzle
 
 @pytest.mark.parametrize('build', [_cooledNozzle, _multiPassNozzle])
-def testTheCircuitViewDrawsInBothModes(tkRoot, build):
+def testTheCircuitViewDrawsInBothModes(build):
     from novaGui import thermalPlots
-    from legacy.novaTk import theme
-    from legacy.novaTk.plotting import MplPane
 
-    theme.applyTheme(tkRoot, 'dark')
-    pane = MplPane(tkRoot)
     nozzle = build()
     for mode in ('dark', 'light'):
-        theme.setMode(tkRoot, mode, matplotlib = False)
-        pane.render(thermalPlots.drawCircuit, nozzle)
-        pane.figure.canvas.draw()
-        assert len(pane.figure.get_axes()) == 1
+        assert len(_drawn(thermalPlots.drawCircuit, nozzle, mode = mode).figure.get_axes()) == 1
 
-def testThePassesViewDrawsBothFamilies(tkRoot):
+def testThePassesViewDrawsBothFamilies():
     from novaGui import thermalPlots
-    from legacy.novaTk import theme
-    from legacy.novaTk.plotting import MplPane
 
-    theme.applyTheme(tkRoot, 'dark')
-    pane = MplPane(tkRoot)
-    pane.render(thermalPlots.drawPasses, _multiPassNozzle())
-    pane.figure.canvas.draw()
+    pane = _drawn(thermalPlots.drawPasses, _multiPassNozzle())
     coolantAxes = pane.figure.get_axes()[0]
     # The two families; the throat marker carries no label
     assert len([line for line in coolantAxes.get_lines() if not line.get_label().startswith('_')]) == 2

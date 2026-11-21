@@ -76,7 +76,8 @@ export function Popout({ initial }: { initial: { run: RunChoice; layout: FigureL
             <main className="popout-body card">
                 <FigureView index={runs.index} mode={mode} compare={against} selected={selected} layout={layout}
                             runChoice={runs.choice} initialGrid={initial.layout === 'grid' ? initial.views : undefined}
-                            onSelect={setSelected} onLayout={setLayout} onNotify={notify} />
+                            liveRevision={run.iterationRevision} onSelect={setSelected} onLayout={setLayout}
+                            onNotify={notify} />
             </main>
             {toast && (
                 <div className="toasts" aria-live="polite">

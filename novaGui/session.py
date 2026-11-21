@@ -14,11 +14,10 @@ stream. A browser that connects mid-run first receives a snapshot of the state, 
 events.
 
 The worker forwards NOVA's progress events (NOVA.progress). The session folds them with
-novaGui.progress.RunProgress, the model the legacy Tkinter window uses too, and sends the browser the
-result: the bar's fraction and ceiling, a short label, the open stages as one detail line, and
-the stage tree with its states, times and iterations. The last finished run's stage times share
-out the next run's bar and stand as its expected times, and its tree lists the sub-stages the
-next run has yet to reach.
+novaGui.progress.RunProgress and sends the browser the result: a short label, the open stages as
+one detail line, and the stage tree with its states, times and iterations. The last finished run's
+stage times weight the next run's stages and stand as its expected times, and its tree lists the
+sub-stages the next run has yet to reach.
 
 The session keeps finished runs, each with the config it ran and the headline of its result
 table, so the browser can list them, show any of them, and name the fields that differ between two
@@ -56,23 +55,30 @@ them in the run bar and list them for whichever run it shows.
 When a run's contour stage ends, the worker sends the figure descriptions that stage settles (the
 contour, the near-wall state, the three flow fields and the revolved wall). The session keeps them
 as the running run's partial result, so the browser can draw them while cooling and the plume
-still run. They are dropped when the run ends; a finished run draws from its Nozzle.
+still run. A multi-pass coolant circuit sends each pass of its outer iteration as it ends, the legs'
+hot wall and coolant along the wall (NOVA.progress profiles events); the session keeps them as the
+circuit iteration view's description, the jacket's and the extension circuit's apart, and tells the
+browser each time one arrives, so the view draws the circuit settling. Both are dropped when the
+run ends; a finished run draws from its Nozzle, whose circuit solutions keep the same passes.
 
 Without a store, runs write into a staging folder for the server process, `<temp>/NOVA/web<pid>/run<n>`.
 Each run gets its own folder, so a cancelled run's partial files never mix with a finished one. The
-staging folder is removed when the server exits; novaGui.runner.clearStaging collects one a crashed server
-left behind after twelve hours, together with the legacy Tkinter front end's.
+staging folder is removed when the server exits; `clearStaging` collects one a crashed server left
+behind, after twelve hours.
 
 Events, as JSON objects:
 
     {'type': 'log', 'line': str}
     {'type': 'status', 'state': 'idle'|'running'|'done'|'error'|'cancelled', 'detail': str,
      'runId': int | None}
-    {'type': 'progress', 'runId': int, 't': float, 'expectedRun': int | None, 'fraction': float,
-     'ceiling': float, 'label': str, 'stageDetail': str, 'stages': [...]}
+    {'type': 'progress', 'runId': int, 't': float, 'expectedRun': int | None, 'label': str,
+     'stageDetail': str, 'stages': [...]}
         `t` is the run's own clock [s] at its latest event; `stages` is RunProgress.stageList, whose
         expected times come from run `expectedRun`
     {'type': 'partial', 'runId': int, 'views': [view keys]}
+    {'type': 'iterations', 'runId': int, 'revision': int}
+                                                    a running circuit kept another pass; `revision`
+                                                    counts the passes the run has kept
     {'type': 'warning', 'runId': int, 'warnings': [{'category', 'message', 'where', 'count'}]}
         every warning of the run so far
     {'type': 'result', 'runId': int, 'ok': bool, 'runName': str, 'elapsedSec': float, 'error': str}
@@ -113,15 +119,39 @@ keptNozzles = 3      # kept runs whose unpickled Nozzle stays in memory
 titleLength = 80     # [characters] the longest name a run takes
 noteLength = 4000    # [characters] the longest note a run takes
 
+iterationView = 'circuitIterations'   # the view a running circuit's passes draw in
+# The circuits whose passes a running run draws, by the top-level stage they run in, with what the
+# figure calls each, in drawing order (novaGui.thermalPlots.iterationLoops names them alike)
+iterationLoops = (('cooling', 'jacket', 'jacket'), ('extension', 'extension', 'extension circuit'))
+
 def stagingRoot() -> str:
 
     '''
 
-    This server's staging folder, beside the Tkinter front end's session folders.
+    This server's staging folder, beside those of other servers running or crashed.
 
     '''
 
     return os.path.join(tempfile.gettempdir(), 'NOVA', f'web{os.getpid()}')
+
+def clearStaging(maxAgeHours: float = 12.0) -> None:
+
+    '''
+
+    Remove other servers' staging folders older than `maxAgeHours`. A server that exits removes its
+    own; one that crashed leaves it behind, and this is what collects it.
+
+    '''
+
+    parent = os.path.dirname(stagingRoot())
+    if not os.path.isdir(parent):
+        return
+
+    cutoff = time.time() - 3600.0 * maxAgeHours
+    for entry in os.listdir(parent):
+        path = os.path.join(parent, entry)
+        if path != stagingRoot() and os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+            shutil.rmtree(path, ignore_errors = True)
 
 class RunRecord:
 
@@ -274,9 +304,8 @@ class RunSession:
         self._queueCount = 0
         self._sweepCount = 0
 
-        self.state = {'state': 'idle', 'detail': '', 'fraction': 0.0, 'ceiling': 0.0, 'label': '',
-                      'stageDetail': '', 'stages': [], 'runId': None, 'startedAt': None, 't': 0.0,
-                      'expectedRun': None, 'warnings': []}
+        self.state = {'state': 'idle', 'detail': '', 'label': '', 'stageDetail': '', 'stages': [],
+                      'runId': None, 'startedAt': None, 't': 0.0, 'expectedRun': None, 'warnings': []}
         self._progress = RunProgress()        # the current run's stages, folded from its events
         self._stageHistory = {}               # [s] top-level stage times of the last finished run
         self._lastStages = []                 # the last finished run's stage tree
@@ -289,7 +318,10 @@ class RunSession:
         self.result = None                     # the last good RunRecord, else the last that ended
         self.runs = collections.OrderedDict()  # runId: RunRecord, the kept finished runs, oldest first
         self.baseline = None                   # the kept run the others are compared against
-        self.partial = None                    # {'runId', 'figures'}: the running run's settled figures
+        self.partial = None                    # {'runId', 'figures', 'revision'}: the running run's settled figures
+        self._iterationLoops = {}              # loop key: {'key', 'label', 'iterations'}, the running circuits' passes
+        self._iterationRevision = 0            # passes kept so far in this run, which names the figure drawn of them
+        self._throatX = None                   # [m] the running run's throat, from its contour stage
         self._drawn = []                       # kept runs by last use, whose Nozzles stay loaded
 
         self._subscribers = set()              # (loop, asyncio.Queue) pairs
@@ -330,9 +362,8 @@ class RunSession:
             self.state['state'], self.state['detail'] = event['state'], event['detail']
             event['runId'] = self.state['runId']
         elif kind == 'progress':
-            self.state.update(fraction = event['fraction'], ceiling = event['ceiling'], label = event['label'],
-                              stageDetail = event['stageDetail'], stages = event['stages'], t = event['t'],
-                              expectedRun = event['expectedRun'])
+            self.state.update(label = event['label'], stageDetail = event['stageDetail'], stages = event['stages'],
+                              t = event['t'], expectedRun = event['expectedRun'])
 
         with self._subscriberLock:
             subscribers = list(self._subscribers)
@@ -344,11 +375,9 @@ class RunSession:
 
     def _publishProgress(self) -> None:
 
-        fraction, ceiling, label = self._progress.summary()
         self._publish({'type': 'progress', 'runId': self.state['runId'], 't': float(self._progress.t),
-                       'expectedRun': self._lastRunId, 'fraction': float(fraction),
-                       'ceiling': float(ceiling), 'label': label, 'stageDetail': self._progress.detail,
-                       'stages': self._progress.stageList()})
+                       'expectedRun': self._lastRunId, 'label': self._progress.label,
+                       'stageDetail': self._progress.detail, 'stages': self._progress.stageList()})
 
     def _addWarning(self, payload: dict, runId: int) -> None:
 
@@ -444,6 +473,9 @@ class RunSession:
         self._process, self._queue = self._spawn(config, outputDir, mode, runId)
         self.log.clear()
         self.partial = None
+        self._iterationLoops = {}
+        self._iterationRevision = 0
+        self._throatX = None
         self._runConfig = dict(config)
         self._runSweep = sweep
         self.state.update(runId = runId, startedAt = time.time(), warnings = [])
@@ -533,6 +565,57 @@ class RunSession:
         elif self.store is None:
             shutil.rmtree(os.path.join(stagingRoot(), f'run{record.runId}'), ignore_errors = True)
 
+    def _settleFigures(self, runId: int, figures: dict) -> None:
+
+        '''
+
+        Add views the running run has settled to those it had, and tell the browser. The partial
+        result is replaced whole, never changed in place, since the routes read it from other threads.
+
+        '''
+
+        partial = self.partial
+        kept = dict(partial['figures']) if partial is not None and partial['runId'] == runId else {}
+        kept.update(figures)
+        self.partial = {'runId': runId, 'figures': kept, 'revision': self._iterationRevision}
+        self._publish({'type': 'partial', 'runId': runId, 'views': list(kept)})
+
+    def _addPass(self, event: dict, runId: int) -> None:
+
+        '''
+
+        Keep one pass of a running circuit's outer iteration (a NOVA.progress profiles event), and
+        tell the browser the circuit view has another pass to draw.
+
+        A circuit is known by the top-level stage it runs in. A pass numbered 1 starts its circuit
+        over: the same circuit solved again, as an outer gas-side iteration around it does.
+
+        '''
+
+        top = str(event.get('path', '')).split('.')[0]
+        loopKey, label = next(((key, name) for stage, key, name in iterationLoops if stage == top), (top, top))
+        index = int(event.get('index', 1))
+        loop = self._iterationLoops.get(loopKey)
+        if loop is None or index <= 1:
+            loop = {'key': loopKey, 'label': label, 'iterations': []}
+        change = (event.get('metrics') or {}).get('change')
+        entry = {'index': index, 'change': change, 'legs': list(event.get('profiles') or [])}
+        self._iterationLoops = {**self._iterationLoops, loopKey: {**loop, 'iterations': loop['iterations'] + [entry]}}
+        self._iterationRevision += 1
+
+        order = [key for _, key, _ in iterationLoops]
+        loops = sorted(self._iterationLoops.values(),
+                       key = lambda candidate: order.index(candidate['key']) if candidate['key'] in order else len(order))
+        limit = (self._runConfig or {}).get('maxWallTemperature')
+        description = {'loops': loops, 'limit': float(limit) if limit else None, 'throatX': self._throatX}
+        partial = self.partial
+        if partial is None or partial['runId'] != runId or iterationView not in partial['figures']:
+            self._settleFigures(runId, {iterationView: description})
+        else:
+            self.partial = {**partial, 'figures': {**partial['figures'], iterationView: description},
+                            'revision': self._iterationRevision}
+        self._publish({'type': 'iterations', 'runId': runId, 'revision': self._iterationRevision})
+
     def _drain(self, process, eventQueue, runId: int) -> None:
 
         '''
@@ -564,15 +647,17 @@ class RunSession:
                 if state == 'running':
                     self._publish({'type': 'status', 'state': state, 'detail': str(detail)})
             elif kind == 'stage':
-                if self._progress.apply(payload):
+                if payload.get('type') == 'profiles':
+                    self._addPass(payload, runId)
+                elif self._progress.apply(payload):
                     self._publishProgress()
             elif kind == 'warning':
                 self._addWarning(payload, runId)
             elif kind == 'partial':
                 figures = dict(payload.get('figures') or {})
+                self._throatX = payload.get('throatX')
                 if figures:
-                    self.partial = {'runId': runId, 'figures': figures}
-                    self._publish({'type': 'partial', 'runId': runId, 'views': list(figures)})
+                    self._settleFigures(runId, figures)
             elif kind == 'result':
                 summary = payload
 
@@ -1063,6 +1148,13 @@ class RunSession:
             return None
         return partial['figures'].get(key)
 
+    def partialRevision(self, runId: int) -> int:
+
+        '''How many circuit passes the running run has kept, which names the figure drawn of them.'''
+
+        partial = self.partial
+        return int(partial.get('revision', 0)) if partial is not None and partial['runId'] == runId else 0
+
     def publish(self, event: dict) -> None:
 
         '''Hand an event to every subscriber: a change a route makes, such as saved preferences.'''
@@ -1082,7 +1174,8 @@ class RunSession:
             queued = [item.entry() for item in self.queue]
         return {'type': 'snapshot', **self.state, 'log': list(self.log), 'queue': queued,
                 'result': self.result.summary() if self.result is not None else None,
-                'partial': {'runId': partial['runId'], 'views': list(partial['figures'])} if partial else None,
+                'partial': ({'runId': partial['runId'], 'views': list(partial['figures']),
+                             'revision': partial.get('revision', 0)} if partial else None),
                 'baseline': self.baseline}
 
     def subscribe(self) -> asyncio.Queue:

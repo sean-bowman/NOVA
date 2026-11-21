@@ -29,6 +29,7 @@ Author: Sean Bowman
 import json
 import os
 import pickle
+import queue
 import sys
 import threading
 
@@ -475,3 +476,56 @@ def testAQueuedRunCanBeTakenOutOfTheQueue(window, served):
     finally:
         session.queue.clear()
         session.publish({'type': 'queue', 'queue': []})
+
+def testTheCircuitIterationViewDrawsEachPassAsTheRunGoesOn(window, served):
+
+    '''
+
+    A running run's coolant circuit draws in Circuit iterations a pass at a time, offered from its
+    first pass, and each later pass draws over the last in place with the reader's zoom held. The
+    run is a worker the test feeds (tests/testCircuitIterations.py); it settles no other view, so
+    this one is shown.
+
+    '''
+
+    from testCircuitIterations import _FedProcess, _sent
+
+    app, _ = served
+    session = app.state.session
+    spawn = session._spawn
+
+    def fed(config, outputDir, mode, runId):
+        session.fedProcess = _FedProcess(queue.Queue())
+        return session.fedProcess, session.fedProcess.eventQueue
+
+    session._spawn = fed
+    session._runCount = 40              # past the showcase runs' ids
+    session.start({**session.record(1).config, 'maxWallTemperature': 800.0})
+    lines = ('(() => { const host = document.querySelector(".plotly-host"); '
+             'return host && host.data ? host.data.filter((trace) => trace.legendgroup).length : 0; })()')
+    xRange = 'document.querySelector(".plotly-host")._fullLayout.xaxis.range.slice()'
+    try:
+        session.fedProcess.feed.put(('stage', _sent('cooling.circuit', 1)))
+        session.fedProcess.feed.put(('stage', _sent('cooling.circuit', 2, 3.0)))
+        window.wait_for_function('document.querySelector(".view-select").value === "circuitIterations"', timeout = drawMs)
+        window.wait_for_function(f'{lines} === 8', timeout = drawMs)
+        assert 'Circuit iterations draws its coolant circuit' in window.inner_text('.result-status')
+
+        # Zoom in on the hot wall panel with a drag, as a reader would
+        whole = window.evaluate(xRange)
+        left, width, top, height = _plotArea(window, 0)
+        window.mouse.move(left + 0.3 * width, top + 0.3 * height)
+        window.mouse.down()
+        window.mouse.move(left + 0.6 * width, top + 0.7 * height, steps = 8)
+        window.mouse.up()
+        window.wait_for_timeout(300)
+        zoomed = window.evaluate(xRange)
+        assert zoomed[1] - zoomed[0] < 0.5 * (whole[1] - whole[0])
+
+        session.fedProcess.feed.put(('stage', _sent('cooling.circuit', 3, 0.5)))
+        window.wait_for_function(f'{lines} === 12', timeout = drawMs)
+        assert window.evaluate(xRange) == pytest.approx(zoomed)
+        assert not window.locator('.figure-overlay').is_visible()
+    finally:
+        session.cancel()
+        session._spawn = spawn

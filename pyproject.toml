@@ -28,9 +28,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The legacy Tkinter front end (legacy/novaTk). Tkinter ships with CPython; Pillow draws its
-# controls and icons.
-gui = ['pillow>=9.1']
 # The front end (novaGui): its server and the desktop window. The React app builds with Node
 # (novaGui/frontend).
 web = ['fastapi>=0.110', 'uvicorn>=0.29', 'pywebview>=5.0']

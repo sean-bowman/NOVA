@@ -4,7 +4,7 @@
    and the result pane side by side with a splitter between them, and the run bar with its stage
    stepper. The config lives here in backend values (SI), so the form edits it and the run bar
    sends it as it stands. An entry that does not parse blocks a run; a cross-field problem asks
-   first, as the legacy Tkinter form does. Generate during a run queues the form behind it, and
+   first. Generate during a run queues the form behind it, and
    Sweep queues a trade sweep (SweepDialog), which then opens in the result pane's Sweep view.
 
    The form's width is dragged on the splitter, or moved with the arrow keys on it, and is kept

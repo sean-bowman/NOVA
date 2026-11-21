@@ -132,9 +132,9 @@ Every field carries an (i) marker. Hovering it gives the field's meaning.
 
 ### Generate
 
-**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. During a run Generate becomes **Queue**: the form joins the queue and runs when the runs before it end, so several designs can be lined up and left to run. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes a little over a minute.
+**Generate** in the run bar, or Ctrl+R, runs the form through `generateNozzle()`, and **Cancel** stops it. During a run Generate becomes **Queue**: the form joins the queue and runs when the runs before it end, so several designs can be lined up and left to run. The run bar steps through the run's stages from its progress events: one segment per stage, as wide as the time that stage took on the last run, each naming what its stage is doing, the contour solve's evaluation or the coolant circuit's pass. **Stages** lists every stage and the stages inside it with their times, and the coolant circuit's passes with each leg's outlet temperature and the up leg's change, so the circuit can be watched settling. While a multi-pass circuit iterates, the **Circuit iterations** view draws each pass as it ends: both legs' hot wall and coolant along the wall, the latest solid and the earlier ones fading, so where along the wall the circuit is still moving reads off the axis. The finished run keeps every pass, so the view stays after it. **Show log** opens the run's full output above the bar. The shipped nozzle builds a one-and-a-half-pass jacket to the exit, its outlet volute and the marched plume, and takes a little over a minute.
 
-When the contour stage ends, about a minute in, the result pane draws the new run's contour, near-wall state and flow fields while cooling and the plume still run; the rest of its views, its table and its outputs follow when it finishes. The warnings a run raises are counted in the run bar, which opens the log on a click, and listed under the pane's header for whichever run it shows. A strip under the pane's header says which run the pane shows, and once the form is edited, it names each field that differs from the config that run ran, with its value then and now.
+When the contour stage ends, about 45 s in, the result pane draws the new run's contour, near-wall state and flow fields while cooling and the plume still run; the rest of its views, its table and its outputs follow when it finishes. The warnings a run raises are counted in the run bar, which opens the log on a click, and listed under the pane's header for whichever run it shows. A strip under the pane's header says which run the pane shows, and once the form is edited, it names each field that differs from the config that run ran, with its value then and now.
 
 ![Run in progress](docs/images/novaGui/generate.png)
 
@@ -161,6 +161,10 @@ With film cooling on, the film view maps the film along the wall; with a radiati
 The circuit view draws the coolant's paths on the half section, and with two passes or an extension circuit, the passes view draws each one's coolant and hot wall.
 
 ![Coolant circuit](docs/images/novaGui/viewCircuit.png)
+
+Circuit iterations draws every pass of a multi-pass circuit's outer iteration. On the shipped nozzle the jacket settles in seven passes: the up leg's coolant rises toward its final profile, its largest change falling from 12 K at the second pass by about a factor of three a pass.
+
+![Circuit iterations](docs/images/novaGui/viewIterations.png)
 
 The channel mesh, the revolved contour and the volutes are 3D views at full resolution.
 
@@ -228,7 +232,7 @@ The sun and moon button in the header switches between the dark and light modes 
 | --- | --- |
 | ![Design form, light](docs/images/novaGui/designLight.png) | ![Plume, light](docs/images/novaGui/viewPlumeLight.png) |
 
-[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds, and [docs/guiRoadmap.md](docs/guiRoadmap.md) lists the GUI work still open. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
+[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds, and [docs/guiRoadmap.md](docs/guiRoadmap.md) lists the GUI work still open.
 
 ## Configuration reference
 
@@ -458,7 +462,7 @@ A run writes to `{filename}Outputs/` beside the repository root.
 | `*.stl` geometry set                                                                                 | `export` with cooling channels                           |
 | `*.pkl` pickled `Nozzle` object                                                                    | `export`                                                 |
 
-Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML companion. Matplotlib is the required backend for the GUI, since it is the only one that renders into a Tk canvas; plotly is required for the browser-side interactive views. Both are drawn from one description in `src/NOVA/figures.py`, which also holds the styled renderer for each backend, so the two renderings cannot drift. [featureShowcase/](featureShowcase/) calls the same Matplotlib renderer for its documentation figures, so a run's own output looks exactly like the worked example below.
+Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML companion. Matplotlib draws the PNGs and the GUI's Save PNG drawings; plotly draws every view the GUI shows. Both are drawn from one description in `src/NOVA/figures.py`, which also holds the styled renderer for each backend, so the two renderings cannot drift. [featureShowcase/](featureShowcase/) calls the same Matplotlib renderer for its documentation figures, so a run's own output looks exactly like the worked example below.
 
 A run's own `export` writes **STL only**. A STEP writer exists in [experimental/stepExport.py](experimental/stepExport.py): it writes each component as the exact surface it is, a surface of revolution for the walls and a B-spline surface for the swept channels and volutes, rather than as triangles. It is not yet wired into `export`, and it does not perform booleans, so a run does not produce an assembled STEP body; see [docs/reports/stepExport_2026-09-20.md](docs/reports/stepExport_2026-09-20.md) for what it covers and what remains. A `rectangular` or `helical` channel needs `channelCornerRadius` above zero for it: the B-spline fit through a sharp corner rings.
 
@@ -630,7 +634,6 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 | `progress.py`                                             | The progress events a run sends to a front end that listens: the stage plan, the stages as they open and close, the steps of long loops and the iterations of iterative solves. With no listener, loops draw tqdm bars on the terminal |
 | `materials.py`, `units.py`, `geometryTools.py`, `Volute.py` | Wall alloys, unit conversion, geometry helpers, volute construction                                                                                                                                                                                          |
 | `novaGui/`                                                | The front end: a React app served by a FastAPI layer over the pipeline, and every non-visual piece of a front end (config schema, form checks, runner, progress model, view list, drawers, result table, palette) |
-| `legacy/novaTk/`                                          | The Tkinter front end novaGui replaced, drawn over the same modules |
 | `featureShowcase/`                                        | Build scripts for the figures above, and the curated gallery                                                                                                                                                                                                   |
 | `examples/`                                               | `novaNozzle.py` runs the reference nozzle through every solver; the others drive one feature each                                                                                                                                                            |
 
