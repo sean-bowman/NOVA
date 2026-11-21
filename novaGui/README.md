@@ -19,7 +19,7 @@ The Python side needs FastAPI, uvicorn and pywebview: `pip install -e .[web]`. p
 
 ## Build
 
-The server serves the built front end from `novaGui/frontend/dist/`, which git ignores. Build it once, and again after any change under `frontend/src/`:
+The server serves the built front end from `novaGui/frontend/dist/`, which the repository carries, so a checkout runs the GUI without Node. Node is needed only to change the front end: after any change under `frontend/` (its sources, `index.html`, the package files, the TypeScript or Vite configuration), rebuild and commit `dist/` with the change:
 
 ```bash
 cd novaGui/frontend
@@ -27,7 +27,7 @@ npm install
 npm run build
 ```
 
-Node is needed to build, not to run.
+The build stamps `dist/buildStamp.json` with a hash of every file it reads, and `tests/testFrontendBuild.py` fails when the sources no longer match the stamp, so a front-end change cannot be committed without its build; it also fails on an asset that index.html loads and the build lacks, or one nothing loads. `.gitattributes` marks `dist/` as generated, so `git diff` shows the sources' changes rather than the minified bundle's.
 
 ## Development
 

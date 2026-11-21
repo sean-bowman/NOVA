@@ -17,8 +17,7 @@ The GUI's server starts in this process, keeping three showcase cooling runs as 
 run, so no run is made; Playwright's Chromium drives the built front end. The tests read the
 showcase runs under featureShowcase/coolingRuns and their outputs under
 featureShowcase/showcaseBaseOutputs, which are local outputs that git ignores, and skip without
-them, without Playwright and its Chromium, or without the built front end
-(`npm run build` in novaGui/frontend). They take about a minute.
+them, or without Playwright and its Chromium. They take about a minute.
 
 Every test fails on a console error in the page.
 

@@ -105,11 +105,10 @@ from NOVA import gasDynamics, materials, fluidProps
 
 ## Quickstart: GUI
 
-[novaGui/](novaGui/) is the front end: a React app served by a FastAPI layer over the same pipeline, in a desktop window. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` in a worker process that Cancel can stop, and shows the result beside the form. It needs the `web` extra and a one-time build of the app, which takes Node:
+[novaGui/](novaGui/) is the front end: a React app served by a FastAPI layer over the same pipeline, in a desktop window. It builds a configuration in the `NOVANozzle.json` schema, runs `generateNozzle()` in a worker process that Cancel can stop, and shows the result beside the form. It needs the `web` extra; the built app ships with the repository, so running it takes no Node:
 
 ```bash
 pip install -e .[web]
-cd novaGui/frontend && npm install && npm run build && cd ../..
 python -m novaGui               # desktop window
 python -m novaGui --browser     # the system browser instead
 ```

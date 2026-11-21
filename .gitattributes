@@ -8,6 +8,12 @@
 *.pdf binary
 *.pkl binary
 *.npz binary
+*.woff binary
+*.woff2 binary
+
+# The GUI's built front end is written by `npm run build` from novaGui/frontend's sources. Its
+# bytes are kept as the build wrote them, and diffs are read from the sources, not the minified output.
+novaGui/frontend/dist/** -text linguist-generated=true -diff
 
 # Windows batch files keep CRLF.
 *.bat text eol=crlf

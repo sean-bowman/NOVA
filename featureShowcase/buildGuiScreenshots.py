@@ -20,11 +20,11 @@ width among them, are written back at the end. The runs go to a run store in a t
 1 and the user's own store is left alone; the details picture names the default store folder in its
 place.
 
-It needs the web extra, the built front end and Playwright with its Chromium:
+It needs the web extra and Playwright with its Chromium; the built front end ships with the
+repository:
 
     pip install -e .[web,screenshots]
     python -m playwright install chromium
-    cd novaGui/frontend && npm install && npm run build && cd ../..
 
 Run it from the NOVA root. Each of the five runs takes a minute and a half or so, because the
 shipped nozzle builds a full cooling jacket, its outlet volute and the marched plume:
@@ -375,7 +375,8 @@ def build() -> None:
     '''Serve the GUI, photograph it, and leave the saved theme preference as it was found.'''
 
     if not os.path.isfile(os.path.join(frontendDist, 'index.html')):
-        raise SystemExit('The front end is not built: run `npm install` and `npm run build` in novaGui/frontend.')
+        raise SystemExit('The built front end, novaGui/frontend/dist, is missing: restore it with '
+                         '`git checkout -- novaGui/frontend/dist`.')
     os.makedirs(outputFolder, exist_ok = True)
 
     # The pictures use the dark mode and the form's default width
