@@ -65,8 +65,8 @@ def client():
 
 def testEveryConfigKeyReachesTheBrowserOnce():
     '''
-    The browser builds its config from the serialized schema, so every key the Tkinter form writes
-    has to be in it exactly once, as a field or as a selector member.
+    The browser builds its config from the serialized schema, so every key the schema carries has
+    to be in it exactly once, as a field or as a selector member.
     '''
     schema = schemaJson.serializeSchema()
     keys = []
@@ -79,7 +79,7 @@ def testEveryConfigKeyReachesTheBrowserOnce():
 
 def testTheDefaultsAreTheShippedNozzle():
     '''
-    A fresh web form is the same nozzle a fresh Tkinter form is.
+    A fresh form is the shipped nozzle.
     '''
     assert schemaJson.serializeSchema()['defaults'] == configSchema.defaultConfig()
 
@@ -196,8 +196,8 @@ def _nozzleStandIn():
 
 def testTheResultTableSplitsThePerformanceColumns():
     '''
-    The Tkinter table packs the three performance columns into one cell; the web table carries them
-    as cells under the column heads, with a blank column kept as '--'.
+    The rows carry the three performance columns as one text; the table carries them as cells
+    under the column heads, with a blank column kept as '--'.
     '''
     table = analysis.resultTable(_nozzleStandIn())
     sections = {section['title']: section for section in table['sections']}
@@ -208,10 +208,10 @@ def testTheResultTableSplitsThePerformanceColumns():
     assert rows['Specific impulse, vacuum [s]']['cells'] == ['453.8', '464.2', '--']
     assert rows['Nozzle efficiency, vacuum']['cells'] == ['0.9808']
 
-def testTheResultTableCarriesTheTkinterRowsAndSummary():
+def testTheResultTableCarriesTheRowsAndSummary():
     '''
-    The rows are the Tkinter Analyze tab's own: a 50 mm throat from its area, a contour 1200 mm
-    long, and the header's thrust, delivered Isp and propellants.
+    The rows are `resultRows`' own: a 50 mm throat from its area, a contour 1200 mm long, and the
+    header's thrust, delivered Isp and propellants.
     '''
     table = analysis.resultTable(_nozzleStandIn())
     sizing = {row['label']: row for row in table['sections'][0]['rows']}
@@ -308,8 +308,8 @@ def testTheAnalysisRouteServesTheRunsTable(client, finishedRun):
 
 def testTheExportListingFilesEachOutputByCategory(client, finishedRun):
     '''
-    The listing is the outputs folder plus the run config beside it, each filed by the Tkinter
-    Export tab's rule.
+    The listing is the outputs folder plus the run config beside it, each filed by its name
+    (`outputs.categoryOf`).
     '''
     files = {entry['name']: entry for entry in client.get('/api/export').json()['files']}
     assert {name: entry['category'] for name, entry in files.items()} == {
@@ -888,10 +888,10 @@ def testTheShippedNozzleRaisesNoProblem(client):
      'makeCoolingChannels'),
     ({'hotWallThickness': None}, "Cooling channels need 'Hot wall thickness'.", 'hotWallThickness'),
 ])
-def testTheCrossFieldChecksAreTheTkinterForms(client, changes, problem, flagged):
+def testTheCrossFieldChecksNameTheirRows(client, changes, problem, flagged):
     '''
-    The problems are the words both forms show, the row a problem quotes is flagged, and the row
-    carries that problem for the browser to write under it.
+    The problems are worded as `design.checks` words them, the row a problem quotes is flagged, and
+    the row carries that problem for the browser to write under it.
     '''
     state = client.post('/api/schema/state', json = _withDefaults(**changes)).json()
     assert problem in state['problems']
@@ -1023,20 +1023,12 @@ def testTheUnlabelledPanelsDrawTheJacketArrays():
     assert np.allclose(hover['Coolant'].customdata, results['temperature'])
 
 def testThePlumeTitleNamesTheInteractiveView():
-    '''The reworded drawer text is still in the drawers, and rewording keeps the title's style.'''
+    '''What lies beyond the march, the static plume's title says, the interactive view shows.'''
     import inspect
-    from matplotlib.figure import Figure
     from novaGui import views
     plotting = views._module('plotting')
     source = inspect.getsource(plotting._drawPlumeScene) + inspect.getsource(plotting._drawCorrelatedPlume)
-    for old in views.staticTextOverrides:
-        assert old in source
-    figure = Figure()
-    ax = figure.add_subplot()
-    ax.set_title('Mach disk lies beyond the march; Open interactive shows them', color = '#123456', fontsize = 10)
-    views._overrideText(figure)
-    assert ax.get_title() == 'Mach disk lies beyond the march; the interactive view shows them'
-    assert ax.title.get_fontsize() == 10 and ax.title.get_color() == '#123456'
+    assert source.count('the interactive view shows them') == 2 and 'Open interactive' not in source
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Palette -- #

@@ -2,7 +2,7 @@
    EXPORT PANEL
    The dialog the result pane's Export button opens. Chooses which of the shown run's outputs to
    keep and copies them to an output folder, as <output folder>/<run name>Outputs/. The outputs
-   are listed by category (novaGui/outputs.py, shared with the legacy Tkinter Export tab); a check
+   are listed by category (novaGui/outputs.py); a check
    on a category or on a single file chooses it. Every output is chosen after a run, except the
    categories unchecked before it. A file opens in its desktop application on a double click.
    In the desktop window Browse opens the native folder picker; in a browser the folder is typed.

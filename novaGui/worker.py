@@ -6,10 +6,9 @@
 Entry point of the child process that runs one NOVA pipeline.
 
 Each run gets a fresh process, started with the 'spawn' method so nothing from the server's
-interpreter leaks into it. Inside, novaGui.runner.PipelineRunner does the run exactly as the
-legacy Tkinter front end does it (forced program flags, staging output root, headless figures,
-progress reported as events), and its messages are forwarded to the server through a
-multiprocessing queue.
+interpreter leaks into it. Inside, novaGui.runner.PipelineRunner does the run (forced program
+flags, the run's own output folder, headless figures, progress reported as events), and its
+messages are forwarded to the server through a multiprocessing queue.
 
 A separate process is what makes a run cancellable: the server terminates it. RocketCEA's
 machine-wide lock (`nova.lock`, held through msvcrt.locking) is released by the operating

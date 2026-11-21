@@ -2,7 +2,7 @@
 
 The front end for the NOVA nozzle design suite: a React app served by a FastAPI layer over the Python backend, in a desktop window. It builds a configuration in the `NOVANozzle.json` schema, runs `Nozzle.generateNozzle()` in a worker process, and shows the result beside the form: the Design form on the left, the last finished run's figures or results table on the right, and a run bar that steps through the run's stages.
 
-The package also holds every piece of a front end that is not drawing widgets: the config schema, the form checks, the units, the runner, the progress model, the view list, the Matplotlib drawers, the result table, the output categories and the palette. The Tkinter front end it replaced, [legacy/novaTk](../legacy/novaTk/README.md), draws its widgets over these same modules.
+The package also holds every piece of a front end that is not drawing widgets: the config schema, the form checks, the units, the runner, the progress model, the view list, the Matplotlib drawers, the result table, the output categories and the palette.
 
 ## Launch
 
@@ -66,8 +66,8 @@ Run events (log lines, progress, status, a running run's settled figures, its wa
 | `schemaJson` | The schema as JSON for the browser, and the predicates evaluated on a posted config |
 | `design` | The cross-field checks and the rows they name, the wall alloy's sampled properties, the extension material's store note and fill |
 | `units` | The unit table, reduced to `si = scale * shown + offset` per display unit |
-| `runner` | The run itself: forced program flags, the staging folder, headless figures, the progress reporter, the output listing |
-| `progress` | `RunProgress`, which folds a run's progress events into the stage tree the stepper and the stage list draw, and into the legacy window's single bar |
+| `runner` | The run itself: forced program flags, the run's own output folder, headless figures, the progress reporter, the output listing |
+| `progress` | `RunProgress`, which folds a run's progress events into the stage tree the stepper and the stage list draw |
 | `viewCatalog` | The views a run can produce, in menu order, and the test of which ones it produced |
 | `plotting`, `thermalPlots` | The Matplotlib drawers, the plotly builder for each view, and the jacket, film and extension accessors |
 | `coolingFigures` | Plotly figures for the ten cooling views |
@@ -77,9 +77,7 @@ Run events (log lines, progress, status, a running run's settled figures, its wa
 | `outputs` | The output categories, and listing, previewing (an STL read into vertices and triangles), copying and opening a run's files |
 | `themeColors`, `paletteCss` | The palette in both modes with its Matplotlib styling, and the stylesheet written from it |
 | `settings`, `backend` | The saved theme mode and form width, and lazy access to NOVA's figures and material store |
-| `assets/` | The plume mark in each mode, the window icon and the nozzle outline |
-
-The legacy Tkinter front end imports `configSchema`, `design`, `units`, `runner`, `progress`, `viewCatalog`, `plotting`, `thermalPlots`, `analysis`, `outputs`, `themeColors`, `settings`, `backend` and the assets, so both front ends build the same config, raise the same problems in the same words, list the same results and draw the same static figures.
+| `assets/` | The plume mark in each mode and the window icon |
 
 The schema's `showWhen` and `expandWhen` predicates are Python functions. The browser receives each row's static description with a `conditional` flag and posts its config to `/api/schema/state`, which returns the rows and sections to hide, the sections to open, and the cross-field problems with the rows they name.
 
@@ -145,8 +143,6 @@ Stages opens the stage list: every stage and sub-stage with its time, and the pa
 
 A multi-pass coolant circuit also sends each pass of its outer iteration as it ends (a `profiles` event): both legs' axial positions, metal hot wall and coolant temperature, a few kilobytes a pass, and the circuit's solution keeps the same passes (`CircuitSolution.iterationProfiles`). `RunProgress` leaves these out of the stage tree. The session keeps them as the running run's description of the Circuit iterations view, the chamber jacket's and the extension circuit's apart by the top-level stage they run in, and sends `{'type': 'iterations', 'revision'}` with the count kept so far; a pass numbered 1 starts its circuit over, as under Ievlev's outer gas-side iteration. The view's figure is drawn and kept once per pass, and the browser fetches it again at each revision and draws it over the last in place, keeping the reader's zoom (plotly's `uirevision`) with no loading overlay between. Once the run finishes, the view draws from the Nozzle's circuit solutions, so it stays. A run solved before its circuits kept their passes has no such view.
 
-The legacy Tkinter window keeps one bar over the same model: each stage spans a share of the bar in proportion to the same times, the label names the running stage and its iteration or loop (`Cooling channels, pass 4`), and between events the bar eases toward the running stage's end.
-
 ## Validation status
 
 `docs/validationStatus.json` summarizes the validation status of every model behind a reported result: the status, the reference, the result in numbers, what would close the gap, and the records it comes from, each with a passage quoted word for word. `validationStatus.annotate` puts a badge on each headline number and section of a run's table: the models behind it (`sectionModelIds`, `headlineModelIds`), with the gas-side model resolved from the run's `gasSideAxialModel` and the multi-pass circuit and chamber film included only where the run has them, and the weakest of their statuses, so a number reads as no stronger than its least trusted model. `GET /api/validation/{model}` returns a model with the paragraphs of its records that carry its quotes, which the badge's dialog shows with the quote marked.
@@ -170,11 +166,9 @@ A view's figure is built once per run, view, palette mode and compared run, gzip
 
 `coolingFigures.py` draws the ten cooling views (circuit, passes, circuit iterations, jacket on the wall, temperatures, coolant flow and properties, heat flux, film, radiative extension) with plotly from the same Nozzle arrays, titles and colors as `thermalPlots`, read through that module's own accessors. A line colored station by station is drawn as closely spaced markers, with a transparent marker at each solver station carrying the hover; the film map resamples the core and the film band onto a rectangular grid. The circuit iterations view draws each pass of a multi-pass circuit's outer iteration, the hot wall above and the coolant below, the jacket's down leg blue and up leg copper and the extension circuit's legs purple with the down leg dashed, as the passes view colors them; the latest pass is solid and in the legend, and the earlier ones fade with age. `thermalPlots.iterationDescription` reads the passes off a finished Nozzle in the same form the session builds from a running one, so both draw through `coolingFigures.plotIterations`. The 3D assemblies draw at full resolution in WebGL. Figures are drawn in one palette mode at a time, held in module globals, so the server renders one figure at a time.
 
-The Matplotlib plume title points a legacy Tkinter user at its Open interactive button for the correlated structure beyond the march; the static drawing here, saved as a PNG, rewords that to the interactive view (`views.staticTextOverrides`).
-
 ## Theme
 
-The Engineering Flat Metal palette lives in `themeColors.palettes`, and `src/NOVA/palette.py` holds the same values for NOVA's own figures; `tests/testGuiTheme.py` keeps the two equal. `frontend/src/styles/palette.css` carries the palette as CSS custom properties for both modes and is written by `python -m novaGui.paletteCss`; `tests/testWebServer.py` fails if the two differ. The server writes the saved mode into `index.html` before sending it, so the first paint is in the right palette. The mode persists in `%APPDATA%\NOVA\guiSettings.json` with the Design form's width; the legacy front end reads the mode from the same file.
+The Engineering Flat Metal palette lives in `themeColors.palettes`, and `src/NOVA/palette.py` holds the same values for NOVA's own figures; `tests/testGuiTheme.py` keeps the two equal. `frontend/src/styles/palette.css` carries the palette as CSS custom properties for both modes and is written by `python -m novaGui.paletteCss`; `tests/testWebServer.py` fails if the two differ. The server writes the saved mode into `index.html` before sending it, so the first paint is in the right palette. The mode persists in `%APPDATA%\NOVA\guiSettings.json` with the Design form's width.
 
 ## Layout
 
@@ -219,7 +213,7 @@ It also covers the warning relay and the session's count of a run's warnings, th
 
 `tests/testCircuitIterations.py` covers the circuit iteration view: a finished run's passes in drawing order with the wall limit and the throat, no view for a run with no multi-pass circuit or one solved before passes were kept, both renderers (every pass on both panels, the latest alone in the legend and solid, the earlier ones fading, a PNG), and a running run fed pass by pass: the view settled once, each pass announced, the jacket and the extension circuit kept apart, a circuit solved again starting over, the figure route growing a pass at a time and the passes dropped when the run ends. It makes no run and takes about ten seconds.
 
-`tests/testProgress.py` covers the progress events and `RunProgress`; `tests/testGuiSchema.py` imports every module of both front ends headless and holds the schema to the shipped configuration.
+`tests/testProgress.py` covers the progress events and `RunProgress`; `tests/testGuiSchema.py` imports every module of the package headless and holds the schema to the shipped configuration; `tests/testGuiForm.py` holds the Design form's layout to the schema and the collection of a crashed server's staging folder; `tests/testViewFigures.py` draws every Matplotlib view on the static renderer's pane in both modes.
 
 ## Security
 

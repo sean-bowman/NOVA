@@ -14,11 +14,10 @@ stream. A browser that connects mid-run first receives a snapshot of the state, 
 events.
 
 The worker forwards NOVA's progress events (NOVA.progress). The session folds them with
-novaGui.progress.RunProgress, the model the legacy Tkinter window uses too, and sends the browser the
-result: the bar's fraction and ceiling, a short label, the open stages as one detail line, and
-the stage tree with its states, times and iterations. The last finished run's stage times share
-out the next run's bar and stand as its expected times, and its tree lists the sub-stages the
-next run has yet to reach.
+novaGui.progress.RunProgress and sends the browser the result: a short label, the open stages as
+one detail line, and the stage tree with its states, times and iterations. The last finished run's
+stage times weight the next run's stages and stand as its expected times, and its tree lists the
+sub-stages the next run has yet to reach.
 
 The session keeps finished runs, each with the config it ran and the headline of its result
 table, so the browser can list them, show any of them, and name the fields that differ between two
@@ -64,16 +63,16 @@ run ends; a finished run draws from its Nozzle, whose circuit solutions keep the
 
 Without a store, runs write into a staging folder for the server process, `<temp>/NOVA/web<pid>/run<n>`.
 Each run gets its own folder, so a cancelled run's partial files never mix with a finished one. The
-staging folder is removed when the server exits; novaGui.runner.clearStaging collects one a crashed server
-left behind after twelve hours, together with the legacy Tkinter front end's.
+staging folder is removed when the server exits; `clearStaging` collects one a crashed server left
+behind, after twelve hours.
 
 Events, as JSON objects:
 
     {'type': 'log', 'line': str}
     {'type': 'status', 'state': 'idle'|'running'|'done'|'error'|'cancelled', 'detail': str,
      'runId': int | None}
-    {'type': 'progress', 'runId': int, 't': float, 'expectedRun': int | None, 'fraction': float,
-     'ceiling': float, 'label': str, 'stageDetail': str, 'stages': [...]}
+    {'type': 'progress', 'runId': int, 't': float, 'expectedRun': int | None, 'label': str,
+     'stageDetail': str, 'stages': [...]}
         `t` is the run's own clock [s] at its latest event; `stages` is RunProgress.stageList, whose
         expected times come from run `expectedRun`
     {'type': 'partial', 'runId': int, 'views': [view keys]}
@@ -129,11 +128,30 @@ def stagingRoot() -> str:
 
     '''
 
-    This server's staging folder, beside the Tkinter front end's session folders.
+    This server's staging folder, beside those of other servers running or crashed.
 
     '''
 
     return os.path.join(tempfile.gettempdir(), 'NOVA', f'web{os.getpid()}')
+
+def clearStaging(maxAgeHours: float = 12.0) -> None:
+
+    '''
+
+    Remove other servers' staging folders older than `maxAgeHours`. A server that exits removes its
+    own; one that crashed leaves it behind, and this is what collects it.
+
+    '''
+
+    parent = os.path.dirname(stagingRoot())
+    if not os.path.isdir(parent):
+        return
+
+    cutoff = time.time() - 3600.0 * maxAgeHours
+    for entry in os.listdir(parent):
+        path = os.path.join(parent, entry)
+        if path != stagingRoot() and os.path.isdir(path) and os.path.getmtime(path) < cutoff:
+            shutil.rmtree(path, ignore_errors = True)
 
 class RunRecord:
 
@@ -286,9 +304,8 @@ class RunSession:
         self._queueCount = 0
         self._sweepCount = 0
 
-        self.state = {'state': 'idle', 'detail': '', 'fraction': 0.0, 'ceiling': 0.0, 'label': '',
-                      'stageDetail': '', 'stages': [], 'runId': None, 'startedAt': None, 't': 0.0,
-                      'expectedRun': None, 'warnings': []}
+        self.state = {'state': 'idle', 'detail': '', 'label': '', 'stageDetail': '', 'stages': [],
+                      'runId': None, 'startedAt': None, 't': 0.0, 'expectedRun': None, 'warnings': []}
         self._progress = RunProgress()        # the current run's stages, folded from its events
         self._stageHistory = {}               # [s] top-level stage times of the last finished run
         self._lastStages = []                 # the last finished run's stage tree
@@ -345,9 +362,8 @@ class RunSession:
             self.state['state'], self.state['detail'] = event['state'], event['detail']
             event['runId'] = self.state['runId']
         elif kind == 'progress':
-            self.state.update(fraction = event['fraction'], ceiling = event['ceiling'], label = event['label'],
-                              stageDetail = event['stageDetail'], stages = event['stages'], t = event['t'],
-                              expectedRun = event['expectedRun'])
+            self.state.update(label = event['label'], stageDetail = event['stageDetail'], stages = event['stages'],
+                              t = event['t'], expectedRun = event['expectedRun'])
 
         with self._subscriberLock:
             subscribers = list(self._subscribers)
@@ -359,11 +375,9 @@ class RunSession:
 
     def _publishProgress(self) -> None:
 
-        fraction, ceiling, label = self._progress.summary()
         self._publish({'type': 'progress', 'runId': self.state['runId'], 't': float(self._progress.t),
-                       'expectedRun': self._lastRunId, 'fraction': float(fraction),
-                       'ceiling': float(ceiling), 'label': label, 'stageDetail': self._progress.detail,
-                       'stages': self._progress.stageList()})
+                       'expectedRun': self._lastRunId, 'label': self._progress.label,
+                       'stageDetail': self._progress.detail, 'stages': self._progress.stageList()})
 
     def _addWarning(self, payload: dict, runId: int) -> None:
 

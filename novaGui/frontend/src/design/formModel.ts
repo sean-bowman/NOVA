@@ -65,8 +65,7 @@ function optionMatches(option: OptionSpec, config: Config): boolean {
 
 /**
  * The option a config describes: the first whose constants it matches and whose value it
- * sets, then the first whose constants it matches, then the row's blank option. The same
- * rule as legacy.novaTk.widgets.SelectorRow.set.
+ * sets, then the first whose constants it matches, then the row's blank option.
  */
 export function chooseOption(selector: SelectorSpec, config: Config): OptionSpec {
     const options = selector.options;
@@ -136,9 +135,8 @@ export function valueToText(spec: FieldSpec, value: ConfigValue, units: UnitTabl
 export type Parsed = { ok: true; value: ConfigValue } | { ok: false; message: string };
 
 /**
- * An entry's text as a config value in SI, following legacy.novaTk.widgets.FieldRow.get: blank is
- * null, int and float must parse, floatText falls back to text, and a dimensioned value is
- * converted from the unit shown.
+ * An entry's text as a config value in SI: blank is null, int and float must parse, floatText
+ * falls back to text, and a dimensioned value is converted from the unit shown.
  */
 export function textToValue(spec: FieldSpec, raw: string, units: UnitTable, unit: string | null, label?: string): Parsed {
     const text = raw.trim();

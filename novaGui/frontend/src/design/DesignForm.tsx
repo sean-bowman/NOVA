@@ -55,7 +55,7 @@ export function DesignForm({ schema, config, formVersion, formState, errors, onP
     const outline = useRef<HTMLElement>(null);
     const jumped = useRef('');          // the section an outline click scrolled to, until the user scrolls
 
-    // A section whose expandWhen predicate turns true opens itself, once, as in the legacy Tkinter form
+    // A section whose expandWhen predicate turns true opens itself, once; the reader can close it again
     const previousExpand = useRef<Set<string>>(new Set(formState.expand));
     useEffect(() => {
         const opened = formState.expand.filter((id) => !previousExpand.current.has(id));

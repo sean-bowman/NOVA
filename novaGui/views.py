@@ -5,8 +5,8 @@
 
 The result pane's figures, rendered for the browser.
 
-The list of views and the test of which ones a run produced are novaGui.viewCatalog, which the
-legacy Tkinter front end reads too. Each view renders one or both of two ways:
+The list of views and the test of which ones a run produced are novaGui.viewCatalog. Each view
+renders one or both of two ways:
 
     interactive   a plotly figure as JSON, drawn in the browser by plotly.js at full resolution,
                   from the builder novaGui.plotting.interactiveBuilders names for the view, or for
@@ -29,10 +29,6 @@ iteration view, from the passes the session has kept so far (coolingFigures.desc
 The contour and the near-wall state hover along the axis here (`alongAxisHover`), as the cooling
 plots do, so the browser's axial cursor reads the wall radius and the gas state at its station. In
 NOVA's own HTML they hover to the nearest point.
-
-The Matplotlib plume title tells a legacy Tkinter user that its "Open interactive" button shows
-the correlated structure beyond the march. Here the same figure, saved as a PNG, says the interactive
-view does.
 
 Figures are drawn in one palette mode at a time, and the mode lives in module globals
 (NOVA.palette for both renderers, novaGui.themeColors and Matplotlib's rcParams for the static one), so
@@ -66,11 +62,6 @@ alongAxisHover = frozenset({'contour', 'nearWall'})
 # Line plots along the nozzle axis, which can draw a second run over the first
 comparableViews = frozenset({'contour', 'nearWall', 'passes', 'jacketTemperatures', 'coolantFlow', 'coolantProperties',
                              'heatFlux', 'film', 'extension'})
-
-# Text in the shared Matplotlib drawers that names a legacy Tkinter control, and what it reads here
-staticTextOverrides = {
-    'Open interactive shows them': 'the interactive view shows them',
-}
 
 def warmUp() -> None:
 
@@ -358,23 +349,6 @@ class HeadlessPane:
 
         pass
 
-def _overrideText(figure) -> None:
-
-    '''
-
-    Reword the drawer text that names a legacy Tkinter control (staticTextOverrides) in every axes title.
-    The title's Text is edited in place, so it keeps the size and color the drawer gave it.
-
-    '''
-
-    for ax in figure.axes:
-        title = ax.title.get_text()
-        reworded = title
-        for old, new in staticTextOverrides.items():
-            reworded = reworded.replace(old, new)
-        if reworded != title:
-            ax.title.set_text(reworded)
-
 def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixelRatio: float) -> dict:
 
     '''
@@ -419,7 +393,6 @@ def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixel
         function(pane, nozzle, *arguments)
         if pane.messageText is not None:
             return {'message': pane.messageText}
-        _overrideText(pane.figure)
 
         FigureCanvasAgg(pane.figure)
         buffer = io.BytesIO()

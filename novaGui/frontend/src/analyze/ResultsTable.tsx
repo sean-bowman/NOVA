@@ -3,8 +3,7 @@
    A run's scalar results, the result pane's Table: sizing, the chamber, delivered performance
    against the 1D estimates, station thermochemistry, the cooling summary and passes, the
    extension, the gas generator, films and the plume. The rows are built on the server
-   (novaGui/analysis.py), the same rows the legacy Tkinter Analyze tab lists; the three
-   performance columns are drawn as columns. A filter narrows the rows by name, and the table
+   (novaGui/analysis.py), and the three performance columns are drawn as columns. A filter narrows the rows by name, and the table
    copies to the clipboard as tab-separated text or saves as CSV.
 
    The numbers a design is judged by first head the table: delivered Isp and thrust, length,

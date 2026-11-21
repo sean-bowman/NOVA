@@ -37,7 +37,7 @@ export function fromSI(table: UnitTable, value: number, dimension: string, unit:
 
 /**
  * Compact text for a number: an integer when it is one, otherwise up to ten significant
- * figures. The same rule as legacy.novaTk.widgets.FieldRow._formatNumber.
+ * figures.
  */
 export function formatNumber(value: number | null | undefined): string {
     if (value === null || value === undefined || Number.isNaN(value)) {

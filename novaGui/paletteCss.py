@@ -5,8 +5,8 @@
 
 Write the front end's palette stylesheet from novaGui.themeColors.palettes.
 
-The Engineering Flat Metal palette is held in Python, where the Matplotlib drawers, the legacy
-Tkinter front end and NOVA's figures read it. The React app reads it as CSS custom properties, one block per mode, keyed
+The Engineering Flat Metal palette is held in Python, where the Matplotlib drawers and NOVA's
+figures read it. The React app reads it as CSS custom properties, one block per mode, keyed
 on the root element's data-theme attribute. This module renders that stylesheet, and
 tests/testWebServer.py checks the committed file against it, so the three copies cannot drift.
 

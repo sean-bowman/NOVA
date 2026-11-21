@@ -4,8 +4,8 @@
 '''
 
 The Matplotlib drawers for the views: contour, near-wall state, the Mach, pressure and temperature
-fields, the revolved contour, the plume and the 3D assemblies, and the table of plotly builders for
-the same views.
+fields, the revolved contour and the plume, and the table of plotly builders for the same views
+and the 3D assemblies, which draw only in plotly.
 
 The drawers take figure descriptions from NOVA.figures, which also carries a plotly renderer for
 the same descriptions, so the static and interactive renderings of a view cannot drift apart.
@@ -13,8 +13,8 @@ Colors come from the active palette mode (themeColors), and fields use NOVA.pale
 the same mode.
 
 A drawer draws into a pane: any object with `figure` (a Matplotlib Figure), `axes`, `_projection`,
-`clear(projection)`, `message(text)` and `redraw()`. The web front end's pane renders to PNG with no
-window (novaGui.views.HeadlessPane); the legacy Tkinter front end's draws on a Tk canvas.
+`clear(projection)`, `message(text)` and `redraw()`. The static renderer's pane renders to PNG with
+no window (novaGui.views.HeadlessPane).
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -380,7 +380,7 @@ def _drawPlumeScene(pane, scene) -> None:
     if np.size(scene.cellX) and float(np.max(scene.cellX)) > end:
         beyond.append('shock cells')
     if beyond:
-        heading += '\nThe correlated ' + ' and '.join(beyond) + ' lie beyond the march; Open interactive shows them'
+        heading += '\nThe correlated ' + ' and '.join(beyond) + ' lie beyond the march; the interactive view shows them'
     ax.set_title(heading, color = themeColors.text, fontsize = 10)
     _colorbar(pane, shading, ax, 'Mach number [-]')
     _legend(ax, loc = 'upper left')
@@ -455,7 +455,7 @@ def _drawCorrelatedPlume(pane, nozzle) -> None:
         if np.size(data.cellX) and float(np.max(data.cellX)) > end:
             beyond.append('shock cells')
         if beyond:
-            heading += '\n' + ' and '.join(beyond) + ' lie beyond the marched reach; Open interactive shows them'
+            heading += '\n' + ' and '.join(beyond) + ' lie beyond the marched reach; the interactive view shows them'
         halfHeight = 1.25 * max(float(np.max(np.abs(data.boundaryR))) if np.size(data.boundaryR) else 0.0,
                                 float(np.max(data.wallR)) if data.wallX.size else 0.0)
         ax.set_xlim(start, end)
@@ -468,73 +468,6 @@ def _drawCorrelatedPlume(pane, nozzle) -> None:
     ax.set_xlabel('Nozzle axis [m]')
     ax.set_ylabel('Radius [m]')
     _legend(ax, loc = 'upper left')
-    pane.redraw()
-
-def drawPlotly3d(pane, figure, maximumGrid: int = 60) -> None:
-
-    '''
-
-    A plotly 3D figure redrawn in Matplotlib, for the views Tk cannot host: surfaces as flat
-    shaded meshes, decimated to at most `maximumGrid` rows and columns so a dense channel mesh
-    stays responsive, and line traces as lines.
-
-    '''
-
-    if figure is None:
-        pane.message('This view was not built for this run.')
-        return
-
-    from matplotlib.colors import to_rgba
-
-    def colorOf(value, fallback):
-        if isinstance(value, str) and value.startswith('rgb'):
-            numbers = [float(part) for part in value[value.index('(') + 1:value.index(')')].split(',')[:3]]
-            return tuple(number / 255.0 for number in numbers)
-        try:
-            return to_rgba(value)
-        except (TypeError, ValueError):
-            return fallback
-
-    pane.clear(projection = '3d')
-    ax = pane.axes
-
-    # Matplotlib sorts whole surfaces by mean depth rather than pixel by pixel, so a translucent
-    # shell around a part (the cold wall around the channels) is often drawn over all of it.
-    # Shells are drawn first and faded further, opaque parts over them, lines over both.
-    ax.computed_zorder = False
-    shellFade = 0.35
-    spans = []
-    for trace in figure.data:
-        kind = getattr(trace, 'type', '')
-        if kind == 'surface' and trace.x is not None:
-            x, y, z = (np.asarray(value, dtype = float) for value in (trace.x, trace.y, trace.z))
-            if x.ndim != 2:
-                continue
-            step = max(1, int(np.ceil(max(x.shape) / maximumGrid)))
-            scale = trace.colorscale
-            color = colorOf(scale[0][1], themeColors.textMuted) if scale else themeColors.textMuted
-            opacity = float(trace.opacity if trace.opacity is not None else 1.0)
-            shell = opacity < 0.95
-            ax.plot_surface(x[::step, ::step], y[::step, ::step], z[::step, ::step], color = color,
-                            alpha = shellFade * opacity if shell else opacity, zorder = 1 if shell else 2,
-                            linewidth = 0, antialiased = True, shade = True)
-            spans.append((x, y, z))
-        elif kind == 'scatter3d' and trace.x is not None:
-            line = getattr(trace, 'line', None)
-            color = colorOf(getattr(line, 'color', None), themeColors.textMuted)
-            ax.plot(np.asarray(trace.x, dtype = float), np.asarray(trace.y, dtype = float),
-                    np.asarray(trace.z, dtype = float), color = color, linewidth = 0.8, zorder = 3)
-
-    if spans:
-        try:
-            ranges = [max(np.nanmax(part[index]) for part in spans) - min(np.nanmin(part[index]) for part in spans)
-                      for index in range(3)]
-            ax.set_box_aspect(tuple(value or 1.0 for value in ranges))
-        except Exception:                                  # noqa: BLE001 -- the default aspect still draws
-            pass
-
-    title = getattr(getattr(figure.layout, 'title', None), 'text', '') or ''
-    ax.set_title(title, color = themeColors.text)
     pane.redraw()
 
 #--------------------------------------------------------------------------------------------------------------------------#

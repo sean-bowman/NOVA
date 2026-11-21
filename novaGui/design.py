@@ -5,10 +5,9 @@
 The Design form's pieces beyond the schema: the cross-field checks, the wall alloy's sampled
 properties and the radiative extension material's store entry.
 
-Both front ends use them, so they raise the same problems in the same words: the web front end
-through `checks`, `wallSample` and `extensionEntry`, and the legacy Tkinter form directly. The one
-check left to each form is that a required selector option has a value, because it reads the
-selector rows themselves; the browser's selector row blocks the run on it.
+The browser reaches them through `checks`, `wallSample` and `extensionEntry`. One check is left
+to the form itself, that a required selector option has a value, because it reads the selector
+rows themselves; the browser's selector row blocks the run on it.
 
 The checks are warnings: a run with problems asks before it starts. A row is flagged when a problem
 names its label in quotes, and each flagged row carries the problems that name it, which the browser

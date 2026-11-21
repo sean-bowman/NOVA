@@ -3,7 +3,7 @@
 
 '''
 
-Every view a run can produce, in the order both front ends list them, and the test of which ones a
+Every view a run can produce, in the order the view menu lists them, and the test of which ones a
 finished run produced.
 
 Each view names the Matplotlib drawer's source line, the plotly builder that renders it

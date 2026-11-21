@@ -6,9 +6,9 @@ The result table for a finished run: sizing, the chamber, delivered performance,
 thermochemistry from CEA, the cooling summary and each coolant pass, the extension circuit, the gas
 generator, the films and the plume.
 
-`resultRows` builds the rows as plain text, and both front ends show them: the web front end's
-results table through `resultTable`, and the legacy Tkinter front end's Analyze tab directly. They
-therefore list the same quantities with the same formatting.
+`resultRows` builds the rows as plain text, and `resultTable` lays them out for the browser's
+results table; the worker takes the summary line from the same rows, so the run list and the table
+agree.
 
 The performance section carries three columns (equilibrium 1D, chamber gas 1D, delivered) as one
 text joined by `columnSeparator`, under a row named `Columns`. `resultTable` splits them into cells,
@@ -257,7 +257,7 @@ def resultRows(nozzle) -> tuple:
 
     '''
 
-    The result table of a finished run, as both front ends show it.
+    The result table of a finished run, as the browser shows it.
 
     Parameters:
     -----------

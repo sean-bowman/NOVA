@@ -232,7 +232,7 @@ The sun and moon button in the header switches between the dark and light modes 
 | --- | --- |
 | ![Design form, light](docs/images/novaGui/designLight.png) | ![Plume, light](docs/images/novaGui/viewPlumeLight.png) |
 
-[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds, and [docs/guiRoadmap.md](docs/guiRoadmap.md) lists the GUI work still open. The Tkinter front end it replaced is kept in [legacy/novaTk/](legacy/novaTk/README.md), launched with `python -m legacy.novaTk`, and draws its widgets over the same modules.
+[novaGui/README.md](novaGui/README.md) covers the architecture, the run pipeline, the progress model, the views and the modules the package holds, and [docs/guiRoadmap.md](docs/guiRoadmap.md) lists the GUI work still open.
 
 ## Configuration reference
 
@@ -462,7 +462,7 @@ A run writes to `{filename}Outputs/` beside the repository root.
 | `*.stl` geometry set                                                                                 | `export` with cooling channels                           |
 | `*.pkl` pickled `Nozzle` object                                                                    | `export`                                                 |
 
-Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML companion. Matplotlib is the required backend for the GUI, since it is the only one that renders into a Tk canvas; plotly is required for the browser-side interactive views. Both are drawn from one description in `src/NOVA/figures.py`, which also holds the styled renderer for each backend, so the two renderings cannot drift. [featureShowcase/](featureShowcase/) calls the same Matplotlib renderer for its documentation figures, so a run's own output looks exactly like the worked example below.
+Every figure is written twice: a Matplotlib PNG and an interactive plotly HTML companion. Matplotlib draws the PNGs and the GUI's Save PNG drawings; plotly draws every view the GUI shows. Both are drawn from one description in `src/NOVA/figures.py`, which also holds the styled renderer for each backend, so the two renderings cannot drift. [featureShowcase/](featureShowcase/) calls the same Matplotlib renderer for its documentation figures, so a run's own output looks exactly like the worked example below.
 
 A run's own `export` writes **STL only**. A STEP writer exists in [experimental/stepExport.py](experimental/stepExport.py): it writes each component as the exact surface it is, a surface of revolution for the walls and a B-spline surface for the swept channels and volutes, rather than as triangles. It is not yet wired into `export`, and it does not perform booleans, so a run does not produce an assembled STEP body; see [docs/reports/stepExport_2026-09-20.md](docs/reports/stepExport_2026-09-20.md) for what it covers and what remains. A `rectangular` or `helical` channel needs `channelCornerRadius` above zero for it: the B-spline fit through a sharp corner rings.
 
@@ -634,7 +634,6 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 | `progress.py`                                             | The progress events a run sends to a front end that listens: the stage plan, the stages as they open and close, the steps of long loops and the iterations of iterative solves. With no listener, loops draw tqdm bars on the terminal |
 | `materials.py`, `units.py`, `geometryTools.py`, `Volute.py` | Wall alloys, unit conversion, geometry helpers, volute construction                                                                                                                                                                                          |
 | `novaGui/`                                                | The front end: a React app served by a FastAPI layer over the pipeline, and every non-visual piece of a front end (config schema, form checks, runner, progress model, view list, drawers, result table, palette) |
-| `legacy/novaTk/`                                          | The Tkinter front end novaGui replaced, drawn over the same modules |
 | `featureShowcase/`                                        | Build scripts for the figures above, and the curated gallery                                                                                                                                                                                                   |
 | `examples/`                                               | `novaNozzle.py` runs the reference nozzle through every solver; the others drive one feature each                                                                                                                                                            |
 

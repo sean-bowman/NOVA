@@ -173,11 +173,11 @@ def main(argv: list | None = None) -> int:
     # Before anything imports NOVA: write figures, open no windows or browser tabs
     os.environ.setdefault('NOVA_HEADLESS', '1')
 
-    from . import runner
     from . import settings as guiSettings
     from .server import createApp, frontendDist
+    from .session import clearStaging
 
-    runner.clearStaging()
+    clearStaging()
     app = createApp()
     session = app.state.session
 
