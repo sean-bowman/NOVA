@@ -8,7 +8,8 @@
 
 import type {
     Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, Health, MeshPreview, Mode, ResultTable, RunEntry,
-    RunEvent, RunList, Schema, Settings, Submitted, Sweep, SweepList, SweepRequest, ValidationDetail, ViewIndex, WallSample,
+    RunEvent, RunList, Schema, Settings, Submitted, Sweep, SweepList, SweepRequest, UpdateCheck, ValidationDetail, ViewIndex,
+    WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -51,6 +52,7 @@ export function query(values: Record<string, string | number | null | undefined>
 
 export const api = {
     health: () => request<Health>('/api/health'),
+    updates: () => request<UpdateCheck>('/api/updates'),
     schema: () => request<Schema>('/api/schema'),
     formState: (config: Config) => request<FormState>('/api/schema/state', jsonBody('POST', config)),
     example: (name: string) => request<Config>(`/api/examples/${encodeURIComponent(name)}`),

@@ -7,11 +7,11 @@ into the form, deleting a run, the baseline drawn under a line plot, the grid's 
 zoom along the nozzle axis, the headline numbers and a row that opens its figure, the section
 outline, a problem written under its field, the warnings of a run, the export previews, a figure
 popped out into its own window, compressed figure responses, a trade sweep's plot and table, the
-sweep dialog's request, and the run queue.
+sweep dialog's request, the run queue, and the About dialog's build line and update check.
 
 The sweep view reads the showcase runs as the points of a sweep the test lays out; the sweep
-dialog's request is caught before it reaches the server, and the queue holds runs that never
-start, so no test makes a run.
+dialog's request and the update check are caught before they reach the server, and the queue
+holds runs that never start, so no test makes a run or leaves the machine.
 
 The GUI's server starts in this process, keeping three showcase cooling runs as if they had just
 run, so no run is made; Playwright's Chromium drives the built front end. The tests read the
@@ -41,7 +41,7 @@ if root not in sys.path:
 pytest.importorskip('fastapi')
 syncApi = pytest.importorskip('playwright.sync_api')
 
-from novaGui import analysis, configSchema, sweeps
+from novaGui import analysis, configSchema, runningBuild, sweeps
 from novaGui.__main__ import _freePort, _serve, _waitUntilStarted
 from novaGui.server import createApp, frontendDist
 from novaGui.session import QueuedRun, RunRecord, RunSession
@@ -528,3 +528,36 @@ def testTheCircuitIterationViewDrawsEachPassAsTheRunGoesOn(window, served):
     finally:
         session.cancel()
         session._spawn = spawn
+
+def testTheAboutDialogNamesWhatRunsAndChecksForUpdates(window):
+    '''
+    The About dialog carries the running build's line, and Check for updates says what GitHub
+    answered: a later release links to its page with how to install it, and no release says so. The
+    update route is caught, so no request leaves the machine.
+    '''
+    answers = [
+        {'status': 'newer', 'running': '0.1.0', 'build': 'standalone', 'latest': '0.2.0',
+         'url': 'https://github.com/sean-bowman/NOVA/releases/tag/v0.2.0', 'published': '2026-12-01', 'detail': ''},
+        {'status': 'none', 'running': '0.1.0', 'build': 'standalone', 'latest': '', 'url': '', 'published': '',
+         'detail': ''},
+    ]
+    window.route('**/api/updates', lambda route: route.fulfill(status = 200, content_type = 'application/json',
+                                                               body = json.dumps(answers.pop(0))))
+    window.locator('header').get_by_role('button', name = 'About').click()
+    dialog = window.get_by_role('dialog', name = 'About NOVA')
+    dialog.wait_for()
+    assert dialog.locator('.about-build').inner_text() == runningBuild()['label']
+
+    dialog.get_by_role('button', name = 'Check for updates').click()
+    status = dialog.get_by_role('status')
+    status.wait_for()
+    assert status.inner_text() == 'NOVA 0.2.0 is out, released 2026-12-01. This is 0.1.0.'
+    link = dialog.get_by_role('link', name = 'Open the release page')
+    assert link.get_attribute('href') == 'https://github.com/sean-bowman/NOVA/releases/tag/v0.2.0'
+    assert link.get_attribute('target') == '_blank'
+    assert 'Unzip it in place of this folder' in dialog.locator('.update-release').inner_text()
+
+    dialog.get_by_role('button', name = 'Check for updates').click()
+    window.wait_for_function('document.querySelector(".update-answer")?.textContent.includes("No release")')
+    assert dialog.locator('.update-release').count() == 0
+    assert answers == []

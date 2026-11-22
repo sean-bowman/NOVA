@@ -11,7 +11,8 @@
    between launches with the theme mode (novaGui.settings). A double click returns it to the
    default. Below a narrow window width the form and the pane stack instead. A theme mode saved
    from a popped-out figure window switches this window too. The About dialog names what runs: the
-   version, the standalone build or the checkout's revision, and the Python and system under it.
+   version, the standalone build or the checkout's revision, and the Python and system under it;
+   its Check for updates asks GitHub for a later release (UpdateCheck).
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -22,6 +23,7 @@ import {
 
 import { api } from './api';
 import { CloseIcon, MoonIcon, SunIcon } from './components/Icons';
+import { UpdateCheck } from './components/UpdateCheck';
 import { DesignForm } from './design/DesignForm';
 import { ExportPanel } from './export/ExportPanel';
 import { ResultPane } from './result/ResultPane';
@@ -478,6 +480,7 @@ export function App() {
                             Save report writes a run's or a sweep's report as one HTML file to send.
                         </p>
                         <p className="muted">Shortcuts: Ctrl+R generate, Ctrl+O load a config, Ctrl+S save one, Escape close.</p>
+                        <UpdateCheck />
                         <div className="modal-actions">
                             <button type="button" className="button" onClick={() => setAboutOpen(false)}>Close</button>
                         </div>

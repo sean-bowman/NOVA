@@ -8,6 +8,7 @@ as the window would:
     the server starts (--api, on a free port) and its views are ready
     it names what runs, the standalone build at the checkout's version, in its health route and as
     the first line of its log
+    its update check reaches GitHub, so the frozen TLS stack works; this check needs the network
     the Design form's schema loads, with the shipped configuration behind it
     every validation model's passages, read from the bundled records, match the checkout's
     the shipped nozzle runs to the end in a worker process (NOVA.exe started again by spawn)
@@ -164,6 +165,11 @@ def main(argv: list) -> int:
         named = (health.get('build') == 'standalone' and health.get('version') == novaGui.__version__
                  and _firstLogLine() == health.get('label'))
         _check(named, f'the exe names what runs, in its health route and first log line: {health.get("label")}')
+
+        # Any answer from GitHub, its hourly limit included, shows the frozen TLS stack works
+        update = client.json('/updates')
+        status = update.get('status', 'unreachable')
+        _check(status != 'unreachable', f'the update check reaches GitHub ({status}) {update.get("detail", "")}')
 
         schema = client.json('/schema')
         _check(bool(schema), 'the Design form schema loads')

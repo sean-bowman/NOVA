@@ -33,7 +33,7 @@ A conda Python links some of its extension modules to DLLs in the environment's 
 
 [packaging/requirements.txt](../packaging/requirements.txt) pins PyInstaller. [packaging/constraints.txt](../packaging/constraints.txt) pins NOVA's dependencies to the versions the test suite passes with in the development environment, so a release runs what was tested; update it when the development environment moves to new versions and the suite passes there.
 
-The build lands in `dist/NOVA/` and the zip beside it, `dist/NOVA-<version>-win64.zip`. [packaging/smokeTest.py](../packaging/smokeTest.py) runs on its own against any build: it starts the exe from a folder outside the checkout with a run store of its own, checks that the exe names itself the standalone build at the checkout's version in its health route and log, that the schema loads and that every validation model reads its records as the checkout does, runs the shipped nozzle, and draws an interactive figure, a static figure and the report.
+The build lands in `dist/NOVA/` and the zip beside it, `dist/NOVA-<version>-win64.zip`. [packaging/smokeTest.py](../packaging/smokeTest.py) runs on its own against any build: it starts the exe from a folder outside the checkout with a run store of its own, checks that the exe names itself the standalone build at the checkout's version in its health route and log, that its update check reaches GitHub (so the frozen TLS stack works; the smoke test needs the network), that the schema loads and that every validation model reads its records as the checkout does, runs the shipped nozzle, and draws an interactive figure, a static figure and the report.
 
 ## What the build carries
 
@@ -60,6 +60,8 @@ A new third-party dependency, or a data file read from outside the assets folder
 | CEA work files | `%USERPROFILE%\RocketCEA` |
 
 [packaging/userReadme.txt](../packaging/userReadme.txt) goes into the folder as `README.txt` and tells the user the same.
+
+Check for updates in the About dialog asks GitHub for the latest release and links a later one. The app makes no request off the machine otherwise. A user installs a new release by unzipping it in place of the old folder; everything in the table above lives outside that folder and is kept.
 
 ## Code signing
 
