@@ -2728,6 +2728,57 @@ select.input option {
     height: clamp(240px, 48%, 480px);
 }
 
+/* A throttle sweep's boundaries and performance side by side, stacked on a narrow pane */
+.plume-sweep-plots {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 10px;
+    height: clamp(240px, 48%, 480px);
+}
+
+.plume-sweep-plots .sweep-plot {
+    flex: 3 1 0;
+    min-width: 0;
+    height: auto;
+}
+
+.plume-sweep-plots .plume-performance-plot {
+    flex-grow: 2;
+}
+
+@media (max-width: 900px) {
+    .plume-sweep-plots {
+        flex-direction: column;
+        height: auto;
+    }
+
+    .plume-sweep-plots .sweep-plot {
+        flex: 0 0 auto;
+        height: 320px;
+    }
+}
+
+.plume-separation {
+    margin: 8px 0 0;
+    padding-left: 8px;
+    border-left: 3px solid var(--yellow);
+    font-size: 12px;
+}
+
+.plume-kind {
+    align-self: flex-start;
+    margin-bottom: 4px;
+}
+
+.plume-held {
+    width: 90px;
+}
+
+.plume-held-unit {
+    flex: 0 0 auto;
+    width: 90px;
+}
+
 .sweep-error-row.is-cancelled td.sweep-error {
     color: var(--text-muted);
 }

@@ -18,6 +18,10 @@ solved at each of a list of ambients, kept with the run.
     solved cancelled, and the session keeps a run with a plume sweep as it keeps a named run
     the server solves a sweep in a worker process on the run's pickled nozzle, draws it, and
     deletes it
+    a throttle sweep holds the ambient and varies the power level: its performance follows the
+    frozen gas relation F = f F_vac - p_a A_e, a power level solves the same field as the ambient
+    scaled by it, the separation limit is f_sep = 0.40 p_a / p_e and the march refuses below it,
+    and the table and figures name each point by its power level with the limit and its bias
 
 The contour the march runs on is a stand-in with a real exit profile, so the tests need no run.
 The end-to-end test starts a worker process and solves one point, about ten seconds.
@@ -224,7 +228,7 @@ def testTheTableNamesEachPointsNumbersAndMarksAnErrorPastTheBound():
     assert kept['cells']['axisShock']['text'] == '4.2, regular reflection'
     assert kept['cells']['drift']['tone'] == '' and loose['cells']['drift']['tone'] == 'warn'
     assert shown['counts']['done'] == 2 and shown['counts']['refused'] == 1
-    assert shown['lip']['pressureText'] == '30 kPa' and kept['ambientText'] == '20 kPa'
+    assert shown['lip']['pressureText'] == '30 kPa' and kept['label'] == '20 kPa'
 
 def testASweepDrawnAtTwoLipRadiiHasOneErrorColumn():
     keys = [column['key'] for column in plumeSweeps.table(_solvedSweep(reach = 2.0))['columns']]
@@ -258,6 +262,142 @@ def testNoFigureBeforeAPointIsSolved():
     sweep = plumeSweeps.build({'ambients': [40000.0, 20000.0]})
     sweep.update(runId = 7, number = 1, lip = None)
     assert plumeSweeps.figure(sweep, 'light') is None
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Throttle sweeps -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+def testAThrottleRequestLaysOutOnePointPerPowerLevelAtOneAmbient():
+    sweep = plumeSweeps.build({'kind': 'throttle', 'ambient': 8850.0, 'fractions': [1.0, 0.5, 0.25], 'unit': 'kPa'})
+    assert sweep['kind'] == 'throttle' and sweep['ambient'] == 8850.0
+    assert [point['fraction'] for point in sweep['points']] == [1.0, 0.5, 0.25]
+    assert all('ambient' not in point and point['state'] == 'queued' for point in sweep['points'])
+    assert sweep['name'] == 'Throttle, 100 to 25 % at 8.85 kPa'
+    assert plumeSweeps.pointConditions(sweep, sweep['points'][1]) == (8850.0, 0.5)
+
+def testASweepSavedWithoutAKindIsAnAmbientSweepAtRatedPower():
+    sweep = plumeSweeps.build({'ambients': [40000.0, 20000.0]})
+    del sweep['kind']
+    assert plumeSweeps.pointConditions(sweep, sweep['points'][1]) == (20000.0, 1.0)
+    sweep.update(runId = 7, number = 1, lip = None)
+    shown = plumeSweeps.table(sweep)
+    assert shown['kind'] == 'ambient' and shown['separation'] is None and shown['ambient'] is None
+
+@pytest.mark.parametrize('request_, reason', [
+    ({'kind': 'sideways', 'ambients': [1.0, 2.0]}, 'not a kind of plume sweep'),
+    ({'kind': 'throttle', 'fractions': [1.0, 0.5]}, 'not an ambient pressure'),
+    ({'kind': 'throttle', 'ambient': 0.0, 'fractions': [1.0, 0.5]}, 'not an ambient pressure'),
+    ({'kind': 'throttle', 'ambient': 9000.0, 'fractions': [1.0]}, 'at least two power levels'),
+    ({'kind': 'throttle', 'ambient': 9000.0, 'fractions': [1.0, 0.0]}, 'fraction of rated'),
+    ({'kind': 'throttle', 'ambient': 9000.0, 'fractions': [1.0, 80.0]}, 'at most 1.5'),
+    ({'kind': 'throttle', 'ambient': 9000.0, 'fractions': [1.0, 1.0]}, 'a power level is given twice'),
+])
+def testAThrottleRequestOutsideTheLimitsIsRefusedWithTheReason(request_, reason):
+    with pytest.raises(ValueError, match = reason):
+        plumeSweeps.build(request_)
+
+@pytest.mark.parametrize('fraction', [0.25, 0.6, 1.2])
+def testThePerformanceAtAPowerLevelFollowsTheFrozenGasRelation(fraction):
+    '''
+    At a frozen gas state the exit plane's vacuum thrust scales with the power level while its
+    vacuum coefficient and impulse hold, so F(f, p_a) = f F_vac - p_a A_e. The same relation makes
+    a power level and an ambient interchangeable in the coefficient and the impulse: f at p_a reads
+    as rated power at p_a / f, with the thrust scaled by f.
+    '''
+    ambient = 20000.0                                                         # [Pa]
+    summary = _summary(ambient)
+    run = types.SimpleNamespace(performance = summary, chamberPressure = CHAMBERPRESSURE)
+    at = plumeSweeps.performanceAt(run, ambient, fraction)
+    vacuumThrust = summary.thrustDelivered['vacuum']                          # [N]
+    throatArea = vacuumThrust / (CHAMBERPRESSURE * summary.thrustCoefDelivered['vacuum'])  # [m^2]
+    exitArea = summary.areaRatio * throatArea                                 # [m^2]
+    assert at['thrust'] == pytest.approx(fraction * vacuumThrust - ambient * exitArea, rel = 1e-12)
+    rated = plumeSweeps.performanceAt(run, ambient / fraction)
+    assert at['thrustCoef'] == pytest.approx(rated['thrustCoef'], rel = 1e-12)
+    assert at['specificImpulse'] == pytest.approx(rated['specificImpulse'], rel = 1e-12)
+    assert at['thrust'] == pytest.approx(fraction * rated['thrust'], rel = 1e-12)
+
+def testAPowerLevelSolvesTheSameFieldAsTheAmbientScaledByIt(nozzle, lip, expanded):
+    '''
+    The march carries one stagnation pressure and its relations are homogeneous in pressure, so
+    half power against an ambient is rated power against half that ambient: the same ratios, the
+    same mass error and the same boundary.
+    '''
+    ambient, rated = expanded
+    throttled = plumeSweeps.solvePoint(nozzle, 0.5 * ambient, 2.0, lip, fraction = 0.5)
+    assert throttled['state'] == 'done'
+    result, reference = throttled['result'], rated['result']
+    assert result['fraction'] == 0.5
+    assert result['lipRatio'] == pytest.approx(reference['lipRatio'], rel = 1e-12)
+    assert result['exitRatio'] == pytest.approx(reference['exitRatio'], rel = 1e-12)
+    assert result['nearDrift'] == pytest.approx(reference['nearDrift'], rel = 1e-9)
+    assert result['boundary'] == reference['boundary']
+
+def testThePowerLevelBelowTheSeparationLimitIsRefusedOnTheCriterion(nozzle, lip):
+    '''
+    At a frozen gas state the exit pressure scales with the chamber, so the power level at which
+    the exit pressure ratio reaches the Summerfield criterion is exact: f_sep = 0.40 p_a / p_e. Just
+    below it the march refuses as separated; well above it the plume solves.
+    '''
+    from NOVA.plume import separationPressureRatio
+    ambient = 0.5 * lip['exitPressure']                                       # [Pa] full power at an exit ratio of 2
+    sweep = plumeSweeps.build({'kind': 'throttle', 'ambient': ambient, 'fractions': [1.0, 0.19], 'unit': 'kPa'})
+    sweep.update(runId = 7, number = 1, lip = lip)
+    limit = plumeSweeps.separation(sweep)
+    assert limit['fraction'] == pytest.approx(separationPressureRatio * ambient / lip['exitPressure'], rel = 1e-12)
+    assert limit['fraction'] == pytest.approx(0.2, rel = 1e-12) and limit['lowFraction'] == pytest.approx(0.175, rel = 1e-12)
+    below = plumeSweeps.solvePoint(nozzle, ambient, 2.0, lip, fraction = 0.19)
+    assert below['state'] == 'refused' and 'Summerfield' in below['error']
+    full = plumeSweeps.solvePoint(nozzle, ambient, 2.0, lip, fraction = 1.0)
+    assert full['state'] == 'done' and full['result']['exitRatio'] == pytest.approx(2.0, rel = 1e-9)
+
+def _throttleSweep():
+
+    sweep = plumeSweeps.build({'kind': 'throttle', 'ambient': 10000.0, 'fractions': [1.0, 0.5, 0.2], 'unit': 'kPa'})
+    lipPressure = 30000.0
+    sweep.update(runId = 7, number = 2, lip = {'pressure': lipPressure, 'exitPressure': 20000.0, 'x': 1.0, 'radius': 0.3,
+                                               'wall': {'x': [-3.0, 0.0], 'r': [0.5, 1.0]}})
+    full, half, low = sweep['points']
+    low.update(state = 'refused', error = 'Pe/Pa is 0.400, below the Summerfield separation criterion')
+    for point in (full, half):
+        fraction = point['fraction']
+        point.update(state = 'done', result = {
+            'fraction': fraction, 'lipRatio': fraction * lipPressure / 10000.0, 'exitRatio': fraction * 2.0,
+            'jetType': 'underexpanded', 'thrustCoef': 1.8, 'specificImpulse': 440.0 * fraction ** 0.05,
+            'thrust': 100000.0 * fraction - 3000.0, 'jetDiameter': 0.71, 'shockCellLength': 1.2,
+            'axisShockKind': '', 'axisShockAt': None, 'nearDrift': 0.3, 'drift': 0.3, 'trustworthy': True,
+            'tolerance': 1.0, 'boundaryMach': 3.4, 'notes': [], 'boundary': {'x': [0.0, 1.0], 'r': [1.0, 1.1]}})
+    return sweep
+
+def testAThrottleTableNamesEachPowerLevelAndGivesTheSeparationLimitWithItsBias():
+    shown = plumeSweeps.table(_throttleSweep())
+    assert shown['kind'] == 'throttle' and shown['ambientText'] == '10 kPa'
+    assert [column['key'] for column in shown['columns']][:2] == ['exitRatio', 'lipRatio']
+    assert [point['label'] for point in shown['points']] == ['100 %', '50 %', '20 %']
+    assert shown['points'][1]['cells']['exitRatio']['text'] == '1.000'
+    assert [point['fraction'] for point in shown['points']] == [1.0, 0.5, 0.2]
+    separation = shown['separation']
+    assert separation['fraction'] == pytest.approx(0.2) and separation['lowFraction'] == pytest.approx(0.175)
+    assert 'below 20 % power at 10 kPa' in separation['limit'] and '17.5 %' in separation['limit']
+    assert f'{plumeSweeps.frozenGasBias:g} % high' in separation['bias'] and 'safe side' in separation['bias']
+
+def testAThrottleSweepDrawsItsPerformanceAgainstPowerLevelWithTheLimitMarked():
+    import json
+    sweep = _throttleSweep()
+    figure = json.loads(plumeSweeps.performanceFigure(sweep, 'dark'))
+    thrust, impulse = figure['data']
+    assert thrust['x'] == [50.0, 100.0] and thrust['y'] == [47.0, 97.0]
+    assert impulse['yaxis'] == 'y2' and impulse['x'] == thrust['x']
+    band, line = figure['layout']['shapes']
+    assert line['x0'] == line['x1'] == pytest.approx(20.0)
+    assert band['x0'] == pytest.approx(17.5) and band['x1'] == pytest.approx(20.0)
+    assert 'separates below 20 %' in figure['layout']['annotations'][0]['text']
+    # The boundaries name each line by its power level
+    boundaries = json.loads(plumeSweeps.figure(sweep, 'dark'))
+    assert [trace['name'] for trace in boundaries['data'][1:]] == ['50 %, 1.500', '100 %, 3.000']
+    assert '10 kPa held' in boundaries['layout']['title']['text']
+    # An ambient sweep draws no performance against power level
+    assert plumeSweeps.performanceFigure(_solvedSweep(), 'dark') is None
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- Kept with the run -- #
@@ -350,14 +490,16 @@ def testTheServerSolvesASweepOnTheRunsNozzleDrawsItAndDeletesIt(tmp_path, nozzle
 
     picklePath = tmp_path / 'novaGuiResult.pkl'
     with open(picklePath, 'wb') as handle:
-        pickle.dump(nozzle, handle)
+        # The stand-in with a performance summary, so the throttle sweep has thrust to draw
+        pickle.dump(_marchable(performance = _summary(20000.0)), handle)
     session = RunSession()
     record = RunRecord(41, {'ok': True, 'runName': 'standIn', 'picklePath': str(picklePath), 'elapsedSec': 1.0})
     session.adopt(record)
     try:
         with TestClient(createApp(session = session, warm = False)) as client:
             assert client.get('/api/runs/99/plume-sweeps').status_code == 404
-            assert client.get('/api/runs/41/plume-lip').json() == {'pressure': pytest.approx(lip['pressure']), 'reason': ''}
+            assert client.get('/api/runs/41/plume-lip').json() == {'pressure': pytest.approx(lip['pressure']),
+                                                                   'exitPressure': pytest.approx(lip['exitPressure']), 'reason': ''}
             refused = client.post('/api/runs/41/plume-sweeps', json = {'ambients': [20000.0]})
             assert refused.status_code == 400 and 'at least two' in refused.json()['detail']
 
@@ -372,10 +514,28 @@ def testTheServerSolvesASweepOnTheRunsNozzleDrawsItAndDeletesIt(tmp_path, nozzle
             figure = client.get('/api/runs/41/plume-sweeps/1/figure', params = {'mode': 'light'}).json()
             assert len(figure['data']) == 2
 
+            assert client.get('/api/runs/41/plume-sweeps/1/figure', params = {'plot': 'performance'}).status_code == 404
+            assert client.get('/api/runs/41/plume-sweeps/1/figure', params = {'plot': 'sideways'}).status_code == 400
+
             assert client.post('/api/runs/41/plume-sweeps/1/resume').json() == {'queued': 0}
             assert client.delete('/api/runs/41/plume-sweeps/1').json() == {'deleted': 1}
             assert client.get('/api/runs/41/plume-sweeps/1/figure').status_code == 404
             assert client.delete('/api/runs/41/plume-sweeps/1').status_code == 404
+
+            # A throttle sweep at the ambient that puts full power at an exit pressure ratio of 2:
+            # full power solves, and below the separation limit at a fifth of it the march refuses
+            ambient = 0.5 * lip['exitPressure']
+            throttled = client.post('/api/runs/41/plume-sweeps', json = {'kind': 'throttle', 'ambient': ambient,
+                                                                         'fractions': [1.0, 0.19]}).json()
+            assert throttled['number'] == 1 and throttled['kind'] == 'throttle'
+            _settle(session.plumeSweeps, 120.0)
+            listed = client.get('/api/runs/41/plume-sweeps').json()
+            assert listed['maxFraction'] == plumeSweeps.maxFraction and listed['separationRatio'] == 0.4
+            [shown] = listed['sweeps']
+            assert [point['state'] for point in shown['points']] == ['done', 'refused']
+            assert shown['separation']['fraction'] == pytest.approx(0.2)
+            performance = client.get('/api/runs/41/plume-sweeps/1/figure', params = {'plot': 'performance'}).json()
+            assert performance['data'][0]['x'] == [100.0]
     finally:
         session.shutdown()
 
@@ -401,3 +561,24 @@ def testTheShippedNozzleHoldsMassAtTwoLipRadiiAndMatchesItsOwnPerformance():
     at = plumeSweeps.performanceAt(shipped, summary.backPressures['seaLevel'])
     assert at['thrustCoef'] == pytest.approx(summary.thrustCoefDelivered['seaLevel'], rel = 1e-12)
     assert at['specificImpulse'] == pytest.approx(summary.specificImpulseDelivered['seaLevel'], rel = 1e-12)
+
+def testTheShippedNozzleThrottlesToAQuarterAtTheAmbientThatPutsFullPowerAtTheTopOfTheEnvelope():
+    '''
+    docs/plumeThrottleModel.md on the shipped nozzle: with the ambient chosen so that rated power
+    sits at an exit pressure ratio of 2, a quarter of rated power solves within the march's
+    tolerance at an exit pressure ratio of 0.5, and at a fifth, on the Summerfield floor itself,
+    the march declines first on the strength of the lip shock.
+    '''
+    from NOVA.plume import plumeFieldMaxPressureRatio
+    path = os.path.join(root, 'featureShowcase', 'showcaseBase.pkl')
+    if not os.path.isfile(path):
+        pytest.skip('showcaseBase.pkl is a local run and is not in this checkout')
+    with open(path, 'rb') as handle:
+        shipped = pickle.load(handle)
+    lipShipped = plumeSweeps.lipState(shipped)
+    ambient = lipShipped['exitPressure'] / plumeFieldMaxPressureRatio
+    quarter = plumeSweeps.solvePoint(shipped, ambient, 2.0, lipShipped, fraction = 0.25)
+    assert quarter['state'] == 'done' and quarter['result']['trustworthy']
+    assert quarter['result']['exitRatio'] == pytest.approx(0.5, rel = 1e-9)
+    fifth = plumeSweeps.solvePoint(shipped, ambient, 2.0, lipShipped, fraction = 0.20)
+    assert fifth['state'] == 'refused' and 'oblique shock' in fifth['error']

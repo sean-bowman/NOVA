@@ -223,6 +223,10 @@ Of a run's stages, only the plume and the delivered performance depend on the am
 
 ![A plume sweep over the shipped nozzle](docs/images/novaGui/plumeSweep.png)
 
+A throttle sweep holds the ambient and varies the engine, to find how far it throttles at one altitude before its nozzle separates. **Power levels** in the dialog takes one ambient and a range or a list of power levels in percent of rated chamber pressure, and gives each one's exit pressure ratio and the power level below which the nozzle separates at that ambient. Each power level scales every pressure in the run's contour, with the gas held at its rated state. The view adds the delivered thrust and specific impulse against power level with the separation limit marked, and states the frozen gas state's bias on that limit: holding the gas reports separation at a power level 4.9 percent too high on the shipped engine, on the conservative side ([plumeThrottleModel.md](docs/plumeThrottleModel.md)). On the shipped nozzle at 8.85 kPa, 100 to 25 percent power solves and the nozzle separates below 20 percent.
+
+![A throttle sweep over the shipped nozzle](docs/images/novaGui/plumeThrottle.png)
+
 ### Export
 
 A run writes its outputs into its own folder in the run store, not to the output folder. **Export** in the result pane's header opens a dialog that lists the shown run's outputs by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. The figures carry thumbnails, and the eye on a row previews the file beside the list: an image as itself, an STL surface in the 3D viewer, a text or JSON file as its first lines. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.

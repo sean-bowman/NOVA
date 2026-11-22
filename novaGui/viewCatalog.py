@@ -54,7 +54,7 @@ views = (
     ViewSpec('pressure', 'Flow', 'Pressure field', fieldSource, 'pressure', 'pressureField'),
     ViewSpec('temperature', 'Flow', 'Temperature field', fieldSource, 'temperature', 'temperatureField'),
     ViewSpec('plume', 'Plume', 'Plume', 'chamber, nozzle and marched plume as one field', 'plume', 'plume'),
-    ViewSpec('plumeSweep', 'Plume', 'Plume sweep', 'the plume marched at each ambient on this run\'s nozzle'),
+    ViewSpec('plumeSweep', 'Plume', 'Plume sweep', 'the plume marched at each ambient or power level on this run\'s nozzle'),
     ViewSpec('circuit', 'Cooling', 'Coolant circuit', 'drawn from the jacket, extension and film solves'),
     ViewSpec('passes', 'Cooling', 'Coolant per pass', 'drawn from the coupled passes'),
     ViewSpec('circuitIterations', 'Cooling', 'Circuit iterations', 'every pass of the outer iteration, earlier ones fading'),

@@ -316,11 +316,12 @@ export interface PlumeColumn {
     validation: ValidationBadgeInfo | null;
 }
 
-/** One ambient of a plume sweep (novaGui.plumeSweeps.table). */
+/** One ambient or power level of a plume sweep (novaGui.plumeSweeps.table). */
 export interface PlumePoint {
     index: number;
     ambient: number;              // [Pa]
-    ambientText: string;          // in the unit the sweep was entered in
+    fraction: number;             // [-] power level, 1 for an ambient sweep
+    label: string;                // the ambient in the sweep's unit, or the power level
     state: PlumePointState;
     error: string;                // why a point was refused, failed or not solved
     trustworthy: boolean | null;  // the drawn march's mass error is within its bound; null before it is solved
@@ -329,15 +330,31 @@ export interface PlumePoint {
     cells: Record<string, { text: string; tone: '' | 'warn' }>;
 }
 
-/** A run's plume solved over a list of ambients, kept with the run. */
+export type PlumeSweepKind = 'ambient' | 'throttle';
+
+/** Where a throttle sweep's nozzle separates (novaGui.plumeSweeps.separation). */
+export interface PlumeSeparation {
+    fraction: number;             // [-] at the criterion the march refuses on
+    lowFraction: number;          // [-] at the low end of the criterion's quoted spread
+    ratio: number;
+    lowRatio: number;
+    limit: string;                // the limit as a sentence
+    bias: string;                 // the frozen gas state's bias on it, as a sentence
+}
+
+/** A run's plume solved over a list of ambients, or over a list of power levels at one ambient, kept with the run. */
 export interface PlumeSweep {
     runId: number;
     number: number;               // within its run
+    kind: PlumeSweepKind;
     name: string;
     createdAt: number;            // [s] epoch
     unit: string;
     reach: number;                // [lip radii] drawn
+    ambient: number | null;       // [Pa] a throttle sweep's held ambient
+    ambientText: string | null;
     lip: { pressure: number; pressureText: string } | null;
+    separation: PlumeSeparation | null;
     columns: PlumeColumn[];
     counts: Record<PlumePointState, number>;
     badge: ValidationBadgeInfo | null;
@@ -350,15 +367,15 @@ export interface PlumeSweepList {
     maxPoints: number;
     nearReach: number;            // [lip radii] the reach the march conserves mass over
     maxReach: number;             // [lip radii]
+    maxFraction: number;          // [-] the highest power level a throttle sweep takes
+    separationRatio: number;      // the exit pressure ratio the march refuses on as separated
+    separationSpreadLow: number;  // the low end of that criterion's quoted spread
+    maxPressureRatio: number;     // the exit pressure ratio a throttle sweep's first ambient puts rated power at
 }
 
-/** A plume sweep as the dialog asks for it: ambients in Pa, entered in `unit`. */
-export interface PlumeSweepRequest {
-    name: string;
-    ambients: number[];
-    unit: string;
-    reach: number;
-}
+/** A plume sweep as the dialog asks for it: pressures in Pa, entered in `unit`, power levels as fractions. */
+export type PlumeSweepRequest = { name: string; unit: string; reach: number } & (
+    { kind: 'ambient'; ambients: number[] } | { kind: 'throttle'; ambient: number; fractions: number[] });
 
 /** The run store the server keeps runs in between launches (novaGui.runStore). */
 export interface RunStoreInfo {

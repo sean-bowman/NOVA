@@ -111,13 +111,19 @@ Every separation refusal in `solveStationField` and `solvePlumeStructure`, and t
 
 `Nozzle.throttledPlumeField(throttleFraction, ambientPressure)` is `plumeField` with the engine as the variable. It returns the field rather than keeping it, because a sweep produces one per power level and none of them is the nozzle's own state.
 
-`featureShowcase/buildPlumeThrottle.py` is the sweep. It takes the ambient from the contour so that rated power lands at the top of the march's envelope, walks the power level down in 5 percent steps, and stops where the march refuses on the separation criterion. Each frame carries its power level, its exit pressure ratio, the mass continuity at two and six lip radii, and the delivered thrust and specific impulse against power level with the separation limit marked.
+`featureShowcase/buildPlumeThrottle.py` is the sweep. It takes the ambient from the contour so that rated power lands at the top of the march's envelope, walks the power level down in 5 percent steps, and stops where the march refuses on the separation criterion. Each frame carries its power level, its exit pressure ratio, the mass continuity at two and six lip radii, and the one-dimensional ideal thrust and specific impulse against power level with the separation limit marked.
 
 Performance is analytic at a frozen gas state. Mass flow and every static pressure scale with the chamber while exit velocity does not, because the area ratio sets the exit Mach number, so
 
 $$F(f) = f\,\dot m_r V_e + (f\,p_{e,r} - p_a)A_e$$
 
 with the pressure term going negative as the engine throttles into overexpansion. It is drawn only over the attached range: below separation the jet leaves from inside the nozzle and the geometric exit area is no longer the area that matters.
+
+The GUI runs the same sweep on any finished run: a throttle sweep in the run's Plume sweep view (`novaGui.plumeSweeps`) solves the plume at each of a list of power levels against one ambient, on the run's own contour through `throttledContour`. Its performance is the same relation with the run's exit-plane integral in place of the one-dimensional exit state. At a frozen gas state every density and static pressure on that plane scales with the chamber and every velocity holds, so the integral's vacuum thrust scales with $f$ and
+
+$$F(f) = f\,F_{vac} - p_a A_e$$
+
+with the thrust coefficient and specific impulse following at a chamber pressure of $f\,p_c$. On the shipped nozzle at 8.85 kPa it gives 103.4 to 23.7 kN from 100 to 25 percent power, against 104.0 to 23.9 kN from the one-dimensional relation above. The separation limit is $f_{sep} = 0.40\,p_a / p_{e,r}$, exact within the model, and the view states the frozen gas state's bias on it beside it.
 
 ## Cost of the frozen gas state
 
@@ -130,7 +136,7 @@ Chamber temperature, molecular weight and the ratio of specific heats all move w
 | 40 % | 2.7579 | 1.14049 | 3303.7 | 3.9172 | 0.002640 |
 | 20 % | 1.3790 | 1.13541 | 3232.3 | 3.8913 | 0.002693 |
 
-**The field is unaffected and the separation limit is not.** Over the full range $\gamma$ moves 1.05 percent and the exit Mach number 1.57 percent, both inside the march's own mass drift. The exit static pressure ratio moves 4.9 percent, which biases the power level at which separation is reported by about the same amount, in the direction of reporting separation later than it happens. That bias is the size of the spread in the separation criterion itself, which is quoted as 0.35 to 0.40, so correcting one without the other buys nothing.
+**The field is unaffected and the separation limit is not.** Over the full range $\gamma$ moves 1.05 percent and the exit Mach number 1.57 percent, both inside the march's own mass drift. The exit static pressure ratio $p_e/p_c$ rises 4.9 percent as the power level falls, so at 20 percent power a re-solved gas leaves the nozzle at an exit pressure 4.9 percent above the frozen gas's. A higher exit pressure is less overexpanded: the re-solved engine separates at 19.1 percent power where the frozen model reports 20.0. **The frozen gas state reports separation at a power level 4.9 percent too high, on the conservative side.** That bias is smaller than the spread in the separation criterion itself, which is quoted as 0.35 to 0.40 and moves the limit by 12.5 percent, so correcting one without the other buys little.
 
 ## What remains
 

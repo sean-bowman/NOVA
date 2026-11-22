@@ -40,12 +40,17 @@ Routes, all under /api:
     GET  /runs/{runId}/plume-sweeps  a run's plume sweeps, newest first (novaGui.plumeSweeps.table), and the
                                     limits on a new one
     GET  /runs/{runId}/plume-lip    the static pressure at the run's nozzle lip, which sets each ambient's lip
-                                    pressure ratio, or why the plume march cannot start on its contour
-    POST /runs/{runId}/plume-sweeps  solve the run's plume over a list of ambients: {'name', 'ambients' [Pa],
-                                    'unit', 'reach' [lip radii]}
+                                    pressure ratio, and its one-dimensional exit pressure, which sets where a
+                                    throttle sweep separates, or why the plume march cannot start on its contour
+    POST /runs/{runId}/plume-sweeps  solve the run's plume over a list of ambients, {'kind': 'ambient', 'name',
+                                    'ambients' [Pa], 'unit', 'reach' [lip radii]}, or over a list of power
+                                    levels at one ambient, {'kind': 'throttle', 'name', 'ambient' [Pa],
+                                    'fractions' [-], 'unit', 'reach'}
     POST /runs/{runId}/plume-sweeps/{number}/resume   queue a plume sweep's cancelled points again
     DELETE /runs/{runId}/plume-sweeps/{number}        delete a plume sweep, cancelling it if it is solving
-    GET  /runs/{runId}/plume-sweeps/{number}/figure   its plume boundaries over one another, ?mode=
+    GET  /runs/{runId}/plume-sweeps/{number}/figure   its plume boundaries over one another, or with
+                                    ?plot=performance a throttle sweep's thrust and impulse against power
+                                    level; ?mode=
     GET  /report                    a run's report as one HTML file, ?run=&baseline= (novaGui.report)
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
@@ -425,16 +430,21 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
     @app.get('/api/runs/{runId}/plume-sweeps')
     def plumeSweepList(runId: int) -> dict:
 
+        # Here rather than at the top: the server starts without importing the solver
+        from NOVA.plume import plumeFieldMaxPressureRatio, separationPressureRatio
+
         _plumeRun(runId)
         return {'runId': runId, 'sweeps': app.state.session.plumeSweeps.sweepsOf(runId),
                 'maxPoints': plumeSweeps.maxPoints, 'nearReach': plumeSweeps.nearReach,
-                'maxReach': plumeSweeps.maxReach}
+                'maxReach': plumeSweeps.maxReach, 'maxFraction': plumeSweeps.maxFraction,
+                'separationRatio': separationPressureRatio, 'separationSpreadLow': plumeSweeps.separationSpreadLow,
+                'maxPressureRatio': plumeFieldMaxPressureRatio}
 
     @app.get('/api/runs/{runId}/plume-lip')
     def plumeLip(runId: int) -> dict:
 
         lip = _lip(_plumeRun(runId))
-        return {'pressure': lip.get('pressure'), 'reason': lip.get('reason', '')}
+        return {'pressure': lip.get('pressure'), 'exitPressure': lip.get('exitPressure'), 'reason': lip.get('reason', '')}
 
     @app.post('/api/runs/{runId}/plume-sweeps')
     async def addPlumeSweep(runId: int, request: Request) -> dict:
@@ -469,13 +479,18 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         return {'deleted': number}
 
     @app.get('/api/runs/{runId}/plume-sweeps/{number}/figure')
-    def plumeSweepFigure(runId: int, number: int, mode: str = 'dark') -> Response:
+    def plumeSweepFigure(runId: int, number: int, mode: str = 'dark', plot: str = 'boundaries') -> Response:
 
         try:
             sweep = app.state.session.plumeSweeps.sweep(runId, number)
         except KeyError as exc:
             raise HTTPException(404, f'run {runId} has no plume sweep {number}') from exc
-        figure = plumeSweeps.figure(sweep, _mode(mode))
+        if plot not in ('boundaries', 'performance'):
+            raise HTTPException(400, f'{plot!r} is not a plume sweep plot; it is boundaries or performance')
+        if plot == 'performance' and sweep.get('kind') != 'throttle':
+            raise HTTPException(404, f'plume sweep {number} holds the engine at rated power; only a throttle sweep '
+                                     f'draws performance against power level')
+        figure = (plumeSweeps.performanceFigure if plot == 'performance' else plumeSweeps.figure)(sweep, _mode(mode))
         if figure is None:
             raise HTTPException(404, f'no point of plume sweep {number} is solved yet')
         return Response(figure, media_type = 'application/json')

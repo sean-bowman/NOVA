@@ -109,19 +109,20 @@ class PlumeQueue:
                 sweep = self._sweeps.get((runId, number))
                 if sweep is None:
                     continue
-                ambients = [(point['index'], point['ambient']) for point in sweep['points'] if point['state'] == 'queued']
-                if ambients:
+                points = [(point['index'], *plumeModel.pointConditions(sweep, point))
+                          for point in sweep['points'] if point['state'] == 'queued']
+                if points:
                     break
             else:
                 return
             eventQueue = self._context.Queue()
             self._process = self._context.Process(target = plumeModel.runSweep, name = f'novaPlume{runId}.{number}',
-                                                  args = (picklePath, ambients, sweep['reach'], eventQueue), daemon = True)
+                                                  args = (picklePath, points, sweep['reach'], eventQueue), daemon = True)
             self._current = (runId, number)
             self._cancelled = False
             process = self._process
             process.start()
-        indices = {index for index, _ in ambients}
+        indices = {point[0] for point in points}
         threading.Thread(target = self._drain, args = (process, eventQueue, sweep, indices),
                          name = f'novaPlumePump{runId}.{number}', daemon = True).start()
 

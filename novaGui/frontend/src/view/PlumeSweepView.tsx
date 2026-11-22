@@ -1,12 +1,17 @@
 /* ========================================
    PLUME SWEEP VIEW
-   A run's plume over a list of ambient pressures (novaGui.plumeSweeps), solved on the run's own
-   nozzle and kept with the run. The plot draws the plume boundaries over one another in lip radii
-   from the exit plane, each named by its lip pressure ratio and its ambient; a boundary past the
-   march's trusted bound of mass continuity draws dashed. The table gives each ambient's lip
-   pressure ratio, delivered thrust coefficient, specific impulse and thrust, fully expanded jet
-   diameter, first shock on the axis and the march's mass error, each column with the validation
-   status of the models behind it. An ambient the march refused carries its reason.
+   A run's plume over a list of ambient pressures, or over a list of power levels at one ambient
+   (novaGui.plumeSweeps), solved on the run's own nozzle and kept with the run. The plot draws the
+   plume boundaries over one another in lip radii from the exit plane, each named by its lip
+   pressure ratio and its ambient or power level; a boundary past the march's trusted bound of mass
+   continuity draws dashed. The table gives each point's lip pressure ratio, delivered thrust
+   coefficient, specific impulse and thrust, fully expanded jet diameter, first shock on the axis
+   and the march's mass error, each column with the validation status of the models behind it. A
+   point the march refused carries its reason.
+
+   A throttle sweep adds a second plot, the delivered thrust and specific impulse against power
+   level with the separation limit marked, the exit pressure ratio in the table, and under the
+   plots the limit and the frozen gas state's bias on it.
 
    New plume sweep opens the dialog (PlumeSweepDialog); it needs the form's unit table, so a
    popped-out window shows the sweeps without starting one. A sweep whose window closed before its
@@ -20,7 +25,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { ValidationBadge } from '../analyze/ValidationBadge';
 import type { UnitTable } from '../design/units';
-import type { Mode, PlumePoint, PlumeSweep, PlumeSweepList } from '../types';
+import type { Mode, PlumePoint, PlumeSweep, PlumeSweepKind, PlumeSweepList } from '../types';
 import { loadPlotly } from './PlotlyFigure';
 import { PlumeSweepDialog } from './PlumeSweepDialog';
 
@@ -35,6 +40,11 @@ interface PlumeSweepViewProps {
 const stateText: Record<PlumePoint['state'], string> = {
     queued: 'queued', running: 'solving', done: 'solved', refused: 'refused', failed: 'failed', cancelled: 'not solved',
 };
+
+/** What a sweep's points are, in words: 'ambient', 'ambients', 'power level', 'power levels'. */
+function pointWord(kind: PlumeSweepKind, count: number): string {
+    return kind === 'throttle' ? (count === 1 ? 'power level' : 'power levels') : (count === 1 ? 'ambient' : 'ambients');
+}
 
 /** A plume sweep's progress in a few words: '4 of 6 solved, 1 refused, 1 to solve'. */
 export function plumeProgress(sweep: PlumeSweep): string {
@@ -55,7 +65,7 @@ export function plumeProgress(sweep: PlumeSweep): string {
     return parts.join(', ');
 }
 
-function PlumePlot({ sweep, mode }: { sweep: PlumeSweep; mode: Mode }) {
+function PlumePlot({ sweep, mode, plot }: { sweep: PlumeSweep; mode: Mode; plot: 'boundaries' | 'performance' }) {
     const host = useRef<HTMLDivElement>(null);
     const [message, setMessage] = useState('');
     // Draw again as points end
@@ -69,11 +79,12 @@ function PlumePlot({ sweep, mode }: { sweep: PlumeSweep; mode: Mode }) {
             return;
         }
         if (solved === 0) {
-            setMessage(sweep.counts.queued + sweep.counts.running > 0 ? 'The plot draws as the first ambient is solved.'
-                                                                     : 'No ambient of this sweep was solved.');
+            const word = pointWord(sweep.kind, 1);
+            setMessage(sweep.counts.queued + sweep.counts.running > 0 ? `The plot draws as the first ${word} is solved.`
+                                                                     : `No ${word} of this sweep was solved.`);
             return;
         }
-        Promise.all([loadPlotly(), api.plumeSweepFigure(sweep.runId, sweep.number, mode)])
+        Promise.all([loadPlotly(), api.plumeSweepFigure(sweep.runId, sweep.number, mode, plot)])
             .then(([Plotly, figure]) => {
                 if (cancelled) {
                     return undefined;
@@ -86,7 +97,7 @@ function PlumePlot({ sweep, mode }: { sweep: PlumeSweep; mode: Mode }) {
         return () => {
             cancelled = true;
         };
-    }, [sweep.runId, sweep.number, mode, drawKey, solved, sweep.counts.queued, sweep.counts.running]);
+    }, [sweep.runId, sweep.number, sweep.kind, mode, plot, drawKey, solved, sweep.counts.queued, sweep.counts.running]);
 
     // The plot follows the pane's size, as the figures do
     useEffect(() => {
@@ -104,7 +115,7 @@ function PlumePlot({ sweep, mode }: { sweep: PlumeSweep; mode: Mode }) {
     }, []);
 
     return (
-        <div className="sweep-plot plume-sweep-plot">
+        <div className={`sweep-plot plume-sweep-plot plume-${plot}-plot`}>
             <div ref={host} className="plotly-host" hidden={!!message} />
             {message && <div className="figure-message sweep-plot-empty muted">{message}</div>}
         </div>
@@ -140,14 +151,16 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
     const sweep = sweeps.find((entry) => entry.number === chosen) ?? sweeps[0] ?? null;
     useEffect(() => setConfirming(false), [sweep?.number]);
 
-    const limits = list ? { maxPoints: list.maxPoints, nearReach: list.nearReach, maxReach: list.maxReach } : null;
+    const limits = list ? { maxPoints: list.maxPoints, nearReach: list.nearReach, maxReach: list.maxReach,
+                            maxFraction: list.maxFraction, separationRatio: list.separationRatio,
+                            maxPressureRatio: list.maxPressureRatio } : null;
     const dialog = adding && units && limits && (
         <PlumeSweepDialog runId={runId} units={units} limits={limits} onClose={() => setAdding(false)} onNotify={onNotify}
                           onAdded={(added) => setChosen(added.number)} />
     );
     const newButton = units && limits && (
         <button type="button" className={`button ${sweep ? '' : 'button-primary'}`} onClick={() => setAdding(true)}
-                title="Solve this run's plume over a list of ambient pressures, on its nozzle, without running it again">
+                title="Solve this run's plume over a list of ambient pressures or power levels, on its nozzle, without running it again">
             New plume sweep
         </button>
     );
@@ -163,8 +176,8 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
             <div className="sweep-view plume-sweep-view plume-sweep-empty">
                 <p>
                     No plume sweep of run {runId} yet. A plume sweep solves the run's plume and delivered performance at each
-                    of a list of ambient pressures on the run's own nozzle, seconds an ambient, where a trade sweep runs the
-                    whole pipeline again at each.
+                    of a list of ambient pressures, or at each of a list of power levels against one ambient, on the run's own
+                    nozzle, seconds a point, where a trade sweep runs the whole pipeline again at each.
                 </p>
                 {newButton}
                 {!units && <p className="muted">Start one from the main window.</p>}
@@ -175,7 +188,7 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
 
     const resume = () => {
         api.resumePlumeSweep(runId, sweep.number)
-            .then((done) => onNotify('info', `${sweep.name}: ${done.queued} ${done.queued === 1 ? 'ambient' : 'ambients'} queued again`))
+            .then((done) => onNotify('info', `${sweep.name}: ${done.queued} ${pointWord(sweep.kind, done.queued)} queued again`))
             .catch((failure: Error) => onNotify('error', 'Plume sweep not resumed', failure.message));
     };
 
@@ -190,6 +203,7 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
     };
 
     const columns = sweep.columns;
+    const throttle = sweep.kind === 'throttle';
     return (
         <div className="sweep-view plume-sweep-view">
             <div className="figure-toolbar sweep-toolbar">
@@ -197,7 +211,7 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
                         onChange={(event) => setChosen(Number(event.target.value))}>
                     {sweeps.map((entry) => (
                         <option key={entry.number} value={entry.number}>
-                            {entry.name} · {entry.points.length} ambients
+                            {entry.name} · {entry.points.length} {pointWord(entry.kind, entry.points.length)}
                         </option>
                     ))}
                 </select>
@@ -206,7 +220,7 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
                 <span className="toolbar-spacer" />
                 {sweep.counts.cancelled > 0 && (
                     <button type="button" className="button" onClick={resume}
-                            title="Solve the ambients that were cancelled or not solved before NOVA closed">
+                            title={`Solve the ${pointWord(sweep.kind, 2)} that were cancelled or not solved before NOVA closed`}>
                         Solve the {sweep.counts.cancelled} not solved
                     </button>
                 )}
@@ -217,20 +231,32 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
                 <div className="result-status is-warn sweep-confirm" role="alert">
                     <span>
                         Delete {sweep.name}?
-                        {sweep.counts.running + sweep.counts.queued > 0 ? ' Its ambients still to solve are cancelled.' : ''}
+                        {sweep.counts.running + sweep.counts.queued > 0 ? ` Its ${pointWord(sweep.kind, 2)} still to solve are cancelled.` : ''}
                     </span>
                     <span className="toolbar-spacer" />
                     <button type="button" className="button strip-action" onClick={() => setConfirming(false)}>Keep it</button>
                     <button type="button" className="button button-danger strip-action" onClick={remove}>Delete</button>
                 </div>
             )}
-            <PlumePlot sweep={sweep} mode={mode} />
+            {throttle ? (
+                <div className="plume-sweep-plots">
+                    <PlumePlot sweep={sweep} mode={mode} plot="boundaries" />
+                    <PlumePlot sweep={sweep} mode={mode} plot="performance" />
+                </div>
+            ) : (
+                <PlumePlot sweep={sweep} mode={mode} plot="boundaries" />
+            )}
+            {sweep.separation && (
+                <p className="plume-separation">
+                    <span>{sweep.separation.limit}</span> <span className="muted">{sweep.separation.bias}</span>
+                </p>
+            )}
             <div className="sweep-table-wrap">
                 <table className="result-table sweep-table plume-sweep-table">
                     <thead>
                         <tr>
                             <th className="sweep-index">#</th>
-                            <th>Ambient</th>
+                            <th>{throttle ? 'Power level' : 'Ambient'}</th>
                             <th>State</th>
                             {columns.map((column) => (
                                 <th key={column.key} className="sweep-number">
@@ -250,7 +276,7 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
                                 <Fragment key={point.index}>
                                     <tr className={`sweep-point is-${point.state === 'refused' ? 'failed' : point.state}`} title={reason}>
                                         <td className="sweep-index">{point.index + 1}</td>
-                                        <td className="result-value">{point.ambientText}</td>
+                                        <td className="result-value">{point.label}</td>
                                         <td className={`sweep-state is-${point.state === 'refused' ? 'failed' : point.state}`}>
                                             {stateText[point.state]}
                                             {point.trustworthy === false ? ', past the bound' : ''}
@@ -276,12 +302,23 @@ export function PlumeSweepView({ runId, mode, version, units, onNotify }: PlumeS
                     </tbody>
                 </table>
             </div>
-            <p className="muted sweep-foot">
-                Solved on run {runId}'s nozzle{sweep.lip ? `, whose lip static pressure is ${sweep.lip.pressureText}` : ''}; the lip
-                pressure ratio is that over the ambient. Every ambient is marched {list.nearReach} lip radii for its numbers
-                {sweep.reach > list.nearReach ? `, and ${sweep.reach} for the boundary drawn` : ''}. The jet diameter and the first
-                shock are the correlations', which the march cannot give.
-            </p>
+            {throttle ? (
+                <p className="muted sweep-foot">
+                    Solved on run {runId}'s nozzle against an ambient of {sweep.ambientText} held, each power level a fraction of
+                    rated chamber pressure with every pressure scaled by it and the gas at its rated state
+                    {sweep.lip ? `; the lip static pressure at rated power is ${sweep.lip.pressureText}` : ''}. Every power level is
+                    marched {list.nearReach} lip radii for its numbers{sweep.reach > list.nearReach ? `, and ${sweep.reach} for the
+                    boundary drawn` : ''}. The delivered thrust is the run's vacuum thrust scaled by the power level, less the
+                    ambient on the exit area. The jet diameter and the first shock are the correlations', which the march cannot give.
+                </p>
+            ) : (
+                <p className="muted sweep-foot">
+                    Solved on run {runId}'s nozzle{sweep.lip ? `, whose lip static pressure is ${sweep.lip.pressureText}` : ''}; the lip
+                    pressure ratio is that over the ambient. Every ambient is marched {list.nearReach} lip radii for its numbers
+                    {sweep.reach > list.nearReach ? `, and ${sweep.reach} for the boundary drawn` : ''}. The jet diameter and the first
+                    shock are the correlations', which the march cannot give.
+                </p>
+            )}
             {dialog}
         </div>
     );
