@@ -27,7 +27,9 @@ a typed folder alone, and a figure pops out into a browser window instead.
 `nova-gui` is the launcher pip writes from the gui-scripts entry point in pyproject.toml. It
 runs under pythonw, which has no console: sys.stdout and sys.stderr are None, and uvicorn's log
 setup fails on them. The launcher then writes both to `<temp>/NOVA/novaGui.log`, replaced at each
-launch, which also keeps the traceback of a failed start.
+launch, which also keeps the traceback of a failed start. Its first line, or the console's in the
+other modes, names what runs (novaGui.runningBuild): NOVA's version, the standalone build or the
+checkout's revision, and the Python and system it runs on.
 
 The GUI runs from a checkout, installed editable (`pip install -e .[web]`). A regular install
 carries the package without the checkout files it reads, and the launcher stops with a message
@@ -182,7 +184,10 @@ def main(argv: list | None = None) -> int:
     _consoleOrLogFile()
     options = parser.parse_args(argv)
 
-    from . import missingCheckoutFiles, repositoryRoot
+    from . import missingCheckoutFiles, repositoryRoot, runningBuild
+
+    # What runs, first in the log or on the console, so a report of a problem names it
+    print(runningBuild()['label'], flush = True)
 
     missing = missingCheckoutFiles()
     if missing:

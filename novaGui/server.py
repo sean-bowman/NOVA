@@ -7,7 +7,8 @@ The HTTP interface between the React front end and NOVA.
 
 Routes, all under /api:
 
-    GET  /health                    liveness, and whether the view machinery has loaded
+    GET  /health                    liveness, whether the view machinery has loaded, and what is running:
+                                    the version, the build and a checkout's revision (novaGui.runningBuild)
     GET  /brand/{name}              the plume mark (bannerDark, bannerLight) and the icon
     GET  /settings                  saved preferences (novaGui.settings: theme mode, form width)
     PUT  /settings                  save preferences
@@ -105,6 +106,7 @@ from . import assetFolder
 from . import design
 from . import outputs
 from . import report
+from . import runningBuild
 from . import schemaJson
 from . import sweeps
 from . import validationStatus
@@ -169,7 +171,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
     @app.get('/api/health')
     def health() -> dict:
 
-        return {'ok': True, 'viewsReady': views.ready()}
+        return {'ok': True, 'viewsReady': views.ready(), **runningBuild()}
 
     # -- Settings -- #
     @app.get('/api/settings')

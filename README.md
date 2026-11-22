@@ -119,7 +119,7 @@ python -m novaGui               # the same window, from a console
 python -m novaGui --browser     # the system browser instead
 ```
 
-The install writes the `nova-gui` launcher (`nova-gui.exe` on Windows) into the environment's `Scripts` or `bin` folder. It starts from any folder, and with no console it writes startup output to `%TEMP%\NOVA\novaGui.log`. The install has to be editable: the GUI reads the checkout's `docs/` and `src/NOVA/assets/` and exports to its `runs/` folder.
+The install writes the `nova-gui` launcher (`nova-gui.exe` on Windows) into the environment's `Scripts` or `bin` folder. It starts from any folder, and with no console it writes startup output to `%TEMP%\NOVA\novaGui.log`. The log's first line, and the About dialog, name what runs: NOVA's version, the checkout's revision and whether it has uncommitted changes, and the Python and system under it. The install has to be editable: the GUI reads the checkout's `docs/` and `src/NOVA/assets/` and exports to its `runs/` folder.
 
 ### Design
 

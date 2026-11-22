@@ -10,7 +10,8 @@
    The form's width is dragged on the splitter, or moved with the arrow keys on it, and is kept
    between launches with the theme mode (novaGui.settings). A double click returns it to the
    default. Below a narrow window width the form and the pane stack instead. A theme mode saved
-   from a popped-out figure window switches this window too.
+   from a popped-out figure window switches this window too. The About dialog names what runs: the
+   version, the standalone build or the checkout's revision, and the Python and system under it.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -29,7 +30,7 @@ import { useRunEvents } from './run/useRunEvents';
 import { useRuns } from './result/useRuns';
 import { SweepDialog } from './sweep/SweepDialog';
 import { useSweeps } from './sweep/useSweeps';
-import type { Config, FormState, Mode, RunEntry, RunSummary, Schema, Submitted, Sweep } from './types';
+import type { Config, FormState, Health, Mode, RunEntry, RunSummary, Schema, Submitted, Sweep } from './types';
 
 const defaultFormWidth = 540;   // [px]
 const minFormWidth = 380;       // [px]
@@ -59,6 +60,7 @@ export function App() {
     const [stagesOpen, setStagesOpen] = useState(false);
     const [exportOpen, setExportOpen] = useState(false);
     const [aboutOpen, setAboutOpen] = useState(false);
+    const [build, setBuild] = useState<Health | null>(null);
     const [sweepOpen, setSweepOpen] = useState(false);
     const [focusSweep, setFocusSweep] = useState<{ sweepId: number; at: number } | null>(null);
     const [confirmProblems, setConfirmProblems] = useState<string[] | null>(null);
@@ -87,6 +89,7 @@ export function App() {
             })
             .catch((error: Error) => setLoadError(error.message));
         api.settings().then((saved) => saved.formWidth && setFormWidth(saved.formWidth)).catch(() => undefined);
+        api.health().then(setBuild).catch(() => undefined);
     }, []);
 
     // -- The schema's predicates decide which rows show; ask the server as the config changes -- //
@@ -464,6 +467,7 @@ export function App() {
                 <div className="modal-scrim" onClick={() => setAboutOpen(false)}>
                     <div className="card modal" role="dialog" aria-label="About NOVA" onClick={(event) => event.stopPropagation()}>
                         <h2>NOVA -- Nozzle Optimization for Variable Applications</h2>
+                        {build && <p className="muted about-build">{build.label}</p>}
                         <p>
                             Web front end for the NOVA suite. Design a nozzle in the form on the left and Generate it:
                             the contour, cooling, heat transfer and plume pipeline runs in a worker process, and the
