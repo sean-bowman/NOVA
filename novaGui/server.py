@@ -9,6 +9,8 @@ Routes, all under /api:
 
     GET  /health                    liveness, whether the view machinery has loaded, and what is running:
                                     the version, the build and a checkout's revision (novaGui.runningBuild)
+    GET  /updates                   whether GitHub has a later release than the running version
+                                    (novaGui.updates); the one route that leaves the machine
     GET  /brand/{name}              the plume mark (bannerDark, bannerLight) and the icon
     GET  /settings                  saved preferences (novaGui.settings: theme mode, form width)
     PUT  /settings                  save preferences
@@ -109,6 +111,7 @@ from . import report
 from . import runningBuild
 from . import schemaJson
 from . import sweeps
+from . import updates
 from . import validationStatus
 from . import views
 from . import settings as guiSettings
@@ -172,6 +175,12 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
     def health() -> dict:
 
         return {'ok': True, 'viewsReady': views.ready(), **runningBuild()}
+
+    # -- Update check: GitHub is asked here alone, when the user asks -- #
+    @app.get('/api/updates')
+    def checkUpdates() -> dict:
+
+        return updates.checkForUpdate()
 
     # -- Settings -- #
     @app.get('/api/settings')

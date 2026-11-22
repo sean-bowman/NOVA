@@ -15,7 +15,7 @@ python -m novaGui               # the same window, from a console
 python -m novaGui --browser     # the system browser instead
 ```
 
-`nova-gui` is the launcher pip writes from the `gui-scripts` entry point in `pyproject.toml`: `nova-gui.exe` in the environment's `Scripts` folder on Windows. It starts from any folder, and Start or the taskbar can pin it. The window it opens takes a taskbar button of its own with NOVA's icon (`assets/nova.ico`). It runs under `pythonw`, so it writes its output to `%TEMP%\NOVA\novaGui.log`, replaced at each launch, and a failed start leaves its traceback there. The log's first line names what runs (`runningBuild`): NOVA's version, the standalone build or the checkout's revision as `git describe --always --dirty` gives it, and the Python and system under it. The About dialog shows the same line, and `GET /api/health` returns it with its parts.
+`nova-gui` is the launcher pip writes from the `gui-scripts` entry point in `pyproject.toml`: `nova-gui.exe` in the environment's `Scripts` folder on Windows. It starts from any folder, and Start or the taskbar can pin it. The window it opens takes a taskbar button of its own with NOVA's icon (`assets/nova.ico`). It runs under `pythonw`, so it writes its output to `%TEMP%\NOVA\novaGui.log`, replaced at each launch, and a failed start leaves its traceback there. The log's first line names what runs (`runningBuild`): NOVA's version, the standalone build or the checkout's revision as `git describe --always --dirty` gives it, and the Python and system under it. The About dialog shows the same line, and `GET /api/health` returns it with its parts. Its Check for updates asks GitHub for the latest release (`updates`) and links a later one's page; the app makes no other request off the machine.
 
 The install has to be editable. The GUI reads the checkout's validation summary (`docs/validationStatus.json`) and shipped configuration (`src/NOVA/assets/NOVANozzle.json`), and exports to its `runs/` folder. A regular install carries the package without them, and the launcher stops with a message naming what is missing.
 
@@ -83,6 +83,7 @@ Run events (log lines, progress, status, a running run's settled figures, its wa
 | `outputs` | The output categories, and listing, previewing (an STL read into vertices and triangles), copying and opening a run's files |
 | `themeColors`, `paletteCss` | The palette in both modes with its Matplotlib styling, and the stylesheet written from it |
 | `settings`, `backend` | The saved theme mode and form width, and lazy access to NOVA's figures and material store |
+| `updates` | The update check: GitHub's latest release against the running version, and the release page's link built from its tag |
 | `assets/` | The plume mark in each mode and the window icon |
 
 The schema's `showWhen` and `expandWhen` predicates are Python functions. The browser receives each row's static description with a `conditional` flag and posts its config to `/api/schema/state`, which returns the rows and sections to hide, the sections to open, and the cross-field problems with the rows they name.

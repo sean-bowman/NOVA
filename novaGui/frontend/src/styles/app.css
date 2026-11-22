@@ -1759,6 +1759,32 @@ select.input option {
     user-select: text;
 }
 
+/* The About dialog's update check: the button, GitHub's answer, and a later release's link */
+.update-check {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+}
+
+.modal p.update-answer {
+    margin-top: 8px;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
+
+.update-release {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    font-size: 12px;
+}
+
+.update-release a.button {
+    flex: none;
+    text-decoration: none;
+}
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;

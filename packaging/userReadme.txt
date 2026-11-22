@@ -30,6 +30,13 @@ NOVA computes coolant properties with CoolProp, which is included. If REFPROP is
 machine (in %USERPROFILE%\REFPROP or C:\Program Files (x86)\REFPROP), NOVA uses it instead.
 REFPROP is licensed separately and is not included.
 
+Updating
+--------
+The About button, top right, has Check for updates. It asks GitHub for the latest release, the one
+time NOVA goes online, and links to a newer one. To install it, close NOVA and unzip the new
+release in place of this folder. Finished runs, exports and settings live outside the folder and
+are kept.
+
 Reporting a problem
 -------------------
 The About button, top right, names the version running; the startup log starts with the same line.

@@ -361,6 +361,19 @@ export interface Health {
     label: string;                // the line naming all of it, as the launcher's log starts
 }
 
+export type UpdateStatusName = 'newer' | 'current' | 'ahead' | 'none' | 'unreachable' | 'refused' | 'unreadable';
+
+/** GitHub's latest release against the running version (novaGui.updates). */
+export interface UpdateCheck {
+    status: UpdateStatusName;
+    running: string;
+    build: 'standalone' | 'checkout';
+    latest: string;               // the latest release's version, or ''
+    url: string;                  // its release page, or ''
+    published: string;            // its date, YYYY-MM-DD, or ''
+    detail: string;               // why GitHub gave no answer to compare, or ''
+}
+
 export interface ResultRow {
     label: string;
     cells: string[];
