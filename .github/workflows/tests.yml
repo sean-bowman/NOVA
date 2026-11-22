@@ -1,0 +1,48 @@
+# The test suite on Windows, on every pull request and every push to main, so what a version tag
+# releases (release.yml) has passed it. The runner has no REFPROP, so NOVA's fluid properties come
+# from CoolProp and the tests that need REFPROP skip. The tests that read the local showcase runs
+# skip too: tests/testGuiBrowser.py and parts of testWebServer.py and testRunReport.py.
+# tests/regressionHarness.py is not part of the suite and stays local, since its baselines are one
+# machine's answer bit for bit.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request or branch cancels the run it replaces
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  suite:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      # The version the development environment runs, as release.yml builds with
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.10'
+          cache: pip
+          cache-dependency-path: |
+            pyproject.toml
+            packaging/constraints.txt
+            tests/requirements.txt
+
+      # Editable, as the development install is: the GUI reads the checkout's docs/ and assets.
+      # The refprop extra is ctREFPROP, NIST's wrapper, as the release carries it; without REFPROP
+      # itself it stays unused.
+      - name: Install NOVA and the test tools
+        run: python -m pip install -e ".[web,refprop]" -r tests/requirements.txt -c packaging/constraints.txt
+
+      # -ra lists every skip with its reason, so a test that skips on the runner says why
+      - name: Run the test suite
+        run: python -m pytest -ra --durations=25

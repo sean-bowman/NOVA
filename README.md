@@ -648,6 +648,8 @@ Program option flags (`plotsEnabled`, `export`, `makeCoolingChannels`, `makeInle
 python -m pytest tests/ -v
 ```
 
+The Tests workflow ([.github/workflows/tests.yml](.github/workflows/tests.yml)) runs the suite on a Windows runner for every pull request and every push to main, with NOVA's dependencies pinned by `packaging/constraints.txt` and the test tools by `tests/requirements.txt`. The runner has no REFPROP, so fluid properties come from CoolProp there and the tests that need REFPROP skip; the tests that read the local showcase runs skip as well. A version tag is pushed only once the merge commit has passed it ([docs/releasing.md](docs/releasing.md)).
+
 The suite never opens a window. `tests/conftest.py` sets `NOVA_HEADLESS` before anything is imported, which selects a non-interactive matplotlib backend and stops plotly launching a browser tab per figure, and it closes any figures a test leaves behind. Nothing is suppressed except the display: every figure is still built and every file still written.
 
 The same switch is available to any run, which is what to reach for when iterating on a feature rather than clicking through a dozen windows each time:

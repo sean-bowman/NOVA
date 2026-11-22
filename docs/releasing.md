@@ -6,7 +6,7 @@ A release is NOVA's GUI frozen into a Windows folder, `NOVA.exe` with its suppor
 
 1. Set the version in `pyproject.toml`, `src/NOVA/__init__.py` and `novaGui/__init__.py`. `tests/testStandaloneBuild.py` holds the three equal.
 2. Merge the change to main.
-3. Tag the merge commit with the version and push the tag:
+3. Once the Tests workflow ([.github/workflows/tests.yml](../.github/workflows/tests.yml)) has passed on the merge commit, tag it with the version and push the tag:
 
    ```bash
    git tag v0.2.0
