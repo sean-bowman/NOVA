@@ -596,3 +596,43 @@ def testAPlumeSweepSolvesTheRunsPlumeAndGivesTheReasonForARefusal(window, served
     window.locator('.sweep-confirm').get_by_role('button', name = 'Delete').click()
     window.locator('.plume-sweep-empty').wait_for()
     assert app.state.session.plumeSweeps.sweepsOf(3) == []
+
+def testAThrottleSweepSolvesPowerLevelsAtOneAmbientAndMarksWhereTheNozzleSeparates(window, served):
+    '''
+    A throttle sweep over the shipped nozzle's run: the dialog holds the ambient that puts rated
+    power at an exit pressure ratio of 2, gives each power level's exit pressure ratio and the power
+    level the nozzle separates below, and the sweep solves rated power and refuses 19 percent, below
+    the limit. The view draws the boundaries and the performance against power level side by side,
+    and states the limit with the frozen gas state's bias on it.
+    '''
+    app, _ = served
+    lip = plumeSweeps.lipState(app.state.session.record(3).nozzle())
+    heldKpa = float(f'{lip["exitPressure"] / 2.0 / 1e3:.3g}')
+    window.select_option('select[aria-label="View"]', 'plumeSweep')
+    window.get_by_role('button', name = 'New plume sweep').click()
+    dialog = window.get_by_role('dialog', name = 'Plume sweep')
+    dialog.wait_for()
+    dialog.get_by_role('button', name = 'Power levels').click()
+    dialog.locator('.plume-limit-note').wait_for()
+    assert dialog.locator('input[aria-label="Ambient pressure held"]').input_value() == f'{heldKpa:g}'
+    dialog.get_by_role('button', name = 'List').click()
+    dialog.locator('input[aria-label="Power level values"]').fill('100, 19')
+    ratios = [fraction * lip['exitPressure'] / (heldKpa * 1e3) for fraction in (1.0, 0.19)]
+    assert dialog.locator('.plume-ratios').inner_text() == f'exit pressure ratio {ratios[0]:.2f}, {ratios[1]:.2f}'
+    separates = 0.4 * heldKpa * 1e3 / lip['exitPressure']
+    assert f'separates below {float(f"{100 * separates:.3g}"):g} % power' in dialog.locator('.plume-limit-note').inner_text()
+    dialog.get_by_role('button', name = 'Solve 2 power levels').click()
+
+    window.wait_for_function('[...document.querySelectorAll(".plume-sweep-table .sweep-state")]'
+                             '.map((cell) => cell.textContent).join() === "solved,refused"', timeout = 120000)
+    assert 'Summerfield separation criterion' in window.locator('.plume-sweep-table .sweep-error').inner_text()
+    assert window.locator('.plume-sweep-table thead th').nth(1).text_content() == 'Power level'
+    window.wait_for_function('document.querySelector(".plume-boundaries-plot .plotly-host")?.data?.length === 2', timeout = drawMs)
+    window.wait_for_function('document.querySelector(".plume-performance-plot .plotly-host")?.data?.length === 2', timeout = drawMs)
+    separation = window.locator('.plume-separation').inner_text()
+    assert 'The nozzle separates below' in separation and 'safe side' in separation
+
+    window.locator('.plume-sweep-view .sweep-toolbar').get_by_role('button', name = 'Delete').click()
+    window.locator('.sweep-confirm').get_by_role('button', name = 'Delete').click()
+    window.locator('.plume-sweep-empty').wait_for()
+    assert app.state.session.plumeSweeps.sweepsOf(3) == []

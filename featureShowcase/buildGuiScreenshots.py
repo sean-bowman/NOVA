@@ -9,8 +9,8 @@ front end at the desktop window's size. The script presses Generate on the form 
 with, which is the shipped nozzle, photographs the stage stepper and the stage list while the
 coolant circuit iterates, with the run's contour already in the result pane, and once the run ends
 steps the result pane through its views, solves the run's plume over the plume sweep dialog's first
-range of ambients, and photographs the results table, the validation of its peak hot wall and the
-export dialog with a preview.
+range of ambients and then over its first range of power levels, and photographs the results table,
+the validation of its peak hot wall and the export dialog with a preview.
 It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
 of a run drawn over its baseline, the table beside it, the second run's details with a name and a
 note, its report against the first, and the grid of views along the nozzle axis in a popped-out window. Last it queues a trade
@@ -264,6 +264,21 @@ def photograph(page: Page, base: str, storeFolder: str) -> None:
         close.click()
     page.wait_for_timeout(1500)
     capture(page, 'plumeSweep')
+
+    # -- The run's plume over the dialog's first range of power levels, at the ambient it holds -- #
+    page.get_by_role('button', name = 'New plume sweep').click()
+    page.get_by_role('dialog', name = 'Plume sweep').get_by_role('button', name = 'Power levels').click()
+    page.wait_for_selector('.plume-sweep-dialog .plume-limit-note')
+    page.get_by_role('button', name = re.compile('^Solve')).click()
+    page.wait_for_selector('.plume-sweep-dialog', state = 'detached')
+    page.wait_for_function("(() => { const text = document.querySelector('.plume-sweep-view .sweep-progress')?.textContent;"
+                           " return !!text && !text.includes('to solve') && text.includes('16 of 16'); })()",
+                           timeout = runTimeoutMs)
+    page.wait_for_selector('.plume-performance-plot .main-svg', timeout = figureTimeoutMs)
+    for close in page.locator('.toast-close').all():
+        close.click()
+    page.wait_for_timeout(1500)
+    capture(page, 'plumeThrottle')
     showView(page, 'contour', 500)
 
     # -- The results table, and the export dialog previewing the hot wall surface -- #

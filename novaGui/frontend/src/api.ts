@@ -76,15 +76,17 @@ export const api = {
     sweepFigure: (sweepId: number, number: string, mode: Mode) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(`/api/sweeps/${sweepId}/figure${query({ number, mode })}`),
     plumeSweeps: (runId: number) => request<PlumeSweepList>(`/api/runs/${runId}/plume-sweeps`),
-    plumeLip: (runId: number) => request<{ pressure: number | null; reason: string }>(`/api/runs/${runId}/plume-lip`),
+    plumeLip: (runId: number) =>
+        request<{ pressure: number | null; exitPressure: number | null; reason: string }>(`/api/runs/${runId}/plume-lip`),
     addPlumeSweep: (runId: number, sweep: PlumeSweepRequest) =>
         request<PlumeSweep>(`/api/runs/${runId}/plume-sweeps`, jsonBody('POST', sweep)),
     resumePlumeSweep: (runId: number, number: number) =>
         request<{ queued: number }>(`/api/runs/${runId}/plume-sweeps/${number}/resume`, { method: 'POST' }),
     deletePlumeSweep: (runId: number, number: number) =>
         request<{ deleted: number }>(`/api/runs/${runId}/plume-sweeps/${number}`, { method: 'DELETE' }),
-    plumeSweepFigure: (runId: number, number: number, mode: Mode) =>
-        request<{ data: object[]; layout: Record<string, unknown> }>(`/api/runs/${runId}/plume-sweeps/${number}/figure${query({ mode })}`),
+    plumeSweepFigure: (runId: number, number: number, mode: Mode, plot: 'boundaries' | 'performance' = 'boundaries') =>
+        request<{ data: object[]; layout: Record<string, unknown> }>(
+            `/api/runs/${runId}/plume-sweeps/${number}/figure${query({ mode, plot })}`),
     views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),
     interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null, revision?: number) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(
