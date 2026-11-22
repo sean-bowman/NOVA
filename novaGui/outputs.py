@@ -11,7 +11,8 @@ folder (`<store>/run<id>/`, novaGui.runStore): the outputs in `<runName>Outputs/
 the run was given beside it as `<runName>RunConfig.json`. Nothing reaches the output folder until an export copies the chosen
 files into `<output folder>/<runName>Outputs/`. The Export dialog lists the outputs by category
 (`outputCategories`, `categoryOf`, which files an output in one by its name); the default output
-folder is `runs/` at the repository root.
+folder is `runs/` at the repository root, or in the standalone build, whose own folder may not be
+writable, `NOVA` in the user's Documents folder.
 
 The browser names files by their base name, and only names the run listed are copied, opened or
 previewed, so a request cannot reach a file outside the run's own folder.
@@ -167,10 +168,36 @@ def categories() -> list:
 
     return [{'key': key, 'name': name, 'description': description} for key, name, description in outputCategories]
 
+def _documentsFolder() -> str:
+
+    '''
+
+    The user's Documents folder. On Windows the shell's own answer, which follows a Documents folder
+    moved or redirected (to OneDrive, say); elsewhere, or when the shell gives none, ~/Documents.
+
+    '''
+
+    if sys.platform == 'win32':
+        import ctypes
+
+        buffer = ctypes.create_unicode_buffer(260)
+        # CSIDL_PERSONAL (5) is the Documents folder; 0 is S_OK
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buffer) == 0 and buffer.value:
+            return buffer.value
+    return os.path.join(os.path.expanduser('~'), 'Documents')
+
 def defaultBaseDir() -> str:
 
-    '''The runs folder at the repository root, so exported output collects in one place.'''
+    '''
 
+    Where exports go unless the Export dialog names a folder: the runs folder at the repository
+    root, so exported output collects in one place. The standalone build's own folder may not be
+    writable, so it exports to NOVA in the user's Documents folder.
+
+    '''
+
+    if getattr(sys, 'frozen', False):
+        return os.path.join(_documentsFolder(), 'NOVA')
     return os.path.join(repositoryRoot, 'runs')
 
 def safeRunName(name: str) -> str:

@@ -26,6 +26,7 @@ NOVA is a computational toolset for generating and analyzing rocket nozzle geome
   - [What NOVA Is](#what-nova-is)
   - [Design Ethos](#design-ethos)
   - [Contents](#contents)
+  - [Download: the desktop app](#download-the-desktop-app)
   - [Installation](#installation)
   - [Quickstart: API](#quickstart-api)
   - [Quickstart: GUI](#quickstart-gui)
@@ -57,6 +58,10 @@ NOVA is a computational toolset for generating and analyzing rocket nozzle geome
   - [Theory](#theory)
 
 ---
+
+## Download: the desktop app
+
+Windows users who want the GUI alone can run it without Python. Each [release](https://github.com/sean-bowman/NOVA/releases) carries `NOVA-<version>-win64.zip`: unzip it and run `NOVA\NOVA.exe`. Releases are not code-signed, so the first launch may show "Windows protected your PC"; **More info**, then **Run anyway**, starts it. The [GUI quickstart](#quickstart-gui) describes the window, and `README.txt` in the folder says where the app keeps its runs, exports and log. [docs/releasing.md](docs/releasing.md) covers how a release is built.
 
 ## Installation
 

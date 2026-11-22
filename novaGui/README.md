@@ -19,6 +19,10 @@ python -m novaGui --browser     # the system browser instead
 
 The install has to be editable. The GUI reads the checkout's validation summary (`docs/validationStatus.json`) and shipped configuration (`src/NOVA/assets/NOVANozzle.json`), and exports to its `runs/` folder. A regular install carries the package without them, and the launcher stops with a message naming what is missing.
 
+## Desktop app
+
+The GUI also ships as a Windows desktop app for users without Python: a folder holding `NOVA.exe`, frozen by PyInstaller from a version tag and attached to a GitHub Release. The frozen GUI exports to `Documents\NOVA` and leaves out the app id, since `NOVA.exe` carries the icon itself. [docs/releasing.md](../docs/releasing.md) covers the build, its smoke test and the release workflow.
+
 ## Build
 
 The server serves the built front end from `novaGui/frontend/dist/`, which the repository carries, so a checkout runs the GUI without Node. Node is needed only to change the front end: after any change under `frontend/` (its sources, `index.html`, the package files, the TypeScript or Vite configuration), rebuild and commit `dist/` with the change:
