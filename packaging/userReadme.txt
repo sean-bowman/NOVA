@@ -30,4 +30,10 @@ NOVA computes coolant properties with CoolProp, which is included. If REFPROP is
 machine (in %USERPROFILE%\REFPROP or C:\Program Files (x86)\REFPROP), NOVA uses it instead.
 REFPROP is licensed separately and is not included.
 
+Reporting a problem
+-------------------
+The About button, top right, names the version running; the startup log starts with the same line.
+Put that line in the report, with the startup log if NOVA did not open:
+https://github.com/sean-bowman/NOVA/issues
+
 Source, documentation and validation records: https://github.com/sean-bowman/NOVA

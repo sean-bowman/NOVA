@@ -15,7 +15,7 @@ python -m novaGui               # the same window, from a console
 python -m novaGui --browser     # the system browser instead
 ```
 
-`nova-gui` is the launcher pip writes from the `gui-scripts` entry point in `pyproject.toml`: `nova-gui.exe` in the environment's `Scripts` folder on Windows. It starts from any folder, and Start or the taskbar can pin it. The window it opens takes a taskbar button of its own with NOVA's icon (`assets/nova.ico`). It runs under `pythonw`, so it writes its output to `%TEMP%\NOVA\novaGui.log`, replaced at each launch, and a failed start leaves its traceback there.
+`nova-gui` is the launcher pip writes from the `gui-scripts` entry point in `pyproject.toml`: `nova-gui.exe` in the environment's `Scripts` folder on Windows. It starts from any folder, and Start or the taskbar can pin it. The window it opens takes a taskbar button of its own with NOVA's icon (`assets/nova.ico`). It runs under `pythonw`, so it writes its output to `%TEMP%\NOVA\novaGui.log`, replaced at each launch, and a failed start leaves its traceback there. The log's first line names what runs (`runningBuild`): NOVA's version, the standalone build or the checkout's revision as `git describe --always --dirty` gives it, and the Python and system under it. The About dialog shows the same line, and `GET /api/health` returns it with its parts.
 
 The install has to be editable. The GUI reads the checkout's validation summary (`docs/validationStatus.json`) and shipped configuration (`src/NOVA/assets/NOVANozzle.json`), and exports to its `runs/` folder. A regular install carries the package without them, and the launcher stops with a message naming what is missing.
 

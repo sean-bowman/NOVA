@@ -6,6 +6,8 @@ Runs the built NOVA.exe from a working folder outside the checkout and drives it
 as the window would:
 
     the server starts (--api, on a free port) and its views are ready
+    it names what runs, the standalone build at the checkout's version, in its health route and as
+    the first line of its log
     the Design form's schema loads, with the shipped configuration behind it
     every validation model's passages, read from the bundled records, match the checkout's
     the shipped nozzle runs to the end in a worker process (NOVA.exe started again by spawn)
@@ -41,6 +43,7 @@ import urllib.request
 root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, root)
 
+import novaGui
 from novaGui import validationStatus
 
 runTimeoutSec = 900.0
@@ -85,6 +88,14 @@ def _check(condition: bool, message: str) -> None:
             with open(log, encoding = 'utf-8', errors = 'replace') as handle:
                 print(f'--- end of {log} ---', *handle.readlines()[-40:], sep = '', flush = True)
         raise SystemExit(1)
+
+def _firstLogLine() -> str:
+
+    log = os.path.join(tempfile.gettempdir(), 'NOVA', 'novaGui.log')
+    if not os.path.isfile(log):
+        return ''
+    with open(log, encoding = 'utf-8', errors = 'replace') as handle:
+        return handle.readline().rstrip('\n')
 
 def _waitForServer(client: Client, process: subprocess.Popen, timeoutSec: float = 180.0) -> dict:
 
@@ -147,7 +158,12 @@ def main(argv: list) -> int:
                                env = {**os.environ, 'NOVA_RUN_STORE': store})
     try:
         started = time.monotonic()
-        _check(bool(_waitForServer(client, process)), f'the server starts ({time.monotonic() - started:.1f} s)')
+        health = _waitForServer(client, process)
+        _check(bool(health), f'the server starts ({time.monotonic() - started:.1f} s)')
+
+        named = (health.get('build') == 'standalone' and health.get('version') == novaGui.__version__
+                 and _firstLogLine() == health.get('label'))
+        _check(named, f'the exe names what runs, in its health route and first log line: {health.get("label")}')
 
         schema = client.json('/schema')
         _check(bool(schema), 'the Design form schema loads')

@@ -351,6 +351,16 @@ export interface Settings {
     formWidth: number | null;     // [px] the Design form's width beside the result pane
 }
 
+/** The server's liveness and what is running (novaGui.runningBuild). */
+export interface Health {
+    ok: boolean;
+    viewsReady: boolean;
+    version: string;
+    build: 'standalone' | 'checkout';
+    revision: string;             // the checkout's `git describe`; '' for the standalone build
+    label: string;                // the line naming all of it, as the launcher's log starts
+}
+
 export interface ResultRow {
     label: string;
     cells: string[];

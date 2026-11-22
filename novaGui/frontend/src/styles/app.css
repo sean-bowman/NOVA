@@ -1751,6 +1751,14 @@ select.input option {
     margin: 12px 0 0;
 }
 
+/* What runs, under the About dialog's title; selectable, to paste into a report of a problem */
+.modal p.about-build {
+    margin-top: 6px;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+    user-select: text;
+}
+
 .modal-actions {
     display: flex;
     justify-content: flex-end;
