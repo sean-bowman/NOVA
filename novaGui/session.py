@@ -48,6 +48,11 @@ are the baseline. A sweep whose window closed with points still to run lists the
 can queue them again. The worker records each finished run's headline numbers
 (novaGui.analysis.headline), so a sweep's table reads them without unpickling its runs.
 
+A kept run's plume sweeps (novaGui.plumeSweeps), its plume solved over a list of ambients on the
+run's own nozzle, live in the session's plume queue (novaGui.plumeQueue), which solves them apart
+from the run queue. They are kept in the run's folder and go with the run; a run with a plume
+sweep stays however many runs follow it, as a named run does.
+
 The warnings a run raises (novaGui.runner.warningRelay) are collected as it goes, one entry per
 distinct warning with the number of times it came, and kept with the run, so the browser can count
 them in the run bar and list them for whichever run it shows.
@@ -87,6 +92,8 @@ Events, as JSON objects:
     {'type': 'queue', 'queue': [{'queueId', 'label', 'runName', 'sweepId', 'point'}]}
                                                     the runs waiting their turn, in order
     {'type': 'sweeps'}                              a sweep was added or deleted, or a point's state moved
+    {'type': 'plumeSweeps', 'runId': int}           a run's plume sweep was added or deleted, or a point's
+                                                    state moved (novaGui.plumeQueue)
     {'type': 'settings', ...}                       saved preferences changed (novaGui.settings)
     {'type': 'snapshot', ...}                       sent once on connect: the whole state
 
@@ -109,6 +116,7 @@ import threading
 import time
 
 # Local imports
+from .plumeQueue import PlumeQueue
 from .progress import RunProgress
 from . import runStore
 from . import sweeps as sweepModel
@@ -326,6 +334,7 @@ class RunSession:
 
         self._subscribers = set()              # (loop, asyncio.Queue) pairs
         self._subscriberLock = threading.Lock()
+        self.plumeSweeps = PlumeQueue(store, self._publish, onSettled = self._resave)
 
         # The runs the store kept from earlier launches, after the folders of runs that never finished
         self.store = store
@@ -342,6 +351,7 @@ class RunSession:
             for record in self.runs.values():
                 if record.sweep is not None and record.sweep['sweepId'] not in self.sweeps:
                     record.sweep = None
+            self.plumeSweeps.load(list(self.runs))
 
         os.makedirs(stagingRoot(), exist_ok = True)
         atexit.register(self.shutdown)
@@ -413,6 +423,20 @@ class RunSession:
         self.sweeps[sweep['sweepId']] = sweep
         if stopped:
             self.store.saveSweep(sweep)
+
+    def _resave(self, runId: int) -> None:
+
+        '''Save a kept run's record again, so its size counts a plume sweep's file.'''
+
+        with self._lock:
+            record = self.runs.get(runId)
+        if record is None or self.store is None or record.folder is None:
+            return
+        try:
+            record.bytes = self.store.save(record.runId, record.stored())
+        except OSError:
+            return
+        self._publish({'type': 'runs', 'baseline': self.baseline})
 
     def _queueEvent(self) -> None:
 
@@ -965,7 +989,7 @@ class RunSession:
         the store's. Runs then drop out, except the baseline: with a store, the unnamed runs past
         its limits (novaGui.runStore.pruned), oldest first; without one, the oldest past `keptRuns`.
         A run that drops out takes its folder with it. A sweep's runs stay, as named runs do, until
-        the sweep is deleted.
+        the sweep is deleted, and so does a run with a plume sweep.
 
         '''
 
@@ -978,12 +1002,13 @@ class RunSession:
             if self.result is None or not self.result.ok or self.result.runId <= record.runId:
                 self.result = record
             if self.store is not None:
-                kept = [(runId, bool(entry.title) or entry.sweep is not None, entry.bytes)
+                kept = [(runId, bool(entry.title) or entry.sweep is not None or self.plumeSweeps.holds(runId), entry.bytes)
                         for runId, entry in self.runs.items()]
                 for runId in runStore.pruned(kept, self.baseline, record.runId):
                     dropped.append(self.runs.pop(runId))
             else:
-                loose = [runId for runId, entry in self.runs.items() if runId != self.baseline and entry.sweep is None]
+                loose = [runId for runId, entry in self.runs.items()
+                         if runId != self.baseline and entry.sweep is None and not self.plumeSweeps.holds(runId)]
                 dropped += [self.runs.pop(runId) for runId in loose[:max(0, len(loose) - keptRuns)]]
             self._drawn = [kept for kept in self._drawn if kept not in dropped]
         for old in dropped:
@@ -1048,7 +1073,7 @@ class RunSession:
 
     def forget(self, runId: int) -> None:
 
-        '''Drop a run from the list without touching its files.'''
+        '''Drop a run from the list without touching its files; its plume sweeps go, the one solving cancelled.'''
 
         with self._lock:
             record = self.runs.pop(runId, None)
@@ -1057,6 +1082,7 @@ class RunSession:
             if self.result is not None and self.result.runId == runId:
                 self.result = next(reversed(self.runs.values()), None)
             self._drawn = [kept for kept in self._drawn if kept is not record]
+        self.plumeSweeps.dropRun(runId)
 
     def record(self, runId: int | None = None) -> RunRecord | None:
 
@@ -1211,6 +1237,7 @@ class RunSession:
             self.queue.clear()
         with self._storeLock:
             pass
+        self.plumeSweeps.shutdown()
         process = self._process
         if process is not None and process.is_alive():
             self._cancelled = True

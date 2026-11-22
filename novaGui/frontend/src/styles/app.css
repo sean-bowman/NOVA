@@ -2703,3 +2703,51 @@ select.input option {
     margin: 8px 0 0;
     font-size: 12px;
 }
+
+/* -- The plume sweep view, under the figure toolbar -- */
+.plume-sweep-view {
+    padding: 10px 0 0;
+}
+
+.plume-sweep-empty {
+    align-items: flex-start;
+    gap: 10px;
+    padding: 18px 4px;
+}
+
+.plume-sweep-empty p {
+    max-width: 640px;
+    margin: 0;
+}
+
+.plume-sweep-view .sweep-toolbar .view-select {
+    min-width: 260px;
+}
+
+.plume-sweep-plot {
+    height: clamp(240px, 48%, 480px);
+}
+
+.sweep-error-row.is-cancelled td.sweep-error {
+    color: var(--text-muted);
+}
+
+.plume-lip {
+    margin-left: auto;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+.plume-ratios {
+    padding-left: 66px;
+}
+
+.plume-reach {
+    width: 80px;
+}
+
+.modal p.plume-reach-note {
+    margin: 0;
+    padding-left: 66px;
+    font-size: 12px;
+}

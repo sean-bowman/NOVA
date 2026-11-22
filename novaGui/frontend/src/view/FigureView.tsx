@@ -11,6 +11,10 @@
    While a run goes on, the circuit iteration view draws its coolant circuit's passes as each one
    ends, the latest solid and the earlier ones fading.
 
+   The plume sweep view is the run's plume over a list of ambients (PlumeSweepView), drawn by the
+   browser from the run's plume sweeps rather than as one of the run's figures; its plot saves
+   from plotly's own camera button.
+
    Save PNG saves the Matplotlib drawing of the view (novaGui.plotting, thermalPlots), the
    picture NOVA's saved figures use, at the pane's size. Pop out opens the figures in a window of
    their own, for a second monitor; it follows the latest run, or keeps to the run it was opened
@@ -22,10 +26,12 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { openWindow, saveBlob, staticFigure } from '../api';
 import { GridIcon, ImageIcon, PopOutIcon } from '../components/Icons';
+import type { UnitTable } from '../design/units';
 import type { RunChoice } from '../result/useRuns';
 import type { Mode, ViewIndex, ViewSpec } from '../types';
 import { AxialLink } from './axialLink';
 import { PlotlyFigure } from './PlotlyFigure';
+import { PlumeSweepView } from './PlumeSweepView';
 
 export type FigureLayout = 'single' | 'grid';
 
@@ -37,6 +43,7 @@ const coolingGrid = ['contour', 'jacketTemperatures', 'heatFlux', 'coolantFlow']
 const flowGrid = ['contour', 'nearWall', 'mach', 'pressure'];
 const threeD = new Set(['channelMesh', 'revolved', 'volute']);
 const liveView = 'circuitIterations';      // the view a running run draws again at each circuit pass
+const plumeSweepView = 'plumeSweep';       // the run's plume sweeps, drawn by PlumeSweepView
 
 interface FigureViewProps {
     index: ViewIndex | null;
@@ -46,6 +53,8 @@ interface FigureViewProps {
     layout: FigureLayout;
     runChoice: RunChoice;            // what a popped-out window follows
     liveRevision?: number;           // the running run's circuit passes so far, for its live view
+    plumeVersion?: number;           // moves when one of the run's plume sweeps changes
+    units?: UnitTable | null;        // the form's units, which a new plume sweep is entered in
     initialGrid?: string[];
     onSelect: (key: string) => void;
     onLayout: (layout: FigureLayout) => void;
@@ -60,7 +69,7 @@ export function gridFor(available: Set<string>, kept: string[]): string[] {
         if (chosen.length >= gridSize) {
             break;
         }
-        if (available.has(key) && !chosen.includes(key) && !threeD.has(key)) {
+        if (available.has(key) && !chosen.includes(key) && !threeD.has(key) && key !== plumeSweepView) {
             chosen.push(key);
         }
     }
@@ -100,8 +109,8 @@ function ViewSelect({ views, available, value, onChange, compact = false }: {
     );
 }
 
-export function FigureView({ index, mode, compare, selected, layout, runChoice, initialGrid, liveRevision, onSelect,
-                             onLayout, onNotify }: FigureViewProps) {
+export function FigureView({ index, mode, compare, selected, layout, runChoice, initialGrid, liveRevision, plumeVersion = 0,
+                             units = null, onSelect, onLayout, onNotify }: FigureViewProps) {
     const [gridKeys, setGridKeys] = useState<string[]>(initialGrid ?? []);
     const [saving, setSaving] = useState('');
     const link = useMemo(() => new AxialLink(), []);
@@ -162,6 +171,9 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
         if (!spec || !available.has(key)) {
             return <div className="figure-pane"><div className="figure-overlay figure-message">{spec?.label ?? 'This view'} was not produced by this run.</div></div>;
         }
+        if (key === plumeSweepView) {
+            return <PlumeSweepView key={runId} runId={runId} mode={mode} version={plumeVersion} units={units} onNotify={onNotify} />;
+        }
         const against = compareFor(key);
         const revision = partial && key === liveView ? liveRevision : undefined;
         return <PlotlyFigure key={`${key}-${runId}-${partial}-${against}`} viewKey={key} mode={mode} runId={runId}
@@ -170,6 +182,7 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
 
     const spec = specOf(selected);
     const produced = spec !== undefined && available.has(spec.key);
+    const drawnHere = selected === plumeSweepView;     // no Matplotlib drawing to save
 
     return (
         <div className="figure-view">
@@ -187,7 +200,8 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
                     </button>
                 </div>
                 {layout === 'single' && (
-                    <button type="button" className="button" disabled={!produced || partial || saving !== ''} title={savingTitle}
+                    <button type="button" className="button" disabled={!produced || partial || drawnHere || saving !== ''}
+                            title={drawnHere ? 'The plume sweep saves its plot from the camera button over it' : savingTitle}
                             onClick={(event) => save(selected, event.currentTarget.closest('.figure-view')?.querySelector('.figure-pane') as HTMLElement)}>
                         {saving ? <span className="spinner" /> : <ImageIcon />} Save PNG
                     </button>

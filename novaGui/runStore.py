@@ -29,6 +29,10 @@ A trade sweep (novaGui.sweeps) is kept as `sweeps/sweep<id>.json`: its name, the
 from, the fields it sweeps and each point's state and run. Sweep ids count up across launches the
 way run ids do, held in `store.json` as `lastSweepId`; creating the sweep's file claims its id.
 
+A plume sweep (novaGui.plumeSweeps) belongs to one run and is kept in that run's folder, as
+`plumeSweeps/plume<n>.json`, numbered within the run; it goes when the run's folder goes, and its
+size counts in the run's.
+
 The store lives in `%LOCALAPPDATA%\\NOVA\\runs` on Windows and `~/.local/share/NOVA/runs`
 elsewhere; NOVA_RUN_STORE names another folder. It is the user's own folder, and the server
 unpickles the Nozzle each run saved there, as it does a run of its own.
@@ -52,9 +56,11 @@ staleHours = 12.0                # [h] age at which an unfinished run's folder i
 recordName = 'run.json'
 indexName = 'store.json'
 sweepFolderName = 'sweeps'
+plumeFolderName = 'plumeSweeps'
 recordVersion = 1
 _runFolder = re.compile(r'^run(\d+)$')
 _sweepFile = re.compile(r'^sweep(\d+)\.json$')
+_plumeFile = re.compile(r'^plume(\d+)\.json$')
 
 def storeRoot() -> str:
 
@@ -384,6 +390,63 @@ class RunStore:
 
         try:
             os.remove(self._sweepPath(sweepId))
+        except OSError:
+            pass
+
+    def _plumePath(self, runId: int, number: int) -> str:
+
+        return os.path.join(self.folder(runId), plumeFolderName, f'plume{int(number)}.json')
+
+    def savePlumeSweep(self, runId: int, sweep: dict) -> None:
+
+        '''
+
+        Write a run's plume sweep to its file. A run whose folder is gone, deleted while the sweep
+        ran, is not made again.
+
+        Raises:
+        -------
+        FileNotFoundError : if the run's folder is gone
+
+        '''
+
+        if not os.path.isdir(self.folder(runId)):
+            raise FileNotFoundError(f'run {runId} has no folder in the store')
+        os.makedirs(os.path.join(self.folder(runId), plumeFolderName), exist_ok = True)
+        self._writeJson(self._plumePath(runId, sweep['number']), {**sweep, 'version': recordVersion})
+
+    def plumeSweeps(self, runId: int) -> list:
+
+        '''
+
+        A run's plume sweeps, in the order of their numbers. A file that does not read is passed
+        over.
+
+        '''
+
+        try:
+            entries = os.listdir(os.path.join(self.folder(runId), plumeFolderName))
+        except OSError:
+            return []
+        matches = [_plumeFile.match(entry) for entry in entries]
+        found = []
+        for number in sorted(int(match.group(1)) for match in matches if match):
+            try:
+                with open(self._plumePath(runId, number), encoding = 'utf-8') as handle:
+                    content = json.load(handle)
+            except (OSError, ValueError):
+                continue
+            if isinstance(content, dict) and isinstance(content.get('points'), list):
+                content.update(runId = int(runId), number = number)
+                found.append(content)
+        return found
+
+    def removePlumeSweep(self, runId: int, number: int) -> None:
+
+        '''Delete one of a run's plume sweeps.'''
+
+        try:
+            os.remove(self._plumePath(runId, number))
         except OSError:
             pass
 

@@ -8,7 +8,9 @@ finished run produced.
 
 Each view names the Matplotlib drawer's source line, the plotly builder that renders it
 interactively (`plotting.interactiveBuilders`), and the HTML file the run writes for it
-(`runner.htmlFiles`), where it has them.
+(`runner.htmlFiles`), where it has them. The plume sweep view has none of the three: the browser
+draws it from the run's plume sweeps (novaGui.plumeSweeps), and it is there for any run whose
+contour the plume march can continue.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -52,6 +54,7 @@ views = (
     ViewSpec('pressure', 'Flow', 'Pressure field', fieldSource, 'pressure', 'pressureField'),
     ViewSpec('temperature', 'Flow', 'Temperature field', fieldSource, 'temperature', 'temperatureField'),
     ViewSpec('plume', 'Plume', 'Plume', 'chamber, nozzle and marched plume as one field', 'plume', 'plume'),
+    ViewSpec('plumeSweep', 'Plume', 'Plume sweep', 'the plume marched at each ambient on this run\'s nozzle'),
     ViewSpec('circuit', 'Cooling', 'Coolant circuit', 'drawn from the jacket, extension and film solves'),
     ViewSpec('passes', 'Cooling', 'Coolant per pass', 'drawn from the coupled passes'),
     ViewSpec('circuitIterations', 'Cooling', 'Circuit iterations', 'every pass of the outer iteration, earlier ones fading'),
@@ -107,7 +110,7 @@ def availableViews(nozzle, outputs: dict) -> set:
 
     # The thermal drawers' accessors read the jacket, film and extension; imported here so the
     # catalog loads without the plotting stack
-    from . import thermalPlots
+    from . import plumeSweeps, thermalPlots
 
     def jacket():
         return thermalPlots.thermalResults(nozzle) is not None
@@ -119,6 +122,8 @@ def availableViews(nozzle, outputs: dict) -> set:
         'pressure':           lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
         'temperature':        lambda: len(getattr(nozzle, 'allXPoints', []) or []) > 0,
         'plume':              lambda: getattr(nozzle, 'nozzlePlumeStructure', None) is not None,
+        # Any run whose contour the march can continue, swept or not: the view is where a sweep starts
+        'plumeSweep':         lambda: 'reason' not in plumeSweeps.lipState(nozzle),
         'circuit':            jacket,
         'passes':             lambda: (getattr(nozzle, 'coolantCircuitSolution', None) is not None
                                        or getattr(nozzle, 'extensionCircuitSolution', None) is not None),

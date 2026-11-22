@@ -7,11 +7,13 @@ into the form, deleting a run, the baseline drawn under a line plot, the grid's 
 zoom along the nozzle axis, the headline numbers and a row that opens its figure, the section
 outline, a problem written under its field, the warnings of a run, the export previews, a figure
 popped out into its own window, compressed figure responses, a trade sweep's plot and table, the
-sweep dialog's request, the run queue, and the About dialog's build line and update check.
+sweep dialog's request, the run queue, the About dialog's build line and update check, and a plume
+sweep over a kept run.
 
 The sweep view reads the showcase runs as the points of a sweep the test lays out; the sweep
 dialog's request and the update check are caught before they reach the server, and the queue
-holds runs that never start, so no test makes a run or leaves the machine.
+holds runs that never start, so no test makes a run or leaves the machine. The plume sweep solves
+two ambients on the shipped nozzle's run in a worker process, about ten seconds.
 
 The GUI's server starts in this process, keeping three showcase cooling runs as if they had just
 run, so no run is made; Playwright's Chromium drives the built front end. The tests read the
@@ -41,7 +43,7 @@ if root not in sys.path:
 pytest.importorskip('fastapi')
 syncApi = pytest.importorskip('playwright.sync_api')
 
-from novaGui import analysis, configSchema, runningBuild, sweeps
+from novaGui import analysis, configSchema, plumeSweeps, runningBuild, sweeps
 from novaGui.__main__ import _freePort, _serve, _waitUntilStarted
 from novaGui.server import createApp, frontendDist
 from novaGui.session import QueuedRun, RunRecord, RunSession
@@ -561,3 +563,36 @@ def testTheAboutDialogNamesWhatRunsAndChecksForUpdates(window):
     window.wait_for_function('document.querySelector(".update-answer")?.textContent.includes("No release")')
     assert dialog.locator('.update-release').count() == 0
     assert answers == []
+
+def testAPlumeSweepSolvesTheRunsPlumeAndGivesTheReasonForARefusal(window, served):
+    '''
+    A plume sweep over the shipped nozzle's run: the dialog gives each ambient's lip pressure ratio,
+    the sweep solves in a worker process on the run's own nozzle, the plot draws the solved boundary
+    against the wall, and sea level, where the nozzle separates, is refused with the march's reason.
+    Deleting the sweep leaves the view empty again.
+    '''
+    app, _ = served
+    lip = plumeSweeps.lipState(app.state.session.record(3).nozzle())
+    solvedKpa = float(f'{lip["pressure"] / 1.5 / 1e3:.4g}')
+    window.select_option('select[aria-label="View"]', 'plumeSweep')
+    window.get_by_role('button', name = 'New plume sweep').click()
+    dialog = window.get_by_role('dialog', name = 'Plume sweep')
+    dialog.wait_for()
+    dialog.locator('.plume-ratios').wait_for()
+    dialog.get_by_role('button', name = 'List').click()
+    dialog.locator('input[aria-label="Ambient pressure values"]').fill(f'{solvedKpa:g}, 101.325')
+    ratios = [lip['pressure'] / (value * 1e3) for value in (solvedKpa, 101.325)]
+    assert dialog.locator('.plume-ratios').inner_text() == f'lip pressure ratio {ratios[0]:.2f}, {ratios[1]:.2f}'
+    dialog.get_by_role('button', name = 'Solve 2 ambients').click()
+
+    window.wait_for_function('[...document.querySelectorAll(".plume-sweep-table .sweep-state")]'
+                             '.map((cell) => cell.textContent).join() === "solved,refused"', timeout = 120000)
+    assert 'Summerfield separation criterion' in window.locator('.plume-sweep-table .sweep-error').inner_text()
+    window.wait_for_function('document.querySelector(".plume-sweep-plot .plotly-host")?.data?.length === 2', timeout = drawMs)
+    assert window.locator('.plume-sweep-plot .plotly-host').evaluate('element => element.data[0].name') == 'nozzle wall'
+    assert window.locator('.plume-sweep-view .sweep-progress').inner_text() == '1 of 2 solved, 1 refused'
+
+    window.locator('.plume-sweep-view .sweep-toolbar').get_by_role('button', name = 'Delete').click()
+    window.locator('.sweep-confirm').get_by_role('button', name = 'Delete').click()
+    window.locator('.plume-sweep-empty').wait_for()
+    assert app.state.session.plumeSweeps.sweepsOf(3) == []

@@ -41,7 +41,8 @@ interface SweepDialogProps {
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
 }
 
-function FieldEntry({ field, entry, values, choices, units, onChange }: {
+/** A field's values: a range or a list in a unit for a number, the options ticked for a choice or a switch. */
+export function FieldEntry({ field, entry, values, choices, units, onChange }: {
     field: Sweepable;
     entry: SweepEntry;
     values: Values;

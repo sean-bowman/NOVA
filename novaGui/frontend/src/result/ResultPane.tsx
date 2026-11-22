@@ -276,8 +276,8 @@ export function ResultPane({ runs, mode, run, schema, config, sweeps, focusSweep
             )}
             <div className="result-content" hidden={showing !== 'figure'}>
                 <FigureView index={index} mode={mode} compare={against} selected={selected} layout={layout}
-                            runChoice={runs.choice} liveRevision={run.iterationRevision} onSelect={setSelected}
-                            onLayout={setLayout} onNotify={onNotify} />
+                            runChoice={runs.choice} liveRevision={run.iterationRevision} plumeVersion={run.plumeVersion}
+                            units={schema?.units ?? null} onSelect={setSelected} onLayout={setLayout} onNotify={onNotify} />
             </div>
             <div className="result-content" hidden={showing !== 'table'}>
                 <ResultsTable table={table} loading={tableLoading} error={tableError} available={available}
