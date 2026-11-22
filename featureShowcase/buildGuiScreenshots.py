@@ -8,8 +8,9 @@ The GUI's server starts in this process on a free port, and Playwright's Chromiu
 front end at the desktop window's size. The script presses Generate on the form the window opens
 with, which is the shipped nozzle, photographs the stage stepper and the stage list while the
 coolant circuit iterates, with the run's contour already in the result pane, and once the run ends
-steps the result pane through its views, the results table, the validation of its peak hot wall and
-the export dialog with a preview.
+steps the result pane through its views, solves the run's plume over the plume sweep dialog's first
+range of ambients, and photographs the results table, the validation of its peak hot wall and the
+export dialog with a preview.
 It then makes that run the baseline, raises the chamber pressure and runs again, for the pictures
 of a run drawn over its baseline, the table beside it, the second run's details with a name and a
 note, its report against the first, and the grid of views along the nozzle axis in a popped-out window. Last it queues a trade
@@ -55,12 +56,11 @@ os.environ.setdefault('NOVA_HEADLESS', '1')
 from playwright.sync_api import Page, sync_playwright
 
 # Local imports
-from novaGui import runner
 from novaGui import settings as guiSettings
 from novaGui.__main__ import _freePort, _serve, _waitUntilStarted
 from novaGui.runStore import RunStore
 from novaGui.server import createApp, frontendDist
-from novaGui.session import RunSession
+from novaGui.session import RunSession, clearStaging
 
 outputFolder = os.path.join(root, 'docs', 'images', 'novaGui')
 viewport = {'width': 1480, 'height': 940}      # [px] the desktop window's opening size
@@ -251,6 +251,21 @@ def photograph(page: Page, base: str, storeFolder: str) -> None:
         showView(page, key, settleMs)
         capture(page, name)
 
+    # -- The run's plume over the dialog's first range of ambients, solved on its nozzle -- #
+    page.select_option('.figure-toolbar > .view-select', 'plumeSweep')
+    page.get_by_role('button', name = 'New plume sweep').click()
+    page.wait_for_selector('.plume-sweep-dialog .plume-ratios')
+    page.get_by_role('button', name = re.compile('^Solve')).click()
+    page.wait_for_selector('.plume-sweep-dialog', state = 'detached')
+    page.wait_for_function("(() => { const text = document.querySelector('.plume-sweep-view .sweep-progress')?.textContent;"
+                           " return !!text && !text.includes('to solve'); })()", timeout = runTimeoutMs)
+    page.wait_for_selector('.plume-sweep-plot .main-svg', timeout = figureTimeoutMs)
+    for close in page.locator('.toast-close').all():
+        close.click()
+    page.wait_for_timeout(1500)
+    capture(page, 'plumeSweep')
+    showView(page, 'contour', 500)
+
     # -- The results table, and the export dialog previewing the hot wall surface -- #
     page.locator('.result-head .segmented button', has_text = 'Table').click()
     page.wait_for_selector('.result-table')
@@ -383,7 +398,7 @@ def build() -> None:
     savedSettings = guiSettings.load()
     guiSettings.save({**savedSettings, 'themeMode': 'dark', 'formWidth': None})
 
-    runner.clearStaging()
+    clearStaging()
     storeFolder = tempfile.TemporaryDirectory(prefix = 'novaScreenshotRuns')
     session = RunSession(store = RunStore(storeFolder.name))
     app = createApp(session = session)

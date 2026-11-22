@@ -7,9 +7,9 @@
    ======================================== */
 
 import type {
-    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, Health, MeshPreview, Mode, ResultTable, RunEntry,
-    RunEvent, RunList, Schema, Settings, Submitted, Sweep, SweepList, SweepRequest, UpdateCheck, ValidationDetail, ViewIndex,
-    WallSample,
+    Config, ExportIndex, ExportResult, ExportTarget, ExtensionEntry, FormState, Health, MeshPreview, Mode, PlumeSweep,
+    PlumeSweepList, PlumeSweepRequest, ResultTable, RunEntry, RunEvent, RunList, Schema, Settings, Submitted, Sweep, SweepList,
+    SweepRequest, UpdateCheck, ValidationDetail, ViewIndex, WallSample,
 } from './types';
 
 export class ApiError extends Error {
@@ -75,6 +75,16 @@ export const api = {
     deleteSweep: (sweepId: number) => request<{ deleted: number; runs: number[] }>(`/api/sweeps/${sweepId}`, { method: 'DELETE' }),
     sweepFigure: (sweepId: number, number: string, mode: Mode) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(`/api/sweeps/${sweepId}/figure${query({ number, mode })}`),
+    plumeSweeps: (runId: number) => request<PlumeSweepList>(`/api/runs/${runId}/plume-sweeps`),
+    plumeLip: (runId: number) => request<{ pressure: number | null; reason: string }>(`/api/runs/${runId}/plume-lip`),
+    addPlumeSweep: (runId: number, sweep: PlumeSweepRequest) =>
+        request<PlumeSweep>(`/api/runs/${runId}/plume-sweeps`, jsonBody('POST', sweep)),
+    resumePlumeSweep: (runId: number, number: number) =>
+        request<{ queued: number }>(`/api/runs/${runId}/plume-sweeps/${number}/resume`, { method: 'POST' }),
+    deletePlumeSweep: (runId: number, number: number) =>
+        request<{ deleted: number }>(`/api/runs/${runId}/plume-sweeps/${number}`, { method: 'DELETE' }),
+    plumeSweepFigure: (runId: number, number: number, mode: Mode) =>
+        request<{ data: object[]; layout: Record<string, unknown> }>(`/api/runs/${runId}/plume-sweeps/${number}/figure${query({ mode })}`),
     views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),
     interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null, revision?: number) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(

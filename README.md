@@ -217,6 +217,12 @@ The result pane's **Sweep** view plots any headline number against the swept fie
 
 ![A sweep's plot and table](docs/images/novaGui/sweep.png)
 
+### Plume sweeps
+
+Of a run's stages, only the plume and the delivered performance depend on the ambient pressure. The **Plume sweep** view solves a finished run's plume at each of a list of ambients on the run's own nozzle, seconds an ambient, where a trade sweep runs the whole pipeline again at each. **New plume sweep** takes a range or a list of ambients in a pressure unit, gives each one's lip pressure ratio, and takes the reach the boundaries are drawn to. The plot draws the plume boundaries over one another against the nozzle wall, and the table gives each ambient's delivered thrust coefficient, specific impulse and thrust, the fully expanded jet diameter, the first shock on the axis and the march's mass continuity error, each column with its validation status. An ambient the march refuses, such as sea level on a nozzle that separates there, carries the march's reason. A plume sweep is kept with its run, and keeps the run in the store as a name does.
+
+![A plume sweep over the shipped nozzle](docs/images/novaGui/plumeSweep.png)
+
 ### Export
 
 A run writes its outputs into its own folder in the run store, not to the output folder. **Export** in the result pane's header opens a dialog that lists the shown run's outputs by category, each with a check: figures, interactive HTML, contour coordinates, STL geometry, the channel size profile, the pickled `Nozzle` and the run configuration. The figures carry thumbnails, and the eye on a row previews the file beside the list: an image as itself, an STL surface in the 3D viewer, a text or JSON file as its first lines. **Export** copies the checked files to `<output folder>/<output name>Outputs/`.

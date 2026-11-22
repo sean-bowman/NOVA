@@ -219,6 +219,7 @@ export type RunEvent =
     | { type: 'runs'; baseline: number | null }
     | { type: 'queue'; queue: QueueEntry[] }
     | { type: 'sweeps' }
+    | { type: 'plumeSweeps'; runId: number }
     | ({ type: 'settings' } & Settings);
 
 /** Where a run asked for went: started (position 0, with its id) or queued (its place from 1). */
@@ -303,6 +304,60 @@ export interface SweepRequest {
     config: Config;
     mode: Mode;
     fields: { key: string; unit: string; values: ConfigValue[] }[];
+}
+
+export type PlumePointState = 'queued' | 'running' | 'done' | 'refused' | 'failed' | 'cancelled';
+
+/** A number column of a plume sweep's table, with the validation status of the models behind it. */
+export interface PlumeColumn {
+    key: string;
+    label: string;
+    unit: string;
+    validation: ValidationBadgeInfo | null;
+}
+
+/** One ambient of a plume sweep (novaGui.plumeSweeps.table). */
+export interface PlumePoint {
+    index: number;
+    ambient: number;              // [Pa]
+    ambientText: string;          // in the unit the sweep was entered in
+    state: PlumePointState;
+    error: string;                // why a point was refused, failed or not solved
+    trustworthy: boolean | null;  // the drawn march's mass error is within its bound; null before it is solved
+    jetType: string;
+    notes: string[];              // the march's own notes on the solve
+    cells: Record<string, { text: string; tone: '' | 'warn' }>;
+}
+
+/** A run's plume solved over a list of ambients, kept with the run. */
+export interface PlumeSweep {
+    runId: number;
+    number: number;               // within its run
+    name: string;
+    createdAt: number;            // [s] epoch
+    unit: string;
+    reach: number;                // [lip radii] drawn
+    lip: { pressure: number; pressureText: string } | null;
+    columns: PlumeColumn[];
+    counts: Record<PlumePointState, number>;
+    badge: ValidationBadgeInfo | null;
+    points: PlumePoint[];
+}
+
+export interface PlumeSweepList {
+    runId: number;
+    sweeps: PlumeSweep[];         // newest first
+    maxPoints: number;
+    nearReach: number;            // [lip radii] the reach the march conserves mass over
+    maxReach: number;             // [lip radii]
+}
+
+/** A plume sweep as the dialog asks for it: ambients in Pa, entered in `unit`. */
+export interface PlumeSweepRequest {
+    name: string;
+    ambients: number[];
+    unit: string;
+    reach: number;
 }
 
 /** The run store the server keeps runs in between launches (novaGui.runStore). */

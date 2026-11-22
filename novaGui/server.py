@@ -37,6 +37,15 @@ Routes, all under /api:
                                     the baseline
     GET  /sweeps/{sweepId}/figure   one headline number against the swept field, ?number=&mode=
     GET  /sweeps/{sweepId}/report   the sweep's report as one HTML file (novaGui.report)
+    GET  /runs/{runId}/plume-sweeps  a run's plume sweeps, newest first (novaGui.plumeSweeps.table), and the
+                                    limits on a new one
+    GET  /runs/{runId}/plume-lip    the static pressure at the run's nozzle lip, which sets each ambient's lip
+                                    pressure ratio, or why the plume march cannot start on its contour
+    POST /runs/{runId}/plume-sweeps  solve the run's plume over a list of ambients: {'name', 'ambients' [Pa],
+                                    'unit', 'reach' [lip radii]}
+    POST /runs/{runId}/plume-sweeps/{number}/resume   queue a plume sweep's cancelled points again
+    DELETE /runs/{runId}/plume-sweeps/{number}        delete a plume sweep, cancelling it if it is solving
+    GET  /runs/{runId}/plume-sweeps/{number}/figure   its plume boundaries over one another, ?mode=
     GET  /report                    a run's report as one HTML file, ?run=&baseline= (novaGui.report)
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
@@ -101,12 +110,14 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 # Local imports
 from . import analysis
 from . import assetFolder
 from . import design
 from . import outputs
+from . import plumeSweeps
 from . import report
 from . import runningBuild
 from . import schemaJson
@@ -381,6 +392,92 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             raise HTTPException(404, f'sweep {sweepId} is not kept') from exc
         if figure is None:
             raise HTTPException(404, f'no run of sweep {sweepId} has reported {number!r} yet')
+        return Response(figure, media_type = 'application/json')
+
+    # -- Plume sweeps over a kept run -- #
+    def _plumeRun(runId: int):
+
+        '''A kept, finished run a plume sweep can solve on; 404 otherwise.'''
+
+        record = app.state.session.record(runId)
+        if record is None or not record.ok:
+            raise HTTPException(404, f'run {runId} is not kept')
+        return record
+
+    def _lip(record) -> dict:
+
+        '''The lip of a run's nozzle (novaGui.plumeSweeps.lipState), worked out once a run.'''
+
+        queue = app.state.session.plumeSweeps
+        lip = queue.lip(record.runId)
+        if lip is None:
+            nozzle = app.state.session.nozzle(record)
+            if nozzle is None:
+                raise HTTPException(404, f'run {record.runId} cannot be drawn: {record.loadError}' if record.loadError
+                                    else f'run {record.runId} has no saved result')
+            try:
+                lip = plumeSweeps.lipState(nozzle)
+            except Exception as exc:                       # noqa: BLE001 -- any seeding failure says why
+                lip = {'reason': f'the plume march could not start on this contour ({type(exc).__name__}: {exc})'}
+            queue.setLip(record.runId, lip)
+        return lip
+
+    @app.get('/api/runs/{runId}/plume-sweeps')
+    def plumeSweepList(runId: int) -> dict:
+
+        _plumeRun(runId)
+        return {'runId': runId, 'sweeps': app.state.session.plumeSweeps.sweepsOf(runId),
+                'maxPoints': plumeSweeps.maxPoints, 'nearReach': plumeSweeps.nearReach,
+                'maxReach': plumeSweeps.maxReach}
+
+    @app.get('/api/runs/{runId}/plume-lip')
+    def plumeLip(runId: int) -> dict:
+
+        lip = _lip(_plumeRun(runId))
+        return {'pressure': lip.get('pressure'), 'reason': lip.get('reason', '')}
+
+    @app.post('/api/runs/{runId}/plume-sweeps')
+    async def addPlumeSweep(runId: int, request: Request) -> dict:
+
+        body = await request.json()
+        record = _plumeRun(runId)
+        try:
+            sweep = plumeSweeps.build(body)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        lip = await run_in_threadpool(_lip, record)
+        if 'reason' in lip:
+            raise HTTPException(400, f'the plume of run {runId} cannot be swept: {lip["reason"]}')
+        return app.state.session.plumeSweeps.add(runId, record.picklePath, sweep)
+
+    @app.post('/api/runs/{runId}/plume-sweeps/{number}/resume')
+    def resumePlumeSweep(runId: int, number: int) -> dict:
+
+        record = _plumeRun(runId)
+        try:
+            return {'queued': app.state.session.plumeSweeps.resume(runId, number, record.picklePath)}
+        except KeyError as exc:
+            raise HTTPException(404, f'run {runId} has no plume sweep {number}') from exc
+
+    @app.delete('/api/runs/{runId}/plume-sweeps/{number}')
+    def deletePlumeSweep(runId: int, number: int) -> dict:
+
+        try:
+            app.state.session.plumeSweeps.delete(runId, number)
+        except KeyError as exc:
+            raise HTTPException(404, f'run {runId} has no plume sweep {number}') from exc
+        return {'deleted': number}
+
+    @app.get('/api/runs/{runId}/plume-sweeps/{number}/figure')
+    def plumeSweepFigure(runId: int, number: int, mode: str = 'dark') -> Response:
+
+        try:
+            sweep = app.state.session.plumeSweeps.sweep(runId, number)
+        except KeyError as exc:
+            raise HTTPException(404, f'run {runId} has no plume sweep {number}') from exc
+        figure = plumeSweeps.figure(sweep, _mode(mode))
+        if figure is None:
+            raise HTTPException(404, f'no point of plume sweep {number} is solved yet')
         return Response(figure, media_type = 'application/json')
 
     @app.get('/api/runs/state')

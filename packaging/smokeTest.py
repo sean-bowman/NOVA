@@ -14,6 +14,8 @@ as the window would:
     the shipped nozzle runs to the end in a worker process (NOVA.exe started again by spawn)
     the finished run draws an interactive (plotly) and a static (Matplotlib) figure
     the run's report renders
+    a plume sweep over the run solves in a worker process of its own, one ambient solved and one,
+    sea level, refused because the nozzle separates there
     exports default to a folder outside the build, the user's Documents
 
 Usage:
@@ -48,6 +50,7 @@ import novaGui
 from novaGui import validationStatus
 
 runTimeoutSec = 900.0
+plumeTimeoutSec = 180.0
 
 def _freePort() -> int:
 
@@ -148,6 +151,28 @@ def _figures(client: Client, runId: int) -> tuple:
             break
     return available, interactive, static
 
+def _plumeSweep(client: Client, runId: int) -> tuple:
+
+    '''
+
+    A plume sweep over a finished run: one ambient past the lip pressure, which the march solves,
+    and sea level, where the shipped nozzle separates and the march refuses. Returns the points'
+    states, and why there are none.
+
+    '''
+
+    lip = client.json(f'/runs/{runId}/plume-lip')
+    if not lip.get('pressure'):
+        return [], lip.get('reason', 'no lip pressure')
+    client.json(f'/runs/{runId}/plume-sweeps', {'ambients': [lip['pressure'] / 1.5, 101325.0], 'unit': 'kPa'})
+    started = time.monotonic()
+    while time.monotonic() - started < plumeTimeoutSec:
+        points = client.json(f'/runs/{runId}/plume-sweeps')['sweeps'][0]['points']
+        if not any(point['state'] in ('queued', 'running') for point in points):
+            return [point['state'] for point in points], ''
+        time.sleep(1.0)
+    return [], f'not solved in {plumeTimeoutSec:.0f} s'
+
 def main(argv: list) -> int:
 
     exe = os.path.abspath(argv[0] if argv else os.path.join(root, 'dist', 'NOVA', 'NOVA.exe'))
@@ -191,6 +216,9 @@ def main(argv: list) -> int:
 
         kind, page = client.get(f'/report?run={runId}', timeoutSec = 300.0)
         _check('html' in kind and len(page) > 10000, f'the report renders ({len(page) / 1e6:.1f} MB)')
+
+        states, reason = _plumeSweep(client, runId)
+        _check(states == ['done', 'refused'], f'a plume sweep solves in a worker of its own ({", ".join(states) or reason})')
 
         exports = os.path.normcase(client.json(f'/export?run={runId}')['defaultBaseDir'])
         inside = exports.startswith(os.path.normcase(os.path.dirname(exe)) + os.sep)
