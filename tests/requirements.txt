@@ -1,0 +1,9 @@
+# The tools the test suite needs beyond NOVA's own dependencies, pinned to the versions it passes
+# with in the development environment. NOVA's dependencies are pinned in packaging/constraints.txt.
+pytest==9.0.2
+# fastapi's TestClient, which the GUI's server tests drive the routes through
+httpx==0.28.1
+# testPackaging builds the wheel without build isolation, so it uses the build backend installed
+# here; pyproject.toml asks for setuptools 68 or later
+setuptools==68.2.2
+wheel==0.41.2
