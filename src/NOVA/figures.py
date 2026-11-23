@@ -1201,7 +1201,7 @@ def plotlyPlume(data):
     for sign in (1.0, -1.0):
         figure.add_trace(go.Scatter(
             x = data.boundaryX, y = sign * data.boundaryR, mode = 'lines',
-            line = dict(color = _color('yellow'), width = 2,
+            line = dict(color = _color('purple'), width = 2,
                         dash = 'solid' if solved else 'dot'),
             name = boundaryName, showlegend = sign > 0,
             hovertemplate = 'x %{x:.3f} m<br>r %{y:.3f} m<extra></extra>'))

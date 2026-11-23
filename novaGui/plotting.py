@@ -343,7 +343,7 @@ def _drawPlumeScene(pane, scene) -> None:
     _clipTo(ax, shading, outline)
 
     for sign in (1.0, -1.0):
-        ax.plot(scene.boundaryX, sign * scene.boundaryR, color = themeColors.yellow, linewidth = 1.4, alpha = 0.9,
+        ax.plot(scene.boundaryX, sign * scene.boundaryR, color = themeColors.purple, linewidth = 1.4, alpha = 0.9,
                 label = 'Plume boundary, solved' if sign > 0 else None)
         ax.plot(scene.wallX, sign * scene.wallR, color = themeColors.accent, linewidth = 2.0, solid_capstyle = 'round',
                 label = 'Nozzle wall' if sign > 0 else None)
@@ -439,7 +439,7 @@ def _drawCorrelatedPlume(pane, nozzle) -> None:
 
     label = 'Plume boundary, solved' if solved else 'Plume boundary, correlated'
     for sign in (1.0, -1.0):
-        ax.plot(data.boundaryX, sign * data.boundaryR, color = themeColors.yellow, linewidth = 1.6,
+        ax.plot(data.boundaryX, sign * data.boundaryR, color = themeColors.purple, linewidth = 1.6,
                 linestyle = '-' if solved else ':', label = label if sign > 0 else None)
 
     for index, cellPosition in enumerate(np.asarray(data.cellX, dtype = float)):
