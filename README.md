@@ -151,7 +151,7 @@ The flow fields run from the injector face to the exit plane: the one-dimensiona
 
 ![Mach field](docs/images/novaGui/viewMach.png)
 
-The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary. It opens on the nozzle and the marched plume; zooming out shows the correlated shock cells past the march.
+The plume view draws the nozzle and its plume as one Mach field: the chamber, the characteristic mesh and the station march past the lip, inside the wall and the solved plume boundary. The scale spans the supersonic flow, so the chamber sits at the bottom color, and hovering reads the Mach number. It opens on the nozzle and the marched plume; zooming out shows the correlated shock cells past the march. Where the march did not solve, the view draws the nozzle's field and the correlated boundary.
 
 ![Plume](docs/images/novaGui/viewPlume.png)
 

@@ -391,7 +391,8 @@ def _drawCorrelatedPlume(pane, nozzle) -> None:
     '''
 
     The correlated plume structure against the nozzle contour, for a run whose march did not solve:
-    the correlated boundary over its whole length, the shock cells and the Mach disk.
+    the Mach field inside the wall where the run kept it, the correlated boundary over its whole
+    length, the shock cells and the Mach disk.
 
     '''
 
@@ -413,6 +414,23 @@ def _drawCorrelatedPlume(pane, nozzle) -> None:
                                  np.concatenate([data.fieldR, -data.fieldR]),
                                  np.concatenate([data.fieldMach, data.fieldMach]),
                                  levels = 60, cmap = _palette().colormap('mach', themeColors.mode))
+        _colorbar(pane, shading, ax, 'Mach number [-]')
+    elif np.size(data.interiorX) > 3 and data.wallX.size > 2:
+        # The flow inside the wall, which the correlated plume continues: shaded on the scale of the
+        # supersonic flow, so the chamber sits at the bottom color, and clipped to the wall
+        ax.grid(False)
+        lowest, highest = data.machRange
+        if not (np.isfinite(lowest) and np.isfinite(highest) and highest > lowest):
+            lowest, highest = float(np.min(data.interiorMach)), float(np.max(data.interiorMach))
+        wall = data.wallX <= data.lipX if np.isfinite(data.lipX) else np.ones(data.wallX.size, dtype = bool)
+        upperX, upperR = data.wallX[wall], np.abs(data.wallR[wall])
+        outline = np.column_stack([np.concatenate([upperX, upperX[::-1]]), np.concatenate([upperR, -upperR[::-1]])])
+        shading = ax.tricontourf(np.concatenate([data.interiorX, data.interiorX]),
+                                 np.concatenate([data.interiorR, -data.interiorR]),
+                                 np.concatenate([data.interiorMach, data.interiorMach]),
+                                 levels = np.linspace(lowest, highest, 120),
+                                 cmap = _palette().colormap('mach', themeColors.mode), extend = 'both')
+        _clipTo(ax, shading, outline)
         _colorbar(pane, shading, ax, 'Mach number [-]')
 
     if data.wallX.size:
