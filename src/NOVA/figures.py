@@ -207,9 +207,12 @@ class PlumeFigure:
 
     The boundary is the station march's computed constant-pressure streamline when one was
     solved, and the correlated sinusoid when it was not; `boundarySource` says which, because the
-    two are different kinds of claim. The interior Mach field comes with the marched boundary and
-    is empty otherwise. The cell spacing and the Mach disk are always correlations, since the
-    march is isentropic and describes no shock.
+    two are different kinds of claim. The plume's Mach field comes with the marched boundary and
+    is empty otherwise. The nozzle's own Mach field to the lip, the chamber's one-dimensional
+    answer and the characteristic mesh, comes whenever the run kept them, so the plume is drawn as
+    the continuation of the flow inside the wall. `machRange` spans the supersonic flow, nozzle and
+    plume together, so the chamber sits at the bottom color. The cell spacing and the Mach disk
+    are always correlations, since the march is isentropic and describes no shock.
 
     `massDriftWorst` travels with the field and belongs on the figure whatever its value: it is
     the only thing separating a plume shape worth reading from one that is merely drawn.
@@ -236,6 +239,11 @@ class PlumeFigure:
     massDriftWorst: float = float('nan')           # [%], flux departure from the exit plane
     trustworthy: bool = False                      # whether that drift is inside tolerance
     reachMarched: float = 0.0                      # [-], lip radii the march covered
+    lipX: float = float('nan')                     # [m], where the wall ends and the plume begins
+    interiorX: np.ndarray = field(default_factory = lambda: np.array([]))   # [m], chamber and mesh nodes to the lip
+    interiorR: np.ndarray = field(default_factory = lambda: np.array([]))   # [m]
+    interiorMach: np.ndarray = field(default_factory = lambda: np.array([]))  # [-]
+    machRange: tuple = (float('nan'), float('nan'))  # (lowest, highest) [-] of the supersonic flow
 
 @dataclass
 class StitchedFieldFigure:
@@ -425,6 +433,23 @@ def plumeFigure(nozzle):
     # its envelope, the correlated boundary is what there is and the figure says so.
     field = getattr(nozzle, 'nozzlePlumeField', None)
     marched = field is not None and getattr(field, 'solved', False) and field.boundaryX.size > 1
+
+    # The flow inside the wall to the lip, which the plume continues, whichever boundary is drawn
+    lipX = float(field.lipX) if marched else float(getattr(structure, 'lipX', 0.0) or 0.0)
+    if not lipX and wallX.size:
+        lipX = float(np.max(wallX))
+    blocks = _nozzleInterior(nozzle, lipX)
+    interior = dict(lipX = lipX,
+                    interiorX = np.concatenate([x for x, _, _, _ in blocks]) if blocks else np.array([]),
+                    interiorR = np.concatenate([r for _, r, _, _ in blocks]) if blocks else np.array([]),
+                    interiorMach = np.concatenate([mach for _, _, mach, _ in blocks]) if blocks else np.array([]))
+    supersonic = [mach for _, _, mach, isSupersonic in blocks if isSupersonic and mach.size]
+    if marched and np.size(field.nodeMach):
+        supersonic.append(np.asarray(field.nodeMach, dtype = float))
+    if supersonic:
+        joined = np.concatenate(supersonic)
+        interior['machRange'] = (float(np.nanmin(joined)), float(np.nanmax(joined)))
+
     if marched:
         reach = ((field.solvedTo - field.lipX) / field.lipRadius
                  if field.lipRadius > 0.0 else 0.0)
@@ -446,6 +471,7 @@ def plumeFigure(nozzle):
             massDriftWorst = field.massDriftWorst,
             trustworthy = bool(field.trustworthy),
             reachMarched = reach,
+            **interior,
         )
 
     if field is not None and field.notes:
@@ -462,6 +488,7 @@ def plumeFigure(nozzle):
         jetType = structure.jetType,
         summary = summary,
         notes = notes,
+        **interior,
     )
 
 # Quantity key -> (Nozzle attribute, color bar label, plotly colorscale, figure title)
@@ -577,6 +604,29 @@ def _chamberField(nozzle):
     except (AttributeError, TypeError, ValueError):
         return None
 
+def _nozzleInterior(nozzle, lipX: float) -> list:
+
+    '''
+
+    The Mach field inside the wall to the lip, the flow a plume continues: the chamber's quasi
+    one-dimensional answer to the throat, painted across the radius, and the characteristic mesh
+    from the throat to the lip. A list of (x, r, mach, supersonic) blocks in metres, empty when the
+    run kept neither.
+
+    '''
+
+    blocks = []
+    chamber = _chamberField(nozzle)
+    if chamber is not None:
+        blocks.append((chamber['x'].ravel(), chamber['r'].ravel(), np.asarray(chamber['mach']).ravel(), False))
+    mesh = _meshNodes(nozzle, 'allMachNumbers')
+    if mesh is not None:
+        meshX, meshR, meshMach = mesh
+        keep = meshX <= lipX
+        blocks.append((meshX[keep], meshR[keep], meshMach[keep], True))
+
+    return blocks
+
 def stitchedFieldFigure(nozzle, quantity: str):
 
     '''
@@ -640,15 +690,7 @@ def plumeSceneFigure(nozzle):
     if wallX.size < 3 or wallR.size != wallX.size:
         return None
 
-    blocks = []
-    chamber = _chamberField(nozzle)
-    if chamber is not None:
-        blocks.append((chamber['x'].ravel(), chamber['r'].ravel(), np.asarray(chamber['mach']).ravel(), False))
-    mesh = _meshNodes(nozzle, 'allMachNumbers')
-    if mesh is not None:
-        meshX, meshR, meshMach = mesh
-        keep = meshX <= plume.lipX
-        blocks.append((meshX[keep], meshR[keep], meshMach[keep], True))
+    blocks = _nozzleInterior(nozzle, plume.lipX)
     blocks.append((np.asarray(plume.nodeX, dtype = float), np.asarray(plume.nodeR, dtype = float),
                    np.asarray(plume.nodeMach, dtype = float), True))
 
@@ -1051,41 +1093,73 @@ def plotlyField(data: StitchedFieldFigure, filled: bool = False):
     figure.update_layout(**layout)
     return figure
 
-def _plumeFieldGrid(data, axialPoints: int = 260, radialPoints: int = 130):
+def _plumeSceneGrid(data) -> tuple | None:
 
     '''
 
-    Resample the marched plume onto a rectangular grid, or None when there is no field.
+    The nozzle's Mach field and the marched plume's as one field on a regular grid, mirrored about
+    the axis, for a filled rendering: (x, r, mach), NaN outside the wall up to the lip and outside
+    the plume boundary past it. None when there is neither field.
 
-    The march puts its points at fixed fractions of a jet radius that changes station to station,
-    so the nodes are structured but not rectangular in (x, r) and plotly's contour needs
-    rectangular. Everything outside the jet boundary is left NaN so the fill stops at the
-    boundary rather than squaring off the jet.
+    The nodes are the ones the static drawing shades: the chamber's one-dimensional answer, the
+    characteristic mesh to the lip and the march's stations. They are kept as one set, so the field
+    has no seam of background at the throat or the lip. A cell takes the value interpolated
+    linearly inside their triangles, and the nearest node's value in the sliver between the
+    outermost nodes and the wall or the boundary. The cells are square, `filledFieldCells` of them,
+    so the grid follows the figure's proportions.
 
     '''
 
-    if data.fieldX.size < 4 or data.fieldMach.size != data.fieldX.size:
+    from scipy.interpolate import LinearNDInterpolator, NearestNDInterpolator
+
+    pieces = []
+    for x, r, mach in ((data.interiorX, data.interiorR, data.interiorMach), (data.fieldX, data.fieldR, data.fieldMach)):
+        x, r, mach = (np.asarray(array, dtype = float).ravel() for array in (x, r, mach))
+        if x.size and x.shape == r.shape == mach.shape:
+            keep = np.isfinite(x) & np.isfinite(r) & np.isfinite(mach)
+            pieces.append((x[keep], np.abs(r[keep]), mach[keep]))
+    if not pieces:
+        return None
+    nodeX, nodeR, nodeMach = (np.concatenate([piece[index] for piece in pieces]) for index in range(3))
+    if nodeX.size < 4:
         return None
 
-    from scipy.interpolate import griddata
+    # The outline: the wall to the lip, the solved boundary past it where the plume was marched
+    wallX, wallR = np.asarray(data.wallX, dtype = float), np.abs(np.asarray(data.wallR, dtype = float))
+    lipX = float(data.lipX) if np.isfinite(data.lipX) else (float(np.max(wallX)) if wallX.size else float(np.max(nodeX)))
+    keepWall = wallX <= lipX
+    outlineX, outlineR = wallX[keepWall], wallR[keepWall]
+    if data.fieldX.size > 3 and np.size(data.boundaryX) > 1:
+        boundaryX, boundaryR = np.asarray(data.boundaryX, dtype = float), np.abs(np.asarray(data.boundaryR, dtype = float))
+        past = boundaryX > lipX
+        outlineX, outlineR = np.concatenate([outlineX, boundaryX[past]]), np.concatenate([outlineR, boundaryR[past]])
+    if outlineX.size < 2:
+        return None
+    order = np.argsort(outlineX)
+    outlineX, outlineR = outlineX[order], outlineR[order]
 
-    axial = np.linspace(float(data.fieldX.min()), float(data.fieldX.max()), axialPoints)
-    edge = float(np.abs(data.boundaryR).max()) if data.boundaryR.size else float(data.fieldR.max())
-    radial = np.linspace(-edge, edge, radialPoints)
-    axialGrid, radialGrid = np.meshgrid(axial, radial)
+    start, end = float(min(outlineX[0], nodeX.min())), float(nodeX.max())
+    span = float(np.max(outlineR[outlineX <= end])) if np.any(outlineX <= end) else float(np.max(outlineR))
+    if not (end > start and span > 0.0):
+        return None
+    cell = np.sqrt((end - start) * 2.0 * span / filledFieldCells)
+    x = np.linspace(start, end, max(int(round((end - start) / cell)), 50))
+    r = np.linspace(-span, span, max(int(round(2.0 * span / cell)), 30))
+    gridX, gridR = np.meshgrid(x, r)
+    radius = np.abs(gridR)
+    inside = radius <= np.interp(gridX, outlineX, outlineR)
 
-    # The solve is one half plane, so it is mirrored before interpolating rather than after.
-    points = np.column_stack([np.concatenate([data.fieldX, data.fieldX]),
-                              np.concatenate([data.fieldR, -data.fieldR])])
-    values = np.concatenate([data.fieldMach, data.fieldMach])
-    machGrid = griddata(points, values, (axialGrid, radialGrid), method = 'linear')
+    # The solve is one half plane: the grid's radius is read as its distance from the axis
+    points = np.column_stack([nodeX, nodeR])
+    query = np.column_stack([gridX[inside], radius[inside]])
+    linear = LinearNDInterpolator(points, nodeMach)(query)
+    missing = ~np.isfinite(linear)
+    if missing.any():
+        linear[missing] = NearestNDInterpolator(points, nodeMach)(query[missing])
+    values = np.full(gridX.shape, np.nan)
+    values[inside] = linear
 
-    if data.boundaryX.size > 1:
-        order = np.argsort(data.boundaryX)
-        localEdge = np.interp(axialGrid, data.boundaryX[order], data.boundaryR[order])
-        machGrid = np.where(np.abs(radialGrid) <= localEdge, machGrid, np.nan)
-
-    return axial, radial, machGrid
+    return x, r, values
 
 def plotlyPlume(data):
 
@@ -1100,16 +1174,20 @@ def plotlyPlume(data):
 
     figure = go.Figure()
 
-    # The interior goes down first so the wall, the boundary and the Mach disk draw over it.
-    grid = _plumeFieldGrid(data)
+    # The field goes down first so the wall, the boundary and the Mach disk draw over it. Its scale
+    # spans the supersonic flow, as the static drawing's does; the chamber sits at the bottom color
+    # and its hover reads its own Mach number.
+    grid = _plumeSceneGrid(data)
     if grid is not None:
         axialGrid, radialGrid, machGrid = grid
-        figure.add_trace(go.Contour(
-            x = axialGrid, y = radialGrid, z = machGrid, ncontours = 40,
-            colorscale = figurePalette.plotlyColorscale('mach'), connectgaps = False,
-            contours = dict(coloring = 'fill', showlines = False),
-            colorbar = dict(title = 'Mach', thickness = 14, len = 0.7),
-            name = 'Mach field', hoverinfo = 'skip'))
+        lowest, highest = data.machRange
+        if not (np.isfinite(lowest) and np.isfinite(highest) and highest > lowest):
+            lowest, highest = float(np.nanmin(machGrid)), float(np.nanmax(machGrid))
+        figure.add_trace(go.Heatmap(
+            x = axialGrid, y = radialGrid, z = machGrid.astype(np.float32), zmin = lowest, zmax = highest,
+            colorscale = figurePalette.plotlyColorscale('mach'), zsmooth = False, hoverongaps = False,
+            colorbar = dict(title = 'Mach', thickness = 14, len = 0.7), name = 'Mach field', showlegend = False,
+            hovertemplate = 'x %{x:.3f} m<br>r %{y:.3f} m<br>Mach %{z:.3f}<extra></extra>'))
 
     if data.wallX.size:
         for sign in (1.0, -1.0):
@@ -1123,7 +1201,7 @@ def plotlyPlume(data):
     for sign in (1.0, -1.0):
         figure.add_trace(go.Scatter(
             x = data.boundaryX, y = sign * data.boundaryR, mode = 'lines',
-            line = dict(color = _color('yellow'), width = 2,
+            line = dict(color = _color('purple'), width = 2,
                         dash = 'solid' if solved else 'dot'),
             name = boundaryName, showlegend = sign > 0,
             hovertemplate = 'x %{x:.3f} m<br>r %{y:.3f} m<extra></extra>'))

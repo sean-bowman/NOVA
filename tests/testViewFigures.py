@@ -7,7 +7,8 @@ The figure descriptions behind the GUI's flow, plume and cooling views, and the 
 A flow field runs from the injector face to the exit plane: the quasi one-dimensional chamber
 upstream of the throat, the characteristic mesh from the throat to the exit plane of the wall that
 is built, never the mesh a truncated contour carries past it. The plume scene is one Mach field
-from the chamber through the nozzle and into the march, on a scale set by the supersonic flow. The
+from the chamber through the nozzle and into the march, on a scale set by the supersonic flow, and
+the interactive plume shades the same field, the nozzle's alone where the march did not solve. The
 cooling views draw from the jacket's station arrays, the film arrays and the extension solution.
 
 The descriptions are checked on a synthetic nozzle, which is all they read; the views are drawn on
@@ -29,7 +30,7 @@ for path in (root, os.path.join(root, 'src')):
     if path not in sys.path:
         sys.path.insert(0, path)
 
-from NOVA.figures import PlumeFigure, plotlyField, plotlyPlume, plumeSceneFigure, stitchedFieldFigure
+from NOVA.figures import PlumeFigure, plotlyField, plotlyPlume, plumeFigure, plumeSceneFigure, stitchedFieldFigure
 
 def _syntheticNozzle(**extra):
 
@@ -96,7 +97,7 @@ def _plume(solved = True):
     return types.SimpleNamespace(
         solved = solved, nodeX = x.ravel(), nodeR = r.ravel(), nodeMach = np.full(x.size, 4.6),
         boundaryX = x[:, -1], boundaryR = r[:, -1], lipX = 0.60, lipRadius = 0.31, solvedTo = 0.90,
-        lipPressureRatio = 1.4, massDriftWorst = -0.3, trustworthy = True)
+        lipPressureRatio = 1.4, massDriftWorst = -0.3, trustworthy = True, notes = [])
 
 def testThePlumeSceneIsOneFieldFromTheChamberThroughTheMarch():
     nozzle = _syntheticNozzle(nozzlePlumeField = _plume(), plumeAmbientPressure = 20000.0, nozzlePlumeStructure = None)
@@ -113,6 +114,35 @@ def testThePlumeSceneIsOneFieldFromTheChamberThroughTheMarch():
 def testAPlumeThatDidNotMarchHasNoScene():
     nozzle = _syntheticNozzle(nozzlePlumeField = _plume(solved = False))
     assert plumeSceneFigure(nozzle) is None
+
+def _structure():
+
+    '''The correlated plume structure the plume figure reads, its boundary leaving the 0.60 m lip.'''
+
+    x = np.linspace(0.60, 2.0, 30)
+    return types.SimpleNamespace(
+        jetType = 'underexpanded', exitPressureRatio = 1.4, nozzlePressureRatio = 350.0, fullyExpandedMach = 4.3,
+        shockCellLength = 0.9, notes = [], cellX = np.array([0.60, 1.5]), machDiskX = 0.0, machDiskDiameter = 0.0,
+        machDiskPresent = False, boundaryX = x, boundaryR = 0.31 + 0.05 * np.sin(np.pi * (x - 0.60) / 0.9) ** 2,
+        lipX = 0.60)
+
+def testThePlumeFigureCarriesTheFlowInsideTheWallToTheLip():
+    nozzle = _syntheticNozzle(nozzlePlumeField = _plume(), nozzlePlumeStructure = _structure())
+    data = plumeFigure(nozzle)
+    assert data.boundarySource == 'marched' and data.lipX == pytest.approx(0.60)
+    # The chamber's one-dimensional answer from the injector face, the mesh to the lip and no further
+    assert data.interiorX.min() == pytest.approx(nozzle.xNozzleWall[0]) and data.interiorX.max() <= 0.60
+    # The scale spans the supersonic flow either side of the lip; the subsonic chamber sits below it
+    assert data.interiorMach.min() < 1.0
+    assert data.machRange[0] >= 1.0 and data.machRange[1] == pytest.approx(4.6)
+
+def testAPlumeThatDidNotMarchStillCarriesTheNozzlesFlow():
+    nozzle = _syntheticNozzle(nozzlePlumeField = _plume(solved = False), nozzlePlumeStructure = _structure())
+    data = plumeFigure(nozzle)
+    assert data.boundarySource == 'correlated' and data.fieldX.size == 0
+    assert data.interiorX.size and data.interiorX.max() <= 0.60
+    supersonic = data.interiorMach[data.interiorMach >= 1.0]
+    assert data.machRange[1] == pytest.approx(float(supersonic.max()))
 
 #--------------------------------------------------------------------------------------------------------------------------#
 # -- The interactive renderings -- #
@@ -147,6 +177,31 @@ def testTheInteractivePressureIsShadedOnALogarithmicScale():
     ticks = 10.0 ** np.asarray(bar.tickvals)
     mantissas = ticks / 10.0 ** np.floor(np.log10(ticks) + 1e-9)
     assert ticks.size >= 3 and np.all(np.isclose(mantissas[:, None], [1.0, 2.0, 5.0]).any(axis = 1))
+
+def _heatmap(figure):
+    [field] = [trace for trace in figure.data if trace.type == 'heatmap']
+    return np.asarray(field.x), np.asarray(field.y), np.asarray(field.z, dtype = float), field
+
+def testTheInteractivePlumeShadesTheNozzleAndTheMarchAsOneField():
+    nozzle = _syntheticNozzle(nozzlePlumeField = _plume(), nozzlePlumeStructure = _structure())
+    data = plumeFigure(nozzle)
+    x, r, mach, field = _heatmap(plotlyPlume(data))
+    # From the injector face to the end of the march, on the scale of the supersonic flow
+    assert x[0] == pytest.approx(nozzle.xNozzleWall[0]) and x[-1] == pytest.approx(0.90)
+    assert field.zmin == pytest.approx(data.machRange[0]) and field.zmax == pytest.approx(4.6)
+    axis = int(np.argmin(np.abs(r)))
+    chamber, plume = x < -0.12, x > 0.63
+    # The chamber reads its own subsonic Mach number, and the plume the march's
+    assert np.all(mach[axis, chamber] < 1.0)
+    assert np.allclose(mach[axis, plume], 4.6, atol = 1e-6)
+    # Nothing is shaded outside the wall: in the chamber, past its 0.09 m radius
+    assert np.all(np.isnan(mach[np.ix_(np.abs(r) > 0.095, chamber)]))
+
+def testTheInteractivePlumeOfARunThatDidNotMarchShadesTheNozzle():
+    nozzle = _syntheticNozzle(nozzlePlumeField = _plume(solved = False), nozzlePlumeStructure = _structure())
+    x, _, mach, _ = _heatmap(plotlyPlume(plumeFigure(nozzle)))
+    assert x[0] == pytest.approx(nozzle.xNozzleWall[0]) and x[-1] <= 0.60 + 1e-9
+    assert np.isfinite(mach).any()
 
 def testOnlyTheFirstShockCellIsLabelled():
     data = PlumeFigure(wallX = np.array([0.0, 0.6]), wallR = np.array([0.05, 0.3]),
@@ -255,6 +310,16 @@ def testACoolingViewWithNothingToDrawSaysSo(name):
     from novaGui import thermalPlots
 
     assert _drawn(getattr(thermalPlots, name), _syntheticNozzle()).messageText
+
+def testTheStaticPlumeOfARunThatDidNotMarchShadesTheNozzle():
+    from novaGui.plotting import drawPlume
+
+    nozzle = _syntheticNozzle(nozzlePlumeField = _plume(solved = False), nozzlePlumeStructure = _structure())
+    for mode in ('dark', 'light'):
+        pane = _drawn(drawPlume, nozzle, mode = mode)
+        # The shading and its color bar beside the plot
+        assert pane.messageText is None and len(pane.figure.get_axes()) >= 2
+        assert pane.figure.get_axes()[0].collections
 
 @pytest.mark.parametrize('quantity', ['mach', 'pressure', 'temperature'])
 def testTheFieldViewDraws(quantity):
