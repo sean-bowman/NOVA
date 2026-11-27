@@ -34,7 +34,7 @@ solvers.
 
 '''
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 # Import order runs from the modules with no siblings of their own outward to the facade, so a
 # circular import should surface here
