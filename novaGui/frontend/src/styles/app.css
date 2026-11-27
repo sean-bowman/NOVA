@@ -2422,6 +2422,56 @@ select.input option {
     font-weight: 600;
 }
 
+/* -- The runs a closed window left unrun: their count and their list -- */
+.run-not-run {
+    color: var(--yellow);
+    font-weight: 600;
+}
+
+.not-run-panel {
+    width: 540px;
+}
+
+.not-run-note {
+    margin: 0;
+    padding: 0 14px 4px;
+    color: var(--text-muted);
+    font-size: 12px;
+}
+
+.not-run-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px 6px 14px;
+    font-size: 12.5px;
+}
+
+.not-run-row + .not-run-row {
+    border-top: 1px solid var(--border);
+}
+
+.not-run-text {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+}
+
+.not-run-detail {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.not-run-row .icon-button {
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+}
+
 .cancel-menu {
     left: 16px;
     display: grid;

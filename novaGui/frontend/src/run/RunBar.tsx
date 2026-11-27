@@ -8,6 +8,9 @@
    During a run Generate becomes Queue: the form joins the queue and runs when the runs before it
    end. The queued count opens the queue, where a run can be taken out before it starts. With runs
    queued, Cancel asks whether to stop the run alone, so the queue goes on, or the queue with it.
+   The runs a closed window left queued or going count as not run, and the count opens their list:
+   each names what its config changes from the shipped nozzle, and can be queued again, put in the
+   form, or discarded.
 
    NOVA reports its progress as events (NOVA.progress), which the server folds into a stage tree
    (novaGui.progress.RunProgress). The stepper draws one segment per top-level stage of the run's
@@ -22,7 +25,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { CloseIcon, PlayIcon, StopIcon, SweepIcon, WarningIcon } from '../components/Icons';
-import type { QueueEntry, RunStage } from '../types';
+import type { NotRunEntry, QueueEntry, RunStage, Schema } from '../types';
+import { changesText, notRunChanges, queuedText } from './notRun';
 import { StagePanel } from './StagePanel';
 import { formatClock, runClockNow, runElapsed, shownState, stageElapsed, stageTime, type ShownState } from './stageText';
 import { useTicker, type RunView } from './useRunEvents';
@@ -31,6 +35,7 @@ const fullBeforeDone = 0.95;    // [-] the most a running segment fills on time 
 
 interface RunBarProps {
     run: RunView;
+    schema: Schema | null;
     canGenerate: boolean;
     blockReason: string;
     logOpen: boolean;
@@ -39,6 +44,9 @@ interface RunBarProps {
     onSweep: () => void;
     onCancel: (everything: boolean) => void;
     onUnqueue: (queueIds: number[]) => void;
+    onRequeue: (notRunIds: number[]) => void;
+    onDiscard: (notRunIds: number[]) => void;
+    onEditNotRun: (entry: NotRunEntry) => void;
     onToggleLog: () => void;
     onToggleStages: () => void;
 }
@@ -96,6 +104,71 @@ function QueuePanel({ queue, onUnqueue, onClose }: { queue: QueueEntry[]; onUnqu
                         </button>
                     </li>
                 ))}
+            </ol>
+        </Popover>
+    );
+}
+
+interface NotRunPanelProps {
+    entries: NotRunEntry[];
+    schema: Schema | null;
+    onQueue: (notRunIds: number[]) => void;
+    onDiscard: (notRunIds: number[]) => void;
+    onEdit: (entry: NotRunEntry) => void;
+    onClose: () => void;
+}
+
+/** The runs a closed window left unrun, each to queue again, put in the form, or discard. */
+export function NotRunPanel({ entries, schema, onQueue, onDiscard, onEdit, onClose }: NotRunPanelProps) {
+    const ids = entries.map((entry) => entry.notRunId);
+    return (
+        <Popover className="queue-panel not-run-panel" label="Runs not run" onClose={onClose}>
+            <div className="stage-panel-head">
+                <span className="stage-panel-title">Not run</span>
+                <span className="muted">{entries.length === 1 ? 'one run' : `${entries.length} runs`}</span>
+                <span className="toolbar-spacer" />
+                <button type="button" className="button button-quiet button-small" onClick={() => onQueue(ids)}
+                        title="Queue every one again, in this order, behind the runs queued now">
+                    Queue all
+                </button>
+                <button type="button" className="button button-quiet button-small" onClick={() => onDiscard(ids)}
+                        title="Drop every one">
+                    Discard all
+                </button>
+                <button type="button" className="icon-button" aria-label="Close the list" onClick={onClose}><CloseIcon /></button>
+            </div>
+            <p className="not-run-note">Queued or going when NOVA last closed. None starts until it is queued again.</p>
+            <ol className="queue-list">
+                {entries.map((entry) => {
+                    const changes = schema ? notRunChanges(schema, entry) : [];
+                    const detail = [entry.reason, queuedText(entry.queuedAt)].filter(Boolean).join(', ');
+                    return (
+                        <li key={entry.notRunId} className="not-run-row">
+                            <div className="not-run-text">
+                                <span className="queue-label" title={entry.label}>{entry.label}</span>
+                                <span className="not-run-detail">{detail}</span>
+                                {schema && (
+                                    <span className="not-run-detail not-run-changes"
+                                          title={changes.map((change) => `${change.label}: ${change.after}`).join('\n')}>
+                                        {changesText(changes)}
+                                    </span>
+                                )}
+                            </div>
+                            <button type="button" className="button button-quiet button-small" onClick={() => onEdit(entry)}
+                                    aria-label={`Edit ${entry.label} in the form`} title="Put its config in the form">
+                                Edit
+                            </button>
+                            <button type="button" className="button button-small" onClick={() => onQueue([entry.notRunId])}
+                                    aria-label={`Queue ${entry.label} again`} title="Queue it again, behind the runs queued now">
+                                Queue
+                            </button>
+                            <button type="button" className="icon-button" aria-label={`Discard ${entry.label}`}
+                                    onClick={() => onDiscard([entry.notRunId])}>
+                                <CloseIcon />
+                            </button>
+                        </li>
+                    );
+                })}
             </ol>
         </Popover>
     );
@@ -173,14 +246,17 @@ function Stepper({ run, clock }: { run: RunView; clock: number }) {
     );
 }
 
-export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onGenerate, onSweep, onCancel, onUnqueue,
-                         onToggleLog, onToggleStages }: RunBarProps) {
+export function RunBar({ run, schema, canGenerate, blockReason, logOpen, stagesOpen, onGenerate, onSweep, onCancel,
+                         onUnqueue, onRequeue, onDiscard, onEditNotRun, onToggleLog, onToggleStages }: RunBarProps) {
     const running = run.state === 'running';
     const [queueOpen, setQueueOpen] = useState(false);
     const [cancelOpen, setCancelOpen] = useState(false);
+    const [notRunOpen, setNotRunOpen] = useState(false);
     const queued = run.queue.length;
+    const notRun = run.notRun.length;
     const closeQueue = useCallback(() => setQueueOpen(false), []);
     const closeCancel = useCallback(() => setCancelOpen(false), []);
+    const closeNotRun = useCallback(() => setNotRunOpen(false), []);
 
     useEffect(() => {
         if (queued === 0) {
@@ -188,6 +264,11 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
             setCancelOpen(false);
         }
     }, [queued]);
+    useEffect(() => {
+        if (notRun === 0) {
+            setNotRunOpen(false);
+        }
+    }, [notRun]);
     useEffect(() => {
         if (!running) {
             setCancelOpen(false);
@@ -249,6 +330,13 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
                     {queued} queued
                 </button>
             )}
+            {notRun > 0 && (
+                <button type="button" className={`button button-quiet run-not-run ${notRunOpen ? 'is-pressed' : ''}`}
+                        aria-expanded={notRunOpen} onClick={() => setNotRunOpen((open) => !open)}
+                        title={`Queued or going when NOVA last closed:\n${run.notRun.map((entry) => entry.label).join('\n')}`}>
+                    {notRun} not run
+                </button>
+            )}
             {!run.connected && <span className="badge badge-error" title="The NOVA server is not answering">offline</span>}
             <button type="button" className={`button ${stagesOpen ? 'is-pressed' : ''}`} onClick={onToggleStages}
                     aria-expanded={stagesOpen} disabled={run.stages.length === 0} title="Every stage of the run, with its time">
@@ -259,6 +347,14 @@ export function RunBar({ run, canGenerate, blockReason, logOpen, stagesOpen, onG
             </button>
             {stagesOpen && run.stages.length > 0 && <StagePanel run={run} clock={clock} onClose={onToggleStages} />}
             {queueOpen && queued > 0 && <QueuePanel queue={run.queue} onUnqueue={onUnqueue} onClose={closeQueue} />}
+            {notRunOpen && notRun > 0 && (
+                <NotRunPanel entries={run.notRun} schema={schema} onQueue={onRequeue} onDiscard={onDiscard}
+                             onEdit={(entry) => {
+                                 setNotRunOpen(false);
+                                 onEditNotRun(entry);
+                             }}
+                             onClose={closeNotRun} />
+            )}
             {cancelOpen && running && queued > 0 && (
                 <Popover className="cancel-menu" label="Cancel" onClose={closeCancel}>
                     <button type="button" className="cancel-choice" onClick={() => {

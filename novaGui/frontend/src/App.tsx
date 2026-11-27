@@ -5,7 +5,8 @@
    stepper. The config lives here in backend values (SI), so the form edits it and the run bar
    sends it as it stands. An entry that does not parse blocks a run; a cross-field problem asks
    first. Generate during a run queues the form behind it, and
-   Sweep queues a trade sweep (SweepDialog), which then opens in the result pane's Sweep view.
+   Sweep queues a trade sweep (SweepDialog), which then opens in the result pane's Sweep view. A
+   launch after a window closed with runs queued or going says so once; the run bar lists them.
 
    The form's width is dragged on the splitter, or moved with the arrow keys on it, and is kept
    between launches with the theme mode (novaGui.settings). A double click returns it to the
@@ -32,7 +33,7 @@ import { useRunEvents } from './run/useRunEvents';
 import { useRuns } from './result/useRuns';
 import { SweepDialog } from './sweep/SweepDialog';
 import { useSweeps } from './sweep/useSweeps';
-import type { Config, FormState, Health, Mode, RunEntry, RunSummary, Schema, Submitted, Sweep } from './types';
+import type { Config, FormState, Health, Mode, NotRunEntry, RunEntry, RunSummary, Schema, Submitted, Sweep } from './types';
 
 const defaultFormWidth = 540;   // [px]
 const minFormWidth = 380;       // [px]
@@ -199,6 +200,38 @@ export function App() {
         Promise.all(queueIds.map((queueId) => api.unqueue(queueId)))
             .catch((error: Error) => notify('error', 'Not taken out of the queue', error.message));
     }, [notify]);
+
+    // -- Runs a closed window left unrun -- //
+    const requeue = useCallback((notRunIds: number[]) => {
+        api.requeueNotRun(notRunIds)
+            .then(({ queued }) => queued.length > 0
+                && notify('info', queued.length === 1 ? 'Queued again' : `${queued.length} runs queued again`, 'In the order listed'))
+            .catch((error: Error) => notify('error', 'Not queued again', error.message));
+    }, [notify]);
+
+    const discard = useCallback((notRunIds: number[]) => {
+        api.discardNotRun(notRunIds).catch((error: Error) => notify('error', 'Not discarded', error.message));
+    }, [notify]);
+
+    // A run left unrun goes to the form over the defaults, for any field added since it was queued
+    const editNotRun = useCallback((entry: NotRunEntry) => {
+        replaceConfig({ ...(schema?.defaults ?? {}), ...entry.config });
+        notify('info', `${entry.label}'s config is in the form`, entry.reason);
+    }, [schema, notify, replaceConfig]);
+
+    // The list fills only from a launch's snapshot, so the first time it holds runs is the time to say so
+    const notRunTold = useRef(false);
+    useEffect(() => {
+        const count = run.notRun.length;
+        if (notRunTold.current || count === 0) {
+            return;
+        }
+        notRunTold.current = true;
+        const them = count === 1 ? 'it' : 'them';
+        notify('info', count === 1 ? 'One run did not run' : `${count} runs did not run`,
+               `NOVA closed with ${them} queued or going. ${count} not run, in the run bar, queues ${them} again `
+               + `or discards ${them}.`);
+    }, [run.notRun, notify]);
 
     const sweepQueued = useCallback((sweep: Sweep) => {
         notify('info', `${sweep.name} queued`, `${sweep.points.length} runs, one at a time`);
@@ -400,8 +433,9 @@ export function App() {
             </main>
 
             {logOpen && <LogDrawer lines={run.log} />}
-            <RunBar run={run} canGenerate={canGenerate} blockReason={blockReason} logOpen={logOpen} stagesOpen={stagesOpen}
-                    onGenerate={generate} onSweep={() => setSweepOpen(true)} onCancel={cancel} onUnqueue={unqueue}
+            <RunBar run={run} schema={schema} canGenerate={canGenerate} blockReason={blockReason} logOpen={logOpen}
+                    stagesOpen={stagesOpen} onGenerate={generate} onSweep={() => setSweepOpen(true)} onCancel={cancel}
+                    onUnqueue={unqueue} onRequeue={requeue} onDiscard={discard} onEditNotRun={editNotRun}
                     onToggleLog={() => setLogOpen((open) => !open)} onToggleStages={() => setStagesOpen((open) => !open)} />
 
             {sweepOpen && schema && (

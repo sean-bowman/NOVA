@@ -4,9 +4,9 @@
    snapshot, so a reload or a reconnect mid-run picks up where the run is. Besides the run itself
    it carries the figures a running run has settled, how many passes its coolant circuit has
    kept (each one draws again in the circuit iteration view), the warnings it has raised, the runs queued
-   behind it, a count that moves whenever the kept runs or the baseline change, one that moves
-   whenever a trade sweep does and one whenever a run's plume sweep does, and the theme mode last
-   saved from any window.
+   behind it, the runs a closed window left unrun, a count that moves whenever the kept runs or the
+   baseline change, one that moves whenever a trade sweep does and one whenever a run's plume sweep
+   does, and the theme mode last saved from any window.
    Sean Bowman [11/16/2026]
    ======================================== */
 
@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { subscribeRunEvents } from '../api';
 import type {
-    Mode, PartialRun, QueueEntry, RunEvent, RunProgressFields, RunStage, RunStateName, RunSummary, RunWarning,
+    Mode, NotRunEntry, PartialRun, QueueEntry, RunEvent, RunProgressFields, RunStage, RunStateName, RunSummary, RunWarning,
 } from '../types';
 
 const maxLogLines = 4000;
@@ -41,6 +41,7 @@ export interface RunView {
     sweepsVersion: number;        // moves when a sweep is added or deleted, or a point's state moves
     plumeVersion: number;         // moves when a run's plume sweep is added or deleted, or a point's state moves
     queue: QueueEntry[];          // the runs waiting their turn, in order
+    notRun: NotRunEntry[];        // the runs a closed window left unrun, oldest first
     savedMode: Mode | null;       // the theme mode last saved from any window
 }
 
@@ -48,7 +49,7 @@ const initial: RunView = {
     state: 'idle', detail: '', runId: null, label: '', stageDetail: '', stages: [],
     expectedRun: null, runClock: 0, progressAt: 0, startedAt: null, endedAt: null, log: [], result: null,
     connected: false, partial: null, iterationRevision: 0, warnings: [], runsVersion: 0, sweepsVersion: 0, plumeVersion: 0,
-    queue: [], savedMode: null,
+    queue: [], notRun: [], savedMode: null,
 };
 
 function progressOf(event: RunProgressFields): Partial<RunView> {
@@ -68,6 +69,7 @@ function reduce(previous: RunView, event: RunEvent): RunView {
                 partial: event.partial ?? null, iterationRevision: event.partial?.revision ?? 0,
                 warnings: event.warnings ?? [], runsVersion: previous.runsVersion + 1,
                 sweepsVersion: previous.sweepsVersion + 1, plumeVersion: previous.plumeVersion + 1, queue: event.queue ?? [],
+                notRun: event.notRun ?? [],
             };
         case 'log': {
             const log = previous.log.length >= maxLogLines ? previous.log.slice(1 - maxLogLines) : previous.log.slice();
@@ -102,6 +104,8 @@ function reduce(previous: RunView, event: RunEvent): RunView {
             return { ...previous, runsVersion: previous.runsVersion + 1 };
         case 'queue':
             return { ...previous, queue: event.queue };
+        case 'notRun':
+            return { ...previous, notRun: event.notRun };
         case 'sweeps':
             return { ...previous, sweepsVersion: previous.sweepsVersion + 1 };
         case 'plumeSweeps':

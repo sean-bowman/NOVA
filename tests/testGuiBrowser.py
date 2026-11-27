@@ -7,8 +7,8 @@ into the form, deleting a run, the baseline drawn under a line plot, the grid's 
 zoom along the nozzle axis, the headline numbers and a row that opens its figure, the section
 outline, a problem written under its field, the warnings of a run, the export previews, a figure
 popped out into its own window, compressed figure responses, a trade sweep's plot and table, the
-sweep dialog's request, the run queue, the About dialog's build line and update check, and a plume
-sweep over a kept run.
+sweep dialog's request, the run queue, the runs a closed window left unrun, the About dialog's build
+line and update check, and a plume sweep over a kept run.
 
 The sweep view reads the showcase runs as the points of a sweep the test lays out; the sweep
 dialog's request and the update check are caught before they reach the server, and the queue
@@ -477,6 +477,44 @@ def testAQueuedRunCanBeTakenOutOfTheQueue(window, served):
     finally:
         session.queue.clear()
         session.publish({'type': 'queue', 'queue': []})
+
+def testRunsALastWindowLeftUnrunGoToTheFormOrAreDiscarded(window, served):
+    '''
+    The run bar counts the runs a closed window left unrun and says so once; their list names what
+    each changes from the shipped nozzle, discards one, and puts one's config in the form.
+    '''
+    app, _ = served
+    session = app.state.session
+    config = session.record(1).config
+    entries = [
+        {'notRunId': 901, 'label': 'left going', 'runName': 'leftGoing', 'mode': 'dark', 'queuedAt': 1.8e9,
+         'config': {**configSchema.defaultConfig(), 'chamberPressure': 7.0e6}, 'reason': 'NOVA closed while it ran'},
+        {'notRunId': 902, 'label': 'left queued', 'runName': config['filename'], 'mode': 'dark', 'queuedAt': 1.8e9,
+         'config': dict(config), 'reason': 'NOVA closed before it ran'},
+    ]
+    with session._lock:
+        session.notRun.update((entry['notRunId'], entry) for entry in entries)
+    session.publish({'type': 'notRun', 'notRun': session.notRunList()})
+    try:
+        window.wait_for_selector('.run-not-run')
+        assert window.inner_text('.run-not-run') == '2 not run'
+        assert '2 runs did not run' in window.inner_text('.toasts')
+        window.locator('.run-not-run').click()
+        rows = window.locator('.not-run-row')
+        assert rows.count() == 2
+        assert 'NOVA closed while it ran, queued ' in rows.nth(0).inner_text()
+        assert rows.nth(0).locator('.not-run-changes').inner_text() == 'Chamber pressure 7000 kPa'
+        window.get_by_role('button', name = 'Discard left going').click()
+        window.wait_for_function('document.querySelectorAll(".not-run-row").length === 1')
+        assert list(session.notRun) == [902]
+        window.get_by_role('button', name = 'Edit left queued in the form').click()
+        window.wait_for_selector('.not-run-panel', state = 'detached')
+        assert 'left queued\'s config is in the form' in window.inner_text('.toasts')
+        assert window.get_by_label('Output name', exact = True).input_value() == config['filename']
+    finally:
+        with session._lock:
+            session.notRun.clear()
+        session.publish({'type': 'notRun', 'notRun': []})
 
 def testTheCircuitIterationViewDrawsEachPassAsTheRunGoesOn(window, served):
 

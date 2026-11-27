@@ -6,7 +6,9 @@ The GUI's run queue and trade sweeps: a sweep laid out from the fields it varies
 the form could not run it, runs that queue and start in turn, cancelling one run or the whole
 queue, a sweep that runs its points and goes on past a failed one, its table and its plot, a sweep
 that outlasts its window in the run store and queues its unrun points again, a run whose sweep is
-gone, and deleting a sweep.
+gone, and deleting a sweep. The queue outlasts its window too: the store's queue file follows each
+change, and the runs a closed window left queued or going are listed as not run in the next one,
+to queue again or discard.
 
 The session tests stand a scripted worker in for NOVA's (`_ScriptedSession`): a thread that reports
 a result for its config after a short hold, fails a config marked to fail, and stops when
@@ -343,6 +345,121 @@ def testDeletingASweepMidRunStopsItsRunAndItsQueue():
         session.shutdown()
 
 #--------------------------------------------------------------------------------------------------------------------------#
+# -- The queue across launches -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+def _states(store: RunStore) -> list:
+    return [(entry['label'], entry['state']) for entry in store.queuedRuns()]
+
+def testTheStoresQueueFollowsEachChangeToTheQueue(tmp_path):
+    '''
+    The queue file holds the run going and the runs queued on their own, in order, from each change
+    to the next; a sweep's points are its own file's.
+    '''
+    store = RunStore(str(tmp_path))
+    session = _scripted(store, holdSec = 30.0)
+    try:
+        session.submit({'filename': 'first'})
+        dropped = session.submit({'filename': 'second'})['queueId']
+        session.submit({'filename': 'third'})
+        assert _states(store) == [('first', 'running'), ('second', 'queued'), ('third', 'queued')]
+        session.unqueue(dropped)
+        assert _states(store) == [('first', 'running'), ('third', 'queued')]
+        session.addSweep(_sweep(('chamberPressure', 'MPa', [6.0e6, 8.0e6])))
+        assert _states(store) == [('first', 'running'), ('third', 'queued')]
+        session.cancel()
+        _waitFor(lambda: _states(store) == [('third', 'running')])
+        session.cancel(everything = True)
+        _settled(session)
+        assert _states(store) == []
+    finally:
+        session.shutdown()
+
+def testRunsQueuedWhenTheWindowClosedAreListedAsNotRun(tmp_path):
+    '''
+    The next window lists the run that was going and those queued, in order, with why, and starts
+    none of them; a sweep's points stay the sweep's, cancelled.
+    '''
+    store = RunStore(str(tmp_path))
+    session = _scripted(store, holdSec = 30.0)
+    try:
+        session.submit({'filename': 'going', 'chamberPressure': 6.0e6}, mode = 'light')
+        session.submit({'filename': 'waiting', 'chamberPressure': 6.5e6}, label = 'the waiting one')
+        sweep = session.addSweep(_sweep(('chamberPressure', 'MPa', [8.0e6, 9.0e6])))
+        session.submit({'filename': 'last', 'chamberPressure': 6.8e6})
+    finally:
+        session.shutdown()
+    assert _states(store) == [('going', 'running'), ('the waiting one', 'queued'), ('last', 'queued')]
+
+    later = _scripted(RunStore(str(tmp_path)))
+    try:
+        listed = later.notRunList()
+        assert [entry['label'] for entry in listed] == ['going', 'the waiting one', 'last']
+        assert [entry['reason'] for entry in listed] == \
+            ['NOVA closed while it ran', 'NOVA closed before it ran', 'NOVA closed before it ran']
+        assert [entry['config']['chamberPressure'] for entry in listed] == [6.0e6, 6.5e6, 6.8e6]
+        assert [entry['mode'] for entry in listed] == ['light', 'dark', 'dark']
+        assert all(entry['queuedAt'] > 0 for entry in listed)
+        assert later.idle and later.snapshot()['notRun'] == listed
+        assert [point['state'] for point in later.sweeps[sweep['sweepId']]['points']] == ['cancelled'] * 2
+        assert [state for _, state in _states(store)] == ['notRun'] * 3
+    finally:
+        later.shutdown()
+
+    # Listed once, they stay listed until queued again or discarded
+    again = _scripted(RunStore(str(tmp_path)))
+    try:
+        assert [entry['reason'] for entry in again.notRunList()] == \
+            ['NOVA closed while it ran', 'NOVA closed before it ran', 'NOVA closed before it ran']
+    finally:
+        again.shutdown()
+
+def testARunNotRunQueuesAgainOrIsDiscarded(tmp_path):
+    store = RunStore(str(tmp_path))
+    store.saveQueue([{'label': name, 'config': {'filename': name, 'chamberPressure': 6.0e6}, 'mode': 'dark',
+                      'queuedAt': 1.0, 'state': 'queued', 'reason': ''} for name in ('alpha', 'beta', 'gamma')])
+    session = _scripted(RunStore(str(tmp_path)))
+    try:
+        alpha, beta, gamma = (entry['notRunId'] for entry in session.notRunList())
+        queued = session.requeue([gamma, alpha, 999])
+        assert len(queued) == 2
+        assert session.discard([beta, beta, 999]) == [beta]
+        assert session.notRunList() == [] and session.requeue([alpha]) == [] and session.discard([gamma]) == []
+        _settled(session)
+        assert [record.runName for record in session.runs.values()] == ['gamma', 'alpha']
+        assert _states(store) == []
+        kinds = [event['type'] for event in session.events if event['type'] == 'notRun']
+        assert kinds == ['notRun', 'notRun']
+    finally:
+        session.shutdown()
+    later = _scripted(RunStore(str(tmp_path)))
+    try:
+        assert later.notRunList() == []
+    finally:
+        later.shutdown()
+
+def testAQueueFileThatDoesNotReadIsAnEmptyQueue(tmp_path):
+    store = RunStore(str(tmp_path))
+    path = os.path.join(str(tmp_path), 'queue.json')
+    for content in ('not json', '[]', '{"runs": {}}'):
+        with open(path, 'w', encoding = 'utf-8') as handle:
+            handle.write(content)
+        assert store.queuedRuns() == []
+    with open(path, 'w', encoding = 'utf-8') as handle:
+        json.dump({'runs': [{'label': 'no config'}, 'loose', {'config': {'filename': 'kept'}, 'mode': 'sepia',
+                                                             'state': 'lost', 'queuedAt': True}]}, handle)
+    assert store.queuedRuns() == [{'label': 'kept', 'config': {'filename': 'kept'}, 'mode': 'dark', 'queuedAt': 0.0,
+                                   'state': 'queued', 'reason': ''}]
+
+def testWithoutAStoreTheQueueIsTheWindowsAlone():
+    session = _scripted(holdSec = 0.05)
+    try:
+        session.submit({'filename': 'only'})
+        _settled(session)
+        assert session.notRunList() == [] and session.snapshot()['notRun'] == []
+    finally:
+        session.shutdown()
+
+#--------------------------------------------------------------------------------------------------------------------------#
 # -- Routes -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 @pytest.fixture
@@ -391,3 +508,27 @@ def testTheQueueRoutes(client):
     assert client.post('/api/runs/cancel', json = {'all': True}).json() == {'cancelled': True}
     _settled(session)
     assert client.post('/api/runs/cancel').json() == {'cancelled': False}
+
+def testTheNotRunRoutes(tmp_path):
+    store = RunStore(str(tmp_path))
+    store.saveQueue([{'label': name, 'config': {'filename': name}, 'mode': 'dark', 'queuedAt': 1.0, 'state': 'running',
+                      'reason': ''} for name in ('left', 'over')])
+    session = _scripted(RunStore(str(tmp_path)), holdSec = 0.05)
+    app = createApp(session = session, warm = False)
+    try:
+        with TestClient(app) as client:
+            listed = client.get('/api/runs/state').json()['notRun']
+            assert [(entry['label'], entry['reason']) for entry in listed] == \
+                [('left', 'NOVA closed while it ran'), ('over', 'NOVA closed while it ran')]
+            left, over = (entry['notRunId'] for entry in listed)
+            for body in (b'not json', b'{}', b'{"ids": "1"}', b'{"ids": [true]}', b'{"ids": [1.5]}'):
+                assert client.post('/api/not-run/queue', content = body).status_code == 400
+                assert client.post('/api/not-run/discard', content = body).status_code == 400
+            assert client.post('/api/not-run/discard', json = {'ids': [over]}).json() == {'discarded': [over]}
+            queued = client.post('/api/not-run/queue', json = {'ids': [left, over]}).json()['queued']
+            assert len(queued) == 1
+            _settled(session)
+            assert client.get('/api/runs/state').json()['notRun'] == []
+            assert [record.runName for record in session.runs.values()] == ['left']
+    finally:
+        session.shutdown()

@@ -33,6 +33,11 @@ A plume sweep (novaGui.plumeSweeps) belongs to one run and is kept in that run's
 `plumeSweeps/plume<n>.json`, numbered within the run; it goes when the run's folder goes, and its
 size counts in the run's.
 
+The run queue is kept as `queue.json`, which the session writes at each change to it: every run
+queued on its own and the one going, each with its label, config, figure mode and the time it was
+queued, and the runs a closed window left unrun, with why. A sweep's points are its own file's to
+keep. The file is one window's queue: a second server on the same store writes over it.
+
 The store lives in `%LOCALAPPDATA%\\NOVA\\runs` on Windows and `~/.local/share/NOVA/runs`
 elsewhere; NOVA_RUN_STORE names another folder. It is the user's own folder, and the server
 unpickles the Nozzle each run saved there, as it does a run of its own.
@@ -55,6 +60,8 @@ storeBytes = 2 * 2 ** 30         # [B] the store's size past which unnamed runs 
 staleHours = 12.0                # [h] age at which an unfinished run's folder is collected
 recordName = 'run.json'
 indexName = 'store.json'
+queueName = 'queue.json'
+queueStates = ('queued', 'running', 'notRun')
 sweepFolderName = 'sweeps'
 plumeFolderName = 'plumeSweeps'
 recordVersion = 1
@@ -392,6 +399,58 @@ class RunStore:
             os.remove(self._sweepPath(sweepId))
         except OSError:
             pass
+
+    def saveQueue(self, runs: list) -> None:
+
+        '''
+
+        Write the run queue, in order.
+
+        Parameters:
+        -----------
+        runs : list
+            {'label', 'config', 'mode', 'queuedAt', 'state', 'reason'} for each run: `state` is
+            'queued', 'running', or 'notRun' for one a closed window left unrun, which `reason`
+            explains; `queuedAt` [s] is epoch time.
+
+        '''
+
+        self._writeJson(os.path.join(self.root, queueName), {'runs': list(runs), 'version': recordVersion})
+
+    def queuedRuns(self) -> list:
+
+        '''
+
+        The run queue as last saved, in order, each entry as `saveQueue` takes it. An entry without
+        a config is passed over, and a file that is missing or does not read is an empty queue.
+
+        '''
+
+        try:
+            with open(os.path.join(self.root, queueName), encoding = 'utf-8') as handle:
+                content = json.load(handle)
+        except (OSError, ValueError):
+            return []
+        runs = content.get('runs') if isinstance(content, dict) else None
+        if not isinstance(runs, list):
+            return []
+
+        found = []
+        for entry in runs:
+            if not isinstance(entry, dict) or not isinstance(entry.get('config'), dict):
+                continue
+            config = entry['config']
+            queuedAt = entry.get('queuedAt')
+            found.append({
+                'label': str(entry.get('label') or config.get('filename') or 'the form'),
+                'config': config,
+                'mode': entry['mode'] if entry.get('mode') in ('dark', 'light') else 'dark',
+                'queuedAt': float(queuedAt) if isinstance(queuedAt, (int, float)) and not isinstance(queuedAt, bool) else 0.0,
+                'state': entry['state'] if entry.get('state') in queueStates else 'queued',
+                'reason': str(entry.get('reason') or ''),
+            })
+
+        return found
 
     def _plumePath(self, runId: int, number: int) -> str:
 

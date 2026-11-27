@@ -29,6 +29,9 @@ Routes, all under /api:
     DELETE /runs/{runId}            delete a kept run and its files
     POST /runs/cancel               terminate the running worker; {'all': true} empties the queue first
     DELETE /queue/{queueId}         take a run out of the queue
+    POST /not-run/queue             queue again runs a closed window left unrun, in the order given:
+                                    {'ids': [notRunId]}; the snapshot lists them as 'notRun'
+    POST /not-run/discard           drop runs a closed window left unrun: {'ids': [notRunId]}
     GET  /sweeps                    the trade sweeps, newest first, each point with its run's headline
                                     numbers (novaGui.sweeps)
     POST /sweeps                    queue a sweep: {'name', 'config', 'mode', 'fields': [{'key', 'unit', 'values'}]}
@@ -351,6 +354,29 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
         if not app.state.session.unqueue(queueId):
             raise HTTPException(404, f'nothing queued as {queueId}')
         return {'unqueued': queueId}
+
+    async def _notRunIds(request: Request) -> list:
+
+        '''The run ids a not-run route names, {'ids': [int]}; 400 for any other body.'''
+
+        try:
+            loaded = json.loads(await request.body() or b'null')
+        except ValueError as exc:
+            raise HTTPException(400, 'the body must be JSON') from exc
+        ids = loaded.get('ids') if isinstance(loaded, dict) else None
+        if not isinstance(ids, list) or any(isinstance(value, bool) or not isinstance(value, int) for value in ids):
+            raise HTTPException(400, 'the body must carry a list of run ids: {"ids": [int]}')
+        return ids
+
+    @app.post('/api/not-run/queue')
+    async def requeueNotRun(request: Request) -> dict:
+
+        return {'queued': app.state.session.requeue(await _notRunIds(request))}
+
+    @app.post('/api/not-run/discard')
+    async def discardNotRun(request: Request) -> dict:
+
+        return {'discarded': app.state.session.discard(await _notRunIds(request))}
 
     # -- Trade sweeps -- #
     @app.get('/api/sweeps')
