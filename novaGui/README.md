@@ -44,7 +44,7 @@ python -m novaGui --api         # the API alone on 127.0.0.1:8765
 cd novaGui/frontend && npm run dev     # Vite on http://localhost:5173, proxying /api to 8765
 ```
 
-`npm run typecheck` runs the TypeScript compiler alone.
+`npm run typecheck` runs the TypeScript compiler alone, over the sources and the tests. `npm test` runs the front end's unit tests in `frontend/tests/` with Vitest in jsdom: the Design form's model (entry parsing, unit conversion, changed values, the keys a selector row writes) and its rows and form rendered with Testing Library (conversion in place on a unit change, Changed only and the restore, the problems written under rows). `npm test -- tests/units.test.ts` runs one file. The tests are not part of the build, so a change to them alone needs no new `dist/`. The Tests workflow runs both commands in a job beside the Python suite. `npm test` starts Vitest through `tests/runVitest.mjs`, which imports the CLI from its canonical path: on Windows, Vitest 5.1 started from a path with a lower-case drive letter (as a VS Code terminal gives it) loads its runtime twice and fails every suite (vitest-dev/vitest#11872).
 
 ## Architecture
 

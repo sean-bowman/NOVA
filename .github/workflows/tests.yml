@@ -3,7 +3,9 @@
 # from CoolProp and the tests that need REFPROP skip. The tests that read the local showcase runs
 # skip too: tests/testGuiBrowser.py and parts of testWebServer.py and testRunReport.py.
 # tests/regressionHarness.py is not part of the suite and stays local, since its baselines are one
-# machine's answer bit for bit.
+# machine's answer bit for bit. The GUI front end's type check and unit tests (novaGui/frontend)
+# run beside the suite in a job of their own; they read no fluid properties and no runs, so they
+# run on Linux.
 name: Tests
 
 on:
@@ -46,3 +48,27 @@ jobs:
       # -ra lists every skip with its reason, so a test that skips on the runner says why
       - name: Run the test suite
         run: python -m pytest -ra --durations=25
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: novaGui/frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: novaGui/frontend/package-lock.json
+
+      - name: Install the front end's packages
+        run: npm ci
+
+      - name: Type check the front end and its tests
+        run: npm run typecheck
+
+      - name: Run the front end's unit tests
+        run: npm test

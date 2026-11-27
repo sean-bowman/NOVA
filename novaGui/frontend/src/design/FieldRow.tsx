@@ -37,12 +37,14 @@ export function FieldRow({ spec, value, defaultValue, units, visible, changed, e
     const [unit, setUnit] = useState<string | null>(spec.dimension ? siUnit(units, spec.dimension) : null);
     const [text, setText] = useState(() => valueToText(spec, value, units, unit));
 
-    // Follow the config while the user is not typing: a loaded file, a reset, a unit change
+    // Follow the config while the user is not typing: a loaded file, a reset, a unit change. An
+    // entry that does not read keeps its text until it is fixed or restored, so the problem written
+    // under the row stays the problem with what the row shows.
     useEffect(() => {
-        if (!focused.current) {
+        if (!focused.current && !error) {
             setText(valueToText(spec, value, units, unit));
         }
-    }, [spec, value, units, unit]);
+    }, [spec, value, units, unit, error]);
 
     const commit = (raw: string) => {
         setText(raw);
