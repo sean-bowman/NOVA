@@ -58,6 +58,8 @@ import time
 unnamedRuns = 24                 # unnamed runs kept, besides the named ones and the baseline
 storeBytes = 2 * 2 ** 30         # [B] the store's size past which unnamed runs go
 staleHours = 12.0                # [h] age at which an unfinished run's folder is collected
+replaceAttempts = 20             # tries at replacing a record a reader holds open
+replacePause = 0.025             # [s] between them
 recordName = 'run.json'
 indexName = 'store.json'
 queueName = 'queue.json'
@@ -173,12 +175,25 @@ class RunStore:
 
     def _writeJson(self, path: str, content: dict) -> None:
 
-        '''Write through a temporary file, so a crash cannot leave half of one.'''
+        '''
+
+        Write through a temporary file, so a crash cannot leave half of one. On Windows the
+        replace fails while another process or thread has the file open, a reader or a virus
+        scanner, so it is tried again for up to `replaceAttempts` times `replacePause`.
+
+        '''
 
         temporary = path + '.part'
         with open(temporary, 'w', encoding = 'utf-8', newline = '\n') as handle:
             json.dump(content, handle, indent = 1)
-        os.replace(temporary, path)
+        for attempt in range(replaceAttempts):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                if attempt == replaceAttempts - 1:
+                    raise
+                time.sleep(replacePause)
 
     def _updateIndex(self, **changes) -> None:
 

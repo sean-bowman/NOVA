@@ -450,6 +450,24 @@ def testAQueueFileThatDoesNotReadIsAnEmptyQueue(tmp_path):
     assert store.queuedRuns() == [{'label': 'kept', 'config': {'filename': 'kept'}, 'mode': 'dark', 'queuedAt': 0.0,
                                    'state': 'queued', 'reason': ''}]
 
+def testTheQueueIsWrittenThoughAReaderHoldsItsFileOpen(tmp_path):
+    '''On Windows a reader holding the file blocks the replace; the write waits for it to let go.'''
+    store = RunStore(str(tmp_path))
+    store.saveQueue([])
+    entry = {'label': 'held', 'config': {'filename': 'held'}, 'mode': 'dark', 'queuedAt': 1.0, 'state': 'queued',
+             'reason': ''}
+    holding = threading.Event()
+    def hold():
+        with open(os.path.join(str(tmp_path), 'queue.json'), encoding = 'utf-8'):
+            holding.set()
+            time.sleep(0.15)
+    reader = threading.Thread(target = hold)
+    reader.start()
+    holding.wait(5.0)
+    store.saveQueue([entry])
+    reader.join()
+    assert store.queuedRuns() == [entry]
+
 def testWithoutAStoreTheQueueIsTheWindowsAlone():
     session = _scripted(holdSec = 0.05)
     try:

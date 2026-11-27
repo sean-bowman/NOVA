@@ -808,14 +808,16 @@ class RunSession:
         self._publish({'type': 'status', 'state': state, 'detail': detail})
         self._publish({'type': 'result', **record.summary()})
 
+        # The store's queue drops the run before the session reads idle, so idle means the file is current
+        with self._lock:
+            ownRun, self._runEntry = self._runEntry is not None, None
+        if ownRun:
+            self._saveQueue()
         # The run counts as going until its end is told, so the next run's events follow its own
         with self._lock:
             self._process = None
             self._queue = None
             self._runSweep = None
-            ownRun, self._runEntry = self._runEntry is not None, None
-        if ownRun:
-            self._saveQueue()
         self._advance()
 
     # -- Public Methods -- #
