@@ -44,7 +44,7 @@ import platform
 import subprocess
 import sys
 
-__version__ = '0.1.0'
+__version__ = '0.1.1'
 
 # The plume mark in each mode and the window icon
 assetFolder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
