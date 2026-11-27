@@ -167,7 +167,7 @@ The circuit view draws the coolant's paths on the half section, and with two pas
 
 ![Coolant circuit](docs/images/novaGui/viewCircuit.png)
 
-Circuit iterations draws every pass of a multi-pass circuit's outer iteration. On the shipped nozzle the jacket settles in seven passes: the up leg's coolant rises toward its final profile, its largest change falling from 12 K at the second pass by about a factor of three a pass.
+Circuit iterations draws every pass of a multi-pass circuit's outer iteration. On the shipped nozzle the jacket settles in four passes. The up leg's largest change is 12 K at the second pass and 3.5 K at the third; the fourth is solved beside the outer iteration's accelerated estimate of the settled profile and comes out within 0.02 K of it.
 
 ![Circuit iterations](docs/images/novaGui/viewIterations.png)
 

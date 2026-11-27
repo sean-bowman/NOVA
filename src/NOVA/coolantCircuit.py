@@ -28,9 +28,19 @@ and the warmer hands heat to the colder through the rib between them,
 per rib face (regenThermal.ribExchangeConductance). A down channel has two up neighbors; an up
 channel has two down neighbors at a 1:1 ratio and one at 1:2, so the faces each channel presents
 are counted per pass and the heat the two passes exchange balances. Since each pass's march needs
-the other's coolant along the whole wall, the two are solved in turn, each on the other's last
-profile, until neither moves by more than a tolerance (Gauss-Seidel, as the Ievlev outer
-iteration in regenChannels is solved).
+the other's coolant along the whole wall, the two are solved in turn, the down pass beside the up
+pass's profile and the up pass beside the new down pass, until the up coolant moves by less than a
+tolerance (Gauss-Seidel, as the Ievlev outer iteration in regenChannels is solved).
+
+**Acceleration.** The plain iteration converges linearly: the change falls by a steady ratio a
+pass, 0.30 on the shipped nozzle's jacket and 0.52 on the methalox booster's extension circuit,
+which then takes 14 passes. The up pass the down pass is solved beside is instead Anderson's
+combination of the last four up passes (`_Accelerator`), which settles those two in 4 and 7 passes
+and the F-1-like example's jacket in 4 against 5. The accelerated and the plain iteration settle
+on the same circuit: solved to 1e-4 K, the two agree to within 1.1e-4 K of coolant on all three.
+At the 0.05 K tolerance a run uses, the accelerated coolant is within 0.019 K of that settled
+circuit on all three and the plain within 0.040 K, the methalox booster the furthest for both
+(validation/coolingCircuits/circuitAcceleration.py).
 
 ----------------------------------------------------------------------
                             Validation status
@@ -45,7 +55,8 @@ iteration tolerance; the turnaround's loss is charged once and its turn keeps th
 enthalpy; and the flow splits between the families in the ratio asked for. The rib conductance
 runs 2 to 40 percent above a two-dimensional conduction solve of the web between two circular
 channels (validation/coolingCircuits/phase4), the most for large channels at high coolant
-coefficients.
+coefficients. The acceleration is verified, not validated: it is held to the plain iteration of
+the same model, solved further (above).
 
 All units are mass base SI:
     - Length [m]
@@ -360,6 +371,75 @@ def _passState(base, stations, direction: str, channelCount: int, channelMassFlo
     state.stationRise = None
     return state
 
+class _Accelerator:
+
+    '''
+
+    The up pass the next down pass is solved beside, from the up passes fed in so far and those
+    that came out of them.
+
+    The outer iteration is a fixed point x = G(x) on the up pass as the down pass reads it: its
+    coolant leaving each station, its coolant coefficient and its channel radius. The down pass is
+    solved beside x and the up pass beside the down pass, and G(x) is what the up pass gives. The
+    plain iteration feeds the down pass x_{k+1} = G(x_k).
+
+    Accelerated, it is Anderson's (Walker and Ni 2011, undamped): the combination of the last
+    DEPTH + 1 up passes whose coolant residuals r = G(x) - x combined are least,
+
+        x_{k+1} = G(x_k) - dG g,  g minimizing |r_k - dR g|,
+
+    over the differences dR of the kept residuals [K] and dG of the kept up passes. The weights are
+    chosen on the coolant and the step is taken on the coefficient and the radius as well, so the
+    down pass never sees a coolant profile moved ahead of the coefficient that goes with it. A
+    residual larger than the last, or a step to a coefficient or radius that is not positive,
+    drops what is kept and takes the plain step.
+
+    '''
+
+    DEPTH = 3
+
+    def __init__(self, accelerate: bool):
+
+        self.accelerate = accelerate
+        self.residuals = []     # coolant residuals kept [K]
+        self.outputs = []       # up passes kept, as the down pass reads them
+
+    def next(self, fedIn, cameOut) -> dict:
+
+        '''
+
+        The up pass to feed the next down pass.
+
+        Parameters:
+        -----------
+        fedIn : dict | None
+            The up pass the last down pass was solved beside, None on the first pass: 'temperature'
+            [K], 'coefficient' [W/m^2 K] and 'radius' [m], each by station.
+        cameOut : dict
+            The up pass solved after it, the same fields.
+
+        '''
+
+        if fedIn is None or not self.accelerate:
+            return cameOut
+        residual = cameOut['temperature'] - fedIn['temperature']
+        if self.residuals and np.max(np.abs(residual)) > np.max(np.abs(self.residuals[-1])):
+            self.residuals, self.outputs = [], []
+        self.residuals = (self.residuals + [residual])[-(self.DEPTH + 1):]
+        self.outputs = (self.outputs + [cameOut])[-(self.DEPTH + 1):]
+        if len(self.residuals) < 2:
+            return cameOut
+        residualSteps = np.column_stack([b - a for a, b in zip(self.residuals[:-1], self.residuals[1:])])
+        weights = np.linalg.lstsq(residualSteps, residual, rcond = None)[0]
+        pairs = list(zip(self.outputs[:-1], self.outputs[1:]))
+        step = {name: cameOut[name] - sum(weight * (b[name] - a[name]) for weight, (a, b) in zip(weights, pairs))
+                for name in cameOut}
+        if not (np.all(np.isfinite(step['temperature'])) and np.all(step['coefficient'] > 0.0)
+                and np.all(step['radius'] > 0.0)):
+            self.residuals, self.outputs = [residual], [cameOut]
+            return cameOut
+        return step
+
 def _solvePass(template, geometry, thermal, neighborTemperature, neighborCoefficient,
                neighborRadius, faces, ownRise = None):
 
@@ -389,7 +469,7 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
                         minWallThickness: float = 0.0,
                         turnaroundVelocityRatio: float = DEFAULTVELOCITYRATIO,
                         tolerance: float = 0.05, maxIterations: int = 30,
-                        ribExchange: bool = True) -> CircuitSolution:
+                        ribExchange: bool = True, accelerate: bool = True) -> CircuitSolution:
 
     '''
 
@@ -421,11 +501,14 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
     turnaroundVelocityRatio : float
         Turnaround turning velocity over the down channel velocity [-].
     tolerance : float
-        Largest coolant temperature change between passes of the outer iteration [K].
+        Largest change between the up coolant a down pass is solved beside and the up coolant
+        solved after it, at which the outer iteration has settled [K].
     maxIterations : int
         Passes of the outer iteration.
     ribExchange : bool
         False solves the two passes with no heat between them.
+    accelerate : bool
+        Anderson acceleration of the outer iteration (`_Accelerator`); False runs it plain.
 
     Returns:
     --------
@@ -461,16 +544,20 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
     history, upResults, downState, upState, ring = [], None, None, None, None
     iterationProfiles = []
     downRise, upRise = None, None
+    # The up pass the down pass is solved beside, by station: its coolant leaving each station
+    # [K], coolant coefficient [W/m^2 K] and channel radius [m]. On the plain iteration it is the
+    # last up pass; accelerated, the accelerator's estimate of the settled one.
+    beside = None
+    accelerator = _Accelerator(accelerate)
     for iteration in range(1, maxIterations + 1):
 
-        # Down the bell, beside the up pass's last profile
+        # Down the bell, beside the up pass in `beside`
         neighbor = (None, None, None)
-        if ribExchange and upResults is not None:
-            upMid, upRise = stationTemperatures(upResults['temperature'], 'counterflow',
+        if ribExchange and beside is not None:
+            upMid, upRise = stationTemperatures(beside['temperature'], 'counterflow',
                                                 float(upState.coolantInitialTemperature))
-            neighbor = (upMid[downStations],
-                        np.asarray(upResults['coolantConvectiveHeatTransferCoef'])[downStations],
-                        np.asarray(upState.channelRadius)[downStations])
+            neighbor = (upMid[downStations], beside['coefficient'][downStations],
+                        beside['radius'][downStations])
         with progress.stage('down', 'Down pass'):
             downState = _solvePass(downTemplate, geometry, quiet, *neighbor, downFaces, downRise)
         downResults = downState.channelThermalResults
@@ -513,20 +600,24 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         neighborTemperature[downStations] = downMid
         neighborCoefficient[downStations] = np.asarray(downResults['coolantConvectiveHeatTransferCoef'])
         neighborRadius[downStations] = np.asarray(downState.channelRadius)
-        previous = None if upResults is None else np.asarray(upResults['temperature']).copy()
         with progress.stage('up', 'Up pass'):
             upState = _solvePass(upTemplate, geometry, quiet,
                                  neighborTemperature if ribExchange else None, neighborCoefficient,
                                  neighborRadius, upFaces, upRise)
         upResults = upState.channelThermalResults
+        solved = {'temperature': np.array(upResults['temperature'], dtype = float),
+                  'coefficient': np.array(upResults['coolantConvectiveHeatTransferCoef'], dtype = float),
+                  'radius':      np.array(upState.channelRadius, dtype = float)}
 
-        change = (np.inf if previous is None
-                  else float(np.max(np.abs(np.asarray(upResults['temperature']) - previous))))
+        # The change is between the up coolant the down pass was solved beside and the up coolant
+        # that came out, which on the plain iteration is the last two up passes
+        change = (np.inf if beside is None
+                  else float(np.max(np.abs(solved['temperature'] - beside['temperature']))))
         history.append(change)
 
         # The first pass has no previous profile to compare against, so it reports no change
         metrics = {
-            'change':                None if previous is None else change,                 # [K]
+            'change':                None if beside is None else change,                   # [K]
             'tolerance':             tolerance,                                            # [K]
             'downOutletTemperature': float(downState.coolantExitTemperature),              # [K]
             'upOutletTemperature':   float(upState.coolantExitTemperature),                # [K]
@@ -540,6 +631,7 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         progress.profiles(iteration, legs, metrics, name = 'pass')
         if not ribExchange or change < tolerance:
             break
+        beside = accelerator.next(beside, solved)
     else:
         raise ConvergenceFailureError(
             message = (f'The two passes did not settle in {maxIterations} passes: the up coolant '

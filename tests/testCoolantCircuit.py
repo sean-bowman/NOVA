@@ -3,8 +3,9 @@
 Tests for the multi-pass coolant circuits in coolantCircuit.py.
 
 The two passes are each the single-pass sizing march; what is held here is the coupling: the
-passes' spans and counts, the turnaround between them, the heat they take on together, and the
-rib heat one hands the other.
+passes' spans and counts, the turnaround between them, the heat they take on together, the rib
+heat one hands the other, and the accelerated outer iteration that solves them, against the plain
+one.
 
 Author: Sean Bowman
 
@@ -16,7 +17,7 @@ import numpy as np
 import pytest
 
 from NOVA.channelGeometry import ChannelGeometryInputs
-from NOVA.coolantCircuit import passCounts, passStations, solveCoolantCircuit
+from NOVA.coolantCircuit import _Accelerator, passCounts, passStations, solveCoolantCircuit
 from NOVA.errors import InvalidInputError
 from NOVA.fluidProperties import fluidProps
 from NOVA.regenThermal import RegenThermalContext, ribExchangeConductance
@@ -105,6 +106,13 @@ def twoPass(jacket):
     return solveCoolantCircuit(copy.deepcopy(base), geometry, thermal, 'twoPass', material = 'GRCop-42')
 
 @pytest.fixture(scope = 'module')
+def twoPassPlain(jacket):
+
+    _, base, geometry, thermal = jacket
+    return solveCoolantCircuit(copy.deepcopy(base), geometry, thermal, 'twoPass', material = 'GRCop-42',
+                               accelerate = False)
+
+@pytest.fixture(scope = 'module')
 def twoPassApart(jacket):
 
     _, base, geometry, thermal = jacket
@@ -167,6 +175,70 @@ class TestATwoPassJacket:
         upTemperature = np.asarray(twoPass.up.results['temperature'])
         assert int(np.argmax(downTemperature)) == len(downTemperature) - 1
         assert int(np.argmax(upTemperature)) == 0
+
+# -- The accelerated outer iteration -- #
+
+def _upPass(temperature, coefficient = 2.0e4, radius = 1.0e-3) -> dict:
+
+    '''An up pass as the down pass reads it, three stations of each field.'''
+
+    return {'temperature': np.full(3, float(temperature)), 'coefficient': np.full(3, float(coefficient)),
+            'radius': np.full(3, float(radius))}
+
+class TestTheAccelerator:
+
+    def testOnASteadyRatioOneStepAfterThePlainOneLandsOnTheFixedPoint(self):
+
+        # G(x) = ratio x + (1 - ratio) settled at every station and in every field: the first pass
+        # has no down pass to read, the second takes the plain step, and the third is exact
+        settled = {'temperature': np.array([300.0, 250.0, 200.0]),
+                   'coefficient': np.array([2.0e4, 3.0e4, 4.0e4]),
+                   'radius':      np.array([1.0e-3, 1.2e-3, 1.5e-3])}
+        ratio = 0.52
+
+        def solveUp(fedIn):
+            return {name: ratio * fedIn[name] + (1.0 - ratio) * settled[name] for name in fedIn}
+
+        for accelerate in (True, False):
+            accelerator = _Accelerator(accelerate)
+            first = accelerator.next(None, solveUp({name: 0.5 * value for name, value in settled.items()}))
+            second = accelerator.next(first, solveUp(first))
+            third = accelerator.next(second, solveUp(second))
+            for name, value in settled.items():
+                assert np.allclose(second[name], solveUp(first)[name], rtol = 1e-15)
+                assert np.allclose(third[name], value, rtol = 1e-12) == accelerate
+
+    @staticmethod
+    def primed() -> tuple:
+
+        '''An accelerator past its first two passes, 100 K then 110 K, and the profile it fed on.'''
+
+        accelerator = _Accelerator(True)
+        first = accelerator.next(None, _upPass(100.0))
+        return accelerator, accelerator.next(first, _upPass(110.0))
+
+    def testAGrowingResidualOrAStepPastZeroTakesThePlainStep(self):
+
+        accelerator, fedIn = self.primed()
+        grown = _upPass(130.0)
+        assert accelerator.next(fedIn, grown) is grown
+
+        # The coolant halves its change a pass and settles at 120 K; a radius falling as far as
+        # this one would cross zero on the same step
+        accelerator, fedIn = self.primed()
+        assert accelerator.next(fedIn, _upPass(115.0))['temperature'] == pytest.approx(np.full(3, 120.0))
+        accelerator, fedIn = self.primed()
+        shrunk = _upPass(115.0, radius = 0.2e-3)
+        assert accelerator.next(fedIn, shrunk) is shrunk
+
+def testTheAcceleratedAndThePlainIterationSettleTogether(twoPass, twoPassPlain):
+
+    '''The accelerated outer iteration takes no more passes and settles within the tolerance of the plain one.'''
+
+    assert twoPass.iterations <= twoPassPlain.iterations
+    for accelerated, plain in ((twoPass.down, twoPassPlain.down), (twoPass.up, twoPassPlain.up)):
+        for name in ('temperature', 'wallTemperature'):
+            assert np.max(np.abs(np.asarray(accelerated.results[name]) - np.asarray(plain.results[name]))) < 0.05
 
 # -- A one-and-a-half-pass jacket through the whole build -- #
 
