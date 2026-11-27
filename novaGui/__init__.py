@@ -91,7 +91,7 @@ def buildLabel(version: str, build: str, revision: str) -> str:
     '''
 
     One line naming what runs, for a report of a problem: 'NOVA 0.1.0, checkout 89d703f with
-    uncommitted changes, Python 3.10.18 on Windows 10.0.26300'.
+    uncommitted changes, Python 3.14.10 on Windows 10.0.26300'.
 
     '''
 
@@ -101,7 +101,8 @@ def buildLabel(version: str, build: str, revision: str) -> str:
         where = f'checkout {revision.removesuffix("-dirty")} with uncommitted changes'
     else:
         where = f'checkout {revision}' if revision else 'checkout'
-    # Python 3.10 reports Windows 11 as release '10'; the build number in the version tells them apart
+    # Python before 3.12 reports Windows 11 as release '10'; the version's build number tells them
+    # apart on every Python
     system = platform.version() if sys.platform == 'win32' else platform.release()
     return f'NOVA {version}, {where}, Python {platform.python_version()} on {platform.system()} {system}'
 

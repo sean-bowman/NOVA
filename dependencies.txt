@@ -1,7 +1,7 @@
 # NOVA -- Nozzle Optimization for Variable Applications
 #
 # Install with:  pip install -r dependencies.txt
-# Target runtime: Python 3.10 (win-amd64)
+# Target runtime: Python 3.14 (win-amd64)
 
 # -- Core numerics -- #
 numpy>=2.2
@@ -10,8 +10,8 @@ pandas>=2.3
 sympy>=1.14
 
 # -- Combustion -- #
-# NASA CEA, via the rocketcea bindings. Ships a prebuilt cp310 win_amd64
-# wheel, so no Fortran compiler is required on Windows.
+# NASA CEA, via the rocketcea bindings. Ships prebuilt win_amd64 wheels for
+# CPython 3.7 to 3.14, so no Fortran compiler is required on Windows.
 rocketcea>=1.2.3
 
 # -- Fluid properties -- #
