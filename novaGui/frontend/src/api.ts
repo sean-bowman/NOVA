@@ -69,6 +69,8 @@ export const api = {
     startRun: (config: Config, mode: Mode) => request<Submitted>('/api/runs', jsonBody('POST', { config, mode })),
     cancelRun: (all = false) => request<{ cancelled: boolean }>('/api/runs/cancel', jsonBody('POST', { all })),
     unqueue: (queueId: number) => request<{ unqueued: number }>(`/api/queue/${queueId}`, { method: 'DELETE' }),
+    requeueNotRun: (ids: number[]) => request<{ queued: number[] }>('/api/not-run/queue', jsonBody('POST', { ids })),
+    discardNotRun: (ids: number[]) => request<{ discarded: number[] }>('/api/not-run/discard', jsonBody('POST', { ids })),
     sweeps: () => request<SweepList>('/api/sweeps'),
     addSweep: (sweep: SweepRequest) => request<Sweep>('/api/sweeps', jsonBody('POST', sweep)),
     resumeSweep: (sweepId: number) => request<{ queued: number }>(`/api/sweeps/${sweepId}/resume`, { method: 'POST' }),

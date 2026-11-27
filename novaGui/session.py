@@ -40,6 +40,12 @@ serializes the CEA solves of concurrent runs anyway, so the queue costs no speed
 run in progress and the queue goes on, or stops the run and empties the queue; a queued run can
 also be taken out alone.
 
+With a run store, the queue outlasts the window. The runs queued on their own and the one going are
+written to the store at each change to the queue (novaGui.runStore, `queue.json`), so the next
+launch lists them as not run, with why: NOVA closed before or while it ran. Each can be queued
+again or discarded; none starts unasked, since closing the window may have been how they were
+stopped. A sweep's points are not among them: the sweep keeps them, cancelled, to queue again.
+
 A trade sweep (novaGui.sweeps) queues one run per point. The session keeps each sweep with its
 points' states and runs, in the run store when there is one, and a sweep's runs carry its id and
 their point's index. They stay however many runs follow, as named runs do, until the sweep is
@@ -91,6 +97,9 @@ Events, as JSON objects:
                                                     changed
     {'type': 'queue', 'queue': [{'queueId', 'label', 'runName', 'sweepId', 'point'}]}
                                                     the runs waiting their turn, in order
+    {'type': 'notRun', 'notRun': [{'notRunId', 'label', 'runName', 'config', 'mode', 'queuedAt', 'reason'}]}
+                                                    the runs a closed window left unrun, sent when one
+                                                    is queued again or discarded
     {'type': 'sweeps'}                              a sweep was added or deleted, or a point's state moved
     {'type': 'plumeSweeps', 'runId': int}           a run's plume sweep was added or deleted, or a point's
                                                     state moved (novaGui.plumeQueue)
@@ -271,17 +280,19 @@ class QueuedRun:
     '''
 
     A run waiting its turn: the config it will run, the palette mode of its figures, the label the
-    queue shows, and for a sweep's point (sweepId, point index).
+    queue shows, for a sweep's point (sweepId, point index), and when it was queued.
 
     '''
 
-    def __init__(self, queueId: int, config: dict, mode: str, label: str, sweep: tuple | None = None):
+    def __init__(self, queueId: int, config: dict, mode: str, label: str, sweep: tuple | None = None,
+                 queuedAt: float | None = None):
 
         self.queueId = queueId
         self.config = dict(config)
         self.mode = mode
         self.label = label
         self.sweep = sweep
+        self.queuedAt = float(queuedAt or time.time())      # [s] epoch
 
     def entry(self) -> dict:
 
@@ -320,7 +331,10 @@ class RunSession:
         self._lastRunId = None                # the run both of those come from
         self._runConfig = None                # the config of the run in progress
         self._runSweep = None                 # (sweepId, point index) of the run in progress, for a sweep's
+        self._runEntry = None                 # the run in progress as the store's queue keeps it, for one of its own
         self.queue = collections.deque()       # QueuedRun, in the order they start
+        self.notRun = collections.OrderedDict()   # notRunId: a run a closed window left unrun, oldest first
+        self._notRunCount = 0
         self.sweeps = collections.OrderedDict()   # sweepId: sweep (novaGui.sweeps.build), oldest first
         self.log = collections.deque(maxlen = logLines)
         self.result = None                     # the last good RunRecord, else the last that ended
@@ -352,6 +366,7 @@ class RunSession:
                 if record.sweep is not None and record.sweep['sweepId'] not in self.sweeps:
                     record.sweep = None
             self.plumeSweeps.load(list(self.runs))
+            self._restoreQueue(store.queuedRuns())
 
         os.makedirs(stagingRoot(), exist_ok = True)
         atexit.register(self.shutdown)
@@ -424,6 +439,65 @@ class RunSession:
         if stopped:
             self.store.saveSweep(sweep)
 
+    def _restoreQueue(self, entries: list) -> None:
+
+        '''
+
+        Keep the runs the store's queue held when the last window closed (novaGui.runStore.RunStore.queuedRuns).
+        None of them ran: a run still queued, or the one going, is listed as not run with why, and
+        one listed so before stays so.
+
+        '''
+
+        moved = False
+        for entry in entries:
+            reason = entry['reason']
+            if entry['state'] != 'notRun':
+                reason = 'NOVA closed while it ran' if entry['state'] == 'running' else 'NOVA closed before it ran'
+                moved = True
+            self._notRunCount += 1
+            self.notRun[self._notRunCount] = {
+                'notRunId': self._notRunCount, 'label': entry['label'],
+                'runName': str(entry['config'].get('filename') or ''), 'config': dict(entry['config']),
+                'mode': entry['mode'], 'queuedAt': entry['queuedAt'], 'reason': reason or 'NOVA closed before it ran',
+            }
+        if moved:
+            self._saveQueue()
+
+    def _saveQueue(self) -> None:
+
+        '''
+
+        Write the run queue to the store as it stands: the runs a closed window left unrun, the run
+        going when it is one of its own, and the runs queued on their own. A sweep's points are its
+        own file's. Writes go one at a time, each of the state when it starts, and none once the
+        session has shut down, so the file keeps the queue a closing window leaves. A write that
+        fails is logged.
+
+        '''
+
+        if self.store is None:
+            return
+        with self._storeLock:
+            with self._lock:
+                if self._closing:
+                    return
+                runs = [{'label': entry['label'], 'config': entry['config'], 'mode': entry['mode'],
+                         'queuedAt': entry['queuedAt'], 'state': 'notRun', 'reason': entry['reason']}
+                        for entry in self.notRun.values()]
+                if self._runEntry is not None:
+                    runs.append({**self._runEntry, 'state': 'running', 'reason': ''})
+                runs += [{'label': item.label, 'config': item.config, 'mode': item.mode, 'queuedAt': item.queuedAt,
+                          'state': 'queued', 'reason': ''} for item in self.queue if item.sweep is None]
+            try:
+                self.store.saveQueue(runs)
+            except OSError as exc:
+                self._publish({'type': 'log', 'line': f'the run queue could not be saved: {exc}'})
+
+    def _notRunEvent(self) -> None:
+
+        self._publish({'type': 'notRun', 'notRun': self.notRunList()})
+
     def _resave(self, runId: int) -> None:
 
         '''Save a kept run's record again, so its size counts a plume sweep's file.'''
@@ -480,9 +554,15 @@ class RunSession:
                                         args = (dict(config), outputDir, mode, eventQueue), daemon = True)
         return process, eventQueue
 
-    def _startLocked(self, config: dict, mode: str, sweep: tuple | None) -> int:
+    def _startLocked(self, config: dict, mode: str, sweep: tuple | None, label: str = '',
+                     queuedAt: float | None = None) -> int:
 
-        '''Start a run in a new worker process; the caller holds the lock and has checked none is running.'''
+        '''
+
+        Start a run in a new worker process; the caller holds the lock and has checked none is
+        running. `label` and `queuedAt` are what the store's queue keeps of a run of its own.
+
+        '''
 
         if self.store is not None:
             runId, outputDir = self.store.claim()
@@ -502,6 +582,9 @@ class RunSession:
         self._throatX = None
         self._runConfig = dict(config)
         self._runSweep = sweep
+        self._runEntry = None if sweep is not None else {
+            'label': label or str(config.get('filename') or 'the form'), 'config': dict(config), 'mode': mode,
+            'queuedAt': float(queuedAt or time.time())}
         self.state.update(runId = runId, startedAt = time.time(), warnings = [])
         self._publish({'type': 'status', 'state': 'running', 'detail': 'starting worker'})
         self._progress = RunProgress(self._stageHistory, label = 'starting worker', previous = self._lastStages)
@@ -529,12 +612,14 @@ class RunSession:
             if self._process is not None or not self.queue or self._closing:
                 return None
             item = self.queue.popleft()
-            runId = self._startLocked(item.config, item.mode, item.sweep)
+            runId = self._startLocked(item.config, item.mode, item.sweep, item.label, item.queuedAt)
             # Marked under the lock, so a run that ends at once cannot be marked done first
             sweep = self.sweeps.get(item.sweep[0]) if item.sweep is not None else None
             if sweep is not None:
                 sweep['points'][item.sweep[1]].update(state = 'running', runId = runId, error = '')
         self._queueEvent()
+        if item.sweep is None:
+            self._saveQueue()
         if sweep is not None:
             self._saveSweeps([sweep])
             self._publish({'type': 'sweeps'})
@@ -723,6 +808,11 @@ class RunSession:
         self._publish({'type': 'status', 'state': state, 'detail': detail})
         self._publish({'type': 'result', **record.summary()})
 
+        # The store's queue drops the run before the session reads idle, so idle means the file is current
+        with self._lock:
+            ownRun, self._runEntry = self._runEntry is not None, None
+        if ownRun:
+            self._saveQueue()
         # The run counts as going until its end is told, so the next run's events follow its own
         with self._lock:
             self._process = None
@@ -770,7 +860,9 @@ class RunSession:
         with self._lock:
             if self._process is not None:
                 raise RuntimeError('a run is already in progress')
-            return self._startLocked(config, mode, None)
+            runId = self._startLocked(config, mode, None)
+        self._saveQueue()
+        return runId
 
     def submit(self, config: dict, mode: str = 'dark', label: str = '') -> dict:
 
@@ -801,6 +893,7 @@ class RunSession:
         started = self._advance()
         if started is not None and started[0] == item.queueId:
             return {'queueId': item.queueId, 'runId': started[1], 'position': 0}
+        self._saveQueue()
         self._queueEvent()
         with self._lock:
             position = next((place for place, queued in enumerate(self.queue, 1) if queued is item), 0)
@@ -823,6 +916,8 @@ class RunSession:
         self._queueEvent()
         if item.sweep is not None:
             self._settle([(item.sweep, 'cancelled', None, 'taken out of the queue')])
+        else:
+            self._saveQueue()
         return True
 
     def cancel(self, everything: bool = False) -> bool:
@@ -848,11 +943,78 @@ class RunSession:
             self._queueEvent()
             self._settle([(item.sweep, 'cancelled', None, 'cancelled before it ran') for item in dropped
                           if item.sweep is not None])
+            if any(item.sweep is None for item in dropped):
+                self._saveQueue()
         if process is None:
             return bool(dropped)
         self._publish({'type': 'log', 'line': 'run cancelled'})
         process.terminate()
         return True
+
+    # -- Runs a closed window left unrun -- #
+    def notRunList(self) -> list:
+
+        '''
+
+        The runs a closed window left unrun, oldest first: queued on their own, or going, when
+        NOVA last closed.
+
+        Returns:
+        --------
+        list : [{'notRunId', 'label', 'runName', 'config', 'mode', 'queuedAt', 'reason'}]; `queuedAt`
+            [s] is epoch time, 0 when the store did not say
+
+        '''
+
+        with self._lock:
+            return [{**entry, 'config': dict(entry['config'])} for entry in self.notRun.values()]
+
+    def requeue(self, notRunIds: list) -> list:
+
+        '''
+
+        Queue runs a closed window left unrun again, in the order given, behind the runs queued now;
+        the first starts if nothing is running. An id not listed is passed over.
+
+        Returns:
+        --------
+        list : the queue ids the runs took, in order
+
+        '''
+
+        with self._lock:
+            taken = [self.notRun.pop(notRunId) for notRunId in dict.fromkeys(notRunIds) if notRunId in self.notRun]
+            items = []
+            for entry in taken:
+                self._queueCount += 1
+                items.append(QueuedRun(self._queueCount, entry['config'], entry['mode'], entry['label']))
+            self.queue.extend(items)
+        if not taken:
+            return []
+        self._notRunEvent()
+        if self._advance() is None:
+            self._queueEvent()
+        self._saveQueue()
+        return [item.queueId for item in items]
+
+    def discard(self, notRunIds: list) -> list:
+
+        '''
+
+        Drop runs a closed window left unrun. An id not listed is passed over.
+
+        Returns:
+        --------
+        list : the ids dropped
+
+        '''
+
+        with self._lock:
+            dropped = [notRunId for notRunId in dict.fromkeys(notRunIds) if self.notRun.pop(notRunId, None) is not None]
+        if dropped:
+            self._notRunEvent()
+            self._saveQueue()
+        return dropped
 
     # -- Sweeps -- #
     def addSweep(self, sweep: dict, mode: str = 'dark') -> dict:
@@ -1198,7 +1360,7 @@ class RunSession:
         partial = self.partial
         with self._lock:
             queued = [item.entry() for item in self.queue]
-        return {'type': 'snapshot', **self.state, 'log': list(self.log), 'queue': queued,
+        return {'type': 'snapshot', **self.state, 'log': list(self.log), 'queue': queued, 'notRun': self.notRunList(),
                 'result': self.result.summary() if self.result is not None else None,
                 'partial': ({'runId': partial['runId'], 'views': list(partial['figures']),
                              'revision': partial.get('revision', 0)} if partial else None),
@@ -1227,8 +1389,10 @@ class RunSession:
         '''
 
         Empty the queue, stop any run with its store folder, and remove this server's staging
-        folder. A sweep's points still to run read cancelled when the store next opens. A sweep
-        save in progress finishes first, and none starts after, so the store is left as it stands.
+        folder. A sweep's points still to run read cancelled when the store next opens, and the
+        store's queue keeps the runs queued and going, which the next launch lists as not run. A
+        sweep or queue save in progress finishes first, and none starts after, so the store is left
+        as it stands.
 
         '''
 

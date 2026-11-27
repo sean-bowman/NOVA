@@ -194,6 +194,17 @@ export interface QueueEntry {
     point: number | null;         // the sweep point's index, from 0
 }
 
+/** A run a closed window left unrun: queued on its own, or going, when NOVA last closed (novaGui.session.RunSession.notRunList). */
+export interface NotRunEntry {
+    notRunId: number;
+    label: string;                // what the queue called it: its config's filename, or the label it was queued with
+    runName: string;
+    config: Config;
+    mode: Mode;                   // the figures' palette it was queued with
+    queuedAt: number;             // [s] epoch, 0 when the store did not say
+    reason: string;               // 'NOVA closed before it ran' or 'NOVA closed while it ran'
+}
+
 export interface RunSnapshot extends RunProgressFields {
     type: 'snapshot';
     state: RunStateName;
@@ -205,6 +216,7 @@ export interface RunSnapshot extends RunProgressFields {
     baseline: number | null;
     warnings: RunWarning[];       // the run in progress, or the last one started
     queue: QueueEntry[];
+    notRun?: NotRunEntry[];
 }
 
 export type RunEvent =
@@ -218,6 +230,7 @@ export type RunEvent =
     | ({ type: 'result' } & RunSummary)
     | { type: 'runs'; baseline: number | null }
     | { type: 'queue'; queue: QueueEntry[] }
+    | { type: 'notRun'; notRun: NotRunEntry[] }
     | { type: 'sweeps' }
     | { type: 'plumeSweeps'; runId: number }
     | ({ type: 'settings' } & Settings);
