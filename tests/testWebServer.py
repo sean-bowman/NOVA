@@ -1122,7 +1122,7 @@ def _contourRunning(session) -> bool:
 def testACancelledRunEndsCancelledAndFreesTheSession(tmp_path):
     '''
     Cancel terminates the worker mid-solve; the session reports it cancelled, removes the run's store
-    folder, and takes another run.
+    folder and its entry in the store's queue, and takes another run.
     '''
     store = RunStore(str(tmp_path))
     session = RunSession(store = store)
@@ -1138,7 +1138,9 @@ def testACancelledRunEndsCancelledAndFreesTheSession(tmp_path):
         _waitForEnd(session, 30.0)
         assert session.state['state'] == 'cancelled'
         assert not session.cancel()
-        assert not os.path.isdir(store.folder(runId)) and os.listdir(store.root) == [runStore.indexName]
+        assert not os.path.isdir(store.folder(runId))
+        assert sorted(os.listdir(store.root)) == sorted([runStore.indexName, runStore.queueName])
+        assert store.queuedRuns() == []
     finally:
         session.shutdown()
 
