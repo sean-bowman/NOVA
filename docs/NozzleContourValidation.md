@@ -392,7 +392,7 @@ Closing the transonic gap means implementing the series field rather than more t
 
 ## Reproducing
 
-Run from the NOVA root with `C:\Users\seanb\miniconda3\python.exe`:
+Run from the NOVA root with a Python 3.14 environment holding NOVA's dependencies at the versions in `packaging/constraints.txt`:
 
 ```
 python -m pytest                                   # the suite

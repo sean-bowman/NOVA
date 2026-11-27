@@ -28,15 +28,16 @@ It could not run in a fresh checkout for two independent reasons:
    Building it required MinGW-w64 through `runSetup.bat`.
 2. It called `import win32api` at module scope, so it also required `pywin32`.
 
-`rocketcea` publishes a prebuilt `cp310-win_amd64` wheel, so `pip install
-rocketcea` is the entire setup on Windows. It is actively maintained, exposes a
+`rocketcea` publishes prebuilt `win_amd64` wheels for CPython 3.7 to 3.14, so
+`pip install rocketcea` is the entire setup on Windows. It is actively maintained, exposes a
 purpose-built rocket API, and runs in-process rather than shelling out to
 `FCEA2.exe`.
 
 Alternatives considered: NASA's own `cea` 3.2.1 is the long-term successor and
-is Apache-2.0 rather than GPLv3, but it requires Python 3.11+ and NOVA targets
-3.10. `CEA_Wrap` is thread-safe but roughly an order of magnitude slower per
-point. `cantera` has no rocket nozzle API and would not be CEA-traceable.
+is Apache-2.0 rather than GPLv3. It requires Python 3.11 or later, which NOVA's
+Python 3.14 meets; moving to it would mean re-validating every chamber and
+exhaust state against the `rocketcea` results it replaces. `CEA_Wrap` is
+thread-safe but roughly an order of magnitude slower per point. `cantera` has no rocket nozzle API and would not be CEA-traceable.
 
 ## Usage
 

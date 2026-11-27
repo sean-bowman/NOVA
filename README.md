@@ -65,7 +65,7 @@ Windows users who want the GUI alone can run it without Python. Each [release](h
 
 ## Installation
 
-NOVA targets **Python 3.10 or later** on Windows. `pyproject.toml` pins the floor at 3.10 for its `match` statements and `X | Y` union syntax.
+NOVA is developed, tested and released on **Python 3.14** on Windows; the Tests and Release workflows run 3.14, and the desktop app bundles it. `pyproject.toml` sets the floor at 3.10 for its `match` statements and `X | Y` union syntax, but versions below 3.14 are not tested. `packaging/constraints.txt` pins the dependency versions the suite passes with.
 
 Run from the repository root, where `pyproject.toml` lives:
 

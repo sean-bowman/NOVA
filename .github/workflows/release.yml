@@ -27,7 +27,7 @@ jobs:
       # The version the development environment runs, so the release is what was tested
       - uses: actions/setup-python@v7
         with:
-          python-version: '3.10'
+          python-version: '3.14'
 
       - name: Install NOVA and the build tools
         run: python -m pip install ".[web,refprop]" -r packaging/requirements.txt -c packaging/constraints.txt

@@ -21,7 +21,7 @@ A pull request that touches `packaging/`, `pyproject.toml` or the workflow runs 
 
 ## Building locally
 
-From a clean Python 3.10 environment, so nothing outside NOVA's dependencies gets bundled:
+From a clean Python 3.14 environment, so nothing outside NOVA's dependencies gets bundled:
 
 ```bash
 pip install .[web,refprop] -r packaging/requirements.txt -c packaging/constraints.txt
