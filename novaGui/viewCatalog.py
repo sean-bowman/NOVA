@@ -10,7 +10,8 @@ Each view names the Matplotlib drawer's source line, the plotly builder that ren
 interactively (`plotting.interactiveBuilders`), and the HTML file the run writes for it
 (`runner.htmlFiles`), where it has them. The plume sweep view has none of the three: the browser
 draws it from the run's plume sweeps (novaGui.plumeSweeps), and it is there for any run whose
-contour the plume march can continue.
+contour the plume march can continue. The five jacket views (`passViews`) draw one pass of the
+coolant at a time, picked beside the view.
 
 Author: Sean Bowman
 Date:   08/28/2026
@@ -46,6 +47,10 @@ class ViewSpec:
 
 fieldSource = 'one-dimensional chamber, characteristic mesh to the exit plane'
 jacketSource = 'drawn from the jacket solve'
+
+# The views that draw one pass of the coolant at a time, the pass picked beside them
+# (novaGui.thermalPlots.coolantPasses): a multi-pass jacket's down or up pass, or the extension circuit's
+passViews = frozenset({'wallMap', 'jacketTemperatures', 'coolantFlow', 'coolantProperties', 'heatFlux'})
 
 views = (
     ViewSpec('contour', 'Contour', 'Computed contour', 'drawn from the run', 'contour'),

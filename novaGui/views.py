@@ -26,6 +26,11 @@ While a run is going, the views its contour stage settles draw from the figure d
 worker sent (`partialFigure`), through the same renderers as the finished run's. So does the circuit
 iteration view, from the passes the session has kept so far (coolingFigures.describedBuilders).
 
+The five jacket views (viewCatalog.passViews) draw one pass of the coolant at a time: the pass the
+jacket reports unless the browser names another (`coolantPassIndex` lists a run's passes). Drawn
+over a second run, the pass the jacket reports is drawn over that run's own; another pass is drawn
+over the same pass of that run, or not at all when that run has no such pass.
+
 The contour and the near-wall state hover along the axis here (`alongAxisHover`), as the cooling
 plots do, so the browser's axial cursor reads the wall radius and the gas state at its station. In
 NOVA's own HTML they hover to the nearest point.
@@ -142,7 +147,7 @@ def viewList() -> list:
 
     Returns:
     --------
-    list : [{'key', 'group', 'label', 'source', 'interactive', 'static', 'comparable'}]
+    list : [{'key', 'group', 'label', 'source', 'interactive', 'static', 'comparable', 'byPass'}]
 
     '''
 
@@ -153,7 +158,8 @@ def viewList() -> list:
              'source': sourceOverrides.get(spec.key, spec.source),
              'interactive': _interactiveBuilder(spec) is not None,
              'static': spec.key in drawers,
-             'comparable': spec.key in comparableViews}
+             'comparable': spec.key in comparableViews,
+             'byPass': spec.key in catalog.passViews}
             for spec in catalog.views]
 
 def availableViews(record) -> list:
@@ -175,6 +181,26 @@ def availableViews(record) -> list:
     available = catalog.availableViews(nozzle, outputs)
 
     return [spec.key for spec in catalog.views if spec.key in available]
+
+def coolantPassIndex(nozzle) -> dict:
+
+    '''
+
+    The passes of a run's coolant the jacket views can draw, and the one they draw unless another
+    is picked.
+
+    Returns:
+    --------
+    dict : {'passes': [{'key', 'label'}], 'defaultPass': key, or None without a jacket}
+
+    '''
+
+    thermal = _module('thermalPlots')
+    passes = thermal.coolantPasses(nozzle) if nozzle is not None else []
+    chosen = thermal.coolantPass(nozzle) if passes else None
+
+    return {'passes': [{'key': entry.key, 'label': entry.label} for entry in passes],
+            'defaultPass': chosen.key if chosen is not None else None}
 
 def _overlay(figure, other, runLabel: str, otherLabel: str) -> None:
 
@@ -212,7 +238,8 @@ def _render(builder, figures, nozzle, mode: str):
     figures.figurePalette.setFigureMode(mode)
     return builder(figures, nozzle)
 
-def interactiveFigure(nozzle, key: str, mode: str, compare = None, labels: tuple = ('this run', 'the other run')) -> str | None:
+def interactiveFigure(nozzle, key: str, mode: str, compare = None, labels: tuple = ('this run', 'the other run'),
+                      passKey: str = None) -> str | None:
 
     '''
 
@@ -230,6 +257,9 @@ def interactiveFigure(nozzle, key: str, mode: str, compare = None, labels: tuple
         A second run to draw over the first; only for `comparableViews`, and ignored otherwise.
     labels : tuple
         What the title and the legend call the two runs: (this run, the compared run).
+    passKey : str, optional
+        The pass of the coolant a jacket view draws (thermalPlots.coolantPasses); the pass the
+        jacket reports when None. Ignored by the other views.
 
     '''
 
@@ -238,6 +268,18 @@ def interactiveFigure(nozzle, key: str, mode: str, compare = None, labels: tuple
     builder = _interactiveBuilder(spec) if spec is not None else None
     if builder is None:
         return None
+    if key in catalog.passViews:
+        thermal, whole = _module('thermalPlots'), builder
+        chosen, reported = thermal.coolantPass(nozzle, passKey), thermal.coolantPass(nozzle)
+        # The jacket's own pass is drawn over the other run's own; another over the same pass of the other run
+        otherKey = None if chosen is None or chosen.key == reported.key else chosen.key
+
+        def builder(figures, drawn):
+            return whole(figures, drawn, passKey = passKey if drawn is nozzle else otherKey)
+
+        if compare is not None and otherKey is not None and otherKey not in {
+                entry.key for entry in thermal.coolantPasses(compare)}:
+            compare = None
 
     with renderLock:
         figures = backend.figuresModule()
@@ -349,7 +391,8 @@ class HeadlessPane:
 
         pass
 
-def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixelRatio: float) -> dict:
+def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixelRatio: float,
+                 passKey: str = None) -> dict:
 
     '''
 
@@ -367,6 +410,8 @@ def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixel
         The browser pane's size in CSS pixels.
     pixelRatio : float
         The display's device pixel ratio; the PNG has this many pixels per CSS pixel.
+    passKey : str, optional
+        The pass a jacket view draws, as for `interactiveFigure`.
 
     Returns:
     --------
@@ -390,7 +435,8 @@ def staticFigure(nozzle, key: str, mode: str, widthPx: int, heightPx: int, pixel
         _module('backend').figuresModule().figurePalette.setFigureMode(mode)
 
         pane = HeadlessPane(max(widthPx, 200), max(heightPx, 150), max(pixelRatio, 1.0))
-        function(pane, nozzle, *arguments)
+        passed = {'passKey': passKey} if key in _module('viewCatalog').passViews else {}
+        function(pane, nozzle, *arguments, **passed)
         if pane.messageText is not None:
             return {'message': pane.messageText}
 

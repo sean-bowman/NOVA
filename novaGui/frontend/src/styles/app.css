@@ -1045,6 +1045,13 @@ select.input option {
     max-width: 100%;
 }
 
+/* The pass of the coolant the jacket views draw, beside the view */
+.pass-select {
+    width: auto;
+    min-width: 170px;
+    max-width: 100%;
+}
+
 /* The view's description gives way before the rendering switch wraps */
 .figure-source {
     flex: 1 1 0;

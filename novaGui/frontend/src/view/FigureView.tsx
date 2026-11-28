@@ -11,6 +11,11 @@
    While a run goes on, the circuit iteration view draws its coolant circuit's passes as each one
    ends, the latest solid and the earlier ones fading.
 
+   The five jacket views draw one pass of the coolant at a time. On a run with more than one (a
+   multi-pass jacket's down and up passes, an extension circuit's), Pass beside the view picks
+   which, for every jacket view shown, the grid's as well; the pass the jacket reports is drawn
+   until another is picked, and again on a run that has no pass by the name picked.
+
    The plume sweep view is the run's plume over a list of ambients (PlumeSweepView), drawn by the
    browser from the run's plume sweeps rather than as one of the run's figures; its plot saves
    from plotly's own camera button.
@@ -28,7 +33,7 @@ import { openWindow, saveBlob, staticFigure } from '../api';
 import { GridIcon, ImageIcon, PopOutIcon } from '../components/Icons';
 import type { UnitTable } from '../design/units';
 import type { RunChoice } from '../result/useRuns';
-import type { Mode, ViewIndex, ViewSpec } from '../types';
+import type { CoolantPass, Mode, ViewIndex, ViewSpec } from '../types';
 import { AxialLink } from './axialLink';
 import { PlotlyFigure } from './PlotlyFigure';
 import { PlumeSweepView } from './PlumeSweepView';
@@ -56,6 +61,7 @@ interface FigureViewProps {
     plumeVersion?: number;           // moves when one of the run's plume sweeps changes
     units?: UnitTable | null;        // the form's units, which a new plume sweep is entered in
     initialGrid?: string[];
+    initialPass?: string | null;     // the pass a popped-out window opens on
     onSelect: (key: string) => void;
     onLayout: (layout: FigureLayout) => void;
     onNotify: (kind: 'info' | 'error', title: string, body?: string) => void;
@@ -89,6 +95,16 @@ function groupsOf(views: ViewSpec[]): { name: string; views: ViewSpec[] }[] {
     return ordered;
 }
 
+/** The pass of the coolant the jacket views draw. */
+function PassSelect({ passes, value, onChange }: { passes: CoolantPass[]; value: string | null; onChange: (key: string) => void }) {
+    return (
+        <select className="input pass-select" aria-label="Pass" value={value ?? ''}
+                title="The pass of the coolant the jacket views draw" onChange={(event) => onChange(event.target.value)}>
+            {passes.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
+        </select>
+    );
+}
+
 function ViewSelect({ views, available, value, onChange, compact = false }: {
     views: ViewSpec[]; available: Set<string>; value: string; onChange: (key: string) => void; compact?: boolean;
 }) {
@@ -109,9 +125,10 @@ function ViewSelect({ views, available, value, onChange, compact = false }: {
     );
 }
 
-export function FigureView({ index, mode, compare, selected, layout, runChoice, initialGrid, liveRevision, plumeVersion = 0,
-                             units = null, onSelect, onLayout, onNotify }: FigureViewProps) {
+export function FigureView({ index, mode, compare, selected, layout, runChoice, initialGrid, initialPass = null, liveRevision,
+                             plumeVersion = 0, units = null, onSelect, onLayout, onNotify }: FigureViewProps) {
     const [gridKeys, setGridKeys] = useState<string[]>(initialGrid ?? []);
+    const [passChoice, setPassChoice] = useState<string | null>(initialPass);
     const [saving, setSaving] = useState('');
     const link = useMemo(() => new AxialLink(), []);
 
@@ -132,6 +149,11 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
     const compareFor = (key: string) => (compare !== null && compare !== runId && !partial && specOf(key)?.comparable
         ? compare : null);
 
+    // The pass picked while the run has it, else the one the jacket reports
+    const passes = index?.passes ?? [];
+    const passShown = passes.some((entry) => entry.key === passChoice) ? passChoice : (index?.defaultPass ?? null);
+    const passFor = (key: string) => (specOf(key)?.byPass ? passShown : null);
+
     const save = (key: string, element: HTMLElement | null) => {
         if (runId === null || partial) {
             return;
@@ -139,10 +161,11 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
         const width = element?.clientWidth || 1200;
         const height = element?.clientHeight || 800;
         setSaving(key);
-        staticFigure(key, mode, runId, width, height, saveRatio)
+        const pass = passFor(key);
+        staticFigure(key, mode, runId, width, height, saveRatio, undefined, pass)
             .then((drawn) => {
                 if ('blob' in drawn) {
-                    saveBlob(drawn.blob, `${index?.runName || 'nova'}Run${runId}-${key}.png`);
+                    saveBlob(drawn.blob, `${index?.runName || 'nova'}Run${runId}-${key}${pass && passes.length > 1 ? `-${pass}` : ''}.png`);
                 } else {
                     onNotify('error', 'No PNG for this view', drawn.message);
                 }
@@ -154,6 +177,9 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
     const popOut = () => {
         const keys = layout === 'grid' ? grid : [selected];
         const params = new URLSearchParams({ popout: 'figure', run: String(runChoice), layout, views: keys.join(',') });
+        if (passChoice !== null && passShown === passChoice) {
+            params.set('pass', passChoice);
+        }
         const label = keys.map((key) => specOf(key)?.label ?? key).join(', ');
         openWindow(`/?${params.toString()}`, `NOVA -- ${label}`);
     };
@@ -176,18 +202,24 @@ export function FigureView({ index, mode, compare, selected, layout, runChoice, 
         }
         const against = compareFor(key);
         const revision = partial && key === liveView ? liveRevision : undefined;
-        return <PlotlyFigure key={`${key}-${runId}-${partial}-${against}`} viewKey={key} mode={mode} runId={runId}
-                             compare={against} link={link} scrollZoom={!inGrid} revision={revision} />;
+        const pass = passFor(key);
+        return <PlotlyFigure key={`${key}-${runId}-${partial}-${against}-${pass}`} viewKey={key} mode={mode} runId={runId}
+                             compare={against} link={link} scrollZoom={!inGrid} revision={revision} pass={pass} />;
     };
 
     const spec = specOf(selected);
     const produced = spec !== undefined && available.has(spec.key);
     const drawnHere = selected === plumeSweepView;     // no Matplotlib drawing to save
+    // Pass shows beside a jacket view the run drew, or a grid holding one, once the run has more than one pass
+    const shownKeys = layout === 'single' ? [selected] : grid;
+    const picksPass = passes.length > 1 && !partial
+        && shownKeys.some((key) => specOf(key)?.byPass && available.has(key));
 
     return (
         <div className="figure-view">
             <div className="figure-toolbar">
                 {layout === 'single' && <ViewSelect views={views} available={available} value={selected} onChange={onSelect} />}
+                {picksPass && <PassSelect passes={passes} value={passShown} onChange={setPassChoice} />}
                 <span className="muted figure-source" title={layout === 'single' && produced ? spec?.source : undefined}>
                     {layout === 'single' && produced ? spec?.source : (layout === 'grid' ? 'One cursor and one zoom along the nozzle axis' : '')}
                 </span>

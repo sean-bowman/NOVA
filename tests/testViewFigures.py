@@ -371,3 +371,122 @@ def testThePassesViewIsOfferedOnlyForAMultiPassOrExtensionCircuit():
     assert 'passes' in availableViews(_multiPassNozzle(), {})
     assert 'circuit' in availableViews(_cooledNozzle(), {})
 
+
+#--------------------------------------------------------------------------------------------------------------------------#
+# -- Each pass of the coolant in the jacket views -- #
+#--------------------------------------------------------------------------------------------------------------------------#
+
+jacketDrawers = {'wallMap': 'drawWallMap', 'jacketTemperatures': 'drawJacketTemperatures', 'coolantFlow': 'drawCoolantFlow',
+                 'coolantProperties': 'drawCoolantProperties', 'heatFlux': 'drawHeatFlux'}
+
+def _passResults(results: dict, picked, offset: float) -> dict:
+
+    '''The jacket's station arrays on the stations a pass covers, its coolant `offset` K warmer.'''
+
+    passResults = {name: np.asarray(values, dtype = float)[picked] for name, values in results.items()}
+    passResults['temperature'] = passResults['temperature'] + offset
+    return passResults
+
+def _passNozzle(extensionPasses: int = 2):
+
+    '''
+
+    A one-and-a-half-pass jacket, its up pass the jacket's own arrays, and an extension circuit of
+    one or two passes over stations past the throat, each pass with every array the jacket views read.
+
+    '''
+
+    nozzle = _multiPassNozzle()
+    results = nozzle.channelThermalResults
+    stations = len(results['xHotWall3D'])
+    # The inlet manifold sits aft of the throat, at x = 0
+    down = np.flatnonzero(np.asarray(results['xHotWall3D']) > 0.01)
+    nozzle.coolantCircuitSolution.down.results = _passResults(results, down, -20.0)
+    nozzle.coolantCircuitSolution.up.results = results
+
+    # The extension circuit runs past the jacket, on its own coolant and channels
+    extension = dict(results)
+    extension['xHotWall3D'] = np.linspace(0.1, 0.5, stations)
+    extension['rHotWall3D'] = np.interp(extension['xHotWall3D'], nozzle.xNozzleWall, nozzle.rNozzleWall)
+    everyStation = np.arange(stations)
+    sizing = types.SimpleNamespace(channelThermalResults = _passResults(extension, everyStation, 30.0), nChannel = 90,
+                                   maxWallTemperature = 850.0)
+    circuit = None
+    if extensionPasses == 2:
+        circuit = types.SimpleNamespace(
+            down = types.SimpleNamespace(name = 'down', channelCount = 90, results = _passResults(extension, everyStation, 10.0)),
+            up = types.SimpleNamespace(name = 'up', channelCount = 90, results = sizing.channelThermalResults))
+    nozzle.extensionCircuitSolution = types.SimpleNamespace(sizing = sizing, circuit = circuit, coolant = 'Methane')
+    return nozzle
+
+def testTheJacketViewsListEveryPassAndDrawTheJacketsOwnUnlessAnotherIsPicked():
+    from novaGui import thermalPlots
+
+    assert [entry.key for entry in thermalPlots.coolantPasses(_cooledNozzle())] == ['jacket']
+    assert [entry.key for entry in thermalPlots.coolantPasses(_passNozzle(1))] == ['jacketDown', 'jacketUp', 'extension']
+    nozzle = _passNozzle()
+    passes = thermalPlots.coolantPasses(nozzle)
+    assert [(entry.key, entry.label) for entry in passes] == [
+        ('jacketDown', 'Jacket, down pass'), ('jacketUp', 'Jacket, up pass'),
+        ('extensionDown', 'Extension circuit, down pass'), ('extensionUp', 'Extension circuit, up pass')]
+
+    # The up pass is the jacket's own arrays; an extension pass carries its own coolant, channels and limit
+    assert thermalPlots.coolantPass(nozzle).results is nozzle.channelThermalResults
+    assert thermalPlots.coolantPass(nozzle, 'noSuchPass').key == 'jacketUp'
+    chosen = thermalPlots.coolantPass(nozzle, 'extensionDown')
+    assert (chosen.coolant, chosen.channelCount, chosen.wallLimit) == ('Methane', 90, 850.0)
+    assert thermalPlots.coolantPass(_syntheticNozzle()) is None
+
+@pytest.mark.parametrize('key', sorted(jacketDrawers))
+def testEveryJacketViewDrawsEveryPassInBothRenderers(key):
+    import json
+
+    from novaGui import thermalPlots, views
+
+    nozzle = _passNozzle()
+    for entry in thermalPlots.coolantPasses(nozzle):
+        pane = _drawn(getattr(thermalPlots, jacketDrawers[key]), nozzle, entry.key)
+        assert pane.messageText is None and pane.figure.get_axes()
+        figure = json.loads(views.interactiveFigure(nozzle, key, 'dark', passKey = entry.key))
+        assert entry.name.lower() in figure['layout']['title']['text'].lower()
+
+def testAPassIsDrawnFromItsOwnArraysAndTheThroatOnlyWhereThePassCoversIt():
+    import json
+
+    from novaGui import thermalPlots, views
+
+    nozzle = _passNozzle()
+    pane = _drawn(thermalPlots.drawJacketTemperatures, nozzle, 'jacketDown')
+    coolantAxes = pane.figure.get_axes()[1]
+    drawn = next(line for line in coolantAxes.get_lines() if line.get_linewidth() == 1.8)
+    assert np.array_equal(drawn.get_ydata(), nozzle.coolantCircuitSolution.down.results['temperature'])
+
+    def throatLines(passKey):
+        figure = json.loads(views.interactiveFigure(nozzle, 'heatFlux', 'dark', passKey = passKey))
+        return len([shape for shape in figure['layout'].get('shapes', []) if shape.get('type') == 'line'])
+
+    # The up pass runs the whole jacket past the throat; the down pass starts aft of it, the extension further aft
+    assert (throatLines('jacketUp'), throatLines('jacketDown'), throatLines('extensionUp')) == (3, 0, 0)
+
+def testASinglePassJacketKeepsItsTitles():
+    import json
+
+    from novaGui import views
+
+    figure = json.loads(views.interactiveFigure(_cooledNozzle(), 'jacketTemperatures', 'dark'))
+    assert figure['layout']['title']['text'] == 'Wall and coolant temperatures'
+
+def testTheJacketsOwnPassIsDrawnOverTheComparedRunsOwnAndAnotherOverTheSamePassOrNotAtAll():
+    import json
+
+    from novaGui import views
+
+    def compared(nozzle, other, passKey):
+        figure = json.loads(views.interactiveFigure(nozzle, 'coolantFlow', 'dark', compare = other, passKey = passKey,
+                                                    labels = ('this run', 'that run')))
+        return any((trace.get('name') or '').endswith('that run') for trace in figure['data'])
+
+    assert compared(_passNozzle(), _passNozzle(), 'jacketDown')
+    assert not compared(_passNozzle(), _cooledNozzle(), 'jacketDown')
+    # The pass each jacket reports, named or not, drawn over the other's
+    assert compared(_passNozzle(), _cooledNozzle(), None) and compared(_passNozzle(), _cooledNozzle(), 'jacketUp')

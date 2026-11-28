@@ -375,9 +375,15 @@ def testEachOuterPassSendsAndKeepsWhereItLeftEachLeg(jacket):
         assert np.array_equal(leg['coolant'], solved.results['temperature'])
         assert np.array_equal(leg['wall'], solved.results.get('metalWallTemperature', solved.results['wallTemperature']))
 
-def testAMultiPassJacketDrawsItsUpPassOnce(jacket, monkeypatch):
+def testAMultiPassJacketDrawsEachPassOnceUnderItsOwnName(jacket, monkeypatch):
 
-    '''Drawn in the loop, the figure would be written on every outer pass; it is drawn once, of the up pass.'''
+    '''
+
+    Drawn in the loop, the figure would be written on every outer pass; each pass is drawn once,
+    when the circuit has settled, the up pass under the jacket's figure name and the down pass
+    beside it, each titled with its pass.
+
+    '''
 
     import dataclasses
 
@@ -389,5 +395,9 @@ def testAMultiPassJacketDrawsItsUpPassOnce(jacket, monkeypatch):
     circuit = solveCoolantCircuit(copy.deepcopy(base), geometry, dataclasses.replace(thermal, export = 'on'),
                                   'twoPass', material = 'GRCop-42')
 
-    assert circuit.iterations > 1 and len(drawn) == 1
-    assert drawn[0]['nChannel'] == circuit.up.channelCount and drawn[0]['results'] is circuit.up.results
+    assert circuit.iterations > 1
+    assert [(figure['fileName'], figure['results'] is solved.results, figure['nChannel'], figure['titleFlare'].endswith(leg))
+            for figure, solved, leg in zip(drawn, (circuit.down, circuit.up), ('down pass', 'up pass'))] == [
+        ('heatTransferModelOutputDownPass.html', True, circuit.down.channelCount, True),
+        ('heatTransferModelOutput.html', True, circuit.up.channelCount, True)]
+    assert len(drawn) == 2

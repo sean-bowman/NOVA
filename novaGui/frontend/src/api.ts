@@ -90,9 +90,10 @@ export const api = {
         request<{ data: object[]; layout: Record<string, unknown> }>(
             `/api/runs/${runId}/plume-sweeps/${number}/figure${query({ mode, plot })}`),
     views: (run: number | null) => request<ViewIndex>(`/api/views${query({ run })}`),
-    interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null, revision?: number) =>
+    interactiveFigure: (key: string, mode: Mode, run: number | null, compare: number | null, revision?: number,
+                        pass?: string | null) =>
         request<{ data: object[]; layout: Record<string, unknown> }>(
-            `/api/views/${key}/interactive${query({ mode, run, compare, rev: revision })}`),
+            `/api/views/${key}/interactive${query({ mode, run, compare, rev: revision, pass })}`),
     analysis: (run: number | null, baseline: number | null) => request<ResultTable>(`/api/analysis${query({ run, baseline })}`),
     validationModel: (model: string) => request<ValidationDetail>(`/api/validation/${encodeURIComponent(model)}`),
     exportIndex: (run: number | null) => request<ExportIndex>(`/api/export${query({ run })}`),
@@ -141,12 +142,14 @@ export function openWindow(path: string, title: string): void {
 }
 
 /**
- * A static view: the PNG as a blob, or the drawer's message when the run lacks the view's data.
+ * A static view: the PNG as a blob, or the drawer's message when the run lacks the view's data. A
+ * jacket view draws the pass named, or the pass the jacket reports without one.
  */
 export async function staticFigure(key: string, mode: Mode, run: number | null, width: number, height: number,
-                                   ratio: number, signal?: AbortSignal): Promise<{ blob: Blob } | { message: string }> {
+                                   ratio: number, signal?: AbortSignal,
+                                   pass?: string | null): Promise<{ blob: Blob } | { message: string }> {
     const path = `/api/views/${key}/static${query({ mode, run, width: Math.round(width), height: Math.round(height),
-                                                    ratio: ratio.toFixed(2) })}`;
+                                                    ratio: ratio.toFixed(2), pass })}`;
     const response = await fetch(path, { signal });
     if (!response.ok) {
         let message = `${response.status} ${response.statusText}`;

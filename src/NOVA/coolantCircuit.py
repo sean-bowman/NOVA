@@ -469,14 +469,16 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
                         minWallThickness: float = 0.0,
                         turnaroundVelocityRatio: float = DEFAULTVELOCITYRATIO,
                         tolerance: float = 0.05, maxIterations: int = 30,
-                        ribExchange: bool = True, accelerate: bool = True) -> CircuitSolution:
+                        ribExchange: bool = True, accelerate: bool = True,
+                        figureName: str = 'heatTransferModelOutput', figureLabel: str = '') -> CircuitSolution:
 
     '''
 
     Solve a one-and-a-half-pass or two-pass jacket.
 
-    The passes are solved with the figure switches off, and the up pass, the one the jacket reports,
-    is drawn once when the outer iteration has settled.
+    The passes are solved with the figure switches off, and each is drawn once when the outer
+    iteration has settled: the up pass, the one the jacket reports, as `<figureName>.html`, and
+    the down pass as `<figureName>DownPass.html`.
 
     Parameters:
     -----------
@@ -509,6 +511,11 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
         False solves the two passes with no heat between them.
     accelerate : bool
         Anderson acceleration of the outer iteration (`_Accelerator`); False runs it plain.
+    figureName : str
+        The stem of the passes' heat transfer figures.
+    figureLabel : str
+        What the figures' titles call the circuit before its pass: 'extension circuit' gives
+        'extension circuit down pass'; '' gives 'down pass'.
 
     Returns:
     --------
@@ -642,7 +649,10 @@ def solveCoolantCircuit(base, geometry, thermal, circuit: str, passChannelRatio:
             context = createErrorContext(circuit = circuit, history = history),
             iterations = maxIterations, tolerance = tolerance, residual = history[-1])
 
-    drawSizingFigure(upState, thermal, upResults)
+    for state, results, leg, suffix in ((downState, downState.channelThermalResults, 'down', 'DownPass'),
+                                         (upState, upResults, 'up', '')):
+        drawSizingFigure(state, thermal, results, fileName = f'{figureName}{suffix}.html',
+                         passName = f'{figureLabel} {leg} pass'.strip())
 
     return CircuitSolution(
         circuit    = circuit,

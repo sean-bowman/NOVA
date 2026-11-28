@@ -801,7 +801,7 @@ def testAFigureIsBuiltOnceAndSentCompressed(client, finishedRun, monkeypatch):
     '''
     from novaGui import views
     built = []
-    def interactiveFigure(nozzle, key, mode, compare = None, labels = ()):
+    def interactiveFigure(nozzle, key, mode, compare = None, labels = (), passKey = None):
         built.append((key, mode))
         return '{"data": [], "layout": {"title": "' + 'x' * 4000 + '"}}'
     monkeypatch.setattr(views, 'interactiveFigure', interactiveFigure)
@@ -826,6 +826,30 @@ def testAFigureIsBuiltOnceAndSentCompressed(client, finishedRun, monkeypatch):
     finally:
         session.forget(other.runId)
         session.adopt(finishedRun)
+
+def testAJacketViewIsBuiltOncePerPassAndTheOtherViewsIgnoreThePass(client, finishedRun, monkeypatch):
+    '''
+    A jacket view's pass is handed to its builder and names the figure it keeps, so each pass is
+    built once; a view that draws no pass is built once whatever pass is asked.
+    '''
+    from novaGui import views
+    built = []
+    def interactiveFigure(nozzle, key, mode, compare = None, labels = (), passKey = None):
+        built.append((key, passKey))
+        return '{"data": [], "layout": {}}'
+    monkeypatch.setattr(views, 'interactiveFigure', interactiveFigure)
+    for key, passKey in (('heatFlux', None), ('heatFlux', 'jacketDown'), ('heatFlux', 'jacketDown'),
+                         ('contour', None), ('contour', 'jacketDown')):
+        params = {'run': finishedRun.runId, 'mode': 'dark', **({'pass': passKey} if passKey else {})}
+        assert client.get(f'/api/views/{key}/interactive', params = params).status_code == 200
+    assert built == [('heatFlux', None), ('heatFlux', 'jacketDown'), ('contour', None)]
+
+def testTheViewIndexListsTheRunsPasses(client, finishedRun):
+    '''A run without a jacket has no pass for the jacket views to draw.'''
+    index = client.get('/api/views', params = {'run': finishedRun.runId}).json()
+    assert (index['passes'], index['defaultPass']) == ([], None)
+    assert {spec['key'] for spec in index['views'] if spec['byPass']} == {
+        'wallMap', 'jacketTemperatures', 'coolantFlow', 'coolantProperties', 'heatFlux'}
 
 def testTheContourAndNearWallHoverAlongTheAxis():
     '''The browser's axial cursor reads the contour's radius at its station: those views hover along x.'''

@@ -57,10 +57,15 @@ Routes, all under /api:
     GET  /report                    a run's report as one HTML file, ?run=&baseline= (novaGui.report)
     GET  /runs/state                the session snapshot
     GET  /runs/events               Server-Sent Events: a snapshot, then every run event
-    GET  /views                     the view list, the keys a run produced, and that run's id, name,
-                                    time and config, or why its saved result does not load, ?run=
-    GET  /views/{key}/interactive   a view's plotly figure JSON, ?mode=&run=&compare=
-    GET  /views/{key}/static        a view's Matplotlib PNG, ?mode=&run=&width=&height=&ratio=
+    GET  /views                     the view list, the keys a run produced, the passes of its coolant
+                                    the jacket views draw, and that run's id, name, time and config,
+                                    or why its saved result does not load, ?run=
+    GET  /views/{key}/interactive   a view's plotly figure JSON, ?mode=&run=&compare=&pass=
+    GET  /views/{key}/static        a view's Matplotlib PNG, ?mode=&run=&width=&height=&ratio=&pass=
+
+`pass` names the pass of the coolant a jacket view draws (novaGui.views.coolantPassIndex): a
+multi-pass jacket's down or up pass, or the extension circuit's. Without it the view draws the
+pass the jacket reports; the other views ignore it.
     GET  /analysis                  a run's result table (novaGui.analysis), ?run=&baseline=, each headline
                                     number and section with its validation status (novaGui.validationStatus)
     GET  /validation/{model}        a model's validation status and the passages of its records that
@@ -79,7 +84,7 @@ a run's id stays its own across launches. The run in progress answers /views and
 /views/{key}/interactive with the figures its contour stage settled, once the worker has sent them. `compare` draws a second kept run over a line plot, and
 `baseline` sets a second run's table beside the first (novaGui.analysis.compareTables).
 
-A view's figure is built once per run, view, palette mode and compared run, and kept while its run
+A view's figure is built once per run, view, pass, palette mode and compared run, and kept while its run
 is kept (`keptFigureBytes` of them, the least recently drawn going first), compressed as well as
 whole, so switching views, the grid and a popped-out window draw from memory after the first
 time. Every other response is compressed as it goes out when the browser accepts it. A filled flow
@@ -132,6 +137,7 @@ from . import schemaJson
 from . import sweeps
 from . import updates
 from . import validationStatus
+from . import viewCatalog
 from . import views
 from . import settings as guiSettings
 from .runStore import RunStore
@@ -587,15 +593,17 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
             available = [spec['key'] for spec in listed if spec['key'] in partial['views']]
             config = partial['config'] or {}
             return {'views': listed, 'available': available, 'runId': run, 'runName': str(config.get('filename') or ''),
-                    'elapsedSec': None, 'config': partial['config'], 'partial': True, 'loadError': ''}
+                    'elapsedSec': None, 'config': partial['config'], 'partial': True, 'loadError': '',
+                    'passes': [], 'defaultPass': None}
         record = session.record(run)
         finished = record is not None and record.ok
+        passes = views.coolantPassIndex(session.nozzle(record) if finished else None)
         return {'views': listed, 'available': views.availableViews(record) if finished else [],
                 'runId': record.runId if finished else None,
                 'runName': record.runName if finished else '',
                 'elapsedSec': record.elapsedSec if finished else None,
                 'config': record.config if finished else None, 'partial': False,
-                'loadError': record.loadError if finished else ''}
+                'loadError': record.loadError if finished else '', **passes}
 
     # (runId, partial, key, mode, compare, baseline): (figure JSON as bytes, the same gzipped)
     figureCache = collections.OrderedDict()
@@ -647,7 +655,7 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
 
     @app.get('/api/views/{key}/interactive')
     def interactiveView(request: Request, key: str, mode: str = 'dark', run: int | None = None,
-                        compare: int | None = None) -> Response:
+                        compare: int | None = None, passKey: str | None = Query(None, alias = 'pass')) -> Response:
 
         mode = _mode(mode)
         if _running(run):
@@ -672,11 +680,13 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
                 other = _nozzle(against)
                 baseline = app.state.session.baseline
                 labels = (f'run {record.runId}', f'run {against}, baseline' if against == baseline else f'run {against}')
-            return views.interactiveFigure(nozzle, key, mode, compare = other, labels = labels)
+            return views.interactiveFigure(nozzle, key, mode, compare = other, labels = labels, passKey = passKey)
 
-        # The compared run's label names it the baseline or not, so the baseline is part of the key
+        # The compared run's label names it the baseline or not, so the baseline is part of the key;
+        # a jacket view's pass names the figure it draws
         baseline = app.state.session.baseline if against is not None else None
-        figure = _drawnFigure((record.runId, False, key, mode, against, baseline), build)
+        drawnKey = f'{key}#{passKey}' if passKey and key in viewCatalog.passViews else key
+        figure = _drawnFigure((record.runId, False, drawnKey, mode, against, baseline), build)
         if figure is None:
             raise HTTPException(404, f'{key} has no interactive rendering for this run')
         return _figureResponse(request, figure)
@@ -684,9 +694,10 @@ def createApp(session: RunSession | None = None, warm: bool = True) -> FastAPI:
     @app.get('/api/views/{key}/static')
     def staticView(key: str, mode: str = 'dark', run: int | None = None, width: int = Query(900, ge = 100, le = 8000),
                    height: int = Query(600, ge = 100, le = 8000),
-                   ratio: float = Query(1.0, ge = 0.5, le = 4.0)) -> Response:
+                   ratio: float = Query(1.0, ge = 0.5, le = 4.0),
+                   passKey: str | None = Query(None, alias = 'pass')) -> Response:
 
-        drawn = views.staticFigure(_nozzle(run), key, _mode(mode), width, height, ratio)
+        drawn = views.staticFigure(_nozzle(run), key, _mode(mode), width, height, ratio, passKey = passKey)
         if 'message' in drawn:
             return JSONResponse({'message': drawn['message']})
         return Response(drawn['png'], media_type = 'image/png', headers = {'Cache-Control': 'no-store'})

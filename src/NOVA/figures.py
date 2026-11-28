@@ -1631,7 +1631,8 @@ def channelMeshFigure(nozzle):
 
 def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None,
                                 family: str = 'circle', adiabatic = False, titleFlare: str = '',
-                                xReference = [], rReference = [], wallTemperatureLimit = None):
+                                xReference = [], rReference = [], wallTemperatureLimit = None,
+                                fileName: str = 'heatTransferModelOutput.html'):
 
     '''
 
@@ -1642,8 +1643,9 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
     Draws the one channel family it is handed, `results` from the thermal model, labelled with
     `family`. It solves nothing itself, since the channel sizing solve has already computed these
     station-by-station arrays by the time a dashboard is worth drawing. The wall temperature
-    limit is drawn when one is given. Written to `context.dataFolder` when `context.export` is
-    'on', shown inline otherwise.
+    limit is drawn when one is given. Written to `context.dataFolder` as `fileName` when
+    `context.export` is 'on', shown inline otherwise; a jacket of several passes writes one file a
+    pass.
 
     '''
 
@@ -1806,7 +1808,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
 
             print('Saving Heat Transfer Outputs to .html')
 
-            _writePlotlyFigure(fig, filename = os.path.join(context.dataFolder, 'heatTransferModelOutput.html'), auto_open = not headlessPlots())
+            _writePlotlyFigure(fig, filename = os.path.join(context.dataFolder, fileName), auto_open = not headlessPlots())
 
         else:
 
@@ -1886,7 +1888,7 @@ def regenHeatTransferModelPlots(context, coolant, nChannel, results: dict = None
 
             print('Saving Heat Transfer Outputs to .html')
 
-            _writePlotlyFigure(fig, filename = os.path.join(context.dataFolder, 'heatTransferModelOutput.html'), auto_open = not headlessPlots())
+            _writePlotlyFigure(fig, filename = os.path.join(context.dataFolder, fileName), auto_open = not headlessPlots())
 
         else:
 
