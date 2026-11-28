@@ -32,8 +32,9 @@ extension's heat balance the conducted flux is drawn in orange where Matplotlib 
 radiation's pewter, so the two series stay apart.
 
 Builders take `(figuresModule, nozzle)`, the signature of novaGui.plotting.interactiveBuilders,
-and draw in the palette mode NOVA.palette holds; the caller sets it. Each returns None when the run
-lacks the view's data.
+and draw in the palette mode NOVA.palette holds; the caller sets it. The five jacket views also take
+`passKey`, the pass of the coolant they draw (thermalPlots.coolantPasses), the pass the jacket
+reports without one. Each returns None when the run lacks the view's data.
 
 Author: Sean Bowman
 Date:   11/17/2026
@@ -171,11 +172,16 @@ def _throatX(nozzle) -> float | None:
 
     return float(wallX[int(np.argmin(wallR))])
 
-def _throat(figure: go.Figure, nozzle, cells, colors: dict) -> None:
+def _throat(figure: go.Figure, nozzle, cells, colors: dict, x = None) -> None:
 
-    '''Mark the throat on each axial panel, given as (row, col) pairs.'''
+    '''
 
-    throatX = _throatX(nozzle)
+    Mark the throat on each axial panel, given as (row, col) pairs. Given the stations drawn, `x`
+    [m], only where they cover it: an extension circuit lies past the throat.
+
+    '''
+
+    throatX = _throatX(nozzle) if x is None else thermalPlots.throatOnPass(nozzle, x)
     if throatX is None:
         return
     for row, col in cells:
@@ -312,23 +318,24 @@ def _colors(figures) -> dict:
 # -- The jacket -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-def wallMap(figures, nozzle):
+def wallMap(figures, nozzle, passKey: str = None):
 
     '''
 
-    The jacket on the nozzle wall: the hot wall colored by its temperature, and outside it the
-    coolant channel colored by the coolant's, with the wall limit marked on the wall's scale.
+    A pass on the nozzle wall: the hot wall colored by its temperature, and outside it the coolant
+    channel colored by the coolant's, with the wall limit marked on the wall's scale.
 
     '''
 
-    results = thermalPlots.thermalResults(nozzle)
-    if results is None:
+    chosen = thermalPlots.coolantPass(nozzle, passKey)
+    if chosen is None:
         return None
+    results = chosen.results
     colors, palette = _colors(figures), figures.figurePalette
 
     x, r = np.asarray(results['xHotWall3D'], dtype = float), np.asarray(results['rHotWall3D'], dtype = float)
     wall, coolant = thermalPlots._metalWall(results), np.asarray(results['temperature'], dtype = float)
-    limit = getattr(nozzle, 'maxWallTemperature', None)
+    limit = chosen.wallLimit
     # The channel sits millimetres outside the wall, closer than two readable bands can be drawn, so
     # its band is set out by a fixed fraction of the chamber radius and labelled as such
     offset = 0.12 * float(np.max(r))
@@ -352,10 +359,10 @@ def wallMap(figures, nozzle):
     _flowDirection(figure, x, results['pressure'], None, None, colors['textMuted'])
     _note(figure, 'coolant band drawn outside the wall, not to scale', None, None, colors['textMuted'])
 
-    channels = int(getattr(nozzle, 'nChannel', 0) or 0)
-    total = float(np.sum(results['heatTransfer'])) * float(channels or 1)
-    _style(figure, colors, f'The jacket on the wall: {channels} channels, {total / 1e6:.2f} MW into the coolant',
-           hovermode = 'closest')
+    total = float(np.sum(results['heatTransfer'])) * float(chosen.channelCount or 1)
+    summary = f'{chosen.channelCount} channels, {total / 1e6:.2f} MW into the coolant'
+    _style(figure, colors, thermalPlots.passTitle(nozzle, chosen, f'The jacket on the wall: {summary}',
+                                                  f'{{Pass}} on the wall: {summary}'), hovermode = 'closest')
     span = float(np.max(x) - np.min(x))
     _equalAspect(figure, None, None, (float(np.min(x)) - 0.04 * span, float(np.max(x)) + 0.04 * span),
                  (0.0, 1.3 * float(np.max(r + offset))))
@@ -365,13 +372,14 @@ def wallMap(figures, nozzle):
 
     return figure
 
-def jacketTemperatures(figures, nozzle):
+def jacketTemperatures(figures, nozzle, passKey: str = None):
 
     '''The hot wall against its limit, with the gas driving it on its own scale, and the coolant warming.'''
 
-    results = thermalPlots.thermalResults(nozzle)
-    if results is None:
+    chosen = thermalPlots.coolantPass(nozzle, passKey)
+    if chosen is None:
         return None
+    results = chosen.results
     colors = _colors(figures)
 
     x = np.asarray(results['xHotWall3D'], dtype = float)
@@ -386,7 +394,7 @@ def jacketTemperatures(figures, nozzle):
     figure.add_trace(_line(x, metal, 'Hot wall', colors['accent'], 1.8), row = 1, col = 1)
     if not np.array_equal(metal, surface):
         figure.add_trace(_line(x, surface, 'Coating surface', colors['accent'], 1.2, 'dot'), row = 1, col = 1)
-    limit = getattr(nozzle, 'maxWallTemperature', None)
+    limit = chosen.wallLimit
     if limit:
         figure.add_trace(_level(x, float(limit), f'Wall limit {float(limit):.0f} K', colors['red']), row = 1, col = 1)
     figure.add_trace(_line(x, results['drivingTemperature'], 'Gas driving the wall', colors['blue'], 1.2), row = 1, col = 1,
@@ -397,7 +405,8 @@ def jacketTemperatures(figures, nozzle):
     figure.add_trace(_line(x, coolant, 'Coolant', colors['cyan'], 1.8, showlegend = False), row = 2, col = 1)
     _flowDirection(figure, x, results['pressure'], 2, 1, colors['textMuted'])
 
-    _style(figure, colors, 'Wall and coolant temperatures')
+    _style(figure, colors, thermalPlots.passTitle(nozzle, chosen, 'Wall and coolant temperatures',
+                                                  'Wall and coolant temperatures of {pass}'))
     figure.update_yaxes(title_text = 'Hot wall temperature [K]', row = 1, col = 1, secondary_y = False)
     figure.update_yaxes(title_text = 'Gas driving temperature [K]', title_font_color = colors['blue'],
                         tickfont_color = colors['blue'], showgrid = False, row = 1, col = 1, secondary_y = True)
@@ -405,23 +414,25 @@ def jacketTemperatures(figures, nozzle):
     figure.update_xaxes(title_text = 'Nozzle axis [m]', row = 2, col = 1)
     _legendIn(figure, 'legend', 1, 1, 'lower center', colors)
     figure.update_layout(legend_orientation = 'h')
-    _throat(figure, nozzle, ((1, 1), (2, 1)), colors)
+    _throat(figure, nozzle, ((1, 1), (2, 1)), colors, x)
 
     return figure
 
-def _stack(figures, nozzle, title: str, series) -> go.Figure:
+def _stack(figures, nozzle, chosen, title: str, series) -> go.Figure:
 
     '''
 
-    Three panels along the channel, one series each, with the flow direction on the first.
+    Three panels along a pass's channel, one series each, with the flow direction on the first.
 
     Parameters:
     -----------
+    chosen : thermalPlots.CoolantPass
+        The pass drawn.
     series : sequence of (values, label, color, unit, format)
 
     '''
 
-    results = thermalPlots.thermalResults(nozzle)
+    results = chosen.results
     colors = _colors(figures)
     x = np.asarray(results['xHotWall3D'], dtype = float)
 
@@ -434,44 +445,47 @@ def _stack(figures, nozzle, title: str, series) -> go.Figure:
     _flowDirection(figure, x, results['pressure'], 1, 1, colors['textMuted'])
     _style(figure, colors, title)
     figure.update_xaxes(title_text = 'Nozzle axis [m]', row = 3, col = 1)
-    _throat(figure, nozzle, ((1, 1), (2, 1), (3, 1)), colors)
+    _throat(figure, nozzle, ((1, 1), (2, 1), (3, 1)), colors, x)
 
     return figure
 
-def coolantFlow(figures, nozzle):
+def coolantFlow(figures, nozzle, passKey: str = None):
 
     '''Coolant pressure, velocity and Mach number along the channel.'''
 
-    results = thermalPlots.thermalResults(nozzle)
-    if results is None:
+    chosen = thermalPlots.coolantPass(nozzle, passKey)
+    if chosen is None:
         return None
+    results = chosen.results
 
     pressure = np.asarray(results['pressure'], dtype = float)
     drop = float(np.max(pressure) - np.min(pressure))
+    summary = f'{drop / 1e3:.0f} kPa pressure drop, exit at {float(np.min(pressure)) / 1e6:.2f} MPa'
 
-    return _stack(figures, nozzle,
-                  f'Coolant flow: {drop / 1e3:.0f} kPa pressure drop, exit at {float(np.min(pressure)) / 1e6:.2f} MPa',
+    return _stack(figures, nozzle, chosen,
+                  thermalPlots.passTitle(nozzle, chosen, f'Coolant flow: {summary}', f'Coolant flow in {{pass}}: {summary}'),
                   ((pressure / 1e6, 'Pressure [MPa]', 'accent', 'MPa', '.4f'),
                    (results['velocity'], 'Velocity [m/s]', 'blue', 'm/s', '.2f'),
                    (results['machNumber'], 'Mach number [-]', 'cyan', '', '.4f')))
 
-def coolantProperties(figures, nozzle):
+def coolantProperties(figures, nozzle, passKey: str = None):
 
     '''The coolant's density, viscosity and specific heat along the channel, from its equation of state.'''
 
-    results = thermalPlots.thermalResults(nozzle)
-    if results is None:
+    chosen = thermalPlots.coolantPass(nozzle, passKey)
+    if chosen is None:
         return None
+    results = chosen.results
+    title = f'Thermophysical properties of the {chosen.coolant}'
 
-    coolant = getattr(nozzle, 'coolant', None) or 'coolant'
-
-    return _stack(figures, nozzle, f'Thermophysical properties of the {coolant} along the channel',
+    return _stack(figures, nozzle, chosen,
+                  thermalPlots.passTitle(nozzle, chosen, f'{title} along the channel', f'{title} along {{pass}}'),
                   ((results['density'], 'Density [kg/m³]', 'accent', 'kg/m³', '.1f'),
                    (np.asarray(results['viscosity'], dtype = float) * 1e6, 'Viscosity [µPa·s]', 'purple', 'µPa·s', '.2f'),
                    (np.asarray(results['specificHeat'], dtype = float) * 1e-3, 'Specific heat [kJ/kg·K]', 'green',
                     'kJ/kg·K', '.3f')))
 
-def heatFlux(figures, nozzle):
+def heatFlux(figures, nozzle, passKey: str = None):
 
     '''
 
@@ -480,9 +494,10 @@ def heatFlux(figures, nozzle):
 
     '''
 
-    results = thermalPlots.thermalResults(nozzle)
-    if results is None:
+    chosen = thermalPlots.coolantPass(nozzle, passKey)
+    if chosen is None:
         return None
+    results = chosen.results
     colors = _colors(figures)
 
     x = np.asarray(results['xHotWall3D'], dtype = float)
@@ -514,7 +529,8 @@ def heatFlux(figures, nozzle):
     figure.add_trace(_line(x, results['nusseltNumber'], 'Nusselt number', colors['green'], 1.4, unit = '', valueFormat = '.0f',
                            showlegend = False), row = 3, col = 1, secondary_y = True)
 
-    _style(figure, colors, f'Heat flux peaks at {float(np.max(flux)):.1f} MW/m²')
+    peak = f'peaks at {float(np.max(flux)):.1f} MW/m²'
+    _style(figure, colors, thermalPlots.passTitle(nozzle, chosen, f'Heat flux {peak}', f'Heat flux into {{pass}} {peak}'))
     figure.update_yaxes(title_text = 'Heat flux [MW/m²]', row = 1, col = 1)
     figure.update_yaxes(title_text = 'Film coefficient [kW/m²·K]', row = 2, col = 1)
     figure.update_yaxes(title_text = 'Reynolds number [10⁶]', title_font_color = colors['blue'],
@@ -522,7 +538,7 @@ def heatFlux(figures, nozzle):
     figure.update_yaxes(title_text = 'Nusselt number [-]', title_font_color = colors['green'],
                         tickfont_color = colors['green'], showgrid = False, row = 3, col = 1, secondary_y = True)
     figure.update_xaxes(title_text = 'Nozzle axis [m]', row = 3, col = 1)
-    _throat(figure, nozzle, ((1, 1), (2, 1), (3, 1)), colors)
+    _throat(figure, nozzle, ((1, 1), (2, 1), (3, 1)), colors, x)
 
     return figure
 

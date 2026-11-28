@@ -1,7 +1,7 @@
 /* ========================================
    POP-OUT FIGURE WINDOW
    Figures in a window of their own, for a second monitor: the page the result pane's Pop out
-   opens, at /?popout=figure&run=&layout=&views=. It shows one view or the grid, with the same
+   opens, at /?popout=figure&run=&layout=&views=&pass=. It shows one view or the grid, with the same
    axial cursor and the same baseline as the main window, and follows the latest run or keeps to
    the run it was opened on. It listens to the same event stream, so a finished run, a new
    baseline or a theme switched in the main window reach it.
@@ -22,7 +22,7 @@ interface Toast {
     body: string;
 }
 
-export function popoutParams(): { run: RunChoice; layout: FigureLayout; views: string[] } | null {
+export function popoutParams(): { run: RunChoice; layout: FigureLayout; views: string[]; pass: string | null } | null {
     const params = new URLSearchParams(window.location.search);
     if (params.get('popout') !== 'figure') {
         return null;
@@ -33,10 +33,11 @@ export function popoutParams(): { run: RunChoice; layout: FigureLayout; views: s
         run: run && run !== 'latest' && Number.isFinite(Number(run)) ? Number(run) : 'latest',
         layout: params.get('layout') === 'grid' ? 'grid' : 'single',
         views,
+        pass: params.get('pass') || null,
     };
 }
 
-export function Popout({ initial }: { initial: { run: RunChoice; layout: FigureLayout; views: string[] } }) {
+export function Popout({ initial }: { initial: { run: RunChoice; layout: FigureLayout; views: string[]; pass?: string | null } }) {
     const [mode, setMode] = useState<Mode>(() => (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'));
     const [selected, setSelected] = useState(initial.views[0] ?? 'contour');
     const [layout, setLayout] = useState<FigureLayout>(initial.layout);
@@ -76,6 +77,7 @@ export function Popout({ initial }: { initial: { run: RunChoice; layout: FigureL
             <main className="popout-body card">
                 <FigureView index={runs.index} mode={mode} compare={against} selected={selected} layout={layout}
                             runChoice={runs.choice} initialGrid={initial.layout === 'grid' ? initial.views : undefined}
+                            initialPass={initial.pass ?? null}
                             liveRevision={run.iterationRevision} plumeVersion={run.plumeVersion} onSelect={setSelected}
                             onLayout={setLayout} onNotify={notify} />
             </main>

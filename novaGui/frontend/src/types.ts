@@ -414,6 +414,13 @@ export interface ViewSpec {
     interactive: boolean;
     static: boolean;
     comparable: boolean;          // a line plot that can draw a second run over the first
+    byPass: boolean;              // a jacket view, which draws one pass of the coolant at a time
+}
+
+/** A pass of a run's coolant the jacket views can draw: a multi-pass jacket's down or up pass, or the extension circuit's. */
+export interface CoolantPass {
+    key: string;
+    label: string;
 }
 
 /**
@@ -429,6 +436,8 @@ export interface ViewIndex {
     config: Config | null;
     partial: boolean;
     loadError: string;            // why the run's saved result does not load, '' when it does
+    passes: CoolantPass[];        // the passes the jacket views can draw, in the order the picker lists them
+    defaultPass: string | null;   // the pass the jacket reports, which they draw unless another is picked
 }
 
 export interface Settings {

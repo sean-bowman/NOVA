@@ -98,9 +98,15 @@ class TestTheCircuitRefusals:
             runConfiguration(tmp_path, **{**CIRCUIT, 'extensionCircuitOutlet': 'return',
                                           'extensionCoolantMassFlow': 1.0, 'extensionFilmSlots': []})
 
-def testTheExtensionCircuitLeavesTheJacketsFigureAlone(dumpCooled, tmp_path, monkeypatch):
+@pytest.mark.parametrize('passes', [1, 2])
+def testTheExtensionCircuitDrawsEachPassUnderItsOwnName(dumpCooled, tmp_path, monkeypatch, passes):
 
-    '''The heat transfer figure is the chamber jacket's, written under one name; the extension circuit draws nothing over it.'''
+    '''
+
+    Each pass of the extension circuit is drawn once, under the extension circuit's own figure
+    names, so the chamber jacket's heat transfer figure is never written over.
+
+    '''
 
     from NOVA import channelSizing
     from NOVA.extensionCircuit import solveExtensionCircuit
@@ -110,6 +116,16 @@ def testTheExtensionCircuitLeavesTheJacketsFigureAlone(dumpCooled, tmp_path, mon
     monkeypatch.setattr(channelSizing, 'drawRegenHeatTransfer', lambda context, **kwargs: drawn.append(kwargs))
     thermal = RegenThermalContext(material = dumpCooled.material, dataFolder = str(tmp_path),
                                   plotsEnabled = 'on', export = 'on')
-    solution = solveExtensionCircuit(dumpCooled.extensionCircuitState(), thermal)
+    state = dumpCooled.extensionCircuitState()
+    state.extensionCircuitPasses = passes
+    solution = solveExtensionCircuit(state, thermal)
 
-    assert solution.sizing.channelThermalResults is not None and drawn == []
+    if passes == 1:
+        assert [(figure['fileName'], figure['results'] is solution.sizing.channelThermalResults) for figure in drawn] == [
+            ('extensionHeatTransferModelOutput.html', True)]
+        assert drawn[0]['titleFlare'].endswith('extension circuit')
+    else:
+        assert [(figure['fileName'], figure['titleFlare'].split(', ')[-1]) for figure in drawn] == [
+            ('extensionHeatTransferModelOutputDownPass.html', 'extension circuit down pass'),
+            ('extensionHeatTransferModelOutput.html', 'extension circuit up pass')]
+        assert drawn[1]['results'] is solution.circuit.up.results

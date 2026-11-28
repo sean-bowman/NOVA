@@ -155,7 +155,7 @@ The plume view draws the nozzle and its plume as one Mach field: the chamber, th
 
 ![Plume](docs/images/novaGui/viewPlume.png)
 
-The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers.
+The cooling views draw everything the jacket solve computes along the channel: the jacket on the wall with the hot wall and the coolant colored by temperature, the wall against its limit and the gas driving it, the coolant's pressure, velocity and Mach number, its density, viscosity and specific heat, and the heat flux with both film coefficients and the Reynolds and Nusselt numbers. On a multi-pass jacket or an extension circuit, Pass beside the view picks the pass they draw.
 
 ![Jacket on the wall](docs/images/novaGui/viewJacket.png)
 
@@ -467,7 +467,9 @@ A run writes to `{filename}Outputs/` beside the repository root.
 | `contourSegmentsVisualization.png`                                                                   | `plotsEnabled`                                            |
 | `machContours.png`, `pressureContours.png`, `temperatureContours.png`                            | `plotsEnabled`                                            |
 | `nearWallProperties.png`                                                                             | `plotsEnabled`                                            |
-| `heatTransferModelOutput.html`                                                                       | `export` with cooling channels                             |
+| `heatTransferModelOutput.html`                                                                       | `export` with cooling channels: the jacket, or a multi-pass jacket's up pass |
+| `heatTransferModelOutputDownPass.html`                                                               | `export` with a multi-pass jacket                          |
+| `extensionHeatTransferModelOutput.html`, `extensionHeatTransferModelOutputDownPass.html`           | `export` with an extension circuit, the second with two passes |
 | `threeChannelMeshViewInterfaced.html`                                                                | `plotsEnabled` with cooling channels                      |
 | `contourInteractive.html`, `nearWallInteractive.html`, `revolvedContourView.html`                | `export`                                                     |
 | `machFieldInteractive.html`, `pressureFieldInteractive.html`, `temperatureFieldInteractive.html` | `export`                                                     |

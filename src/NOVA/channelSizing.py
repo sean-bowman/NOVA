@@ -2033,7 +2033,8 @@ def solveChannelRadii(state, geometry, thermal):
 
     return state
 
-def drawSizingFigure(state, thermal, results: dict) -> None:
+def drawSizingFigure(state, thermal, results: dict, fileName: str = 'heatTransferModelOutput.html',
+                     passName: str = '') -> None:
 
     '''
 
@@ -2042,7 +2043,8 @@ def drawSizingFigure(state, thermal, results: dict) -> None:
 
     The title says which mode drew it, because a wall that sits below its limit means a converged
     bound in one and a profile in the other. A multi-pass circuit solves its passes with the
-    switches off and draws the pass it reports once, when its outer iteration has settled.
+    switches off and draws each pass once, under a file name of its own, when its outer iteration
+    has settled.
 
     Parameters:
     -----------
@@ -2052,6 +2054,11 @@ def drawSizingFigure(state, thermal, results: dict) -> None:
         Where the figure goes, and whether it is drawn.
     results : dict
         The sizing march's station results.
+    fileName : str
+        The figure's file in the data folder.
+    passName : str
+        The pass the figure draws, for its title: 'down pass', 'extension circuit', or '' for a
+        single-pass jacket.
 
     '''
 
@@ -2059,7 +2066,9 @@ def drawSizingFigure(state, thermal, results: dict) -> None:
         return
     titleFlare = (', manual profile results' if state.channelSizingMode == 'manual'
                   else ', dcr( ) results')
+    if passName:
+        titleFlare += f', {passName}'
     drawRegenHeatTransfer(thermal, coolant=state.coolant, nChannel=state.nChannel,
                           results=results, family=state.channelType,
                           titleFlare=titleFlare, xReference=state.xRegenNozzle, rReference=state.rRegenNozzle,
-                          wallTemperatureLimit=state.maxWallTemperature)
+                          wallTemperatureLimit=state.maxWallTemperature, fileName=fileName)

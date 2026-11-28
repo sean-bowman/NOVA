@@ -58,7 +58,7 @@ from typing import Any
 import numpy as np
 
 from .channelGeometry import ChannelGeometryInputs
-from .channelSizing import solveChannelRadii
+from .channelSizing import drawSizingFigure, solveChannelRadii
 from .coolantCircuit import solveCoolantCircuit
 from .errors import InvalidInputError
 from .geometryTools import sizedThroatRadius
@@ -69,6 +69,9 @@ __all__ = ['EXTENSIONOUTLETS', 'ExtensionCircuitState', 'ExtensionCircuitSolutio
            'extensionWallProfile']
 
 EXTENSIONOUTLETS = ('return', 'film', 'overboard')
+
+# The stem of the extension circuit's heat transfer figures: one, or one a pass (coolantCircuit)
+EXTENSIONFIGURE = 'extensionHeatTransferModelOutput'
 
 @dataclass
 class ExtensionCircuitState:
@@ -333,9 +336,9 @@ def solveExtensionCircuit(state: ExtensionCircuitState, thermal) -> ExtensionCir
 
     stations = extensionCircuitSpan(state.xExtension, state.rExtension, state.nozzleScalingFactor,
                                     float(state.extensionCircuitEndAreaRatio))
-    # The heat transfer figure is the chamber jacket's, written under one name; drawn here, the
-    # extension circuit's passes would write over it
-    thermal = dataclasses.replace(thermal, plotsEnabled = 'off', export = 'off')
+    # Each pass is drawn once solved, under the extension circuit's own figure names, so the
+    # chamber jacket's heat transfer figure is not written over
+    quiet = dataclasses.replace(thermal, plotsEnabled = 'off', export = 'off')
     template = state.channelSizingSolution
     geometry = ChannelGeometryInputs(
         numCrossSections = len(stations), numCSPointsChannel = int(state.numCSPointsChannel or 24),
@@ -345,7 +348,9 @@ def solveExtensionCircuit(state: ExtensionCircuitState, thermal) -> ExtensionCir
                  / sizedThroatRadius(np.asarray(state.rExtension, dtype = float), state.nozzleScalingFactor))**2
 
     if passes == 1:
-        sizing = solveChannelRadii(_sizingState(state, stations, direction), geometry, thermal)
+        sizing = solveChannelRadii(_sizingState(state, stations, direction), geometry, quiet)
+        drawSizingFigure(sizing, thermal, sizing.channelThermalResults, fileName = f'{EXTENSIONFIGURE}.html',
+                         passName = 'extension circuit')
         circuit = None
         outletStation = stations[-1] if direction == 'coflow' else stations[0]
     else:
@@ -353,7 +358,8 @@ def solveExtensionCircuit(state: ExtensionCircuitState, thermal) -> ExtensionCir
                                       'twoPass', material = state.material,
                                       factorOfSafety = float(state.voluteFOS) if specified(state, 'voluteFOS') else 1.5,
                                       minWallThickness = (float(state.minVoluteWallThickness)
-                                                          if specified(state, 'minVoluteWallThickness') else 0.0))
+                                                          if specified(state, 'minVoluteWallThickness') else 0.0),
+                                      figureName = EXTENSIONFIGURE, figureLabel = 'extension circuit')
         sizing = circuit.up.state
         direction, outletStation = 'twoPass', stations[0]
 

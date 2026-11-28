@@ -21,9 +21,13 @@ active palette mode (themeColors). A drawer draws into a pane, as novaGui.plotti
     drawCircuitIterations  the hot wall and coolant at every pass of a multi-pass circuit's outer
                            iteration, earlier passes fading
 
-The jacket views read `Nozzle.channelThermalResults`, the station arrays of the jacket solve, in
-station order from the injector face aft. The film views read the regen section's film arrays and
-the extension view the radiative extension's solution.
+The jacket views (the first five) draw one pass of the coolant at a time, named by `passKey`
+(`coolantPasses`): a single-pass jacket's `Nozzle.channelThermalResults`, a multi-pass jacket's
+down and up passes, or the extension circuit's one or two, each its station arrays in station order
+from the injector face aft. They draw the pass the jacket reports unless another is named, title
+the pass when the run has more than one, and mark the throat only where the pass covers it. The
+film views read the regen section's film arrays and the extension view the radiative extension's
+solution.
 
 The film model is written along the wall: it gives an effectiveness and a driving temperature at
 each station and nothing across the film. The film map therefore draws the film as a band of fixed
@@ -34,6 +38,8 @@ to scale.
 Author: Sean Bowman
 
 '''
+
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -63,6 +69,121 @@ def thermalResults(nozzle) -> dict:
         return None
 
     return results
+
+def _stationResults(results) -> bool:
+
+    '''Whether a pass's station results hold enough of the jacket march to draw.'''
+
+    return isinstance(results, dict) and np.size(results.get('xHotWall3D', [])) >= 2
+
+@dataclass(frozen = True)
+class CoolantPass:
+
+    '''
+
+    One pass of a run's coolant, as the jacket views draw it.
+
+    key           'jacket' for a single-pass jacket, 'jacketDown' and 'jacketUp' for a multi-pass
+                  one, 'extension' for a one-pass extension circuit, 'extensionDown' and
+                  'extensionUp' for a two-pass one
+    label         what the pass picker lists it as
+    name          what a title calls it: 'the jacket's down pass'
+    results       its station arrays (ChannelSizingState.channelThermalResults), on its own stations
+    channelCount  its channels
+    coolant       its coolant
+    wallLimit     the wall temperature limit it was sized against [K], or None
+
+    '''
+
+    key: str
+    label: str
+    name: str
+    results: dict
+    channelCount: int
+    coolant: str
+    wallLimit: float = None
+
+def coolantPasses(nozzle) -> list:
+
+    '''
+
+    Every pass the jacket views can draw, in the order the pass picker lists them: the jacket's,
+    its down pass before its up pass, then the extension circuit's. Empty when no jacket was solved.
+
+    '''
+
+    jacket = thermalResults(nozzle)
+    if jacket is None:
+        return []
+    limit = getattr(nozzle, 'maxWallTemperature', None)
+    coolant = getattr(nozzle, 'coolant', None) or 'coolant'
+    channels = int(getattr(nozzle, 'nChannel', 0) or 0)
+
+    circuit = getattr(nozzle, 'coolantCircuitSolution', None)
+    if circuit is None or not _stationResults(getattr(circuit.down, 'results', None)):
+        passes = [CoolantPass('jacket', 'Jacket', 'the jacket', jacket, channels, coolant, limit)]
+    else:
+        # The up pass is the one the jacket reports, so it draws from the jacket's own arrays
+        passes = [CoolantPass('jacketDown', 'Jacket, down pass', 'the jacket\'s down pass', circuit.down.results,
+                              int(circuit.down.channelCount), coolant, limit),
+                  CoolantPass('jacketUp', 'Jacket, up pass', 'the jacket\'s up pass', jacket,
+                              int(circuit.up.channelCount), coolant, limit)]
+
+    extension = getattr(nozzle, 'extensionCircuitSolution', None)
+    if extension is not None:
+        extensionCoolant = getattr(extension, 'coolant', None) or coolant
+        extensionLimit = getattr(extension.sizing, 'maxWallTemperature', None) or limit
+        if extension.circuit is None:
+            legs = [('extension', 'Extension circuit', 'the extension circuit', extension.sizing.channelThermalResults,
+                     getattr(extension.sizing, 'nChannel', 0))]
+        else:
+            legs = [(f'extension{part.name.capitalize()}', f'Extension circuit, {part.name} pass',
+                     f'the extension circuit\'s {part.name} pass', part.results, part.channelCount)
+                    for part in (extension.circuit.down, extension.circuit.up)]
+        passes += [CoolantPass(key, label, name, results, int(count or 0), extensionCoolant, extensionLimit)
+                   for key, label, name, results, count in legs if _stationResults(results)]
+
+    return passes
+
+def coolantPass(nozzle, key: str = None):
+
+    '''
+
+    The pass of a run's coolant named `key`, or the pass the jacket reports (its only pass, or its
+    up pass) when `key` is None or names no pass of this run. None when no jacket was solved.
+
+    '''
+
+    passes = coolantPasses(nozzle)
+    chosen = next((candidate for candidate in passes if candidate.key == key), None)
+
+    return chosen or next((candidate for candidate in passes if candidate.key in ('jacket', 'jacketUp')), None)
+
+def passTitle(nozzle, chosen: CoolantPass, title: str, phrase: str) -> str:
+
+    '''
+
+    A jacket view's title, naming the pass drawn when the run has more than one: `title` as it
+    reads on a single-pass jacket, or `phrase` with the pass's name put in for '{pass}', or for
+    '{Pass}' at the start of a sentence.
+
+    '''
+
+    if len(coolantPasses(nozzle)) < 2:
+        return title
+    return phrase.format(**{'pass': chosen.name, 'Pass': chosen.name[:1].upper() + chosen.name[1:]})
+
+def throatOnPass(nozzle, x):
+
+    '''The throat's axial position where the pass drawn covers it, else None: an extension circuit lies past it.'''
+
+    wallX, wallR = _array(nozzle, 'xNozzleWall'), _array(nozzle, 'rNozzleWall')
+    if wallX.size < 2 or wallR.size != wallX.size:
+        return None
+    throatX = float(wallX[int(np.argmin(wallR))])
+    x = np.asarray(x, dtype = float)
+
+    return throatX if x.size and float(np.min(x)) <= throatX <= float(np.max(x)) else None
 
 def _metalWall(results: dict) -> np.ndarray:
 
@@ -114,14 +235,21 @@ def _panels(pane, rows: int, cols: int = 1, heightRatios = None, sharex: bool = 
 
     return axes
 
-def _throat(nozzle, axes) -> None:
+def _throat(nozzle, axes, x = None) -> None:
 
-    '''Mark the throat on each axial axes, where the jacket's hardest station is.'''
+    '''
+
+    Mark the throat on each axial axes, where the jacket's hardest station is. Given the stations
+    drawn, `x` [m], only where they cover it: an extension circuit lies past the throat.
+
+    '''
 
     wallX, wallR = _array(nozzle, 'xNozzleWall'), _array(nozzle, 'rNozzleWall')
     if wallX.size < 2 or wallR.size != wallX.size:
         return
-    throatX = float(wallX[int(np.argmin(wallR))])
+    throatX = float(wallX[int(np.argmin(wallR))]) if x is None else throatOnPass(nozzle, x)
+    if throatX is None:
+        return
     for ax in axes:
         ax.axvline(throatX, color = themeColors.textDim, linewidth = 0.8, linestyle = ':', zorder = 0)
 
@@ -185,26 +313,36 @@ def _flowDirection(ax, x, pressure, color: str) -> None:
 # -- The jacket -- #
 #--------------------------------------------------------------------------------------------------------------------------#
 
-def drawWallMap(pane, nozzle) -> None:
+def _chosenPass(pane, nozzle, passKey: str):
+
+    '''The pass a jacket view draws, or None with the pane's message set when the run has no jacket.'''
+
+    chosen = coolantPass(nozzle, passKey)
+    if chosen is None:
+        pane.message('No cooling jacket was built for this run.')
+
+    return chosen
+
+def drawWallMap(pane, nozzle, passKey: str = None) -> None:
 
     '''
 
-    The jacket on the nozzle wall: the hot wall colored by its temperature, and outside it the
-    coolant channel colored by the coolant's, from the injector face to the end of the jacket, with
-    the wall temperature limit marked on its scale.
+    A pass on the nozzle wall: the hot wall colored by its temperature, and outside it the coolant
+    channel colored by the coolant's, along the stations the pass covers, with the wall temperature
+    limit marked on its scale.
 
     '''
 
     from matplotlib.colors import Normalize
 
-    results = thermalResults(nozzle)
-    if results is None:
-        pane.message('No cooling jacket was built for this run.')
+    chosen = _chosenPass(pane, nozzle, passKey)
+    if chosen is None:
         return
+    results = chosen.results
 
     x, r = np.asarray(results['xHotWall3D']), np.asarray(results['rHotWall3D'])
     wall, coolant = _metalWall(results), np.asarray(results['temperature'])
-    limit = getattr(nozzle, 'maxWallTemperature', None)
+    limit = chosen.wallLimit
     # The channel sits millimetres outside the wall, closer than two bands wide enough to read can
     # be drawn, so its band is set out by a fixed fraction of the chamber radius and labelled as such
     offset = 0.12 * float(np.max(r))
@@ -221,7 +359,7 @@ def drawWallMap(pane, nozzle) -> None:
     pane.axes = ax
     ax.grid(False)
 
-    # The whole contour for context, the jacketed part of it banded
+    # The whole contour for context, the part the pass covers banded
     wallX, wallR = _array(nozzle, 'xNozzleWall'), _array(nozzle, 'rNozzleWall')
     if wallX.size == wallR.size and wallX.size:
         ax.plot(wallX, wallR, color = themeColors.textDim, linewidth = 1.0)
@@ -245,9 +383,10 @@ def drawWallMap(pane, nozzle) -> None:
     ax.set_aspect('equal', adjustable = 'box')
     ax.set_xlabel('Nozzle axis [m]')
     ax.set_ylabel('Radius [m]')
-    total = float(np.sum(results['heatTransfer'])) * float(getattr(nozzle, 'nChannel', 1) or 1)
-    ax.set_title(f'The jacket on the wall: {int(getattr(nozzle, "nChannel", 0) or 0)} channels, '
-                 f'{total / 1e6:.2f} MW into the coolant', color = themeColors.text)
+    total = float(np.sum(results['heatTransfer'])) * float(chosen.channelCount or 1)
+    summary = f'{chosen.channelCount} channels, {total / 1e6:.2f} MW into the coolant'
+    ax.set_title(passTitle(nozzle, chosen, f'The jacket on the wall: {summary}', f'{{Pass}} on the wall: {summary}'),
+                 color = themeColors.text)
 
     for scale, mappable, label in ((wallScale, wallBand, 'Hot wall temperature [K]'),
                                    (coolantScale, coolantBand, 'Coolant temperature [K]')):
@@ -259,7 +398,7 @@ def drawWallMap(pane, nozzle) -> None:
             bar.ax.axvline(float(limit), color = themeColors.red, linewidth = 2.0)
     pane.redraw()
 
-def drawJacketTemperatures(pane, nozzle) -> None:
+def drawJacketTemperatures(pane, nozzle, passKey: str = None) -> None:
 
     '''
 
@@ -268,10 +407,10 @@ def drawJacketTemperatures(pane, nozzle) -> None:
 
     '''
 
-    results = thermalResults(nozzle)
-    if results is None:
-        pane.message('No cooling jacket was built for this run.')
+    chosen = _chosenPass(pane, nozzle, passKey)
+    if chosen is None:
         return
+    results = chosen.results
 
     x = np.asarray(results['xHotWall3D'])
     wallAxes, coolantAxes = _panels(pane, 2, heightRatios = (1.4, 1.0))
@@ -280,7 +419,7 @@ def drawJacketTemperatures(pane, nozzle) -> None:
     wallAxes.plot(x, metal, color = themeColors.accent, linewidth = 1.8, label = 'Hot wall')
     if not np.array_equal(metal, surface):
         wallAxes.plot(x, surface, color = themeColors.accent, linewidth = 1.2, linestyle = ':', label = 'Coating surface')
-    limit = getattr(nozzle, 'maxWallTemperature', None)
+    limit = chosen.wallLimit
     if limit:
         wallAxes.axhline(float(limit), color = themeColors.red, linewidth = 1.0, linestyle = '--',
                          label = f'Wall limit {float(limit):.0f} K')
@@ -288,7 +427,8 @@ def drawJacketTemperatures(pane, nozzle) -> None:
     gasAxes.plot(x, results['drivingTemperature'], color = themeColors.blue, linewidth = 1.2, label = 'Gas driving the wall')
     gasAxes.set_ylabel('Gas driving temperature [K]', color = themeColors.blue)
     wallAxes.set_ylabel('Hot wall temperature [K]')
-    wallAxes.set_title('Wall and coolant temperatures', color = themeColors.text)
+    wallAxes.set_title(passTitle(nozzle, chosen, 'Wall and coolant temperatures',
+                                 'Wall and coolant temperatures of {pass}'), color = themeColors.text)
     handles, labels = wallAxes.get_legend_handles_labels()
     gasHandles, gasLabels = gasAxes.get_legend_handles_labels()
     gasAxes.legend(handles + gasHandles, labels + gasLabels, facecolor = themeColors.surface2, edgecolor = themeColors.border,
@@ -303,17 +443,17 @@ def drawJacketTemperatures(pane, nozzle) -> None:
     rise = float(np.max(coolant) - np.min(coolant))
     coolantAxes.set_title(f'Coolant warms {rise:.0f} K, from {float(np.min(coolant)):.0f} to '
                           f'{float(np.max(coolant)):.0f} K', color = themeColors.textMuted, fontsize = 9)
-    _throat(nozzle, (wallAxes, coolantAxes))
+    _throat(nozzle, (wallAxes, coolantAxes), x)
     pane.redraw()
 
-def drawCoolantFlow(pane, nozzle) -> None:
+def drawCoolantFlow(pane, nozzle, passKey: str = None) -> None:
 
     '''Coolant pressure, velocity and Mach number along the channel.'''
 
-    results = thermalResults(nozzle)
-    if results is None:
-        pane.message('No cooling jacket was built for this run.')
+    chosen = _chosenPass(pane, nozzle, passKey)
+    if chosen is None:
         return
+    results = chosen.results
 
     x = np.asarray(results['xHotWall3D'])
     pressure = np.asarray(results['pressure'])
@@ -324,21 +464,22 @@ def drawCoolantFlow(pane, nozzle) -> None:
         ax.plot(x, values, color = color, linewidth = 1.7)
         ax.set_ylabel(label)
     drop = float(np.max(pressure) - np.min(pressure))
-    axes[0].set_title(f'Coolant flow: {drop / 1e3:.0f} kPa pressure drop, exit at {float(np.min(pressure)) / 1e6:.2f} MPa',
+    summary = f'{drop / 1e3:.0f} kPa pressure drop, exit at {float(np.min(pressure)) / 1e6:.2f} MPa'
+    axes[0].set_title(passTitle(nozzle, chosen, f'Coolant flow: {summary}', f'Coolant flow in {{pass}}: {summary}'),
                       color = themeColors.text)
     _flowDirection(axes[0], x, pressure, themeColors.textMuted)
     axes[-1].set_xlabel('Nozzle axis [m]')
-    _throat(nozzle, axes)
+    _throat(nozzle, axes, x)
     pane.redraw()
 
-def drawCoolantProperties(pane, nozzle) -> None:
+def drawCoolantProperties(pane, nozzle, passKey: str = None) -> None:
 
     '''The coolant's density, viscosity and specific heat along the channel, from its equation of state.'''
 
-    results = thermalResults(nozzle)
-    if results is None:
-        pane.message('No cooling jacket was built for this run.')
+    chosen = _chosenPass(pane, nozzle, passKey)
+    if chosen is None:
         return
+    results = chosen.results
 
     x = np.asarray(results['xHotWall3D'])
     axes = _panels(pane, 3)
@@ -348,14 +489,15 @@ def drawCoolantProperties(pane, nozzle) -> None:
     for ax, (values, label, color) in zip(axes, series):
         ax.plot(x, values, color = color, linewidth = 1.7)
         ax.set_ylabel(label)
-    coolant = getattr(nozzle, 'coolant', None) or 'coolant'
-    axes[0].set_title(f'Thermophysical properties of the {coolant} along the channel', color = themeColors.text)
+    title = f'Thermophysical properties of the {chosen.coolant}'
+    axes[0].set_title(passTitle(nozzle, chosen, f'{title} along the channel', f'{title} along {{pass}}'),
+                      color = themeColors.text)
     _flowDirection(axes[0], x, np.asarray(results['pressure']), themeColors.textMuted)
     axes[-1].set_xlabel('Nozzle axis [m]')
-    _throat(nozzle, axes)
+    _throat(nozzle, axes, x)
     pane.redraw()
 
-def drawHeatFlux(pane, nozzle) -> None:
+def drawHeatFlux(pane, nozzle, passKey: str = None) -> None:
 
     '''
 
@@ -364,10 +506,10 @@ def drawHeatFlux(pane, nozzle) -> None:
 
     '''
 
-    results = thermalResults(nozzle)
-    if results is None:
-        pane.message('No cooling jacket was built for this run.')
+    chosen = _chosenPass(pane, nozzle, passKey)
+    if chosen is None:
         return
+    results = chosen.results
 
     x = np.asarray(results['xHotWall3D'])
     fluxAxes, coefficientAxes, groupAxes = _panels(pane, 3)
@@ -382,7 +524,9 @@ def drawHeatFlux(pane, nozzle) -> None:
         fluxAxes.plot(x, flux * share, color = themeColors.purple, linewidth = 1.2, label = 'Radiative share')
         _legend(fluxAxes, loc = 'upper left')
     fluxAxes.set_ylabel('Heat flux [MW/m²]')
-    fluxAxes.set_title(f'Heat flux peaks at {float(np.max(flux)):.1f} MW/m²', color = themeColors.text)
+    peak = f'peaks at {float(np.max(flux)):.1f} MW/m²'
+    fluxAxes.set_title(passTitle(nozzle, chosen, f'Heat flux {peak}', f'Heat flux into {{pass}} {peak}'),
+                       color = themeColors.text)
 
     coefficientAxes.plot(x, np.asarray(results['exhaustConvectiveHeatTransferCoef']) / 1e3, color = themeColors.red,
                          linewidth = 1.6, label = 'Gas side')
@@ -397,7 +541,7 @@ def drawHeatFlux(pane, nozzle) -> None:
     nusseltAxes.plot(x, results['nusseltNumber'], color = themeColors.green, linewidth = 1.4)
     nusseltAxes.set_ylabel('Nusselt number [-]', color = themeColors.green)
     groupAxes.set_xlabel('Nozzle axis [m]')
-    _throat(nozzle, (fluxAxes, coefficientAxes, groupAxes))
+    _throat(nozzle, (fluxAxes, coefficientAxes, groupAxes), x)
     pane.redraw()
 
 #--------------------------------------------------------------------------------------------------------------------------#

@@ -4,9 +4,10 @@
 
 The GUI's front end in a browser: the run menu, a run's name and note, putting a run's config back
 into the form, deleting a run, the baseline drawn under a line plot, the grid's shared cursor and
-zoom along the nozzle axis, the headline numbers and a row that opens its figure, the section
-outline, a problem written under its field, the warnings of a run, the export previews, a figure
-popped out into its own window, compressed figure responses, a trade sweep's plot and table, the
+zoom along the nozzle axis, the pass of the coolant the jacket views draw, the headline numbers and
+a row that opens its figure, the section outline, a problem written under its field, the warnings
+of a run, the export previews, a figure popped out into its own window, compressed figure
+responses, a trade sweep's plot and table, the
 sweep dialog's request, the run queue, the runs a closed window left unrun, the About dialog's build
 line and update check, and a plume sweep over a kept run.
 
@@ -223,6 +224,36 @@ def testTheBaselineDrawsDashedUnderALinePlot(window):
     dashes = window.evaluate('''() => document.querySelector('.js-plotly-plot').data
                                     .filter(t => (t.name || '').endsWith('run 1, baseline')).map(t => t.line.dash)''')
     assert dashes and set(dashes) == {'dash'}
+
+def _titled(page, text: str) -> None:
+    '''Wait until the figure shown is drawn with `text` in its title.'''
+    page.wait_for_function('(text) => { const graph = document.querySelector(".js-plotly-plot"); '
+                           'return !!(graph && graph.layout && ((graph.layout.title || {}).text || "").includes(text)); }',
+                           arg = text, timeout = drawMs)
+
+def testThePassPickerDrawsEachPassOfTheCoolant(window):
+    # Run 3, the shipped nozzle, is a one-and-a-half-pass jacket: its views draw the up pass until another is picked
+    window.select_option('.figure-toolbar > .view-select', 'jacketTemperatures')
+    picker = window.locator('.figure-toolbar .pass-select')
+    picker.wait_for()
+    assert picker.locator('option').all_inner_texts() == ['Jacket, down pass', 'Jacket, up pass']
+    assert picker.input_value() == 'jacketUp'
+    _titled(window, "of the jacket's up pass")
+    picker.select_option('jacketDown')
+    _titled(window, "of the jacket's down pass")
+
+    # Run 2's jacket is one pass, with an extension circuit of one; the pick it lacks gives way to the jacket's own
+    window.select_option('.run-select', '2')
+    window.wait_for_function('document.querySelector(".figure-toolbar .pass-select option")?.textContent === "Jacket"',
+                             timeout = drawMs)
+    assert picker.locator('option').all_inner_texts() == ['Jacket', 'Extension circuit']
+    _titled(window, 'of the jacket')
+    picker.select_option('extension')
+    _titled(window, 'of the extension circuit')
+
+    # A view that draws no pass has no picker
+    window.select_option('.figure-toolbar > .view-select', 'contour')
+    window.wait_for_selector('.figure-toolbar .pass-select', state = 'detached')
 
 def testTheShownRunsWarningsAreListed(window):
     strip = window.locator('.result-status.is-caution')
